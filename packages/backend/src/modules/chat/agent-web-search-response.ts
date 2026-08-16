@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Prisma, type ChatSession, type Connection } from '@prisma/client';
 import { shouldIgnoreReasoningMeta } from '@aichat/shared/strip-tool-progress-from-reasoning';
 import { prisma } from '../../db';
@@ -30,7 +31,26 @@ import { normalizeToolCallEventPayload } from './tool-call-event';
 import {
   sendUnsupportedToolError,
   type PdfExportHandlerConfig,
+  type DeepResearchPlanHandlerConfig,
+  type ResearchPlanApprovalGate,
 } from './tool-handlers';
+import {
+  registerResearchPlanApproval,
+  waitForResearchPlanApproval,
+  type ResearchPlanApprovalOutcome,
+} from './research-plan-approval';
+import { RESEARCH_PLAN_TOOL_NAME } from './research-plan-tool';
+import {
+  buildBlockedResearchToolResult,
+  buildResearchPlanRequiredResult,
+  buildResearchPlanTerminalChunk,
+  createResearchPlanGateState,
+  decideResearchToolBlock,
+  markResearchPlanApproved,
+  markResearchPlanRevised,
+  markResearchPlanSubmitted,
+  type ResearchPlanGateState,
+} from './research-plan-flow';
 import {
   type ToolSchema,
   buildToolRequest,
@@ -583,6 +603,61 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       const workingMessages = JSON.parse(JSON.stringify(messagesPayload));
       const modelCapabilities = await resolveModelCapabilitiesForSession(prisma, session);
       const knowledgeBaseIds = params.knowledgeBaseIds || [];
+      const deepResearchRequested = toolFlags.deepResearch === true;
+      const deepResearchPlanRequired = deepResearchRequested && toolFlags.webSearch === true;
+      const researchPlanApprovalTimeoutMs = 5 * 60_000;
+      const researchPlanGate: ResearchPlanGateState = createResearchPlanGateState();
+      const researchPlanApprovalGate: ResearchPlanApprovalGate = {
+        waitForDecision: async ({ toolCallId, revision }) => {
+          markResearchPlanSubmitted(researchPlanGate);
+          const entry = registerResearchPlanApproval({
+            sessionId,
+            actorId: actorIdentifier,
+            toolCallId,
+            messageId: activeAssistantMessageId,
+            clientMessageId: streamMeta?.clientMessageId ?? null,
+            assistantClientMessageId: streamMeta?.assistantClientMessageId ?? null,
+            revision,
+          });
+          const outcome: ResearchPlanApprovalOutcome = await waitForResearchPlanApproval(
+            entry,
+            {
+              timeoutMs: researchPlanApprovalTimeoutMs,
+              signal: requestSignal ?? undefined,
+            },
+          );
+          if (outcome.decision === 'approve') {
+            markResearchPlanApproved(researchPlanGate);
+            return { decision: 'approve', revision: researchPlanGate.revision };
+          }
+          if (outcome.decision === 'adjust') {
+            const nextRevision = Math.min(2, researchPlanGate.revision + 1);
+            markResearchPlanRevised(researchPlanGate, nextRevision);
+            return {
+              decision: 'adjust',
+              feedback: outcome.feedback,
+              revision: nextRevision,
+            };
+          }
+          if (outcome.decision === 'continue') {
+            markResearchPlanApproved(researchPlanGate);
+            return { decision: 'approve', revision: researchPlanGate.revision };
+          }
+          return {
+            decision: outcome.decision === 'expired' ? 'expired' : 'cancel',
+            revision: researchPlanGate.revision,
+          };
+        },
+      };
+      const deepResearchPlanConfig: DeepResearchPlanHandlerConfig | null =
+        deepResearchPlanRequired
+          ? {
+              enabled: true,
+              approvalGate: researchPlanApprovalGate,
+              approvalTimeoutMs: researchPlanApprovalTimeoutMs,
+              resolveRevision: () => researchPlanGate.revision,
+            }
+          : null;
       const toolRegistry = await createSkillRegistry({
         requestedSkills,
         sessionId,
@@ -615,6 +690,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           pdfExport: toolFlags.pdfExport && pdfExportConfig
             ? pdfExportConfig
             : null,
+          deepResearchPlan: deepResearchPlanConfig,
         },
         allowDynamicRuntime: allowDynamicRuntime === true,
         mcpService: params.mcpService,
@@ -704,6 +780,89 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       let providerUsageSeen = false;
       let contextLengthRetryCount = 0;
       let missingToolCallRetryCount = 0;
+
+      const handleResearchPlanTermination = async (
+        code: 'research_plan_cancelled' | 'research_plan_expired',
+      ): Promise<void> => {
+        const terminalChunk = buildResearchPlanTerminalChunk(code);
+        aiResponseContent = terminalChunk.content;
+        safeEnqueue({
+          type: 'complete',
+          content: terminalChunk.content,
+          streamStatus: terminalChunk.streamStatus,
+        });
+        await persistAssistantProgress({ force: true, status: 'cancelled' });
+        traceStatus = 'cancelled';
+        traceRecorder.log('deep_research:plan_terminated', { code, sessionId });
+      };
+
+      const waitForNoSearchChoice = async (
+        callId: string,
+      ): Promise<ResearchPlanApprovalOutcome> => {
+        const expiresAt = Date.now() + researchPlanApprovalTimeoutMs;
+        sendToolEvent({
+          id: callId,
+          tool: RESEARCH_PLAN_TOOL_NAME,
+          stage: 'start',
+          status: 'pending',
+          phase: 'pending_approval',
+          summary: '联网搜索不可用，是否基于已有知识继续？',
+          details: {
+            approval: { kind: 'search_unavailable', expiresAt },
+          },
+        });
+        const entry = registerResearchPlanApproval({
+          sessionId,
+          actorId: actorIdentifier,
+          toolCallId: callId,
+          messageId: activeAssistantMessageId,
+          clientMessageId: streamMeta?.clientMessageId ?? null,
+          assistantClientMessageId: streamMeta?.assistantClientMessageId ?? null,
+          revision: 0,
+        });
+        return waitForResearchPlanApproval(entry, {
+          timeoutMs: researchPlanApprovalTimeoutMs,
+          signal: requestSignal ?? undefined,
+        });
+      };
+
+      if (deepResearchRequested && !toolFlags.webSearch) {
+        const choiceCallId = `research-choice:${randomUUID()}`;
+        const choice = await waitForNoSearchChoice(choiceCallId);
+        if (choice.decision === 'continue') {
+          sendToolEvent({
+            id: choiceCallId,
+            tool: RESEARCH_PLAN_TOOL_NAME,
+            stage: 'result',
+            status: 'success',
+            phase: 'result',
+            summary: '已选择基于已有知识继续',
+            details: {
+              approval: { kind: 'search_unavailable', decision: 'continue' },
+            },
+          });
+        } else {
+          const decision = choice.decision === 'expired' ? 'expired' : 'cancel';
+          sendToolEvent({
+            id: choiceCallId,
+            tool: RESEARCH_PLAN_TOOL_NAME,
+            stage: 'error',
+            status: decision === 'expired' ? 'aborted' : 'rejected',
+            phase: decision === 'expired' ? 'aborted' : 'rejected',
+            summary: decision === 'expired' ? '研究计划已过期' : '深度研究已取消',
+            error: decision === 'expired' ? '研究计划已过期' : '深度研究已取消',
+            details: {
+              approval: { kind: 'search_unavailable', decision },
+            },
+          });
+          await handleResearchPlanTermination(
+            decision === 'expired'
+              ? 'research_plan_expired'
+              : 'research_plan_cancelled',
+          );
+          return;
+        }
+      }
 
       try {
         const orchestration = await runToolOrchestration({
@@ -827,8 +986,32 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             });
             return true;
           },
-          handleToolCall: async (toolName, toolCall, args) => {
+          handleToolCall: async (toolName, toolCall, args, iteration) => {
             if (!toolName || !allowedToolNames.has(toolName)) return null;
+            const toolCallId =
+              (toolCall?.id && typeof toolCall.id === 'string' && toolCall.id.trim()) ||
+              `session:${sessionId}:tool:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
+            if (deepResearchPlanRequired && toolName !== RESEARCH_PLAN_TOOL_NAME) {
+              const blockDecision = decideResearchToolBlock(
+                researchPlanGate,
+                toolName,
+                typeof iteration === 'number' ? iteration : 0,
+              );
+              if (blockDecision.block) {
+                const message = '深度研究计划尚未确认，不能执行其它工具。请先调用 research_plan 提交计划。';
+                sendToolEvent({
+                  id: toolCallId,
+                  tool: toolName,
+                  stage: 'error',
+                  status: 'error',
+                  phase: 'error',
+                  error: message,
+                });
+                return blockDecision.terminal
+                  ? buildResearchPlanRequiredResult(toolCall, toolName)
+                  : buildBlockedResearchToolResult(toolCall, toolName, message);
+              }
+            }
             return toolRegistry.handleToolCall(
               toolName,
               toolCall,
@@ -853,6 +1036,18 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             sendUnsupportedToolError(toolName || 'unknown', toolCallId, sendToolEvent);
           },
         });
+
+        if (orchestration.status === 'terminated') {
+          const { termination } = orchestration;
+          if (
+            termination.code === 'research_plan_cancelled' ||
+            termination.code === 'research_plan_expired'
+          ) {
+            await handleResearchPlanTermination(termination.code);
+            return;
+          }
+          throw new Error(termination.message);
+        }
 
         if (orchestration.status === 'max_iterations') {
           const iterationLabel = Number.isFinite(maxIterations)

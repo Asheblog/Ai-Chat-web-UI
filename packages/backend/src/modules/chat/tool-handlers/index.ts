@@ -22,6 +22,11 @@ export type {
   KnowledgeBaseHandlerConfig,
   WorkspaceHandlerConfig,
   PdfExportHandlerConfig,
+  DeepResearchPlanHandlerConfig,
+  ResearchPlanApprovalGate,
+  ResearchPlanApprovalGateInput,
+  ResearchPlanApprovalGateResult,
+  ToolHandlerTermination,
   ToolLogDetails,
 } from './types'
 

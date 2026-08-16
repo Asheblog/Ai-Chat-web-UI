@@ -108,7 +108,7 @@ export interface ToolDefinition {
  * 工具处理器工厂参数
  */
 export interface ResearchPlanApprovalGateInput {
-  plan: Record<string, unknown>
+  plan: unknown
   toolCallId: string
   revision: number
   context: ToolCallContext

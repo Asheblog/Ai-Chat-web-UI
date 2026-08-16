@@ -6,6 +6,7 @@ import type {
   ToolCall,
   ToolDefinition,
   ToolHandlerResult,
+  ToolHandlerTermination,
 } from './tool-handlers/types'
 import {
   type LegacyFunctionCall,
