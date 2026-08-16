@@ -385,3 +385,36 @@ describe('parseToolLogsJson history-list mode', () => {
   })
 })
 
+
+
+describe('projectToolEventsForHistoryList research plan details', () => {
+  test('keeps plan and approval payloads for static history cards', () => {
+    const events = parseToolLogsJson(
+      JSON.stringify([
+        {
+          id: 'plan-1',
+          tool: 'research_plan',
+          stage: 'error',
+          status: 'aborted',
+          phase: 'aborted',
+          createdAt: 100,
+          details: {
+            plan: {
+              title: '研究标题',
+              objective: '目标',
+              sub_questions: [{ question: 'q', keywords: ['k'] }],
+              estimated_tool_rounds: { min: 1, max: 3 },
+            },
+            approval: { kind: 'plan', decision: 'expired', revision: 0 },
+          },
+        },
+      ]),
+      { mode: 'history-list' },
+    )
+
+    expect(events[0].details).toMatchObject({
+      plan: expect.objectContaining({ title: '研究标题' }),
+      approval: expect.objectContaining({ decision: 'expired' }),
+    })
+  })
+})

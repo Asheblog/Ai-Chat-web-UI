@@ -99,18 +99,34 @@ export function ChatMessageViewport({
     () => (shareModeActive ? shareSelection.selectedMessageIds : []),
     [shareModeActive, shareSelection.selectedMessageIds],
   )
+  const unshareableResearchMessageIds = useMemo(() => {
+    const blocked = new Set<number>()
+    metas.forEach((meta) => {
+      if (meta.sessionId !== sessionId || typeof meta.id !== 'number') return
+      if (!Number.isFinite(meta.id) || meta.role !== 'assistant') return
+      const events = messageBodiesMap[messageKey(meta.id)]?.toolEvents ?? []
+      const terminal = events.some((event) => {
+        const toolId = event.identifier || event.apiName || event.tool
+        return toolId === 'research_plan' && (event.status === 'rejected' || event.status === 'aborted')
+      })
+      if (terminal) blocked.add(meta.id)
+    })
+    return blocked
+  }, [messageBodiesMap, metas, sessionId])
+
   const shareSelectableMessageIds = useMemo(() => {
     const ids: number[] = []
     const seen = new Set<number>()
     metas.forEach((meta) => {
       if (meta.sessionId !== sessionId || typeof meta.id !== 'number') return
       if (!Number.isFinite(meta.id) || meta.pendingSync || meta.isPlaceholder) return
+      if (unshareableResearchMessageIds.has(meta.id)) return
       if (seen.has(meta.id)) return
       ids.push(meta.id)
       seen.add(meta.id)
     })
     return ids
-  }, [metas, sessionId])
+  }, [metas, sessionId, unshareableResearchMessageIds])
   const selectedIdSet = useMemo(() => new Set(selectedMessageIds), [selectedMessageIds])
   const selectableCount = shareSelectableMessageIds.length
   const isAllSelectableChosen =
@@ -212,6 +228,7 @@ export function ChatMessageViewport({
             variantSelections={variantSelections}
             metrics={messageMetrics}
             shareSelection={shareSelection}
+            unshareableMessageIds={unshareableResearchMessageIds}
             onShareToggle={(messageId) => toggleShareSelection(sessionId, messageId)}
             onShareStart={(messageId) => enterShareSelectionMode(sessionId, messageId)}
           />

@@ -216,6 +216,8 @@ export class ShareService {
       throw new ShareServiceError('Some messages were not found in this session')
     }
 
+    this.assertShareableDeepResearchMessages(messages)
+
     const siteBaseSetting = await this.prisma.systemSetting.findUnique({
       where: { key: 'site_base_url' },
       select: { value: true },
@@ -517,6 +519,29 @@ export class ShareService {
   private resolveTitle(customTitle: string | null | undefined, fallback: string): string {
     const source = (customTitle ?? '').trim() || fallback || 'Shared Chat'
     return source.length > 200 ? source.slice(0, 200) : source
+  }
+
+  private assertShareableDeepResearchMessages(messages: MessageRecord[]): void {
+    for (const message of messages) {
+      if (message.role !== 'assistant') continue
+      if (message.streamStatus !== 'cancelled' && message.streamStatus !== 'error') continue
+      let toolEvents: unknown[] = []
+      try {
+        const parsed = message.toolLogsJson ? JSON.parse(message.toolLogsJson) : []
+        if (Array.isArray(parsed)) toolEvents = parsed
+      } catch {
+        continue
+      }
+      const hasTerminalResearchPlan = toolEvents.some((event) => {
+        if (!event || typeof event !== 'object') return false
+        const record = event as Record<string, unknown>
+        if (record.tool !== 'research_plan') return false
+        return record.status === 'rejected' || record.status === 'aborted'
+      })
+      if (hasTerminalResearchPlan) {
+        throw new ShareServiceError('已取消或已过期的深度研究消息不能分享', 400)
+      }
+    }
   }
 
   private buildMessageSnapshots(
