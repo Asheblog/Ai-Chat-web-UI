@@ -90,6 +90,18 @@ export const sendMessageSchema = z.object({
   return hasContent || hasReference
 }, { message: 'content or replyToMessageId is required' });
 
+export const researchPlanRespondSchema = z
+  .object({
+    sessionId: z.number().int().positive(),
+    toolCallId: z.string().min(1).max(128),
+    decision: z.enum(['approve', 'adjust', 'cancel', 'continue']),
+    feedback: z.string().max(2000).optional(),
+  })
+  .refine((value) => value.decision !== 'adjust' || Boolean(value.feedback && value.feedback.trim()), {
+    message: 'adjust 决策必须提供 feedback',
+    path: ['feedback'],
+  })
+
 export const cancelStreamSchema = z.object({
   sessionId: z.number().int().positive(),
   clientMessageId: z.string().min(1).max(128).optional(),
