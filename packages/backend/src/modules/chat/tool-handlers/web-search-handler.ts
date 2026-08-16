@@ -662,6 +662,11 @@ export class WebSearchToolHandler implements IToolHandler {
               type: 'string',
               description: 'Search query describing the missing information',
             },
+            scope: {
+              type: 'string',
+              enum: ['webpage', 'image', 'document', 'paper', 'scholar', 'video', 'podcast'],
+              description: 'Optional search scope/type. Use "image" only when the research needs news/evidence images; the backend will run image-capable engines and run the existing vision relevance filter.',
+            },
           },
           required: ['query'],
         },
@@ -703,6 +708,9 @@ export class WebSearchToolHandler implements IToolHandler {
 
     const modelRequestedLimit = parseRequestedLimit(args.num_results)
     const appliedLimit = this.config.resultLimit
+    const requestedScope = typeof args.scope === 'string' ? args.scope.trim().toLowerCase() : ''
+    const validScopes = ['webpage', 'image', 'document', 'paper', 'scholar', 'video', 'podcast']
+    const effectiveScope = validScopes.includes(requestedScope) ? requestedScope : this.config.scope
     const expandedQueries = buildBilingualQueries(query, this.config)
     const activeEngines = pickActiveEngines(this.config)
     const routingPlan = buildLanguageAwareSearchPlan({
@@ -728,6 +736,7 @@ export class WebSearchToolHandler implements IToolHandler {
         queryCount: expandedQueries.length,
         requiredSources: routingPlan.requiredSources,
         highRisk: routingPlan.highRisk,
+        scope: effectiveScope,
       },
     })
 
@@ -853,7 +862,7 @@ export class WebSearchToolHandler implements IToolHandler {
         limit: appliedLimit,
         domains: this.config.domains,
         endpoint: this.config.endpoint,
-        scope: this.config.scope,
+        scope: effectiveScope,
         includeSummary: this.config.includeSummary,
         includeRawContent: this.config.includeRawContent,
         timeoutMs: parallelTimeoutMs,
@@ -899,7 +908,7 @@ export class WebSearchToolHandler implements IToolHandler {
             limit: appliedLimit,
             domains: this.config.domains,
             endpoint: this.config.endpoint,
-            scope: this.config.scope,
+            scope: effectiveScope,
             includeSummary: this.config.includeSummary,
             includeRawContent: this.config.includeRawContent,
             timeoutMs: parallelTimeoutMs,
@@ -923,8 +932,8 @@ export class WebSearchToolHandler implements IToolHandler {
       }
 
       const hits = searchResult.hits
-      const autoReadEnabled = this.config.autoReadAfterSearch !== false
-      const autoReadTopK = clampAutoReadTopK(this.config.autoReadTopK)
+      const autoReadEnabled = effectiveScope !== 'image' && this.config.autoReadAfterSearch !== false
+      const autoReadTopK = effectiveScope === 'image' ? 0 : clampAutoReadTopK(this.config.autoReadTopK)
       const autoReadParallelism = clampPositiveInt(
         this.config.autoReadParallelism,
         DEFAULT_AUTO_READ_PARALLELISM,
@@ -1222,6 +1231,7 @@ export class WebSearchToolHandler implements IToolHandler {
           autoReadRequested: autoReadTargets.length,
           autoReadSucceeded,
           autoReadFailed,
+          scope: effectiveScope,
           requiredSources: routingPlan.requiredSources,
           highRisk: routingPlan.highRisk,
           escalationTriggered: escalationInfo.triggered,
