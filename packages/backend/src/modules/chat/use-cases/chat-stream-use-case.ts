@@ -450,6 +450,11 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         ),
       )
 
+      const deepResearchSearchActive =
+        requestedSkills.builtin.includes(BUILTIN_SKILL_SLUGS.DEEP_RESEARCH) &&
+        agentWebSearchConfig.enabled &&
+        (agentWebSearchConfig.engines || []).some((engine) => Boolean(agentWebSearchConfig.apiKeys?.[engine]))
+
       // ===== 图片转写代理（Vision Transcription Proxy）=====
       // 主模型无 vision 且有图时：工具流 → 注入视觉分析工具由主模型自主调用；
       // 标准流（无工具）→ 后端自动转写，描述注入用户消息前缀并持久化（转写一次）
@@ -534,6 +539,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         historyUpperBound,
         personalPrompt: actor.type === 'user' ? actor.personalPrompt ?? null : null,
         requestedSkills,
+        deepResearchWebSearchActive: deepResearchSearchActive,
         ragContext,
         systemSettings: turnContext.systemSettings,
         historySnapshot: turnContext.history,
@@ -810,6 +816,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
             knowledgeBase: agentToolFlags.knowledgeBaseToolsActive,
             visionProxy: visionProxyToolFlow,
             pdfExport: agentToolFlags.pdfExportActive,
+            deepResearch: agentToolFlags.deepResearchSkillRequested,
           },
           allowDynamicRuntime: agentToolFlags.dynamicSkillRuntimeEnabled,
           visionProxyConfig: isVisionProxyReady(visionProxyConfig) ? visionProxyConfig : null,

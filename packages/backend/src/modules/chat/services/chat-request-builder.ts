@@ -74,6 +74,8 @@ export interface PrepareChatRequestParams {
   personalPrompt?: string | null
   extraSystemPrompts?: string[]
   requestedSkills?: RequestedSkillsPayload
+  /** 深度研究 + 联网搜索是否同时可用；决定是否注入计划确认工具流程 */
+  deepResearchWebSearchActive?: boolean
   /** RAG 增强上下文（从文档检索获取） */
   ragContext?: string | null
   /** 同 turn 由编排层注入，避免重复 systemSetting.findMany */
@@ -182,7 +184,9 @@ export class ChatRequestBuilder {
       systemPrompts.push({
         role: 'system',
         content:
-          '你现在处于深度研究（Deep Research）模式。开始前先在心里制定研究计划：将问题拆成 3-6 个关键子问题，并为每个子问题确定搜索关键词。然后交替使用 web_search 和 read_url 收集证据；至少读取若干篇搜索结果原文，并对冲突信息做交叉验证。所有关键事实必须记录来源，并在最终报告中用 [1]、[2] 等编号逐段引用。报告必须使用 Markdown 写成完整文档，结构为：标题、摘要、研究背景、分节正文、结论、参考来源列表。报告完成后，必须调用 export_pdf，把完整 Markdown 报告和标题传给该工具生成 PDF；PDF 生成成功后在回答中告知用户可下载。若搜索工具不可用，则基于对话上下文和已有知识完成报告，并明确标注未经联网验证的部分。'
+          params.deepResearchWebSearchActive === true
+            ? '你现在处于深度研究（Deep Research）模式。第一步必须调用 research_plan 工具，把完整研究计划提交给用户确认；在收到用户批准之前，绝对不要调用 web_search、read_url 或任何其它工具。研究计划必须包含：title、objective、3-6 个 sub_questions（每个子问题附 1-3 个搜索 keywords）、estimated_tool_rounds 范围、deliverable 固定为 markdown_report_with_citations_pdf。用户批准计划后，交替使用 web_search 和 read_url 收集证据；至少读取若干篇搜索结果原文，并对冲突信息做交叉验证。所有关键事实必须记录来源，并在最终报告中用 [1]、[2] 等编号逐段引用。报告必须使用 Markdown 写成完整文档，结构为：标题、摘要、研究背景、分节正文、结论、参考来源列表。报告完成后，必须调用 export_pdf，把完整 Markdown 报告和标题传给该工具生成 PDF；PDF 生成成功后在回答中告知用户可下载。'
+            : '你现在处于深度研究（Deep Research）模式，但当前没有可用的联网搜索工具。不要调用 research_plan、web_search 或 read_url。请直接基于对话上下文和已有知识完成研究报告；报告必须使用 Markdown 写成完整文档，结构为：标题、摘要、研究背景、分节正文、结论、参考来源列表，并且必须在显著位置明确标注“本报告未经联网验证，基于模型已有知识生成”。报告完成后，调用 export_pdf 生成 PDF 并在回答中告知用户可下载。'
       })
     }
     if (

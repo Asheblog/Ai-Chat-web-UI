@@ -99,6 +99,7 @@ export type AgentResponseParams = {
     workspace?: boolean;
     visionProxy?: boolean;
     pdfExport?: boolean;
+    deepResearch?: boolean;
   };
   requestedSkills: RequestedSkillsPayload;
   knowledgeBaseIds?: number[];

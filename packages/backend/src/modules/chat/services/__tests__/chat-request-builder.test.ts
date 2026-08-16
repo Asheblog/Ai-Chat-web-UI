@@ -111,6 +111,63 @@ describe('ChatRequestBuilder', () => {
     expect(prepared.reasoning.enabled).toBe(true)
   })
 
+  it('injects plan-first deep research prompt when web search is active', async () => {
+    const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
+    prisma.message.findMany.mockResolvedValue([])
+    prisma.systemSetting.findMany.mockResolvedValue([])
+    prisma.modelCatalog.findMany.mockResolvedValue([])
+    tokenizer.truncateMessages.mockResolvedValue([{ role: 'user', content: '调研' }])
+    tokenizer.countConversationTokens.mockResolvedValue(10)
+    resolveContextLimit.mockResolvedValue(4000)
+    resolveCompletionLimit.mockResolvedValue(2048)
+
+    const prepared = await builder.prepare({
+      session: baseSession as any,
+      payload: {
+        sessionId: 1,
+        content: '调研 2026 年 AI 芯片竞争格局',
+        skills: { builtin: ['deep-research'] },
+      } as any,
+      content: '调研 2026 年 AI 芯片竞争格局',
+      mode: 'stream',
+      requestedSkills: { builtin: ['deep-research'], enabled: [] },
+      deepResearchWebSearchActive: true,
+    })
+
+    const serialized = JSON.stringify(prepared.baseRequestBody.messages)
+    expect(serialized).toContain('research_plan')
+    expect(serialized).toContain('在收到用户批准之前')
+    expect(serialized).toContain('export_pdf')
+  })
+
+  it('injects unverified fallback prompt for deep research without search', async () => {
+    const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
+    prisma.message.findMany.mockResolvedValue([])
+    prisma.systemSetting.findMany.mockResolvedValue([])
+    prisma.modelCatalog.findMany.mockResolvedValue([])
+    tokenizer.truncateMessages.mockResolvedValue([{ role: 'user', content: '调研' }])
+    tokenizer.countConversationTokens.mockResolvedValue(10)
+    resolveContextLimit.mockResolvedValue(4000)
+    resolveCompletionLimit.mockResolvedValue(2048)
+
+    const prepared = await builder.prepare({
+      session: baseSession as any,
+      payload: {
+        sessionId: 1,
+        content: '调研 2026 年 AI 芯片竞争格局',
+        skills: { builtin: ['deep-research'] },
+      } as any,
+      content: '调研 2026 年 AI 芯片竞争格局',
+      mode: 'stream',
+      requestedSkills: { builtin: ['deep-research'], enabled: [] },
+      deepResearchWebSearchActive: false,
+    })
+
+    const serialized = JSON.stringify(prepared.baseRequestBody.messages)
+    expect(serialized).toContain('不要调用 research_plan')
+    expect(serialized).toContain('未经联网验证')
+  })
+
   it('applies history upper bound and completion mode for azure provider', async () => {
     const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
     prisma.message.findMany.mockResolvedValue([
