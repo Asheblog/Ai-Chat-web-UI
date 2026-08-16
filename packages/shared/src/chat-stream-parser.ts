@@ -381,6 +381,12 @@ export const normalizeStreamChunk = (payload: any): ChatStreamChunk | null => {
     return {
       type: 'complete',
       content: typeof payload.content === 'string' ? payload.content : undefined,
+      streamStatus:
+        payload.streamStatus === 'done' ||
+        payload.streamStatus === 'cancelled' ||
+        payload.streamStatus === 'error'
+          ? payload.streamStatus
+          : undefined,
     }
   }
   if (payload?.type === 'skill_approval_request') {
