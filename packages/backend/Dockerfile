@@ -100,6 +100,7 @@ RUN apt-get update && \
         docker.io \
         git \
         chromium \
+        fonts-noto-cjk \
         python3 \
         python3-venv \
         python3-pip \

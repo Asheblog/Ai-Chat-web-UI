@@ -458,12 +458,14 @@ export interface AgentToolFlags {
   pythonSkillRequested: boolean
   urlReaderSkillRequested: boolean
   knowledgeBaseSkillRequested: boolean
+  deepResearchSkillRequested: boolean
   webSearchEnginesWithKeys: string[]
   agentWebSearchActive: boolean
   pythonToolActive: boolean
   workspaceToolsActive: boolean
   urlReaderActive: boolean
   documentToolsActive: boolean
+  pdfExportActive: boolean
   knowledgeBaseToolsActive: boolean
   dynamicSkillRequestedRaw: boolean
   dynamicSkillRuntimeEnabled: boolean
@@ -486,7 +488,9 @@ export interface AgentToolFlagsInput {
  */
 export function computeAgentToolFlags(input: AgentToolFlagsInput): AgentToolFlags {
   const { sysMap, requestedSkills, hasKnowledgeBases } = input
-  const webSearchSkillRequested = requestedSkills.builtin.includes(BUILTIN_SKILL_SLUGS.WEB_SEARCH)
+  const deepResearchSkillRequested = requestedSkills.builtin.includes(BUILTIN_SKILL_SLUGS.DEEP_RESEARCH)
+  const webSearchSkillRequested =
+    requestedSkills.builtin.includes(BUILTIN_SKILL_SLUGS.WEB_SEARCH) || deepResearchSkillRequested
   const pythonSkillRequested = requestedSkills.builtin.includes(BUILTIN_SKILL_SLUGS.PYTHON_RUNNER)
   const urlReaderSkillRequested =
     requestedSkills.builtin.includes(BUILTIN_SKILL_SLUGS.URL_READER) || webSearchSkillRequested
@@ -497,6 +501,7 @@ export function computeAgentToolFlags(input: AgentToolFlagsInput): AgentToolFlag
   )
   const agentWebSearchActive =
     webSearchSkillRequested && input.webSearchConfig.enabled && webSearchEnginesWithKeys.length > 0
+  const pdfExportActive = deepResearchSkillRequested
   const pythonToolActive = pythonSkillRequested && input.pythonToolConfig.enabled
   const workspaceToolsActive = pythonToolActive && input.workspaceToolConfig.enabled
   const urlReaderActive = urlReaderSkillRequested
@@ -518,12 +523,14 @@ export function computeAgentToolFlags(input: AgentToolFlagsInput): AgentToolFlag
     urlReaderActive ||
     documentToolsActive ||
     knowledgeBaseToolsActive ||
+    pdfExportActive ||
     dynamicSkillRequested
   return {
     webSearchSkillRequested,
     pythonSkillRequested,
     urlReaderSkillRequested,
     knowledgeBaseSkillRequested,
+    deepResearchSkillRequested,
     webSearchEnginesWithKeys,
     agentWebSearchActive,
     pythonToolActive,
@@ -531,6 +538,7 @@ export function computeAgentToolFlags(input: AgentToolFlagsInput): AgentToolFlag
     urlReaderActive,
     documentToolsActive,
     knowledgeBaseToolsActive,
+    pdfExportActive,
     dynamicSkillRequestedRaw,
     dynamicSkillRuntimeEnabled,
     dynamicSkillRequested,

@@ -663,7 +663,8 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         !agentToolFlags.workspaceToolsActive &&
         !agentToolFlags.urlReaderActive &&
         !agentToolFlags.documentToolsActive &&
-        !agentToolFlags.knowledgeBaseToolsActive
+        !agentToolFlags.knowledgeBaseToolsActive &&
+        !agentToolFlags.pdfExportActive
       ) {
         return c.json<ApiResponse>({
           success: false,
@@ -793,6 +794,12 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
           urlReaderConfig,
           workspaceToolConfig,
           agentMaxToolIterations,
+          pdfExportConfig: agentToolFlags.pdfExportActive
+            ? {
+                enabled: true,
+                browserExecutablePath: urlReaderConfig.browserExecutablePath,
+              }
+            : null,
           requestedSkills,
           toolFlags: {
             webSearch: agentToolFlags.agentWebSearchActive,
@@ -802,6 +809,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
             document: agentToolFlags.documentToolsActive,
             knowledgeBase: agentToolFlags.knowledgeBaseToolsActive,
             visionProxy: visionProxyToolFlow,
+            pdfExport: agentToolFlags.pdfExportActive,
           },
           allowDynamicRuntime: agentToolFlags.dynamicSkillRuntimeEnabled,
           visionProxyConfig: isVisionProxyReady(visionProxyConfig) ? visionProxyConfig : null,

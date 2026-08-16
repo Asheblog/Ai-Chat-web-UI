@@ -21,6 +21,8 @@ declare module 'playwright-core' {
           waitForLoadState(state: 'domcontentloaded' | 'load' | 'networkidle', options?: { timeout?: number }): Promise<void>
           waitForTimeout(ms: number): Promise<void>
           evaluate(pageFunction: string): Promise<unknown>
+          setContent(html: string, options?: { waitUntil?: 'domcontentloaded' | 'load' | 'networkidle'; timeout?: number }): Promise<void>
+          pdf(options?: Record<string, unknown>): Promise<Buffer | Uint8Array>
           content(): Promise<string>
           url(): string
           title(): Promise<string>

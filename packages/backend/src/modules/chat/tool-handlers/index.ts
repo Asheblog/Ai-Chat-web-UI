@@ -21,6 +21,7 @@ export type {
   DocumentHandlerConfig,
   KnowledgeBaseHandlerConfig,
   WorkspaceHandlerConfig,
+  PdfExportHandlerConfig,
   ToolLogDetails,
 } from './types'
 
@@ -31,6 +32,7 @@ export { UrlReaderToolHandler } from './url-reader-handler'
 export { WorkspaceGitCloneToolHandler } from './workspace-git-clone-handler'
 export { WorkspaceListFilesToolHandler } from './workspace-list-files-handler'
 export { WorkspaceReadTextToolHandler } from './workspace-read-text-handler'
+export { ExportPdfToolHandler } from './export-pdf-handler'
 export {
   DocumentToolHandlerAdapter,
   documentToolNames,

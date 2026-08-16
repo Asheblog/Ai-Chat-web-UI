@@ -36,6 +36,12 @@ export const BUILTIN_SKILL_PRESETS: BuiltinSkillPreset[] = [
     description: '检索系统知识库中的文档内容',
     toolName: 'kb_search',
   },
+  {
+    slug: 'deep-research',
+    label: '深度研究',
+    description: '多轮联网搜索、交叉验证并生成带引用报告，最终导出 PDF',
+    toolName: 'export_pdf',
+  },
 ]
 
 const PRESET_MAP = new Map<string, BuiltinSkillPreset>(

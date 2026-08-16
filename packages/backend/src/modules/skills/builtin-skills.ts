@@ -202,6 +202,29 @@ export const BUILTIN_SKILLS: BuiltinSkillDefinition[] = [
       },
     ],
   },
+  {
+    slug: 'deep-research',
+    displayName: 'Deep Research',
+    description: '多轮联网深度研究并输出带引用的 Markdown 报告与可下载 PDF',
+    riskLevel: 'medium',
+    pythonPackages: [],
+    tools: [
+      {
+        name: 'export_pdf',
+        description:
+          'Export a finished Markdown research report to a styled A4 PDF and publish it as a downloadable chat artifact.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Report title' },
+            markdown: { type: 'string', description: 'Complete report Markdown' },
+            filename: { type: 'string', description: 'Optional file stem without extension' },
+          },
+          required: ['title', 'markdown'],
+        },
+      },
+    ],
+  },
 ]
 
 export function buildBuiltinManifest(skill: BuiltinSkillDefinition) {
