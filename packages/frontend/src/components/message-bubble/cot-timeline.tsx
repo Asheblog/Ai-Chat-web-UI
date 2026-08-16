@@ -13,6 +13,7 @@ import type { MessageMeta, ToolEvent } from '@/types'
 import { TypewriterReasoning } from '@/components/typewriter-reasoning'
 import { formatDurationSeconds } from './message-metrics'
 import { CotToolGroupStep, CotToolStep } from './cot-step-parts'
+import { ResearchPlanCard } from './research-plan-card'
 import { usePersistedExpand } from './use-persisted-expand'
 import { FadeScrollContainer } from './fade-scroll-container'
 import { SingleLineScroller } from './single-line-scroller'
@@ -155,6 +156,18 @@ export function CotTimeline({
                   overrideExpanded={masterExpanded}
                   onInteract={clearMasterOverride}
                 />
+              )
+            }
+            const toolId = node.event.identifier || node.event.apiName || node.event.tool
+            if (toolId === 'research_plan') {
+              return (
+                <div key={reactKey} className="relative">
+                  <span
+                    aria-hidden
+                    className={`absolute -left-[19px] top-4 h-2 w-2 rounded-full border-2 border-background ${dotClass}`}
+                  />
+                  <ResearchPlanCard event={node.event} isStreaming={isStreaming} />
+                </div>
               )
             }
             return (

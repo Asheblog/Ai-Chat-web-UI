@@ -81,6 +81,42 @@ describe('CotTimeline', () => {
     expect(screen.getByText(/联网搜索：今日新闻/)).toBeInTheDocument()
   })
 
+  it('renders research_plan events as a dedicated plan card', () => {
+    render(
+      <CotTimeline
+        meta={createMeta()}
+        reasoningRaw=""
+        toolEvents={[
+          tool({
+            id: 'plan-card',
+            tool: 'research_plan',
+            callId: 'call-plan-card',
+            stage: 'result',
+            status: 'success',
+            phase: 'result',
+            details: {
+              plan: {
+                title: 'AI 芯片竞争格局',
+                objective: '梳理厂商路线图、产能与市场份额',
+                sub_questions: [
+                  { question: '头部厂商路线图', keywords: ['AI 芯片', '路线图'] },
+                  { question: '产能分布', keywords: ['产能', '台积电'] },
+                  { question: '市场份额', keywords: ['份额'] },
+                ],
+                estimated_tool_rounds: { min: 3, max: 6 },
+                deliverable: 'markdown_report_with_citations_pdf',
+              },
+              approval: { kind: 'plan', decision: 'approve', revision: 0 },
+            },
+          }),
+        ]}
+      />,
+    )
+
+    expect(screen.getByText('研究计划确认')).toBeInTheDocument()
+    expect(screen.getByText('AI 芯片竞争格局')).toBeInTheDocument()
+  })
+
   it('思考步不展示工具进度污染文案', () => {
     render(
       <CotTimeline

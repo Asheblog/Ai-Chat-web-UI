@@ -1,5 +1,9 @@
 // 用户相关类型
 import type { BrandThemeColors } from '@aichat/shared'
+import type {
+  ResearchPlanApprovalState,
+  ResearchPlanPayload,
+} from '@aichat/shared/chat-stream-contract'
 
 export interface User {
   id: number;
@@ -652,6 +656,8 @@ export interface ToolEventDetails {
   reasoningOffset?: number;
   reasoningOffsetStart?: number;
   reasoningOffsetEnd?: number;
+  plan?: ResearchPlanPayload;
+  approval?: ResearchPlanApprovalState;
   [key: string]: unknown;
 }
 
