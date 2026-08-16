@@ -178,6 +178,13 @@ export class ChatRequestBuilder {
           '仅在需要最新信息时调用 web_search，且 query 必须包含明确关键词（如事件、日期、地点、人物或问题本身）。若无需搜索或无关键词，请直接回答，不要调用工具。若结果不足以回答，可以继续调用 web_search 直到信息充分或达到上限。对新闻、时效事件或争议话题，必须优先依据已读取的网页正文证据作答；若网页正文读取失败，必须明确写出失败原因与不确定性。若用户提供明确 URL，或搜索结果需要核实细节时，务必使用 read_url 读取网页正文后再下结论。',
       })
     }
+    if (enabledSkillSet.has(BUILTIN_SKILL_SLUGS.DEEP_RESEARCH)) {
+      systemPrompts.push({
+        role: 'system',
+        content:
+          '你现在处于深度研究（Deep Research）模式。开始前先在心里制定研究计划：将问题拆成 3-6 个关键子问题，并为每个子问题确定搜索关键词。然后交替使用 web_search 和 read_url 收集证据；至少读取若干篇搜索结果原文，并对冲突信息做交叉验证。所有关键事实必须记录来源，并在最终报告中用 [1]、[2] 等编号逐段引用。报告必须使用 Markdown 写成完整文档，结构为：标题、摘要、研究背景、分节正文、结论、参考来源列表。报告完成后，必须调用 export_pdf，把完整 Markdown 报告和标题传给该工具生成 PDF；PDF 生成成功后在回答中告知用户可下载。若搜索工具不可用，则基于对话上下文和已有知识完成报告，并明确标注未经联网验证的部分。'
+      })
+    }
     if (
       enabledSkillSet.has(BUILTIN_SKILL_SLUGS.WEB_SEARCH) ||
       enabledSkillSet.has(BUILTIN_SKILL_SLUGS.URL_READER)

@@ -383,7 +383,8 @@ function isBuiltinSkill(slug: string): boolean {
     slug === 'python-runner' ||
     slug === 'url-reader' ||
     slug === 'document-search' ||
-    slug === 'knowledge-base-search'
+    slug === 'knowledge-base-search' ||
+    slug === 'deep-research'
   )
 }
 

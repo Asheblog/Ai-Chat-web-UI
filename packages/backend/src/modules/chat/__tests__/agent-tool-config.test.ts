@@ -68,6 +68,29 @@ describe('computeAgentToolFlags', () => {
     expect(flags.urlReaderActive).toBe(true)
   })
 
+  it('deep research activates web search, url reader and pdf export', () => {
+    const flags = computeAgentToolFlags({
+      ...base,
+      requestedSkills: { builtin: [BUILTIN_SKILL_SLUGS.DEEP_RESEARCH], enabled: [] } as any,
+    })
+    expect(flags.deepResearchSkillRequested).toBe(true)
+    expect(flags.agentWebSearchActive).toBe(true)
+    expect(flags.urlReaderActive).toBe(true)
+    expect(flags.pdfExportActive).toBe(true)
+    expect(flags.agentToolsActive).toBe(true)
+  })
+
+  it('deep research stays tool-active even when no search engine keys exist', () => {
+    const flags = computeAgentToolFlags({
+      ...base,
+      webSearchConfig: { ...webSearchConfig, apiKeys: {} },
+      requestedSkills: { builtin: [BUILTIN_SKILL_SLUGS.DEEP_RESEARCH], enabled: [] } as any,
+    })
+    expect(flags.agentWebSearchActive).toBe(false)
+    expect(flags.pdfExportActive).toBe(true)
+    expect(flags.agentToolsActive).toBe(true)
+  })
+
   it('dynamic skill requires runtime enabled', () => {
     const flags = computeAgentToolFlags({
       ...base,

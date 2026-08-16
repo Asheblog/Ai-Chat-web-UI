@@ -61,6 +61,7 @@ export const BUILTIN_SKILL_SLUGS = {
   URL_READER: 'url-reader',
   DOCUMENT_SEARCH: 'document-search',
   KNOWLEDGE_BASE_SEARCH: 'knowledge-base-search',
+  DEEP_RESEARCH: 'deep-research',
 } as const
 
 export function normalizeSkillSlug(value: string): string {

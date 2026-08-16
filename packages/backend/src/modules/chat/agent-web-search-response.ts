@@ -29,6 +29,7 @@ import { enrichToolEventReasoningOffsets } from '@aichat/shared/tool-events';
 import { normalizeToolCallEventPayload } from './tool-call-event';
 import {
   sendUnsupportedToolError,
+  type PdfExportHandlerConfig,
 } from './tool-handlers';
 import {
   type ToolSchema,
@@ -88,6 +89,7 @@ export type AgentResponseParams = {
   workspaceToolConfig: AgentWorkspaceToolConfig;
   agentMaxToolIterations: number;
   allowDynamicRuntime?: boolean;
+  pdfExportConfig?: PdfExportHandlerConfig | null;
   toolFlags: {
     webSearch: boolean;
     python: boolean;
@@ -96,6 +98,7 @@ export type AgentResponseParams = {
     knowledgeBase?: boolean;
     workspace?: boolean;
     visionProxy?: boolean;
+    pdfExport?: boolean;
   };
   requestedSkills: RequestedSkillsPayload;
   knowledgeBaseIds?: number[];
@@ -141,6 +144,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
     workspaceToolConfig,
     agentMaxToolIterations,
     allowDynamicRuntime,
+    pdfExportConfig,
     toolFlags,
     requestedSkills,
     provider,
@@ -179,6 +183,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       workspace_tools: Boolean(toolFlags.workspace),
       document_tools: Boolean(toolFlags.document),
       knowledge_base_tools: Boolean(toolFlags.knowledgeBase),
+      export_pdf: Boolean(toolFlags.pdfExport),
     },
   });
 
@@ -606,6 +611,9 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             ? { enabled: true, knowledgeBaseIds, ragService }
             : null,
           visionProxy: params.visionProxyConfig ?? null,
+          pdfExport: toolFlags.pdfExport && pdfExportConfig
+            ? pdfExportConfig
+            : null,
         },
         allowDynamicRuntime: allowDynamicRuntime === true,
         mcpService: params.mcpService,
