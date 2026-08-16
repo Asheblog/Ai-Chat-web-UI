@@ -105,6 +105,28 @@ export interface ToolHandlerFactoryParams {
   urlReader?: UrlReaderHandlerConfig | null
   workspace?: WorkspaceHandlerConfig | null
   visionProxy?: VisionProxyConfig | null
+  pdfExport?: PdfExportHandlerConfig | null
+}
+
+/**
+ * PDF 导出处理器配置
+ */
+export interface PdfExportHandlerConfig {
+  enabled: boolean
+  maxMarkdownChars?: number
+  browserExecutablePath?: string
+  /** 测试/自定义渲染注入点；不传则使用真实 Chromium 渲染。 */
+  renderPdf?: (
+    markdown: string,
+    outputPath: string,
+    options?: { title?: string; browserExecutablePath?: string },
+  ) => Promise<{ sizeBytes: number }>
+  renderMarkdown?: (markdown: string) => string
+  buildHtml?: (input: {
+    title: string
+    markdownHtml: string
+    generatedAt?: string
+  }) => string
 }
 
 /**

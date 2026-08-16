@@ -26,6 +26,7 @@ import {
   kbToolNames,
 } from './knowledge-base-handler-adapter'
 import { VisionProxyToolHandler } from './vision-proxy-handler'
+import { ExportPdfToolHandler } from './export-pdf-handler'
 import type { VisionProxyService } from '../services/vision-proxy-service'
 import { McpToolAdapter } from '../../../services/mcp/mcp-tool-adapter'
 
@@ -243,6 +244,11 @@ export function createToolHandlerRegistry(
   // 注册视觉分析工具处理器（图片转写代理）
   if (params.visionProxy?.enabled) {
     registry.register(new VisionProxyToolHandler(params.visionProxy, deps.visionProxyService))
+  }
+
+  // 注册深度研究报告 PDF 导出处理器
+  if (params.pdfExport?.enabled) {
+    registry.register(new ExportPdfToolHandler(params.pdfExport))
   }
 
   return registry
