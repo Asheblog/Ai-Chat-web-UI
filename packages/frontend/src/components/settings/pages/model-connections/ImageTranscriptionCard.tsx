@@ -99,9 +99,13 @@ export function ImageTranscriptionCard({ settings, update }: ImageTranscriptionC
         throw new Error(response.error || "探针未返回结果")
       }
       setProbeResult(data)
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const maybe = err as {
+        response?: { data?: { error?: string } }
+        message?: string
+      }
       const message =
-        err?.response?.data?.error || err?.message || "测试转写代理失败"
+        maybe?.response?.data?.error || maybe?.message || "测试转写代理失败"
       toast({ title: "测试失败", description: message, variant: "destructive" })
     } finally {
       setProbing(false)

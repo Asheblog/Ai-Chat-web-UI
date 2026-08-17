@@ -19,6 +19,12 @@ vi.mock("@/components/settings/system-connections/use-system-connections", () =>
   useSystemConnections: useSystemConnectionsMock,
 }))
 
+const toastSpy = vi.hoisted(() => vi.fn())
+vi.mock("@/components/ui/use-toast", () => ({
+  useToast: () => ({ toast: toastSpy }),
+  toast: toastSpy,
+}))
+
 const apiMocks = vi.hoisted(() => ({
   getAggregatedModels: vi.fn(),
   probeImageTranscription: vi.fn(),
@@ -88,6 +94,31 @@ describe("ImageTranscriptionCard", () => {
     await userEvent.click(screen.getByRole("switch", { name: "思考模式" }))
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({ imageTranscriptionReasoningEnabled: true }),
+    )
+  })
+
+  it("changing reasoning effort Select calls update with imageTranscriptionReasoningEffort", async () => {
+    const update = vi.fn()
+    render(<ImageTranscriptionCard settings={configuredSettings as any} update={update} />)
+
+    await userEvent.click(screen.getByRole("button", { name: /更多参数/ }))
+    await userEvent.click(screen.getByRole("combobox", { name: "思考强度" }))
+    await userEvent.click(await screen.findByRole("option", { name: "high" }))
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ imageTranscriptionReasoningEffort: "high" }),
+    )
+  })
+
+  it("toggling Ollama Think calls update with imageTranscriptionOllamaThink true", async () => {
+    const update = vi.fn()
+    render(<ImageTranscriptionCard settings={configuredSettings as any} update={update} />)
+
+    await userEvent.click(screen.getByRole("button", { name: /更多参数/ }))
+    await userEvent.click(screen.getByRole("switch", { name: "Ollama Think" }))
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ imageTranscriptionOllamaThink: true }),
     )
   })
 
@@ -165,5 +196,47 @@ describe("ImageTranscriptionCard", () => {
 
     expect(await screen.findByText("失败")).toBeInTheDocument()
     expect(screen.getByText("转写模型请求失败（HTTP 502）")).toBeInTheDocument()
+  })
+
+  it("probe reject shows destructive toast", async () => {
+    apiMocks.probeImageTranscription.mockRejectedValue(new Error("network down"))
+
+    const update = vi.fn()
+    render(<ImageTranscriptionCard settings={configuredSettings as any} update={update} />)
+
+    await userEvent.click(screen.getByRole("button", { name: "测试转写代理" }))
+
+    await waitFor(() => {
+      expect(toastSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "测试失败",
+          description: "network down",
+          variant: "destructive",
+        }),
+      )
+    })
+  })
+
+  it("probe missing data shows destructive toast with API error", async () => {
+    apiMocks.probeImageTranscription.mockResolvedValue({
+      success: false,
+      error: "探针未返回结果",
+      data: null,
+    })
+
+    const update = vi.fn()
+    render(<ImageTranscriptionCard settings={configuredSettings as any} update={update} />)
+
+    await userEvent.click(screen.getByRole("button", { name: "测试转写代理" }))
+
+    await waitFor(() => {
+      expect(toastSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "测试失败",
+          description: "探针未返回结果",
+          variant: "destructive",
+        }),
+      )
+    })
   })
 })
