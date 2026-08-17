@@ -31,11 +31,32 @@ describe('readRemoteImages', () => {
     expect(result).toHaveLength(1)
     expect(result[0]).toMatchObject({
       url: 'https://cdn.example.com/a.png',
+      requestedUrl: 'https://cdn.example.com/a.png',
       mime: 'image/png',
       alt: '图A',
       source: 'content',
     })
     expect(result[0]?.data).toBe(ONE_BY_ONE_PNG_BASE64)
+  })
+
+  it('preserves requestedUrl when hostname normalization differs', async () => {
+    const fetchImpl = jest.fn(async () =>
+      new Response(Buffer.from(ONE_BY_ONE_PNG_BASE64, 'base64'), {
+        status: 200,
+        headers: {
+          'content-type': 'image/png',
+        },
+      }),
+    ) as typeof fetch
+
+    const result = await readRemoteImages(
+      [{ url: 'https://CDN.EXAMPLE.COM/news.png', alt: '新闻图' }],
+      { fetchImpl },
+    )
+
+    expect(result).toHaveLength(1)
+    expect(result[0]?.requestedUrl).toBe('https://CDN.EXAMPLE.COM/news.png')
+    expect(result[0]?.url).toBe('https://cdn.example.com/news.png')
   })
 
   it('skips invalid or non-image responses', async () => {

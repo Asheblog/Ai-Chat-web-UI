@@ -232,15 +232,11 @@ export class ExportPdfToolHandler implements IToolHandler {
         },
       )
       for (const image of downloaded) {
-        imageSources[image.url] = `data:${image.mime};base64,${image.data}`
-      }
-      // 模型 Markdown 里通常使用原始 URL；若下载器返回了规范化 URL，也把原始 URL 指向同一份内嵌数据。
-      for (const requested of reportImages) {
-        if (!imageSources[requested.url]) {
-          const matched = downloaded.find((image) => image.url === requested.url)
-          if (matched) {
-            imageSources[requested.url] = `data:${matched.mime};base64,${matched.data}`
-          }
+        const dataUrl = `data:${image.mime};base64,${image.data}`
+        // 规范化 URL 与原始请求 URL 都指向同一份内嵌数据，避免 Markdown 仍用原 URL 时落成占位符。
+        imageSources[image.url] = dataUrl
+        if (image.requestedUrl) {
+          imageSources[image.requestedUrl] = dataUrl
         }
       }
     }
