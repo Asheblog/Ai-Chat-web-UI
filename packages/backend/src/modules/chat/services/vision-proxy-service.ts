@@ -298,12 +298,18 @@ export class VisionProxyService {
       })
       if (!response.ok) {
         const errorText = await response.text().catch(() => '')
+        const snippet = errorText.replace(/\s+/g, ' ').trim().slice(0, 240)
         log.warn('[vision-proxy] provider request failed', {
           status: response.status,
           url,
-          error: errorText.slice(0, 200),
+          error: snippet.slice(0, 200),
         })
-        throw new VisionProxyServiceError(`转写模型请求失败（HTTP ${response.status}）`, 502)
+        throw new VisionProxyServiceError(
+          snippet
+            ? `转写模型请求失败（HTTP ${response.status}）：${snippet}`
+            : `转写模型请求失败（HTTP ${response.status}）`,
+          502,
+        )
       }
       const rawText = await response.text()
       let json: any = {}
@@ -318,9 +324,11 @@ export class VisionProxyService {
       } else if (provider === 'google_genai') {
         text = json?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('') || ''
       } else {
+        const message = json?.choices?.[0]?.message
         text =
-          json?.choices?.[0]?.message?.content ||
-          json?.choices?.[0]?.message?.reasoning_content ||
+          message?.content ||
+          message?.reasoning_content ||
+          message?.reasoning ||
           json?.message?.content ||
           ''
       }

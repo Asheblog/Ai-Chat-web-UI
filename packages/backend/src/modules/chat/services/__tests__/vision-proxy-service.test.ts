@@ -212,6 +212,34 @@ describe('VisionProxyService.transcribeImages', () => {
       .rejects.toMatchObject({ statusCode: 502 })
   })
 
+  it('includes upstream body snippet in http error message', async () => {
+    prisma.connection.findUnique.mockResolvedValue({
+      provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
+      headersJson: '', azureApiVersion: null,
+    })
+    const fetchFn = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: async () => '{"error":{"message":"Model opencode-go/mimo-v2.5 is not supported"}}',
+    })
+    await expect(new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', config)).rejects.toMatchObject({
+      statusCode: 502,
+      message: expect.stringMatching(/HTTP 401.*Model opencode-go\/mimo-v2\.5 is not supported/),
+    })
+  })
+
+  it('falls back to message.reasoning when content is null', async () => {
+    prisma.connection.findUnique.mockResolvedValue({
+      provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
+      headersJson: '', azureApiVersion: null,
+    })
+    const fetchFn = jest.fn().mockResolvedValue(
+      okResponse({ choices: [{ message: { content: null, reasoning: '  纯红色方块  ' } }] }),
+    )
+    const result = await new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', config)
+    expect(result.description).toBe('纯红色方块')
+  })
+
   it('throws 502 on empty description', async () => {
     prisma.connection.findUnique.mockResolvedValue({
       provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
