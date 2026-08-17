@@ -1,6 +1,7 @@
 import type { RichMessageEvidenceConfidence } from '../types'
 import type { VisionProxyConfig, VisionProxyService } from '../modules/chat/services/vision-proxy-service'
 import { isVisionProxyReady } from '../modules/chat/services/vision-proxy-service'
+import { BackendLogger as log } from './logger'
 import { readRemoteImages, type RemoteImageCandidate } from './remote-image-reader'
 
 export type WebImageRelevance = 'related' | 'weakly_related' | 'unrelated'
@@ -193,8 +194,12 @@ export async function assessWebImageRelevance(params: {
         confidence: relevanceToConfidence(parsed.relevance),
         description: parsed.description,
       })
-    } catch {
+    } catch (error) {
       // skip failed image; do not fail the whole search
+      log.warn('[web-image-evidence] vision relevance assessment failed', {
+        url: image.url.slice(0, 200),
+        error: error instanceof Error ? error.message : String(error),
+      })
     }
   }
 
