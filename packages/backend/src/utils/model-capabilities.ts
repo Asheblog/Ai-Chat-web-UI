@@ -17,7 +17,7 @@ export async function resolveModelCapabilitiesForSession(
   }
   try {
     const catalog = await prisma.modelCatalog.findFirst({
-      where: { connectionId, rawId: rawModelId },
+      where: { connectionGroupId: connectionId, rawId: rawModelId },
       select: { capabilitiesJson: true, tagsJson: true },
     })
     const parsed = parseCapabilityEnvelope(catalog?.capabilitiesJson)

@@ -149,7 +149,7 @@ export class SettingsService {
   }
 
   private async computeSetupDiagnostics(): Promise<SetupStatusDiagnostics> {
-    const connections = await this.prisma.connection.findMany({
+    const connections = await this.prisma.connectionGroup.findMany({
       where: { ownerUserId: null },
       select: { id: true, enable: true },
     })
@@ -159,14 +159,14 @@ export class SettingsService {
 
     const totalModels = enabledConnectionIds.length
       ? await this.prisma.modelCatalog.count({
-          where: { connectionId: { in: enabledConnectionIds } },
+          where: { connectionGroupId: { in: enabledConnectionIds } },
         })
       : 0
 
     const chatModels = enabledConnectionIds.length
       ? await this.prisma.modelCatalog.count({
           where: {
-            connectionId: { in: enabledConnectionIds },
+            connectionGroupId: { in: enabledConnectionIds },
             modelType: { in: ['chat', 'both'] },
           },
         })

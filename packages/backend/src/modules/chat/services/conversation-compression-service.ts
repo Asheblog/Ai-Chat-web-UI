@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from '@prisma/client'
+import type { PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../../db'
 import { Tokenizer } from '../../../utils/tokenizer'
 import { resolveContextLimit as defaultResolveContextLimit } from '../../../utils/context-window'
@@ -15,8 +15,9 @@ import {
   loadSystemSettingsMap,
   type SystemSettingsMap,
 } from './pre-stream-context'
+import type { SessionWithConnection } from '../../../services/chat/chat-service'
 
-type ChatSessionWithConnection = Prisma.ChatSessionGetPayload<{ include: { connection: true } }>
+type ChatSessionWithConnection = SessionWithConnection
 
 type PlainMessage = {
   id: number
@@ -458,8 +459,8 @@ export class ConversationCompressionService {
     })
 
     let decryptedKey = ''
-    if (authType === 'bearer' && (params.session.connection as any)?.secretVaultId && this.secretVault) {
-      decryptedKey = await this.secretVault.decryptById((params.session.connection as any).secretVaultId).catch(() => { throw new Error('无法解密 API Key：Secret Vault 解密失败') })
+    if (authType === 'bearer' && params.session.connection?.secretVaultId && this.secretVault) {
+      decryptedKey = await this.secretVault.decryptById(params.session.connection.secretVaultId).catch(() => { throw new Error('无法解密 API Key：Secret Vault 解密失败') })
     }
 
     const headers = await buildHeaders(

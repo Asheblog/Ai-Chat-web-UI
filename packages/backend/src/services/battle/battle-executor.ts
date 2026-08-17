@@ -1,4 +1,4 @@
-import type { Connection } from '@prisma/client'
+import type { ResolvedConnection } from '../../repositories/model-resolver-repository'
 import { ChatRequestBuilder, type PreparedChatRequest } from '../../modules/chat/services/chat-request-builder'
 import { ProviderRequester, type ProviderRequester as ProviderRequesterType } from '../../modules/chat/services/provider-requester'
 import { buildChatProviderRequest } from '../../utils/chat-provider'
@@ -118,7 +118,7 @@ export class BattleExecutor {
     prompt: string
     promptImages?: BattleUploadImage[]
     modelConfig: BattleModelInput
-    resolved: { connection: Connection; rawModelId: string }
+    resolved: { connection: ResolvedConnection; rawModelId: string }
     systemSettings: Record<string, string>
     context: BattleExecutionContext
     emitDelta?: (delta: { content?: string; reasoning?: string }) => void
@@ -245,7 +245,7 @@ export class BattleExecutor {
     expectedAnswerImages?: BattleUploadImage[]
     answer: string
     threshold: number
-    judgeModel: { connection: Connection; rawModelId: string }
+    judgeModel: { connection: ResolvedConnection; rawModelId: string }
     context: BattleExecutionContext
   }) {
     const {
@@ -758,7 +758,7 @@ export class BattleExecutor {
     ].join('\n')
   }
 
-  private buildVirtualSession(connection: Connection, rawModelId: string) {
+  private buildVirtualSession(connection: ResolvedConnection, rawModelId: string) {
     return {
       id: -1,
       userId: null,

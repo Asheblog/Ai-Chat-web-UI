@@ -24,9 +24,14 @@ export interface ModelResolverRepository {
    * Returns a ResolvedConnection (group fields + selected credential vault).
    */
   findEnabledResolvedConnectionById(id: number): Promise<ResolvedConnection | null>
+  /** Dual-read without enable filter (system soft-refs). */
+  findResolvedConnectionById(id: number): Promise<ResolvedConnection | null>
 }
 
-const pickCredential = (group: ConnectionGroup, credentials: Connection[]): Connection | null => {
+export const pickPrimaryCredential = (
+  group: ConnectionGroup,
+  credentials: Connection[],
+): Connection | null => {
   const enabled = credentials.filter((item) => item.enable)
   const pool = enabled.length > 0 ? enabled : credentials
   if (pool.length === 0) return null
@@ -36,7 +41,7 @@ const pickCredential = (group: ConnectionGroup, credentials: Connection[]): Conn
   return pool.find((item) => item.secretVaultId != null) ?? pool[0] ?? null
 }
 
-const toResolved = (
+export const toResolvedConnection = (
   group: ConnectionGroup,
   credential: Connection,
 ): ResolvedConnection => ({
@@ -46,6 +51,14 @@ const toResolved = (
   modelIdsJson: credential.modelIdsJson,
   apiKeyLabel: credential.apiKeyLabel,
 })
+
+export const resolveConnectionFromGroup = (
+  group: ConnectionGroup & { credentials: Connection[] },
+): ResolvedConnection | null => {
+  const credential = pickPrimaryCredential(group, group.credentials)
+  if (!credential) return null
+  return toResolvedConnection(group, credential)
+}
 
 export class PrismaModelResolverRepository implements ModelResolverRepository {
   private prisma: PrismaClient
@@ -69,11 +82,11 @@ export class PrismaModelResolverRepository implements ModelResolverRepository {
     })
     if (!row?.connectionGroup) return null
 
-    const credential = pickCredential(row.connectionGroup, row.connectionGroup.credentials)
+    const credential = pickPrimaryCredential(row.connectionGroup, row.connectionGroup.credentials)
     if (!credential) return null
 
     return {
-      connection: toResolved(row.connectionGroup, credential),
+      connection: toResolvedConnection(row.connectionGroup, credential),
       rawId: row.rawId,
       modelId: row.modelId,
       connectionId: row.connectionGroupId,
@@ -101,9 +114,7 @@ export class PrismaModelResolverRepository implements ModelResolverRepository {
       include: { credentials: true },
     })
     if (asGroup) {
-      const credential = pickCredential(asGroup, asGroup.credentials)
-      if (!credential) return null
-      return toResolved(asGroup, credential)
+      return resolveConnectionFromGroup(asGroup)
     }
 
     const credential = await this.prisma.connection.findFirst({
@@ -113,6 +124,28 @@ export class PrismaModelResolverRepository implements ModelResolverRepository {
     if (!credential?.group || credential.group.ownerUserId != null || !credential.group.enable) {
       return null
     }
-    return toResolved(credential.group, credential)
+    return toResolvedConnection(credential.group, credential)
+  }
+
+  /**
+   * Dual-read without enable filter — for system soft-refs (title/vision/rag settings).
+   */
+  async findResolvedConnectionById(id: number): Promise<ResolvedConnection | null> {
+    const asGroup = await this.prisma.connectionGroup.findFirst({
+      where: { id, ownerUserId: null },
+      include: { credentials: true },
+    })
+    if (asGroup) {
+      return resolveConnectionFromGroup(asGroup)
+    }
+
+    const credential = await this.prisma.connection.findFirst({
+      where: { id },
+      include: { group: true },
+    })
+    if (!credential?.group || credential.group.ownerUserId != null) {
+      return null
+    }
+    return toResolvedConnection(credential.group, credential)
   }
 }

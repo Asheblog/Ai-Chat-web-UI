@@ -4,6 +4,7 @@ import type { SecretVaultService } from '../../../services/secret-vault'
 import { buildHeaders, type ProviderType, type AuthType } from '../../../utils/providers'
 import { convertChatCompletionsRequestToResponses, extractTextFromResponsesResponse } from '../../../utils/openai-responses'
 import { BackendLogger as log } from '../../../utils/logger'
+import { PrismaModelResolverRepository } from '../../../repositories/model-resolver-repository'
 
 export interface VisionProxyConfig {
   enabled: boolean
@@ -175,9 +176,8 @@ export class VisionProxyService {
     if (!Array.isArray(images) || images.length === 0) {
       throw new VisionProxyServiceError('没有可转写的图片', 400)
     }
-    const connection = await this.prisma.connection.findUnique({
-      where: { id: config.connectionId! },
-    })
+    const resolver = new PrismaModelResolverRepository(this.prisma)
+    const connection = await resolver.findResolvedConnectionById(config.connectionId!)
     if (!connection) {
       throw new VisionProxyServiceError('图片转写代理的连接不存在，请检查系统设置', 404)
     }
@@ -186,8 +186,8 @@ export class VisionProxyService {
     const endpoint = (connection.baseUrl || '').trim().replace(/\/+$/, '')
     const authType = connection.authType as AuthType
     let apiKey = ''
-    if (authType === 'bearer' && (connection as any).secretVaultId && this.secretVault) {
-      apiKey = await this.secretVault.decryptById((connection as any).secretVaultId).catch(() => {
+    if (authType === 'bearer' && connection.secretVaultId && this.secretVault) {
+      apiKey = await this.secretVault.decryptById(connection.secretVaultId).catch(() => {
         throw new VisionProxyServiceError('图片转写代理的 API Key 解密失败', 502)
       })
     }

@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from '@prisma/client'
+import type { PrismaClient } from '@prisma/client'
 import type { z } from 'zod'
 import { prisma as defaultPrisma } from '../../../db'
 import { Tokenizer } from '../../../utils/tokenizer'
@@ -25,14 +25,11 @@ import {
   type PreStreamHistorySnapshot,
   type SystemSettingsMap,
 } from './pre-stream-context'
+import type { SessionWithConnection, SessionWithResolvedConnection } from '../../../services/chat/chat-service'
 
 type SendMessagePayload = z.infer<typeof sendMessageSchema>
-type ChatSessionWithConnection = Prisma.ChatSessionGetPayload<{ include: { connection: true } }>
-type ChatSessionWithResolvedConnection = Omit<ChatSessionWithConnection, 'connectionId' | 'modelRawId' | 'connection'> & {
-  connectionId: number
-  modelRawId: string
-  connection: NonNullable<ChatSessionWithConnection['connection']>
-}
+type ChatSessionWithConnection = SessionWithConnection
+type ChatSessionWithResolvedConnection = SessionWithResolvedConnection
 
 export interface PreparedChatRequest {
   promptTokens: number
@@ -267,7 +264,7 @@ export class ChatRequestBuilder {
     const temperature = await this.resolveTemperature({
       connectionId: params.session.connectionId,
       rawModelId: params.session.modelRawId,
-      connectionPrefixId: (params.session.connection as any)?.prefixId,
+      connectionPrefixId: params.session.connection.prefixId,
       systemSettings,
     })
 
@@ -713,7 +710,7 @@ export class ChatRequestBuilder {
     const extraHeaders = this.parseHeadersJson(params.session.connection.headersJson)
     let decryptedKey: string | undefined
     if (params.session.connection.authType === 'bearer') {
-      const secretVaultId = (params.session.connection as any).secretVaultId
+      const secretVaultId = params.session.connection.secretVaultId
       if (!secretVaultId) {
         throw new ConnectionServiceError('连接缺少 secretVaultId，无法获取 API Key', 400)
       }
@@ -859,7 +856,7 @@ export class ChatRequestBuilder {
     }
     const catalogRows = await this.prisma.modelCatalog.findMany({
       where: {
-        connectionId,
+        connectionGroupId: connectionId,
         OR: [
           { rawId: normalizedRawId },
           { modelId: { in: Array.from(modelIdCandidates) } },

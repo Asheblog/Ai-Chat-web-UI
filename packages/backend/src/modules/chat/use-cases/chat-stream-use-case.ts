@@ -769,7 +769,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
           connection: {
             id: session.connection.id,
             baseUrl: session.connection.baseUrl,
-            secretVaultId: (session.connection as any).secretVaultId ?? null,
+            secretVaultId: session.connection.secretVaultId ?? null,
             provider: session.connection.provider,
           },
           modelRawId: session.modelRawId || '',

@@ -138,7 +138,7 @@ export class ContextWindowService {
 
     if (connectionId !== null && rawId) {
       const catalog = await this.prisma.modelCatalog.findFirst({
-        where: { connectionId, rawId },
+        where: { connectionGroupId: connectionId, rawId },
         select: { metaJson: true },
       })
       contextWindow = coercePositive(parseMetaContextWindow(catalog?.metaJson) ?? 0)
@@ -188,7 +188,7 @@ export class ContextWindowService {
 
     if (connectionId !== null && rawId) {
       const catalog = await this.prisma.modelCatalog.findFirst({
-        where: { connectionId, rawId },
+        where: { connectionGroupId: connectionId, rawId },
         select: { metaJson: true },
       })
       completionLimit = coercePositive(parseMetaCompletionLimit(catalog?.metaJson) ?? 0)

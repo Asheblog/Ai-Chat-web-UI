@@ -1,6 +1,10 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
 import type { Actor } from '../../types'
 import { prisma as defaultPrisma } from '../../db'
+import {
+  resolveConnectionFromGroup,
+  type ResolvedConnection,
+} from '../../repositories/model-resolver-repository'
 
 export class ChatServiceError extends Error {
   statusCode: number
@@ -17,17 +21,32 @@ export interface ChatServiceDeps {
   logger?: Pick<typeof console, 'warn' | 'error'>
 }
 
-type SessionWithConnection = Prisma.ChatSessionGetPayload<{ include: { connection: true } }>
-type SessionWithResolvedConnection = Omit<SessionWithConnection, 'connectionId' | 'modelRawId' | 'connection'> & {
+type SessionRow = Prisma.ChatSessionGetPayload<{
+  include: { connection: { include: { credentials: true } } }
+}>
+
+export type SessionWithConnection = Omit<SessionRow, 'connection'> & {
+  connection: ResolvedConnection | null
+}
+
+export type SessionWithResolvedConnection = Omit<SessionWithConnection, 'connectionId' | 'modelRawId' | 'connection'> & {
   connectionId: number
   modelRawId: string
-  connection: NonNullable<SessionWithConnection['connection']>
+  connection: ResolvedConnection
 }
 
 const buildSessionOwnershipWhere = (actor: Actor): Prisma.ChatSessionWhereInput =>
   actor.type === 'user'
     ? { userId: actor.id }
     : { anonymousKey: actor.key }
+
+const hydrateSession = (session: SessionRow): SessionWithConnection => {
+  const resolved = session.connection ? resolveConnectionFromGroup(session.connection) : null
+  return {
+    ...session,
+    connection: resolved,
+  }
+}
 
 export class ChatService {
   private prisma: PrismaClient
@@ -43,15 +62,18 @@ export class ChatService {
       this.logger.warn?.('[ChatService] Invalid session id provided', { sessionId })
       return null
     }
-    return this.prisma.chatSession.findFirst({
+    const session = await this.prisma.chatSession.findFirst({
       where: {
         id: sessionId,
         ...buildSessionOwnershipWhere(actor),
       },
       include: {
-        connection: true,
+        connection: {
+          include: { credentials: true },
+        },
       },
     })
+    return session ? hydrateSession(session) : null
   }
 
   async getSessionWithConnection(actor: Actor, sessionId: number): Promise<SessionWithResolvedConnection> {

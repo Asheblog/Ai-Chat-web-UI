@@ -14,7 +14,8 @@ import { redactHeadersForTrace, summarizeBodyForTrace, summarizeErrorForTrace } 
 import { truncateString } from '../utils/task-trace';
 import type { Actor } from '../types';
 
-import type { Connection, Message as MessageEntity } from '@prisma/client';
+import type { Message as MessageEntity } from '@prisma/client';
+import type { ResolvedConnection } from '../repositories/model-resolver-repository';
 import {
   OpenAICompatMessageServiceError,
   OpenAICompatMessageService,
@@ -143,7 +144,7 @@ function cloneMessages(messages: z.infer<typeof chatMessageSchema>[]) {
 }
 
 interface ProviderRequestOptions {
-  connection: Connection;
+  connection: ResolvedConnection;
   rawModelId: string;
   provider: ProviderType;
   body: any;
@@ -180,7 +181,7 @@ async function buildProviderRequest(opts: ProviderRequestOptions) {
 }
 
 interface EmbeddingsRequestOptions {
-  connection: Connection;
+  connection: ResolvedConnection;
   rawModelId: string;
   provider: ProviderType;
   body: z.infer<typeof embeddingsSchema>;

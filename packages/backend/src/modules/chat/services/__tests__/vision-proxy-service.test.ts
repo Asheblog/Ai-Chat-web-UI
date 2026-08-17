@@ -9,9 +9,44 @@ import {
 } from '../vision-proxy-service'
 
 const prisma = {
-  connection: { findUnique: jest.fn() },
+  connectionGroup: { findFirst: jest.fn() },
+  connection: { findFirst: jest.fn() },
   message: { findMany: jest.fn() },
 } as any
+
+const mockResolvedGroup = (fields: Record<string, unknown>) => {
+  prisma.connectionGroup.findFirst.mockResolvedValue({
+    id: 1,
+    ownerUserId: null,
+    displayName: 'test',
+    enable: true,
+    vendor: fields.vendor ?? null,
+    tagsJson: '[]',
+    defaultCapabilitiesJson: '{}',
+    connectionType: 'external',
+    prefixId: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    provider: fields.provider,
+    baseUrl: fields.baseUrl,
+    authType: fields.authType,
+    headersJson: fields.headersJson ?? '',
+    azureApiVersion: fields.azureApiVersion ?? null,
+    credentials: [
+      {
+        id: 10,
+        connectionGroupId: 1,
+        enable: true,
+        secretVaultId: fields.secretVaultId ?? null,
+        apiKeyLabel: null,
+        modelIdsJson: '[]',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ],
+  })
+  prisma.connection.findFirst.mockResolvedValue(null)
+}
 
 const config = {
   enabled: true,
@@ -133,12 +168,12 @@ describe('VisionProxyService.transcribeImages', () => {
   })
 
   it('throws 404 when connection missing', async () => {
-    prisma.connection.findUnique.mockResolvedValue(null)
+    prisma.connectionGroup.findFirst.mockResolvedValue(null); prisma.connection.findFirst.mockResolvedValue(null)
     await expect(service().transcribeImages(images, '', config)).rejects.toMatchObject({ statusCode: 404 })
   })
 
   it('returns description from openai-format response', async () => {
-    prisma.connection.findUnique.mockResolvedValue({
+    mockResolvedGroup({
       provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
       headersJson: '', azureApiVersion: null,
     })
@@ -155,7 +190,7 @@ describe('VisionProxyService.transcribeImages', () => {
   })
 
   it('parses google_genai response', async () => {
-    prisma.connection.findUnique.mockResolvedValue({
+    mockResolvedGroup({
       provider: 'google_genai', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', authType: 'bearer', secretVaultId: null,
       headersJson: '', azureApiVersion: null,
     })
@@ -165,7 +200,7 @@ describe('VisionProxyService.transcribeImages', () => {
   })
 
   it('builds google_genai generateContent body with inline_data parts', async () => {
-    prisma.connection.findUnique.mockResolvedValue({
+    mockResolvedGroup({
       provider: 'google_genai', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', authType: 'bearer', secretVaultId: null,
       headersJson: '', azureApiVersion: null,
     })
@@ -183,7 +218,7 @@ describe('VisionProxyService.transcribeImages', () => {
   })
 
   it('builds ollama /api/chat body with images array', async () => {
-    prisma.connection.findUnique.mockResolvedValue({
+    mockResolvedGroup({
       provider: 'ollama', baseUrl: 'http://localhost:11434', authType: 'none', secretVaultId: null,
       headersJson: '', azureApiVersion: null,
     })
@@ -203,7 +238,7 @@ describe('VisionProxyService.transcribeImages', () => {
   })
 
   it('maps http error to 502 VisionProxyServiceError', async () => {
-    prisma.connection.findUnique.mockResolvedValue({
+    mockResolvedGroup({
       provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
       headersJson: '', azureApiVersion: null,
     })
@@ -213,7 +248,7 @@ describe('VisionProxyService.transcribeImages', () => {
   })
 
   it('includes upstream body snippet in http error message', async () => {
-    prisma.connection.findUnique.mockResolvedValue({
+    mockResolvedGroup({
       provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
       headersJson: '', azureApiVersion: null,
     })
@@ -229,7 +264,7 @@ describe('VisionProxyService.transcribeImages', () => {
   })
 
   it('falls back to message.reasoning when content is null', async () => {
-    prisma.connection.findUnique.mockResolvedValue({
+    mockResolvedGroup({
       provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
       headersJson: '', azureApiVersion: null,
     })
@@ -241,7 +276,7 @@ describe('VisionProxyService.transcribeImages', () => {
   })
 
   it('throws 502 on empty description', async () => {
-    prisma.connection.findUnique.mockResolvedValue({
+    mockResolvedGroup({
       provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
       headersJson: '', azureApiVersion: null,
     })
@@ -251,7 +286,7 @@ describe('VisionProxyService.transcribeImages', () => {
   })
 
   it('includes reasoning_effort on openai body when enabled + effort high', async () => {
-    prisma.connection.findUnique.mockResolvedValue({
+    mockResolvedGroup({
       provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
       headersJson: '', azureApiVersion: null,
     })
@@ -266,7 +301,7 @@ describe('VisionProxyService.transcribeImages', () => {
   })
 
   it('omits reasoning_effort when reasoning disabled', async () => {
-    prisma.connection.findUnique.mockResolvedValue({
+    mockResolvedGroup({
       provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
       headersJson: '', azureApiVersion: null,
     })
@@ -281,7 +316,7 @@ describe('VisionProxyService.transcribeImages', () => {
   })
 
   it('omits reasoning_effort when effort is unset', async () => {
-    prisma.connection.findUnique.mockResolvedValue({
+    mockResolvedGroup({
       provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
       headersJson: '', azureApiVersion: null,
     })
@@ -296,7 +331,7 @@ describe('VisionProxyService.transcribeImages', () => {
   })
 
   it('sets think:true on ollama body when enabled + ollamaThink', async () => {
-    prisma.connection.findUnique.mockResolvedValue({
+    mockResolvedGroup({
       provider: 'ollama', baseUrl: 'http://localhost:11434', authType: 'none', secretVaultId: null,
       headersJson: '', azureApiVersion: null,
     })
@@ -311,7 +346,7 @@ describe('VisionProxyService.transcribeImages', () => {
   })
 
   it('does not set think on ollama when reasoning disabled', async () => {
-    prisma.connection.findUnique.mockResolvedValue({
+    mockResolvedGroup({
       provider: 'ollama', baseUrl: 'http://localhost:11434', authType: 'none', secretVaultId: null,
       headersJson: '', azureApiVersion: null,
     })
@@ -326,7 +361,7 @@ describe('VisionProxyService.transcribeImages', () => {
   })
 
   it('includes thinking enabled for deepseek vendor when reasoningEnabled', async () => {
-    prisma.connection.findUnique.mockResolvedValue({
+    mockResolvedGroup({
       provider: 'openai',
       vendor: 'deepseek',
       baseUrl: 'https://api.example.com/v1',

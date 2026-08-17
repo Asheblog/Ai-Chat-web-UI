@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Prisma, type ChatSession, type Connection } from '@prisma/client';
+import { Prisma, type ChatSession } from '@prisma/client';
 import { shouldIgnoreReasoningMeta } from '@aichat/shared/strip-tool-progress-from-reasoning';
 import { prisma } from '../../db';
 import { BackendLogger as log } from '../../utils/logger';
@@ -77,7 +77,7 @@ import { createSkillRegistry } from '../skills/skill-registry';
 import type { RequestedSkillsPayload } from '../skills/types';
 import type { McpService } from '../../services/mcp/mcp-service';
 import type { VisionProxyConfig, VisionProxyService } from './services/vision-proxy-service';
-
+import type { ResolvedConnection } from '../../repositories/model-resolver-repository';
 // Re-export for backwards compatibility
 export {
   AgentWebSearchConfig,
@@ -90,7 +90,7 @@ export {
   buildAgentWorkspaceToolConfig,
 };
 
-type ChatSessionWithConnection = ChatSession & { connection: Connection | null };
+type ChatSessionWithConnection = ChatSession & { connection: ResolvedConnection | null };
 
 export type AgentResponseParams = {
   session: ChatSessionWithConnection;

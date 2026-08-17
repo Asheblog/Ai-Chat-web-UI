@@ -4,6 +4,10 @@ import type { SecretVaultService } from '../../../services/secret-vault'
 import { buildHeaders, type ProviderType, type AuthType } from '../../../utils/providers'
 import { convertChatCompletionsRequestToResponses, extractTextFromResponsesResponse } from '../../../utils/openai-responses'
 import { BackendLogger as log } from '../../../utils/logger'
+import {
+  PrismaModelResolverRepository,
+  type ResolvedConnection,
+} from '../../../repositories/model-resolver-repository'
 
 export interface TitleSummaryConfig {
   enabled: boolean
@@ -70,19 +74,17 @@ export class TitleSummaryService {
     // 确定使用哪个模型
     let connectionId: number | null
     let modelId: string | null
-    let connection: typeof session.connection
+    let connection: ResolvedConnection | null = null
 
     if (config.modelSource === 'specified' && config.connectionId && config.modelId) {
-      // 使用指定模型
+      // 使用指定模型（connectionId = group id，兼容旧凭据 id）
       connectionId = config.connectionId
       modelId = config.modelId
-      const specifiedConnection = await this.prisma.connection.findUnique({
-        where: { id: connectionId },
-      })
-      if (!specifiedConnection) {
+      const resolver = new PrismaModelResolverRepository(this.prisma)
+      connection = await resolver.findResolvedConnectionById(connectionId)
+      if (!connection) {
         throw new TitleSummaryServiceError('Specified connection not found', 404)
       }
-      connection = specifiedConnection
     } else {
       // 使用当前会话模型
       if (!session.connectionId || !session.connection || !session.modelRawId) {
@@ -90,7 +92,11 @@ export class TitleSummaryService {
       }
       connectionId = session.connectionId
       modelId = session.modelRawId
-      connection = session.connection
+      const resolver = new PrismaModelResolverRepository(this.prisma)
+      connection = await resolver.findResolvedConnectionById(session.connectionId)
+      if (!connection) {
+        throw new TitleSummaryServiceError('Session connection not found', 404)
+      }
     }
 
     // 构建请求
@@ -124,8 +130,8 @@ export class TitleSummaryService {
     const endpoint = (connection.baseUrl || '').trim().replace(/\/+$/, '')
     const authType = connection.authType as AuthType
     let apiKey = ''
-    if (authType === 'bearer' && (connection as any).secretVaultId && this.secretVault) {
-      apiKey = await this.secretVault.decryptById((connection as any).secretVaultId).catch(() => { throw new Error('无法解密 API Key：Secret Vault 解密失败') })
+    if (authType === 'bearer' && connection.secretVaultId && this.secretVault) {
+      apiKey = await this.secretVault.decryptById(connection.secretVaultId).catch(() => { throw new Error('无法解密 API Key：Secret Vault 解密失败') })
     }
 
     if (!endpoint) {

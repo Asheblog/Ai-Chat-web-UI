@@ -11,6 +11,7 @@
 import type { PrismaClient } from '@prisma/client'
 import { SecretVaultService } from './secret-vault'
 import { createLogger } from '../utils/logger'
+import { PrismaModelResolverRepository } from '../repositories/model-resolver-repository'
 
 const log = createLogger('RAGInit')
 import {
@@ -132,10 +133,9 @@ export async function reloadRAGServices(): Promise<{ success: boolean; message: 
         return { success: false, message: 'Invalid connection ID' }
       }
 
-      // 从连接管理获取连接信息
-      const connection = await prisma.connection.findUnique({
-        where: { id: connectionId },
-      })
+      // 从连接组获取端点与主凭据（兼容旧凭据 id）
+      const resolver = new PrismaModelResolverRepository(prisma)
+      const connection = await resolver.findResolvedConnectionById(connectionId)
 
       if (!connection) {
         return { success: false, message: `Connection not found: ${connectionId}` }
@@ -154,7 +154,7 @@ export async function reloadRAGServices(): Promise<{ success: boolean; message: 
         if (!deps.secretVault) {
           return { success: false, message: 'Secret Vault not available' }
         }
-        apiKey = await deps.secretVault.decryptById(connection.secretVaultId!)
+        apiKey = await deps.secretVault.decryptById(connection.secretVaultId)
       } catch (error) {
         return { success: false, message: `Failed to decrypt API key from Secret Vault: ${error instanceof Error ? error.message : String(error)}` }
       }

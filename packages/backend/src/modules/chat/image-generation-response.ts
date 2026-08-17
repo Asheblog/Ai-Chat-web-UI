@@ -208,7 +208,7 @@ export async function checkImageGenerationCapability(
     // 查询 catalog 中的 capabilities
     const catalog = await prisma.modelCatalog.findFirst({
       where: {
-        connectionId,
+        connectionGroupId: connectionId,
         rawId: modelRawId,
       },
       select: {
