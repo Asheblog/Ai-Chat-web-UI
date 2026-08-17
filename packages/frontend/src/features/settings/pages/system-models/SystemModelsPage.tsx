@@ -445,20 +445,15 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
                         </TableCell>
                         <TableCell className="py-3 px-3">
                           <div className="font-medium whitespace-normal break-words">{m.name || m.id}</div>
-                          {m.displayName && (
+                          {(m.displayName || m.provider) && (
                             <div className="mt-0.5 text-xs text-muted-foreground whitespace-normal break-words">
-                              {m.displayName}
+                              {[m.displayName, m.provider].filter(Boolean).join(" · ")}
                             </div>
                           )}
                           <div className="mt-1 flex items-center gap-2 flex-wrap text-xs">
                             <Badge variant="outline" className="text-micro font-normal">
                               {recommendTag(m)}
                             </Badge>
-                            {m.provider && (
-                              <Badge variant="secondary" className="text-micro font-normal">
-                                {m.provider}
-                              </Badge>
-                            )}
                             {m.capabilitySource && (
                               <Badge variant="secondary" className="text-micro font-normal bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
                                 {MODEL_CAP_SOURCE_LABELS[m.capabilitySource] || `来源:${m.capabilitySource}`}

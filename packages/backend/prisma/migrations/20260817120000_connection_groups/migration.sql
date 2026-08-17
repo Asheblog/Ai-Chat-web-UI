@@ -25,28 +25,75 @@ CREATE TABLE "connection_groups" (
 );
 CREATE INDEX "connection_groups_ownerUserId_idx" ON "connection_groups"("ownerUserId");
 
--- The endpoint signature deliberately includes all configuration that affects
--- wire behavior.  System groups get deterministic -2/-3 suffixes for equal
--- display-name seeds; user-owned groups are scoped by owner and may share a
--- display name.
+-- Display-name seed: prefixId → channel-ish host label → provider.
+-- Host label approximates deriveChannelName (strip scheme/path, drop api./www.,
+-- take the first remaining label). System groups get -2/-3 suffixes on clash.
 INSERT INTO "connection_groups" (
   "ownerUserId", "displayName", "provider", "vendor", "baseUrl", "enable",
   "authType", "headersJson", "azureApiVersion", "prefixId", "tagsJson",
   "defaultCapabilitiesJson", "connectionType", "createdAt", "updatedAt"
 )
-WITH distinct_endpoints AS (
+WITH grouped AS (
   SELECT
     "ownerUserId", "provider", "vendor", "baseUrl", "authType", "headersJson",
     "azureApiVersion", "prefixId", "tagsJson", "defaultCapabilitiesJson",
     "connectionType",
     MIN("createdAt") AS "createdAt",
     MAX("updatedAt") AS "updatedAt",
-    MAX(CASE WHEN "enable" THEN 1 ELSE 0 END) AS "enable",
-    COALESCE(NULLIF(TRIM("prefixId"), ''), "provider") AS seed
+    MAX(CASE WHEN "enable" THEN 1 ELSE 0 END) AS "enable"
   FROM "connections"
   GROUP BY "ownerUserId", "provider", "vendor", "baseUrl", "authType",
     "headersJson", "azureApiVersion", "prefixId", "tagsJson",
     "defaultCapabilitiesJson", "connectionType"
+),
+with_host AS (
+  SELECT
+    *,
+    lower(
+      CASE
+        WHEN instr("baseUrl", '://') > 0 THEN
+          substr(
+            substr("baseUrl", instr("baseUrl", '://') + 3),
+            1,
+            CASE
+              WHEN instr(substr("baseUrl", instr("baseUrl", '://') + 3), '/') > 0
+                THEN instr(substr("baseUrl", instr("baseUrl", '://') + 3), '/') - 1
+              WHEN instr(substr("baseUrl", instr("baseUrl", '://') + 3), '?') > 0
+                THEN instr(substr("baseUrl", instr("baseUrl", '://') + 3), '?') - 1
+              ELSE length(substr("baseUrl", instr("baseUrl", '://') + 3))
+            END
+          )
+        ELSE "baseUrl"
+      END
+    ) AS host
+  FROM grouped
+),
+with_channel AS (
+  SELECT
+    *,
+    CASE
+      WHEN host LIKE 'api.%' OR host LIKE 'www.%' THEN
+        CASE
+          WHEN instr(substr(host, instr(host, '.') + 1), '.') > 0
+            THEN substr(
+              substr(host, instr(host, '.') + 1),
+              1,
+              instr(substr(host, instr(host, '.') + 1), '.') - 1
+            )
+          ELSE substr(host, instr(host, '.') + 1)
+        END
+      WHEN instr(host, '.') > 0
+        THEN substr(host, 1, instr(host, '.') - 1)
+      WHEN length(host) >= 2 THEN host
+      ELSE NULL
+    END AS channel
+  FROM with_host
+),
+with_seed AS (
+  SELECT
+    *,
+    COALESCE(NULLIF(TRIM("prefixId"), ''), NULLIF(channel, ''), "provider") AS seed
+  FROM with_channel
 ),
 named_endpoints AS (
   SELECT *,
@@ -54,7 +101,7 @@ named_endpoints AS (
       PARTITION BY CASE WHEN "ownerUserId" IS NULL THEN seed ELSE NULL END
       ORDER BY "baseUrl", COALESCE("vendor", ''), COALESCE("prefixId", '')
     ) AS system_name_rank
-  FROM distinct_endpoints
+  FROM with_seed
 )
 SELECT
   "ownerUserId",
@@ -166,7 +213,7 @@ CREATE TABLE "chat_sessions_new" (
   "systemPrompt" TEXT,
   "knowledgeBaseIdsJson" TEXT NOT NULL DEFAULT '[]',
   CONSTRAINT "chat_sessions_userId_fkey"
-    FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY ("userId") REFERENCES "users" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT "chat_sessions_connectionId_fkey"
     FOREIGN KEY ("connectionId") REFERENCES "connection_groups"("id") ON DELETE SET NULL ON UPDATE CASCADE
 );

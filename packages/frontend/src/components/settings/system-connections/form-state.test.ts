@@ -6,6 +6,7 @@ import {
   createFormFromGroup,
   createFormFromTemplate,
   DEFAULT_FORM,
+  validateBasicFields,
   validateForm,
 } from "./form-state"
 import { createEmptyConnectionCaps } from "./constants"
@@ -111,5 +112,25 @@ describe("form-state displayName", () => {
       ],
     }
     expect(validateForm(form, null)).toBeNull()
+  })
+
+  test("validateBasicFields 在 bearer 缺 Key 时拦截", () => {
+    const form = {
+      ...DEFAULT_FORM,
+      displayName: "测试连接",
+      baseUrl: "https://api.openai.com/v1",
+      keys: [
+        {
+          clientId: "k1",
+          apiKeyLabel: "Key 1",
+          apiKey: "",
+          apiKeyMasked: "",
+          hasStoredApiKey: false,
+          modelIds: "",
+          enable: true,
+        },
+      ],
+    }
+    expect(validateBasicFields(form)).toBe("Key 1 还没有可用的 API Key")
   })
 })

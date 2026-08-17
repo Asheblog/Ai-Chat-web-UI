@@ -228,5 +228,13 @@ export const validateForm = (form: ConnectionFormState, editing: SystemConnectio
 export const validateBasicFields = (form: ConnectionFormState) => {
   if (!form.displayName.trim()) return "请填写显示名称"
   if (!form.baseUrl.trim()) return "请填写 Base URL"
+  if (form.keys.length === 0) return "至少需要一个 API Key 条目"
+  for (let index = 0; index < form.keys.length; index += 1) {
+    const key = form.keys[index]
+    const label = key.apiKeyLabel.trim() || `Key ${index + 1}`
+    if (form.authType === "bearer" && !key.apiKey.trim() && !key.hasStoredApiKey) {
+      return `${label} 还没有可用的 API Key`
+    }
+  }
   return null
 }
