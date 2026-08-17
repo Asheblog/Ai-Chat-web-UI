@@ -13,7 +13,14 @@ const prisma = {
   message: { findMany: jest.fn() },
 } as any
 
-const config = { enabled: true, connectionId: 1, modelId: 'qwen-vl-max' }
+const config = {
+  enabled: true,
+  connectionId: 1,
+  modelId: 'qwen-vl-max',
+  reasoningEnabled: false,
+  reasoningEffort: '',
+  ollamaThink: false,
+}
 const images = [{ data: 'aGVsbG8=', mime: 'image/png' }]
 
 const okResponse = (body: unknown) =>
@@ -22,19 +29,58 @@ const okResponse = (body: unknown) =>
 describe('loadVisionProxyConfig', () => {
   it('parses sysMap with env fallback', () => {
     const cfg = loadVisionProxyConfig({ image_transcription_enabled: 'true', image_transcription_connection_id: '3', image_transcription_model_id: 'gpt-4o' })
-    expect(cfg).toEqual({ enabled: true, connectionId: 3, modelId: 'gpt-4o' })
+    expect(cfg).toEqual({
+      enabled: true,
+      connectionId: 3,
+      modelId: 'gpt-4o',
+      reasoningEnabled: false,
+      reasoningEffort: '',
+      ollamaThink: false,
+    })
   })
   it('disabled by default', () => {
     expect(loadVisionProxyConfig({}).enabled).toBe(false)
+  })
+  it('defaults reasoning fields off / empty', () => {
+    const cfg = loadVisionProxyConfig({})
+    expect(cfg.reasoningEnabled).toBe(false)
+    expect(cfg.reasoningEffort).toBe('')
+    expect(cfg.ollamaThink).toBe(false)
+  })
+  it('parses reasoning sysMap keys', () => {
+    const cfg = loadVisionProxyConfig({
+      image_transcription_reasoning_enabled: 'true',
+      image_transcription_reasoning_effort: 'high',
+      image_transcription_ollama_think: 'true',
+    })
+    expect(cfg.reasoningEnabled).toBe(true)
+    expect(cfg.reasoningEffort).toBe('high')
+    expect(cfg.ollamaThink).toBe(true)
+  })
+  it('allows unset effort value', () => {
+    const cfg = loadVisionProxyConfig({ image_transcription_reasoning_effort: 'unset' })
+    expect(cfg.reasoningEffort).toBe('unset')
   })
 })
 
 describe('isVisionProxyReady', () => {
   it('requires enabled + connectionId + modelId', () => {
-    expect(isVisionProxyReady({ enabled: true, connectionId: 1, modelId: 'm' })).toBe(true)
-    expect(isVisionProxyReady({ enabled: false, connectionId: 1, modelId: 'm' })).toBe(false)
-    expect(isVisionProxyReady({ enabled: true, connectionId: null, modelId: 'm' })).toBe(false)
-    expect(isVisionProxyReady({ enabled: true, connectionId: 1, modelId: null })).toBe(false)
+    expect(isVisionProxyReady({ ...config, enabled: true, connectionId: 1, modelId: 'm' })).toBe(true)
+    expect(isVisionProxyReady({ ...config, enabled: false, connectionId: 1, modelId: 'm' })).toBe(false)
+    expect(isVisionProxyReady({ ...config, enabled: true, connectionId: null, modelId: 'm' })).toBe(false)
+    expect(isVisionProxyReady({ ...config, enabled: true, connectionId: 1, modelId: null })).toBe(false)
+  })
+  it('ignores reasoning fields for readiness', () => {
+    expect(
+      isVisionProxyReady({
+        enabled: true,
+        connectionId: 1,
+        modelId: 'm',
+        reasoningEnabled: true,
+        reasoningEffort: 'high',
+        ollamaThink: true,
+      }),
+    ).toBe(true)
   })
 })
 
@@ -76,8 +122,14 @@ describe('VisionProxyService.transcribeImages', () => {
   const service = () => new VisionProxyService({ prisma, fetchFn: jest.fn() })
 
   it('throws 400 when config not ready', async () => {
-    await expect(service().transcribeImages(images, '', { enabled: true, connectionId: null, modelId: null }))
-      .rejects.toMatchObject({ statusCode: 400 })
+    await expect(
+      service().transcribeImages(images, '', {
+        ...config,
+        enabled: true,
+        connectionId: null,
+        modelId: null,
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 })
   })
 
   it('throws 404 when connection missing', async () => {
@@ -168,5 +220,80 @@ describe('VisionProxyService.transcribeImages', () => {
     const fetchFn = jest.fn().mockResolvedValue(okResponse({ choices: [{ message: { content: '   ' } }] }))
     await expect(new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', config))
       .rejects.toMatchObject({ statusCode: 502 })
+  })
+
+  it('includes reasoning_effort on openai body when enabled + effort high', async () => {
+    prisma.connection.findUnique.mockResolvedValue({
+      provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
+      headersJson: '', azureApiVersion: null,
+    })
+    const fetchFn = jest.fn().mockResolvedValue(okResponse({ choices: [{ message: { content: 'ok' } }] }))
+    await new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', {
+      ...config,
+      reasoningEnabled: true,
+      reasoningEffort: 'high',
+    })
+    const body = JSON.parse(fetchFn.mock.calls[0][1].body)
+    expect(body.reasoning_effort).toBe('high')
+  })
+
+  it('omits reasoning_effort when reasoning disabled', async () => {
+    prisma.connection.findUnique.mockResolvedValue({
+      provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
+      headersJson: '', azureApiVersion: null,
+    })
+    const fetchFn = jest.fn().mockResolvedValue(okResponse({ choices: [{ message: { content: 'ok' } }] }))
+    await new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', {
+      ...config,
+      reasoningEnabled: false,
+      reasoningEffort: 'high',
+    })
+    const body = JSON.parse(fetchFn.mock.calls[0][1].body)
+    expect(body.reasoning_effort).toBeUndefined()
+  })
+
+  it('omits reasoning_effort when effort is unset', async () => {
+    prisma.connection.findUnique.mockResolvedValue({
+      provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
+      headersJson: '', azureApiVersion: null,
+    })
+    const fetchFn = jest.fn().mockResolvedValue(okResponse({ choices: [{ message: { content: 'ok' } }] }))
+    await new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', {
+      ...config,
+      reasoningEnabled: true,
+      reasoningEffort: 'unset',
+    })
+    const body = JSON.parse(fetchFn.mock.calls[0][1].body)
+    expect(body.reasoning_effort).toBeUndefined()
+  })
+
+  it('sets think:true on ollama body when enabled + ollamaThink', async () => {
+    prisma.connection.findUnique.mockResolvedValue({
+      provider: 'ollama', baseUrl: 'http://localhost:11434', authType: 'none', secretVaultId: null,
+      headersJson: '', azureApiVersion: null,
+    })
+    const fetchFn = jest.fn().mockResolvedValue(okResponse({ message: { content: '一只猫' } }))
+    await new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', {
+      ...config,
+      reasoningEnabled: true,
+      ollamaThink: true,
+    })
+    const body = JSON.parse(fetchFn.mock.calls[0][1].body)
+    expect(body.think).toBe(true)
+  })
+
+  it('does not set think on ollama when reasoning disabled', async () => {
+    prisma.connection.findUnique.mockResolvedValue({
+      provider: 'ollama', baseUrl: 'http://localhost:11434', authType: 'none', secretVaultId: null,
+      headersJson: '', azureApiVersion: null,
+    })
+    const fetchFn = jest.fn().mockResolvedValue(okResponse({ message: { content: '一只猫' } }))
+    await new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', {
+      ...config,
+      reasoningEnabled: false,
+      ollamaThink: true,
+    })
+    const body = JSON.parse(fetchFn.mock.calls[0][1].body)
+    expect(body.think).toBeUndefined()
   })
 })

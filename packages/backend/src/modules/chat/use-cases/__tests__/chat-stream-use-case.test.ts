@@ -284,7 +284,14 @@ describe('createChatStreamHandler error handling', () => {
   it('auto-transcribes images for non-vision main model in standard flow', async () => {
     ;(isVisionProxyReady as jest.Mock).mockReturnValue(true)
     ;(resolveModelCapabilitiesForSession as jest.Mock).mockResolvedValue({ vision: false })
-    ;(loadVisionProxyConfig as jest.Mock).mockReturnValue({ enabled: true, connectionId: 2, modelId: 'gemini-2.5-flash' })
+    ;(loadVisionProxyConfig as jest.Mock).mockReturnValue({
+      enabled: true,
+      connectionId: 2,
+      modelId: 'gemini-2.5-flash',
+      reasoningEnabled: false,
+      reasoningEffort: '',
+      ollamaThink: false,
+    })
     ;(visionProxyService.transcribeImages as jest.Mock).mockResolvedValue({ description: '图里有一只猫', modelRawId: 'm' })
     const mockPrepare = jest.fn().mockResolvedValue({
       promptTokens: 10,
@@ -362,6 +369,9 @@ describe('createChatStreamHandler error handling', () => {
       enabled: true,
       connectionId: 2,
       modelId: 'gemini-2.5-flash',
+      reasoningEnabled: false,
+      reasoningEffort: '',
+      ollamaThink: false,
     })
     ;(computeAgentToolFlags as jest.Mock).mockReturnValue({
       agentToolsActive: true,
@@ -438,6 +448,9 @@ describe('createChatStreamHandler error handling', () => {
       enabled: true,
       connectionId: 2,
       modelId: 'gemini-2.5-flash',
+      reasoningEnabled: false,
+      reasoningEffort: '',
+      ollamaThink: false,
     })
     const mockPrepare = jest.fn().mockResolvedValue({
       promptTokens: 10,

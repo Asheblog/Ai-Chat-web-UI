@@ -7,7 +7,14 @@ jest.mock('../../../../utils/chat-images', () => ({
 
 import { loadPersistedChatImages } from '../../../../utils/chat-images'
 
-const config = { enabled: true, connectionId: 1, modelId: 'qwen-vl-max' }
+const config = {
+  enabled: true,
+  connectionId: 1,
+  modelId: 'qwen-vl-max',
+  reasoningEnabled: false,
+  reasoningEffort: '',
+  ollamaThink: false,
+}
 const context = {
   sessionId: 1,
   messageId: 100,

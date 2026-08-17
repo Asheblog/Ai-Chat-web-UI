@@ -9,6 +9,10 @@ export interface VisionProxyConfig {
   enabled: boolean
   connectionId: number | null
   modelId: string | null
+  reasoningEnabled: boolean
+  /** Empty or `unset` means do not send effort */
+  reasoningEffort: string
+  ollamaThink: boolean
 }
 
 export interface ImageDescription {
@@ -29,15 +33,61 @@ export class VisionProxyServiceError extends Error {
 const TRANSCRIPTION_SYSTEM_PROMPT =
   '你是一个图片描述助手。请尽可能详细地描述图片内容，包括：主要物体/人物、可见的文字内容（保留原文）、颜色、布局、数量、场景与氛围等一切可见细节。如有多个图片请分别说明。只输出描述文本，不要使用 Markdown 格式。'
 
+function parseBoolSetting(value: string | undefined, defaultValue = false): boolean {
+  if (value == null || value === '') return defaultValue
+  return value.toString().toLowerCase() === 'true'
+}
+
+/** Empty / unset → do not send reasoning_effort (mirrors chat-request-builder intent). */
+export function shouldSendVisionReasoningEffort(effort: string): boolean {
+  const trimmed = (effort ?? '').toString().trim()
+  return trimmed !== '' && trimmed.toLowerCase() !== 'unset'
+}
+
+/**
+ * Apply transcription reasoning onto an openai-style chat body (before responses conversion)
+ * or ollama body. google_genai: no thinking params (YAGNI).
+ */
+export function applyVisionReasoningOptions(
+  body: Record<string, unknown>,
+  config: Pick<VisionProxyConfig, 'reasoningEnabled' | 'reasoningEffort' | 'ollamaThink'>,
+  provider: string,
+): void {
+  if (!config.reasoningEnabled) return
+  if (provider === 'google_genai') return
+  if (provider === 'ollama') {
+    if (config.ollamaThink) {
+      body.think = true
+    }
+    return
+  }
+  if (shouldSendVisionReasoningEffort(config.reasoningEffort)) {
+    body.reasoning_effort = config.reasoningEffort.toString().trim()
+  }
+}
+
 export function loadVisionProxyConfig(sysMap: Record<string, string>): VisionProxyConfig {
-  const enabled = (sysMap.image_transcription_enabled ?? process.env.IMAGE_TRANSCRIPTION_ENABLED ?? 'false')
-    .toString()
-    .toLowerCase() === 'true'
+  const enabled = parseBoolSetting(sysMap.image_transcription_enabled ?? process.env.IMAGE_TRANSCRIPTION_ENABLED, false)
   const connectionIdRaw = sysMap.image_transcription_connection_id ?? process.env.IMAGE_TRANSCRIPTION_CONNECTION_ID ?? ''
   const connectionId = connectionIdRaw ? Number(connectionIdRaw) || null : null
   const modelIdRaw = sysMap.image_transcription_model_id ?? process.env.IMAGE_TRANSCRIPTION_MODEL_ID ?? ''
   const modelId = modelIdRaw ? modelIdRaw.toString().trim() || null : null
-  return { enabled, connectionId, modelId }
+  const reasoningEnabled = parseBoolSetting(
+    sysMap.image_transcription_reasoning_enabled ?? process.env.IMAGE_TRANSCRIPTION_REASONING_ENABLED,
+    false,
+  )
+  const reasoningEffort = (
+    sysMap.image_transcription_reasoning_effort ??
+    process.env.IMAGE_TRANSCRIPTION_REASONING_EFFORT ??
+    ''
+  )
+    .toString()
+    .trim()
+  const ollamaThink = parseBoolSetting(
+    sysMap.image_transcription_ollama_think ?? process.env.IMAGE_TRANSCRIPTION_OLLAMA_THINK,
+    false,
+  )
+  return { enabled, connectionId, modelId, reasoningEnabled, reasoningEffort, ollamaThink }
 }
 
 export function isVisionProxyReady(config: VisionProxyConfig): boolean {
@@ -167,6 +217,10 @@ export class VisionProxyService {
       max_tokens: 2000,
       stream: false,
     }
+    // openai-style: apply reasoning_effort on chatBody before responses conversion
+    if (provider !== 'ollama' && provider !== 'google_genai') {
+      applyVisionReasoningOptions(chatBody, config, provider)
+    }
     // F6: 各 provider 请求体格式差异在此收敛，openai/azure_openai/openai_responses 保持原样
     let body: Record<string, unknown>
     if (provider === 'google_genai') {
@@ -189,6 +243,7 @@ export class VisionProxyService {
           maxOutputTokens: 2000,
         },
       }
+      // google_genai: skip thinking params (YAGNI)
     } else if (provider === 'ollama') {
       // Ollama /api/chat 多模态格式：messages[].images 为 base64 数组
       body = {
@@ -207,6 +262,7 @@ export class VisionProxyService {
           num_predict: 2000,
         },
       }
+      applyVisionReasoningOptions(body, config, 'ollama')
     } else {
       body = provider === 'openai_responses' ? convertChatCompletionsRequestToResponses(chatBody) : chatBody
     }

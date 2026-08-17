@@ -19,7 +19,14 @@ describe('buildAgentVisionProxyConfig', () => {
       image_transcription_connection_id: '2',
       image_transcription_model_id: 'gemini-2.5-flash',
     })
-    expect(cfg).toEqual({ enabled: true, connectionId: 2, modelId: 'gemini-2.5-flash' })
+    expect(cfg).toEqual({
+      enabled: true,
+      connectionId: 2,
+      modelId: 'gemini-2.5-flash',
+      reasoningEnabled: false,
+      reasoningEffort: '',
+      ollamaThink: false,
+    })
   })
   it('disabled when absent', () => {
     expect(buildAgentVisionProxyConfig({}).enabled).toBe(false)
