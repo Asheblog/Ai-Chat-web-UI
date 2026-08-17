@@ -862,3 +862,29 @@ export const reconcilePythonRuntime = async () => {
   const response = await client.post<ApiResponse>('/settings/python-runtime/reconcile')
   return response.data
 }
+
+export type ImageTranscriptionProbeStepName = 'transcribe' | 'relevance'
+
+export type ImageTranscriptionProbeStep = {
+  name: ImageTranscriptionProbeStepName
+  ok: boolean
+  durationMs: number
+  detail?: string
+  error?: string
+}
+
+export type ImageTranscriptionProbeResult = {
+  ok: boolean
+  steps: ImageTranscriptionProbeStep[]
+}
+
+export const probeImageTranscription = async (payload?: {
+  imageBase64?: string
+  mime?: string
+}) => {
+  const response = await client.post<ApiResponse<ImageTranscriptionProbeResult>>(
+    '/settings/image-transcription/probe',
+    payload ?? {},
+  )
+  return response.data
+}
