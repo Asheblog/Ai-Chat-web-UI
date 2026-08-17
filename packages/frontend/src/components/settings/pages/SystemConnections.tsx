@@ -1,8 +1,9 @@
 "use client"
 
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react"
-import { LayoutGrid, PlugZap, Settings2 } from "lucide-react"
+import { LayoutGrid, PlugZap, Plus, Settings2 } from "lucide-react"
 import { AlertDialog } from "@/components/ui/alert-dialog"
+import { Button } from "@/components/ui/button"
 import { CardDescription, CardTitle } from "@/components/ui/card"
 import { DestructiveConfirmDialogContent } from "@/components/ui/destructive-confirm-dialog"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
@@ -32,18 +33,22 @@ import {
   type ProviderTemplate,
 } from "@/components/settings/system-connections/provider-templates"
 import {
-  createEmptyKey,
   createFormFromTemplate,
   DEFAULT_FORM,
+  createEmptyKey,
 } from "@/components/settings/system-connections/form-state"
 import {
   filterConnections,
   getEnabledKeyCount,
   getGroupHealth,
   providerLabel,
-  type DetailIntent,
-  type EditorFocus,
+  type WizardMode,
+  type WizardStep,
 } from "@/components/settings/system-connections/view-model"
+
+type SheetState =
+  | { open: false }
+  | { open: true; mode: WizardMode; step: WizardStep; title: string; description?: string }
 
 export function SystemConnectionsPage() {
   const {
@@ -75,11 +80,8 @@ export function SystemConnectionsPage() {
   const [providerFilter, setProviderFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
   const [healthFilter, setHealthFilter] = useState("all")
-  const [expandedGroupId, setExpandedGroupId] = useState<number | null>(null)
-  const [detailIntent, setDetailIntent] = useState<DetailIntent>("view")
-  const [editorFocus, setEditorFocus] = useState<EditorFocus>("basic")
   const [advancedOpen, setAdvancedOpen] = useState(false)
-  const [sheetTemplate, setSheetTemplate] = useState<ProviderTemplate | null>(null)
+  const [sheet, setSheet] = useState<SheetState>({ open: false })
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const [confirmExportOpen, setConfirmExportOpen] = useState(false)
   const [confirmImportOpen, setConfirmImportOpen] = useState(false)
@@ -89,11 +91,6 @@ export function SystemConnectionsPage() {
   const [pageError, setPageError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const expandedGroup = useMemo(
-    () => connections.find((group) => group.id === expandedGroupId) || null,
-    [connections, expandedGroupId],
-  )
 
   const stats = useMemo<ConnectionStats>(() => {
     const totalKeys = connections.reduce((sum, group) => sum + group.apiKeys.length, 0)
@@ -148,18 +145,6 @@ export function SystemConnectionsPage() {
   )
 
   useEffect(() => {
-    if (!expandedGroupId) return
-    if (connections.some((group) => group.id === expandedGroupId)) return
-    setExpandedGroupId(null)
-    cancelEdit()
-  }, [cancelEdit, connections, expandedGroupId])
-
-  useEffect(() => {
-    if (detailIntent !== "view" || !expandedGroup || editing?.id === expandedGroup.id) return
-    startEdit(expandedGroup)
-  }, [detailIntent, editing?.id, expandedGroup, startEdit])
-
-  useEffect(() => {
     if (!successMessage) return
     const timer = window.setTimeout(() => setSuccessMessage(null), 5000)
     return () => window.clearTimeout(timer)
@@ -172,14 +157,14 @@ export function SystemConnectionsPage() {
       throw new Error("JSON 格式无效")
     }
     const json = raw as Record<string, unknown>
-    if (json.schemaVersion !== 1) {
-      throw new Error("不支持的 schemaVersion，当前仅支持版本 1")
+    if (json.schemaVersion !== 1 && json.schemaVersion !== 2) {
+      throw new Error("不支持的 schemaVersion，当前仅支持版本 1/2")
     }
     if (!Array.isArray(json.connections)) {
       throw new Error("缺少 connections 数组")
     }
     return {
-      schemaVersion: json.schemaVersion,
+      schemaVersion: json.schemaVersion as 1,
       exportedAt: typeof json.exportedAt === "string" ? json.exportedAt : undefined,
       connections: json.connections,
       skippedKeys: typeof json.skippedKeys === "number" ? json.skippedKeys : undefined,
@@ -253,77 +238,75 @@ export function SystemConnectionsPage() {
     }
   }
 
-  const handleProviderChange = (value: string) => {
-    setForm((prev) => {
-      const forceBearer = value === "google_genai" || value === SPECIAL_PROVIDER_OPENAI_INTERLEAVE
-      return {
-        ...prev,
-        provider: value,
-        authType: forceBearer ? "bearer" : prev.authType,
-      }
+  const closeSheet = () => {
+    setSheet({ open: false })
+    cancelEdit()
+  }
+
+  /** 新建：从第 1 步选择供应商 */
+  const openCreateWizard = () => {
+    cancelEdit()
+    setForm({
+      ...DEFAULT_FORM,
+      keys: [createEmptyKey(0)],
+    })
+    setSheet({
+      open: true,
+      mode: "create",
+      step: 1,
+      title: "新建连接",
+      description: "三步完成：选供应商 → 填基础信息 → 验证保存",
     })
   }
 
-  const openGroup = (group: SystemConnectionGroup, focus: EditorFocus = "basic") => {
-    setDetailIntent("view")
-    setEditorFocus(focus)
-    setExpandedGroupId(group.id)
-    startEdit(group)
-  }
-
-  const toggleGroup = (group: SystemConnectionGroup, focus: EditorFocus = "basic") => {
-    if (detailIntent === "view" && expandedGroupId === group.id) {
-      setExpandedGroupId(null)
-      cancelEdit()
-      return
-    }
-    openGroup(group, focus)
-  }
-
-  const startCreate = () => {
+  /** 模板卡：直接进入第 2 步 */
+  const openTemplateWizard = (template: ProviderTemplate) => {
     cancelEdit()
-    setExpandedGroupId(null)
-    setDetailIntent("create")
-    setEditorFocus("basic")
-  }
-
-  const closeCreate = () => {
-    setDetailIntent("view")
-    cancelEdit()
-  }
-
-  /** 打开模板配置 Sheet：预填模板表单，收起页内内联编辑面 */
-  const openTemplateSheet = (template: ProviderTemplate) => {
-    cancelEdit()
-    setExpandedGroupId(null)
-    setDetailIntent("view")
     setForm(createFormFromTemplate(template))
-    setSheetTemplate(template)
+    setSheet({
+      open: true,
+      mode: "create",
+      step: 2,
+      title: `配置 ${template.label}`,
+      description: template.description,
+    })
   }
 
-  /** 关闭配置 Sheet：重置 DEFAULT_FORM（沿用 closeCreate 的 cancelEdit 语义） */
-  const closeTemplateSheet = () => {
-    setSheetTemplate(null)
-    cancelEdit()
+  const openEditWizard = (group: SystemConnectionGroup) => {
+    startEdit(group)
+    setSheet({
+      open: true,
+      mode: "edit",
+      step: 2,
+      title: `编辑 ${group.displayName}`,
+      description: `${providerLabel(group)} · ${group.baseUrl}`,
+    })
+  }
+
+  const handleSelectTemplate = (template: ProviderTemplate) => {
+    setForm(createFormFromTemplate(template))
+    setSheet({
+      open: true,
+      mode: "create",
+      step: 2,
+      title: `配置 ${template.label}`,
+      description: template.description,
+    })
+  }
+
+  const handleStepChange = (step: WizardStep) => {
+    setSheet((prev) => (prev.open ? { ...prev, step } : prev))
   }
 
   const handleSubmit = async () => {
     const saved = await submitConnection()
     if (!saved) return false
-    if (sheetTemplate) {
-      closeTemplateSheet()
-      return true
-    }
-    if (detailIntent === "create") {
-      setDetailIntent("view")
-    } else {
-      setExpandedGroupId(null)
-      cancelEdit()
-    }
+    closeSheet()
     return true
   }
 
   const firstKey = form.keys[0]
+  const sheetOpen = sheet.open
 
   return (
     <div className="min-w-0 space-y-5">
@@ -396,14 +379,20 @@ export function SystemConnectionsPage() {
       ) : null}
 
       {/* 页头 */}
-      <div className="flex items-center gap-3 border-b border-border/60 pb-3">
-        <PlugZap className="h-5 w-5 flex-shrink-0 text-primary" />
-        <div className="space-y-1">
-          <CardTitle>供应商与连接</CardTitle>
-          <CardDescription className="text-sm text-muted-foreground">
-            按供应商快速接入模型，高级管理在下方
-          </CardDescription>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3">
+        <div className="flex items-center gap-3">
+          <PlugZap className="h-5 w-5 flex-shrink-0 text-primary" />
+          <div className="space-y-1">
+            <CardTitle>供应商与连接</CardTitle>
+            <CardDescription className="text-sm text-muted-foreground">
+              用显示名称区分连接；通过向导完成接入与编辑
+            </CardDescription>
+          </div>
         </div>
+        <Button onClick={openCreateWizard} className="h-10">
+          <Plus className="mr-2 h-4 w-4" />
+          新建连接
+        </Button>
       </div>
 
       {/* 模板卡网格 */}
@@ -415,7 +404,7 @@ export function SystemConnectionsPage() {
           <div>
             <h2 className="v2-section-title">快速接入</h2>
             <p className="v2-muted-line mt-1">
-              选择供应商卡片，预填默认端点与认证方式后即可验证、保存。
+              选择供应商卡片，预填默认端点后填写显示名称并验证保存。
             </p>
           </div>
         </div>
@@ -432,14 +421,14 @@ export function SystemConnectionsPage() {
                 key={template.provider}
                 template={template}
                 count={count}
-                onConfigure={openTemplateSheet}
+                onConfigure={openTemplateWizard}
               />
             ))}
           </div>
         )}
       </section>
 
-      {/* 高级管理折叠：原页面全部管理面 */}
+      {/* 高级管理折叠：列表、导入导出 */}
       <div data-card-key="connections:advanced">
         <CollapsibleEditorSection
           icon={<Settings2 className="h-4 w-4" />}
@@ -448,102 +437,55 @@ export function SystemConnectionsPage() {
           open={advancedOpen}
           onToggle={() => setAdvancedOpen((prev) => !prev)}
         >
-        <div className="space-y-4">
-          <SystemConnectionsToolbar
-            stats={stats}
-            providers={providerOptions}
-            loading={loading}
-            query={query}
-            providerFilter={providerFilter}
-            statusFilter={statusFilter}
-            healthFilter={healthFilter}
-            onQueryChange={setQuery}
-            onProviderFilterChange={setProviderFilter}
-            onStatusFilterChange={setStatusFilter}
-            onHealthFilterChange={setHealthFilter}
-            onRefresh={refresh}
-            onImport={handleImportClick}
-            onExport={handleExportRequest}
-            onCreate={startCreate}
-            exporting={exporting}
-            importing={importing}
-          />
+          <div className="space-y-4">
+            <SystemConnectionsToolbar
+              stats={stats}
+              providers={providerOptions}
+              loading={loading}
+              query={query}
+              providerFilter={providerFilter}
+              statusFilter={statusFilter}
+              healthFilter={healthFilter}
+              onQueryChange={setQuery}
+              onProviderFilterChange={setProviderFilter}
+              onStatusFilterChange={setStatusFilter}
+              onHealthFilterChange={setHealthFilter}
+              onRefresh={refresh}
+              onImport={handleImportClick}
+              onExport={handleExportRequest}
+              onCreate={openCreateWizard}
+              exporting={exporting}
+              importing={importing}
+            />
 
-          {detailIntent === "create" ? (
-            <section className="v2-panel bg-background/92 p-4 shadow-none">
-              <SystemConnectionEditor
-                group={null}
-                detailIntent="create"
-                initialFocus={editorFocus}
-                form={form}
-                setForm={setForm}
-                firstKey={firstKey}
-                capabilities={capabilities}
-                editing={editing}
-                submitting={submitting}
-                verifying={verifying}
-                verifyResult={verifyResult}
-                onProviderChange={handleProviderChange}
-                onToggleCapability={toggleCapability}
-                onAddKey={addKey}
-                onRemoveKey={removeKey}
-                onUpdateKey={updateKey}
-                onSubmit={handleSubmit}
-                onVerify={verifyConnection}
-                onCancelCreate={closeCreate}
-              />
-            </section>
-          ) : null}
-
-          <SystemConnectionList
-            connections={filteredConnections}
-            loading={loading}
-            expandedGroupId={detailIntent === "view" ? expandedGroupId : null}
-            onToggleGroup={toggleGroup}
-            onOpenGroup={openGroup}
-            onDelete={setConfirmDeleteId}
-            renderEditor={(group) => (
-              <SystemConnectionEditor
-                group={group}
-                detailIntent="view"
-                initialFocus={editorFocus}
-                form={form}
-                setForm={setForm}
-                firstKey={firstKey}
-                capabilities={capabilities}
-                editing={editing}
-                submitting={submitting}
-                verifying={verifying}
-                verifyResult={verifyResult}
-                onProviderChange={handleProviderChange}
-                onToggleCapability={toggleCapability}
-                onAddKey={addKey}
-                onRemoveKey={removeKey}
-                onUpdateKey={updateKey}
-                onSubmit={handleSubmit}
-                onVerify={verifyConnection}
-                onCancelCreate={closeCreate}
-              />
-            )}
-          />
-        </div>
+            <SystemConnectionList
+              connections={filteredConnections}
+              loading={loading}
+              onEdit={openEditWizard}
+              onDelete={setConfirmDeleteId}
+            />
+          </div>
         </CollapsibleEditorSection>
       </div>
 
-      {/* 配置 Sheet（模板预填） */}
+      {/* 统一创建/编辑向导 Sheet */}
       <Sheet
-        open={sheetTemplate !== null}
+        open={sheetOpen}
         onOpenChange={(open) => {
-          if (!open) closeTemplateSheet()
+          if (!open) closeSheet()
         }}
       >
-        <SheetContent side="right" dialogTitle={`配置 ${sheetTemplate?.label ?? ""}`} className="w-full max-w-xl">
-          {sheetTemplate ? (
-            <SheetTemplateContent template={sheetTemplate}>
+        <SheetContent
+          side="right"
+          dialogTitle={sheet.open ? sheet.title : "连接向导"}
+          className="w-full max-w-xl"
+        >
+          {sheet.open ? (
+            <SheetWizardShell title={sheet.title} description={sheet.description}>
               <SystemConnectionEditor
-                group={null}
-                detailIntent="create"
-                initialFocus="basic"
+                mode={sheet.mode}
+                step={sheet.step}
+                onStepChange={handleStepChange}
                 form={form}
                 setForm={setForm}
                 firstKey={firstKey}
@@ -552,16 +494,16 @@ export function SystemConnectionsPage() {
                 submitting={submitting}
                 verifying={verifying}
                 verifyResult={verifyResult}
-                onProviderChange={handleProviderChange}
+                onSelectTemplate={handleSelectTemplate}
                 onToggleCapability={toggleCapability}
                 onAddKey={addKey}
                 onRemoveKey={removeKey}
                 onUpdateKey={updateKey}
                 onSubmit={handleSubmit}
                 onVerify={verifyConnection}
-                onCancelCreate={closeTemplateSheet}
+                onCancel={closeSheet}
               />
-            </SheetTemplateContent>
+            </SheetWizardShell>
           ) : null}
         </SheetContent>
       </Sheet>
@@ -571,24 +513,21 @@ export function SystemConnectionsPage() {
 
 export default SystemConnectionsPage
 
-/** Sheet 头部（模板 icon 瓦片 + 「配置 {label}」标题）与滚动内容容器 */
-function SheetTemplateContent({
-  template,
+function SheetWizardShell({
+  title,
+  description,
   children,
 }: {
-  template: ProviderTemplate
+  title: string
+  description?: string
   children: ReactNode
 }) {
-  const Icon = template.icon
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center gap-3 border-b border-border/70 px-5 py-4">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-          <Icon className="h-5 w-5" />
-        </span>
         <div className="min-w-0">
-          <h2 className="v2-section-title">配置 {template.label}</h2>
-          <p className="v2-muted-line mt-0.5 text-xs">{template.description}</p>
+          <h2 className="v2-section-title">{title}</h2>
+          {description ? <p className="v2-muted-line mt-0.5 text-xs">{description}</p> : null}
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>

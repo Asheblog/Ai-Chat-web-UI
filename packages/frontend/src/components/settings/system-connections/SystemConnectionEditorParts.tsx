@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import {
   CONNECTION_CAP_KEYS,
@@ -67,16 +68,33 @@ export function AdvancedFields({
         </Select>
       </Field>
 
-      {form.provider === "azure_openai" ? (
-        <Field label="API Version" htmlFor="connection-azure-version" className="lg:col-span-2">
-          <Input
-            id="connection-azure-version"
-            value={form.azureApiVersion}
-            onChange={(event) => setForm((prev) => ({ ...prev, azureApiVersion: event.target.value }))}
-            placeholder="2024-02-15-preview"
-          />
-        </Field>
-      ) : null}
+      <Field label="Prefix ID" htmlFor="connection-prefix">
+        <Input
+          id="connection-prefix"
+          value={form.prefixId}
+          onChange={(event) => setForm((prev) => ({ ...prev, prefixId: event.target.value }))}
+          placeholder="openai-prod"
+        />
+      </Field>
+
+      <Field label="标签" htmlFor="connection-tags-advanced">
+        <Input
+          id="connection-tags-advanced"
+          value={form.tags}
+          onChange={(event) => setForm((prev) => ({ ...prev, tags: event.target.value }))}
+          placeholder="prod,team-a"
+        />
+      </Field>
+
+      <Field label="自定义 Headers（JSON）" htmlFor="connection-headers" className="lg:col-span-2">
+        <Textarea
+          id="connection-headers"
+          value={form.headers}
+          onChange={(event) => setForm((prev) => ({ ...prev, headers: event.target.value }))}
+          placeholder='{"X-Custom":"value"}'
+          className="min-h-[88px] font-mono text-xs"
+        />
+      </Field>
 
       <div className="space-y-2 lg:col-span-2">
         <Label>默认能力</Label>
@@ -137,4 +155,3 @@ export function CollapsibleEditorSection({
     </section>
   )
 }
-
