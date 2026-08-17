@@ -61,6 +61,15 @@
 - **System Connection Export（系统连接导出）**：管理员将系统级模型连接的供应商配置与明文 API Key 打包为可下载文件的操作；仅用于环境迁移，不属于普通列表回显
 - **System Connection Import（系统连接导入）**：管理员将导出包写入目标环境系统连接的操作；按端点签名合并，对已有明文 Key 去重追加，不删除目标环境既有连接
 
+## 模型连接身份
+
+- **Connection Group（连接组）**：供应商端点的稳定配置单位，持有协议类型、Base URL、显示名、prefix 与默认能力；其主键不因 Key 增删而变化
+- **Connection Display Name（连接显示名）**：连接组的人读名称，系统级连接组范围内必填且唯一；只用于展示、搜索与管理，不进入上游调用的 wire 身份
+- **Connection Credential（连接凭据）**：连接组内的单条 API Key 及其启用状态与密钥引用；属于组内实现细节，不单独出现在模型选择器中
+- **Selectable Model Projection（可选模型投影）**：面向聊天、模型管理与 Battle 的统一可选模型视图；同一连接组同一 rawId 只出现一行，绑定身份为连接组主键加 rawId
+- **Model Wire Identity（模型线路身份）**：调用上游时使用的原始模型 ID（rawId）及可选 prefix；与连接显示名分离
+_Avoid_：用最小 Key 行 ID 冒充连接组身份；用 channelName / prefixId 作为用户消歧主键；把同组多 Key 展成多条可选模型
+
 ## 视觉与品牌
 
 - **Design Tokens（设计令牌）**：Web 端统一的结构与语义视觉变量，包括字号阶梯、控件高度、间距、圆角与默认 Claude 气质色板；由 `globals.css` / Tailwind 持有，页面不得再使用随意 `px` 字号或随意覆盖按钮高度

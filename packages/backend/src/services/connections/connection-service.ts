@@ -1,10 +1,11 @@
-import type { Connection, PrismaClient } from '@prisma/client'
+import type { Connection, ConnectionGroup, PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../db'
 import {
   PrismaConnectionRepository,
   type ConnectionRepository,
-  type ConnectionCreateData,
-  type ConnectionUpdateData,
+  type ConnectionGroupCreateData,
+  type ConnectionGroupUpdateData,
+  type ConnectionGroupWithCredentials,
 } from '../../repositories/connection-repository'
 import {
   CAPABILITY_KEYS,
@@ -19,6 +20,7 @@ import {
   type ProviderType,
 } from '../../utils/providers'
 import type { SecretVaultService as ISecretVaultService } from '../secret-vault'
+import { allocateUniqueDisplayName, seedDisplayName } from './display-name'
 
 export class ConnectionServiceError extends Error {
   statusCode: number
@@ -43,17 +45,11 @@ type NormalizedApiKeyPayload = {
   enable: boolean
 }
 
-type GroupedConnectionRows = {
-  id: number
-  signature: string
-  rows: Connection[]
-}
-
 export interface ConnectionServiceDeps {
   prisma?: PrismaClient
   repository?: ConnectionRepository
   secretVault?: ISecretVaultService
-  refreshModelCatalog?: (connection: Connection) => Promise<unknown>
+  refreshModelCatalog?: (group: ConnectionGroup, credential: Connection) => Promise<unknown>
   fetchModelsForConnection?: (config: ConnectionConfig) => Promise<CatalogItem[]>
   verifyConnection?: (config: {
     provider: ProviderType
@@ -83,6 +79,7 @@ export interface ConnectionApiKeyPayload {
 }
 
 export interface ConnectionPayload {
+  displayName: string
   provider: ProviderType
   vendor?: VendorType
   baseUrl: string
@@ -94,6 +91,11 @@ export interface ConnectionPayload {
   connectionType?: 'external' | 'local'
   defaultCapabilities?: Record<string, unknown> | undefined
   apiKeys: ConnectionApiKeyPayload[]
+}
+
+/** 导入允许缺省 displayName（v1 由 seed 补齐） */
+export type ImportConnectionPayload = Omit<ConnectionPayload, 'displayName'> & {
+  displayName?: string
 }
 
 export interface ConnectionApiKeyView {
@@ -109,6 +111,7 @@ export interface ConnectionApiKeyView {
 
 export interface ConnectionGroupView {
   id: number
+  displayName: string
   connectionIds: number[]
   provider: ProviderType
   vendor?: VendorType | null
@@ -151,6 +154,7 @@ export interface ExportConnectionApiKey {
 }
 
 export interface ExportConnection {
+  displayName: string
   provider: ProviderType
   vendor?: VendorType
   baseUrl: string
@@ -165,7 +169,7 @@ export interface ExportConnection {
 }
 
 export interface ExportSystemConnectionsResult {
-  schemaVersion: 1
+  schemaVersion: 2
   exportedAt: string
   connections: ExportConnection[]
   skippedKeys: number
@@ -173,8 +177,8 @@ export interface ExportSystemConnectionsResult {
 }
 
 export interface ImportSystemConnectionsPayload {
-  schemaVersion: 1
-  connections: ConnectionPayload[]
+  schemaVersion: 1 | 2
+  connections: ImportConnectionPayload[]
 }
 
 export interface ImportSystemConnectionsResult {
@@ -336,10 +340,23 @@ const compareDatesDesc = (a: string, b: string) => {
   return a > b ? -1 : 1
 }
 
+const pickCredentialForCatalog = (
+  group: ConnectionGroup,
+  credentials: Connection[],
+): Connection | null => {
+  const enabled = credentials.filter((item) => item.enable)
+  const pool = enabled.length > 0 ? enabled : credentials
+  if (pool.length === 0) return null
+  if ((group.authType as AuthType) === 'none') {
+    return pool[0] ?? null
+  }
+  return pool.find((item) => item.secretVaultId != null) ?? pool[0] ?? null
+}
+
 export class ConnectionService {
   private repository: ConnectionRepository
   private secretVault?: ISecretVaultService
-  private refreshModelCatalog: (connection: Connection) => Promise<unknown>
+  private refreshModelCatalog: (group: ConnectionGroup, credential: Connection) => Promise<unknown>
   private fetchModelsForConnection: (config: ConnectionConfig) => Promise<CatalogItem[]>
   private verifyConnection?: ConnectionServiceDeps['verifyConnection']
   private logger: Pick<typeof console, 'warn' | 'error' | 'info'>
@@ -354,127 +371,160 @@ export class ConnectionService {
     this.logger = deps.logger ?? console
   }
 
+  /** Dual-read: group id → itself; legacy credential id → its connectionGroupId */
+  async resolveGroupId(id: number): Promise<number> {
+    const asGroup = await this.repository.findSystemGroupById(id)
+    if (asGroup) return asGroup.id
+
+    const groups = await this.repository.listSystemGroups()
+    for (const group of groups) {
+      if (group.credentials.some((credential) => credential.id === id)) {
+        return group.id
+      }
+    }
+    throw new ConnectionServiceError('Connection not found', 404)
+  }
+
   async listSystemConnections(): Promise<ConnectionGroupView[]> {
-    const rows = await this.repository.listSystemConnections()
-    return this.groupRows(rows).map((group) => this.toGroupView(group.rows))
+    const groups = await this.repository.listSystemGroups()
+    return groups
+      .map((group) => this.toGroupView(group))
+      .sort((a, b) => compareDatesDesc(a.updatedAt, b.updatedAt))
   }
 
   async createSystemConnection(payload: ConnectionPayload): Promise<ConnectionGroupView> {
+    const displayName = this.requireDisplayName(payload.displayName)
+    await this.assertSystemDisplayNameAvailable(displayName)
+
     const authType = payload.authType ?? 'bearer'
     const normalizedKeys = this.normalizeApiKeys(payload.apiKeys, authType)
-    const shared = this.buildSharedCreateData(payload)
-    const created: Connection[] = []
+    const groupData = this.buildGroupCreateData({ ...payload, displayName })
+    const group = await this.repository.createSystemGroup(groupData)
 
+    const createdCredentials: Connection[] = []
     for (const key of normalizedKeys) {
-      // Step 1: create connection record (secretVaultId = null initially)
-      const connection = await this.repository.createSystemConnection({
-        ...shared,
+      const credential = await this.repository.createCredential({
+        connectionGroupId: group.id,
         enable: key.enable,
         apiKeyLabel: key.apiKeyLabel,
         modelIdsJson: serializeStringArray(key.modelIds),
       })
 
-      // Step 2: if bearer, create Secret Vault entry and persist secretVaultId
-      const svId = await this.createAndPersistVaultSecret(connection.id, key, authType)
+      const svId = await this.createAndPersistVaultSecret(credential.id, key, authType)
       if (svId != null) {
-        ;(connection as any).secretVaultId = svId
+        ;(credential as Connection).secretVaultId = svId
       }
-
-      created.push(connection)
-      await this.refreshCatalogSafe(connection, 'create')
+      createdCredentials.push(credential)
     }
 
-    return this.toGroupView(created)
+    await this.refreshCatalogSafe(group, createdCredentials, 'create')
+    const fresh = await this.repository.findSystemGroupById(group.id)
+    if (!fresh) {
+      throw new ConnectionServiceError('Connection not found', 404)
+    }
+    return this.toGroupView(fresh)
   }
 
   async updateSystemConnection(id: number, payload: ConnectionPayload): Promise<ConnectionGroupView> {
+    const groupId = await this.resolveGroupId(id)
+    const existing = await this.requireGroupById(groupId)
+    const displayName = this.requireDisplayName(payload.displayName)
+    await this.assertSystemDisplayNameAvailable(displayName, groupId)
+
     const authType = payload.authType ?? 'bearer'
-    const group = await this.requireGroupById(id)
-    const existingById = new Map(group.rows.map((row) => [row.id, row]))
     const normalizedKeys = this.normalizeApiKeys(payload.apiKeys, authType)
-    const shared = this.buildSharedUpdateData(payload, group.rows[0])
-    const sharedCreate = this.buildSharedCreateData(payload, parseRecord(group.rows[0]?.headersJson))
-    const touched: Connection[] = []
+    const existingById = new Map(existing.credentials.map((row) => [row.id, row]))
     const seenIds = new Set<number>()
+    const touched: Connection[] = []
+
+    await this.repository.updateSystemGroup(groupId, this.buildGroupUpdateData({ ...payload, displayName }))
 
     for (const key of normalizedKeys) {
       if (key.id != null) {
-        const existing = existingById.get(key.id)
-        if (!existing) {
+        const credential = existingById.get(key.id)
+        if (!credential) {
           throw new ConnectionServiceError(`API Key #${key.id} 不属于当前端点`, 400)
         }
-        seenIds.add(existing.id)
+        seenIds.add(credential.id)
 
-        const connection = await this.repository.updateSystemConnection(existing.id, {
-          ...shared,
+        const updated = await this.repository.updateCredential(credential.id, {
           enable: key.enable,
           apiKeyLabel: key.apiKeyLabel,
           modelIdsJson: serializeStringArray(key.modelIds),
         })
 
-        // Replace or preserve Vault secret
         if (authType === 'bearer') {
-          const resolvedVaultId = await this.replaceOrPreserveVaultSecret(connection.id, key, existing)
+          const resolvedVaultId = await this.replaceOrPreserveVaultSecret(updated.id, key, credential)
           if (resolvedVaultId != null) {
-            ;(connection as any).secretVaultId = resolvedVaultId
+            ;(updated as Connection).secretVaultId = resolvedVaultId
           }
         }
 
-        touched.push(connection)
-        await this.refreshCatalogSafe(connection, 'update')
+        touched.push(updated)
         continue
       }
 
-      // New key within an update
-      const connection = await this.repository.createSystemConnection({
-        ...sharedCreate,
+      const created = await this.repository.createCredential({
+        connectionGroupId: groupId,
         enable: key.enable,
         apiKeyLabel: key.apiKeyLabel,
         modelIdsJson: serializeStringArray(key.modelIds),
       })
 
-      const svId2 = await this.createAndPersistVaultSecret(connection.id, key, authType)
-      if (svId2 != null) {
-        ;(connection as any).secretVaultId = svId2
+      const svId = await this.createAndPersistVaultSecret(created.id, key, authType)
+      if (svId != null) {
+        ;(created as Connection).secretVaultId = svId
       }
-
-      touched.push(connection)
-      await this.refreshCatalogSafe(connection, 'create')
+      touched.push(created)
     }
 
-    for (const row of group.rows) {
+    for (const row of existing.credentials) {
       if (seenIds.has(row.id)) continue
-      await this.repository.deleteSystemConnection(row.id)
-      await this.repository.deleteModelCatalogByConnectionId(row.id)
+      await this.repository.deleteCredential(row.id)
     }
 
-    return this.toGroupView(touched)
+    const groupSnapshot: ConnectionGroup = {
+      ...existing,
+      displayName,
+      provider: payload.provider,
+      vendor: payload.vendor ?? null,
+      baseUrl: sanitizeBaseUrl(payload.baseUrl),
+      authType,
+      headersJson: serializeRecord(payload.headers ?? parseRecord(existing.headersJson)),
+      azureApiVersion: normalizeOptionalString(payload.azureApiVersion),
+      prefixId: normalizeOptionalString(payload.prefixId),
+      tagsJson: serializeTags(payload.tags),
+      defaultCapabilitiesJson: serializeDefaultCapabilities(payload.defaultCapabilities),
+      connectionType: payload.connectionType ?? 'external',
+    }
+
+    await this.refreshCatalogSafe(groupSnapshot, touched, 'update')
+    const fresh = await this.repository.findSystemGroupById(groupId)
+    if (!fresh) {
+      throw new ConnectionServiceError('Connection not found', 404)
+    }
+    return this.toGroupView(fresh)
   }
 
   async deleteSystemConnection(id: number) {
-    const group = await this.requireGroupById(id)
-    for (const row of group.rows) {
-      await this.repository.deleteSystemConnection(row.id)
-      await this.repository.deleteModelCatalogByConnectionId(row.id)
-    }
+    const groupId = await this.resolveGroupId(id)
+    await this.repository.deleteSystemGroup(groupId)
   }
 
   async exportSystemConnections(
     actor?: ConnectionActorContext,
   ): Promise<ExportSystemConnectionsResult> {
-    const rows = await this.repository.listSystemConnections()
-    const groups = this.groupRows(rows)
+    const groups = await this.repository.listSystemGroups()
     const connections: ExportConnection[] = []
     let skippedKeys = 0
     const skippedReasons: string[] = []
 
     for (const group of groups) {
-      const base = group.rows[0]
-      const authType = (base.authType as AuthType) || 'bearer'
-      const headers = parseRecord(base.headersJson)
+      const authType = (group.authType as AuthType) || 'bearer'
+      const headers = parseRecord(group.headersJson)
       const exportKeys: ExportConnectionApiKey[] = []
 
-      for (const row of group.rows) {
+      for (const row of group.credentials) {
         let apiKey = ''
         if (authType === 'bearer' && row.secretVaultId) {
           try {
@@ -482,7 +532,7 @@ export class ConnectionService {
               throw new ConnectionServiceError('Secret Vault 未配置，无法解密 API Key', 500)
             }
             apiKey = await this.secretVault.decryptById(row.secretVaultId)
-          } catch (error) {
+          } catch {
             skippedKeys += 1
             skippedReasons.push(
               `连接 #${row.id} (${normalizeOptionalString(row.apiKeyLabel) || 'Key'}): 解密失败`,
@@ -502,16 +552,17 @@ export class ConnectionService {
       if (exportKeys.length === 0) continue
 
       connections.push({
-        provider: base.provider as ProviderType,
-        vendor: (base.vendor as VendorType | null) ?? undefined,
-        baseUrl: sanitizeBaseUrl(base.baseUrl),
+        displayName: group.displayName,
+        provider: group.provider as ProviderType,
+        vendor: (group.vendor as VendorType | null) ?? undefined,
+        baseUrl: sanitizeBaseUrl(group.baseUrl),
         authType,
         ...(Object.keys(headers).length > 0 ? { headers } : {}),
-        azureApiVersion: base.azureApiVersion ?? undefined,
-        prefixId: base.prefixId ?? undefined,
-        tags: parseTags(base.tagsJson),
-        connectionType: (base.connectionType || 'external') as 'external' | 'local',
-        defaultCapabilities: parseDefaultCapabilities(base.defaultCapabilitiesJson),
+        azureApiVersion: group.azureApiVersion ?? undefined,
+        prefixId: group.prefixId ?? undefined,
+        tags: parseTags(group.tagsJson),
+        connectionType: (group.connectionType || 'external') as 'external' | 'local',
+        defaultCapabilities: parseDefaultCapabilities(group.defaultCapabilitiesJson),
         apiKeys: exportKeys,
       })
     }
@@ -523,7 +574,7 @@ export class ConnectionService {
     })
 
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       exportedAt: new Date().toISOString(),
       connections,
       skippedKeys,
@@ -535,7 +586,11 @@ export class ConnectionService {
     payload: ImportSystemConnectionsPayload,
     actor?: ConnectionActorContext,
   ): Promise<ImportSystemConnectionsResult> {
-    let signatureToGroup = this.buildSignatureGroupMap(await this.repository.listSystemConnections())
+    if (payload.schemaVersion !== 1 && payload.schemaVersion !== 2) {
+      throw new ConnectionServiceError('不支持的 schemaVersion', 400)
+    }
+
+    let signatureToGroup = this.buildSignatureGroupMap(await this.repository.listSystemGroups())
 
     let createdGroups = 0
     let updatedGroups = 0
@@ -544,22 +599,22 @@ export class ConnectionService {
     const skippedReasons: string[] = []
 
     for (const connection of payload.connections) {
-      const signature = this.signatureFromPayload(connection)
+      const withDisplayName = await this.ensureImportDisplayName(connection, signatureToGroup)
+      const signature = this.signatureFromPayload(withDisplayName)
       const existing = signatureToGroup.get(signature)
 
       if (!existing) {
-        await this.createSystemConnection(connection)
+        await this.createSystemConnection(withDisplayName)
         createdGroups += 1
         addedKeys += connection.apiKeys.length
-        signatureToGroup = this.buildSignatureGroupMap(await this.repository.listSystemConnections())
+        signatureToGroup = this.buildSignatureGroupMap(await this.repository.listSystemGroups())
         continue
       }
 
-      const base = existing.rows[0]
-      const authType = (base.authType as AuthType) || 'bearer'
+      const authType = (existing.authType as AuthType) || 'bearer'
       const existingPlaintextSet = new Set<string>()
 
-      for (const row of existing.rows) {
+      for (const row of existing.credentials) {
         if (authType !== 'bearer' || !row.secretVaultId) {
           existingPlaintextSet.add('')
           continue
@@ -601,20 +656,20 @@ export class ConnectionService {
 
       if (keysToAdd.length === 0) continue
 
-      // 同签名合并时保留目标端点既有共享配置，仅追加 Key
       const mergePayload: ConnectionPayload = {
-        provider: base.provider as ProviderType,
-        vendor: (base.vendor as VendorType | null) ?? undefined,
-        baseUrl: sanitizeBaseUrl(base.baseUrl),
+        displayName: existing.displayName,
+        provider: existing.provider as ProviderType,
+        vendor: (existing.vendor as VendorType | null) ?? undefined,
+        baseUrl: sanitizeBaseUrl(existing.baseUrl),
         authType,
-        headers: parseRecord(base.headersJson),
-        azureApiVersion: base.azureApiVersion ?? undefined,
-        prefixId: base.prefixId ?? undefined,
-        tags: parseTags(base.tagsJson),
-        connectionType: (base.connectionType || 'external') as 'external' | 'local',
-        defaultCapabilities: parseDefaultCapabilities(base.defaultCapabilitiesJson),
+        headers: parseRecord(existing.headersJson),
+        azureApiVersion: existing.azureApiVersion ?? undefined,
+        prefixId: existing.prefixId ?? undefined,
+        tags: parseTags(existing.tagsJson),
+        connectionType: (existing.connectionType || 'external') as 'external' | 'local',
+        defaultCapabilities: parseDefaultCapabilities(existing.defaultCapabilitiesJson),
         apiKeys: [
-          ...existing.rows.map((row) => ({
+          ...existing.credentials.map((row) => ({
             id: row.id,
             apiKeyLabel: normalizeOptionalString(row.apiKeyLabel) || undefined,
             modelIds: parseStringArray(row.modelIdsJson),
@@ -627,7 +682,7 @@ export class ConnectionService {
       await this.updateSystemConnection(existing.id, mergePayload)
       updatedGroups += 1
       addedKeys += keysToAdd.length
-      signatureToGroup = this.buildSignatureGroupMap(await this.repository.listSystemConnections())
+      signatureToGroup = this.buildSignatureGroupMap(await this.repository.listSystemGroups())
     }
 
     this.logger.info?.('系统连接已导入', {
@@ -647,7 +702,7 @@ export class ConnectionService {
     }
   }
 
-  async verifyConnectionConfig(payload: ConnectionPayload): Promise<VerifyConnectionResult> {
+  async verifyConnectionConfig(payload: ConnectionPayload | ImportConnectionPayload): Promise<VerifyConnectionResult> {
     const verifyConnection = this.verifyConnection
     if (!verifyConnection) {
       throw new ConnectionServiceError('verifyConnection dependency not provided', 500)
@@ -655,16 +710,13 @@ export class ConnectionService {
 
     const authType = payload.authType ?? 'bearer'
     const normalizedKeys = this.normalizeApiKeys(payload.apiKeys, authType)
-    const existingById = await this.loadExistingRows(normalizedKeys)
+    const existingById = await this.loadExistingCredentials(normalizedKeys)
 
     const results = await Promise.all(
       normalizedKeys.map(async (key) => {
         const existing = key.id != null ? existingById.get(key.id) ?? null : null
-        const hasStoredApiKey = Boolean(
-          existing?.secretVaultId,
-        )
+        const hasStoredApiKey = Boolean(existing?.secretVaultId)
 
-        // Resolve plainApiKey
         let plainApiKey: string
         try {
           plainApiKey = await this.resolvePlainApiKeyForVerify({
@@ -695,7 +747,7 @@ export class ConnectionService {
             enable: true,
             authType,
             apiKey: plainApiKey || undefined,
-            headers: payload.headers ?? (existing ? parseRecord(existing.headersJson) : undefined),
+            headers: payload.headers,
             azureApiVersion: payload.azureApiVersion,
             prefixId: payload.prefixId,
             tags: payload.tags,
@@ -714,7 +766,7 @@ export class ConnectionService {
               enable: true,
               authType,
               apiKey: plainApiKey || undefined,
-              headers: payload.headers ?? (existing ? parseRecord(existing.headersJson) : undefined),
+              headers: payload.headers,
               azureApiVersion: payload.azureApiVersion,
               prefixId: payload.prefixId,
               tags: payload.tags,
@@ -771,6 +823,52 @@ export class ConnectionService {
 
   // --- private helpers ---
 
+  private requireDisplayName(value?: string | null): string {
+    const trimmed = typeof value === 'string' ? value.trim() : ''
+    if (!trimmed) {
+      throw new ConnectionServiceError('displayName 不能为空', 400)
+    }
+    return trimmed
+  }
+
+  private async assertSystemDisplayNameAvailable(displayName: string, excludeGroupId?: number) {
+    const groups = await this.repository.listSystemGroups()
+    const conflict = groups.find(
+      (group) => group.displayName === displayName && group.id !== excludeGroupId,
+    )
+    if (conflict) {
+      throw new ConnectionServiceError(`显示名「${displayName}」已被使用`, 409)
+    }
+  }
+
+  private async ensureImportDisplayName(
+    connection: ImportConnectionPayload,
+    signatureToGroup: Map<string, ConnectionGroupWithCredentials>,
+  ): Promise<ConnectionPayload> {
+    const provided = normalizeOptionalString(connection.displayName)
+    if (provided) {
+      return { ...connection, displayName: provided }
+    }
+
+    const seed = seedDisplayName({
+      prefixId: connection.prefixId,
+      provider: connection.provider,
+      baseUrl: connection.baseUrl,
+    })
+    const taken = new Set(
+      Array.from(signatureToGroup.values()).map((group) => group.displayName),
+    )
+    // also reserve names from a fresh list so create uniqueness holds
+    const allGroups = await this.repository.listSystemGroups()
+    for (const group of allGroups) {
+      taken.add(group.displayName)
+    }
+    return {
+      ...connection,
+      displayName: allocateUniqueDisplayName(seed, taken),
+    }
+  }
+
   private normalizeApiKeys(
     input: ConnectionApiKeyPayload[],
     authType: AuthType,
@@ -794,17 +892,16 @@ export class ConnectionService {
     })
   }
 
-  private buildSharedCreateData(
-    payload: ConnectionPayload,
-    fallbackHeaders?: Record<string, string>,
-  ): ConnectionCreateData {
+  private buildGroupCreateData(payload: ConnectionPayload): ConnectionGroupCreateData {
     return {
       ownerUserId: null,
+      displayName: payload.displayName.trim(),
       provider: payload.provider,
       vendor: payload.vendor ?? null,
       baseUrl: sanitizeBaseUrl(payload.baseUrl),
+      enable: true,
       authType: payload.authType ?? 'bearer',
-      headersJson: serializeRecord(payload.headers ?? fallbackHeaders),
+      headersJson: serializeRecord(payload.headers),
       azureApiVersion: normalizeOptionalString(payload.azureApiVersion),
       prefixId: normalizeOptionalString(payload.prefixId),
       tagsJson: serializeTags(payload.tags),
@@ -813,14 +910,15 @@ export class ConnectionService {
     }
   }
 
-  private buildSharedUpdateData(payload: ConnectionPayload, existing: Connection): ConnectionUpdateData {
+  private buildGroupUpdateData(payload: ConnectionPayload): ConnectionGroupUpdateData {
     return {
       ownerUserId: null,
+      displayName: payload.displayName.trim(),
       provider: payload.provider,
       vendor: payload.vendor ?? null,
       baseUrl: sanitizeBaseUrl(payload.baseUrl),
       authType: payload.authType ?? 'bearer',
-      headersJson: serializeRecord(payload.headers ?? parseRecord(existing.headersJson)),
+      headersJson: serializeRecord(payload.headers),
       azureApiVersion: normalizeOptionalString(payload.azureApiVersion),
       prefixId: normalizeOptionalString(payload.prefixId),
       tagsJson: serializeTags(payload.tags),
@@ -829,9 +927,9 @@ export class ConnectionService {
     }
   }
 
-  /** Create Vault secret and persist secretVaultId on connection. Returns the secretVaultId. */
+  /** Create Vault secret and persist secretVaultId on credential. Returns the secretVaultId. */
   private async createAndPersistVaultSecret(
-    connectionId: number,
+    credentialId: number,
     key: NormalizedApiKeyPayload,
     authType: AuthType,
   ): Promise<number | null> {
@@ -852,24 +950,24 @@ export class ConnectionService {
       scope: 'system',
       scopeId: 'system',
       kind: 'api_key',
-      label: key.apiKeyLabel || `Connection #${connectionId}`,
+      label: key.apiKeyLabel || `Connection #${credentialId}`,
       value: key.apiKey,
-      refId: String(connectionId),
+      refId: String(credentialId),
       refType: 'connection',
     })
 
-    await this.repository.updateSystemConnection(connectionId, { secretVaultId: created.id })
+    await this.repository.updateCredential(credentialId, { secretVaultId: created.id })
     return created.id
   }
 
-  /** Replace Vault secret if new apiKey provided; preserve existing; throw if neither. Returns the resolved secretVaultId. */
+  /** Replace Vault secret if new apiKey provided; preserve existing; throw if neither. */
   private async replaceOrPreserveVaultSecret(
-    connectionId: number,
+    credentialId: number,
     key: NormalizedApiKeyPayload,
     existing: Connection,
   ): Promise<number | null> {
     if (!this.secretVault) {
-      if (existing.secretVaultId) return existing.secretVaultId // no vault but existing ref → preserve
+      if (existing.secretVaultId) return existing.secretVaultId
       throw new ConnectionServiceError(
         'Secret Vault 未配置且连接无已有密钥引用。bearer 认证需要 Secret Vault。',
         500,
@@ -877,7 +975,6 @@ export class ConnectionService {
     }
 
     if (key.apiKey) {
-      // Replace: delete old, create new, update ref
       if (existing.secretVaultId) {
         await this.secretVault.deleteSecret(existing.secretVaultId).catch(() => {})
       }
@@ -885,16 +982,15 @@ export class ConnectionService {
         scope: 'system',
         scopeId: 'system',
         kind: 'api_key',
-        label: key.apiKeyLabel || `Connection #${connectionId}`,
+        label: key.apiKeyLabel || `Connection #${credentialId}`,
         value: key.apiKey,
-        refId: String(connectionId),
+        refId: String(credentialId),
         refType: 'connection',
       })
-      await this.repository.updateSystemConnection(connectionId, { secretVaultId: created.id })
+      await this.repository.updateCredential(credentialId, { secretVaultId: created.id })
       return created.id
     }
 
-    // No new apiKey — preserve existing secretVaultId
     if (existing.secretVaultId) return existing.secretVaultId
 
     throw new ConnectionServiceError(
@@ -903,7 +999,6 @@ export class ConnectionService {
     )
   }
 
-  /** Resolve apiKey for verify: use payload plaintext for new keys, decrypt from Vault for existing. */
   private async resolvePlainApiKeyForVerify(params: {
     authType: AuthType
     apiKeyInput?: string
@@ -911,12 +1006,10 @@ export class ConnectionService {
   }): Promise<string> {
     if (params.authType !== 'bearer') return ''
 
-    // New key: use the plaintext apiKey from the verify payload
     if (params.apiKeyInput && params.apiKeyInput.trim()) {
       return params.apiKeyInput.trim()
     }
 
-    // Existing key: decrypt from Secret Vault
     if (params.existing?.secretVaultId) {
       if (!this.secretVault) {
         throw new ConnectionServiceError('Secret Vault 未配置，无法解密已有密钥进行验证', 500)
@@ -927,7 +1020,7 @@ export class ConnectionService {
     throw new ConnectionServiceError('存在未填写的新 API Key，无法验证', 400)
   }
 
-  private async loadExistingRows(keys: NormalizedApiKeyPayload[]) {
+  private async loadExistingCredentials(keys: NormalizedApiKeyPayload[]) {
     const ids = Array.from(
       new Set(
         keys
@@ -937,88 +1030,47 @@ export class ConnectionService {
     )
     if (ids.length === 0) return new Map<number, Connection>()
 
-    const rows = await this.repository.listSystemConnections()
-    return new Map(rows.filter((row) => ids.includes(row.id)).map((row) => [row.id, row]))
+    const groups = await this.repository.listSystemGroups()
+    const map = new Map<number, Connection>()
+    for (const group of groups) {
+      for (const credential of group.credentials) {
+        if (ids.includes(credential.id)) {
+          map.set(credential.id, credential)
+        }
+      }
+    }
+    return map
   }
 
-  private async requireGroupById(id: number): Promise<GroupedConnectionRows> {
-    const rows = await this.repository.listSystemConnections()
-    const groups = this.groupRows(rows)
-    const found = groups.find((group) => group.id === id || group.rows.some((row) => row.id === id))
+  private async requireGroupById(id: number): Promise<ConnectionGroupWithCredentials> {
+    const found = await this.repository.findSystemGroupById(id)
     if (!found) {
       throw new ConnectionServiceError('Connection not found', 404)
     }
     return found
   }
 
-  private groupRows(rows: Connection[]): GroupedConnectionRows[] {
-    const map = new Map<string, Connection[]>()
-
-    for (const row of [...rows].sort((a, b) => a.id - b.id)) {
-      const signature = stringifySignature({
-        provider: row.provider,
-        vendor: row.vendor,
-        baseUrl: row.baseUrl,
-        authType: row.authType,
-        headers: parseRecord(row.headersJson),
-        azureApiVersion: row.azureApiVersion,
-        prefixId: row.prefixId,
-        tags: parseTags(row.tagsJson),
-        connectionType: row.connectionType,
-        defaultCapabilities: parseDefaultCapabilities(row.defaultCapabilitiesJson),
-      })
-      const bucket = map.get(signature) ?? []
-      bucket.push(row)
-      map.set(signature, bucket)
-    }
-
-    return Array.from(map.entries())
-      .map(([signature, groupedRows]) => ({
-        id: Math.min(...groupedRows.map((row) => row.id)),
-        signature,
-        rows: [...groupedRows].sort((a, b) => {
-          const labelA = normalizeOptionalString(a.apiKeyLabel) || ''
-          const labelB = normalizeOptionalString(b.apiKeyLabel) || ''
-          return labelA.localeCompare(labelB, 'zh-CN') || a.id - b.id
-        }),
-      }))
-      .sort((a, b) => {
-        const updatedA = a.rows.reduce(
-          (max, row) => (row.updatedAt.toISOString() > max ? row.updatedAt.toISOString() : max),
-          '',
-        )
-        const updatedB = b.rows.reduce(
-          (max, row) => (row.updatedAt.toISOString() > max ? row.updatedAt.toISOString() : max),
-          '',
-        )
-        return compareDatesDesc(updatedA, updatedB)
-      })
-  }
-
-  private toGroupView(rows: Connection[]): ConnectionGroupView {
-    const sortedRows = [...rows].sort((a, b) => a.id - b.id)
-    const base = sortedRows[0]
-    const createdAt = sortedRows
-      .map((row) => row.createdAt.toISOString())
-      .sort()[0]
-    const updatedAt = sortedRows
-      .map((row) => row.updatedAt.toISOString())
-      .sort()
-      .slice(-1)[0]
+  private toGroupView(group: ConnectionGroupWithCredentials): ConnectionGroupView {
+    const credentials = [...group.credentials].sort((a, b) => {
+      const labelA = normalizeOptionalString(a.apiKeyLabel) || ''
+      const labelB = normalizeOptionalString(b.apiKeyLabel) || ''
+      return labelA.localeCompare(labelB, 'zh-CN') || a.id - b.id
+    })
 
     return {
-      id: Math.min(...sortedRows.map((row) => row.id)),
-      connectionIds: sortedRows.map((row) => row.id),
-      provider: base.provider as ProviderType,
-      vendor: (base.vendor as VendorType | null) ?? null,
-      baseUrl: sanitizeBaseUrl(base.baseUrl),
-      authType: (base.authType as AuthType) || 'bearer',
-      azureApiVersion: base.azureApiVersion ?? null,
-      prefixId: base.prefixId ?? null,
-      tags: parseTags(base.tagsJson),
-      connectionType: (base.connectionType || 'external') as 'external' | 'local',
-      defaultCapabilities: parseDefaultCapabilities(base.defaultCapabilitiesJson),
-      apiKeys: sortedRows.map((row) => {
+      id: group.id,
+      displayName: group.displayName,
+      connectionIds: credentials.map((row) => row.id),
+      provider: group.provider as ProviderType,
+      vendor: (group.vendor as VendorType | null) ?? null,
+      baseUrl: sanitizeBaseUrl(group.baseUrl),
+      authType: (group.authType as AuthType) || 'bearer',
+      azureApiVersion: group.azureApiVersion ?? null,
+      prefixId: group.prefixId ?? null,
+      tags: parseTags(group.tagsJson),
+      connectionType: (group.connectionType || 'external') as 'external' | 'local',
+      defaultCapabilities: parseDefaultCapabilities(group.defaultCapabilitiesJson),
+      apiKeys: credentials.map((row) => {
         const hasKey = Boolean(row.secretVaultId)
         return {
           id: row.id,
@@ -1031,27 +1083,49 @@ export class ConnectionService {
           updatedAt: row.updatedAt.toISOString(),
         } satisfies ConnectionApiKeyView
       }),
-      createdAt,
-      updatedAt,
+      createdAt: group.createdAt.toISOString(),
+      updatedAt: group.updatedAt.toISOString(),
     }
   }
 
-  private async refreshCatalogSafe(connection: Connection, action: 'create' | 'update') {
+  private async refreshCatalogSafe(
+    group: ConnectionGroup,
+    credentials: Connection[],
+    action: 'create' | 'update',
+  ) {
+    const credential = pickCredentialForCatalog(group, credentials)
+    if (!credential) return
     try {
-      await this.refreshModelCatalog(connection)
+      await this.refreshModelCatalog(group, credential)
     } catch (error) {
       this.logger.warn?.(`刷新模型目录失败(${action})`, {
-        id: connection.id,
+        id: group.id,
         error: error instanceof Error ? error.message : error,
       })
     }
   }
 
-  private buildSignatureGroupMap(rows: Connection[]) {
-    return new Map(this.groupRows(rows).map((group) => [group.signature, group]))
+  private buildSignatureGroupMap(groups: ConnectionGroupWithCredentials[]) {
+    return new Map(
+      groups.map((group) => [
+        stringifySignature({
+          provider: group.provider,
+          vendor: group.vendor,
+          baseUrl: group.baseUrl,
+          authType: group.authType,
+          headers: parseRecord(group.headersJson),
+          azureApiVersion: group.azureApiVersion,
+          prefixId: group.prefixId,
+          tags: parseTags(group.tagsJson),
+          connectionType: group.connectionType,
+          defaultCapabilities: parseDefaultCapabilities(group.defaultCapabilitiesJson),
+        }),
+        group,
+      ]),
+    )
   }
 
-  private signatureFromPayload(payload: ConnectionPayload) {
+  private signatureFromPayload(payload: ImportConnectionPayload | ConnectionPayload) {
     return stringifySignature({
       provider: payload.provider,
       vendor: payload.vendor ?? null,

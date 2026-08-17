@@ -1,4 +1,4 @@
-import type { Connection, Prisma, PrismaClient } from '@prisma/client'
+import type { Connection, ConnectionGroup, Prisma, PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../db'
 import { hasDefinedCapability, parseCapabilityEnvelope as defaultParseCapabilityEnvelope } from '../../utils/capabilities'
 import type { CapabilityEnvelope, CapabilityFlags } from '../../utils/capabilities'
@@ -15,14 +15,16 @@ import {
   type ModelAccessTriState,
 } from '../../utils/model-access-policy'
 
+type ConnectionGroupWithCredentials = ConnectionGroup & { credentials: Connection[] }
+
 type RefreshAllFn = () => Promise<unknown>
-type RefreshForConnectionsFn = (connections: Connection[]) => Promise<unknown>
-type RefreshByIdFn = (connectionId: number) => Promise<unknown>
+type RefreshForGroupsFn = (groups: ConnectionGroupWithCredentials[]) => Promise<unknown>
+type RefreshByGroupIdFn = (connectionGroupId: number) => Promise<unknown>
 type ComputeCapabilitiesFn = (rawId: string, tags?: Array<{ name: string }>) => CapabilityFlags
 type DeriveChannelNameFn = (provider: ProviderType, baseUrl?: string) => string
 type NormalizeCapabilityFlagsFn = (input?: Record<string, any> | null) => CapabilityFlags | undefined
 type SerializeCapabilityEnvelopeFn = (input?: CapabilityEnvelope | null) => string
-type InvalidateCacheFn = (connectionId: number, rawId: string) => void
+type InvalidateCacheFn = (connectionGroupId: number, rawId: string) => void
 type GetModelAccessDefaultsFn = () => Promise<ModelAccessDefaults>
 type ResolveModelAccessPolicyFn = (params: {
   metaJson?: string | null
@@ -116,6 +118,7 @@ export class ModelCatalogServiceError extends Error {
 }
 
 export interface SaveOverridePayload {
+  /** Stable connection group id (API still names this connectionId). */
   connectionId: number
   rawId: string
   tagsInput?: unknown
@@ -134,8 +137,8 @@ export interface DeleteOverridesPayload {
 export interface ModelCatalogServiceDeps {
   prisma?: PrismaClient
   refreshAllModelCatalog?: RefreshAllFn
-  refreshModelCatalogForConnections?: RefreshForConnectionsFn
-  refreshModelCatalogForConnectionId?: RefreshByIdFn
+  refreshModelCatalogForConnectionGroups?: RefreshForGroupsFn
+  refreshModelCatalogForConnectionGroupId?: RefreshByGroupIdFn
   computeCapabilities?: ComputeCapabilitiesFn
   deriveChannelName?: DeriveChannelNameFn
   parseCapabilityEnvelope?: typeof defaultParseCapabilityEnvelope
@@ -152,8 +155,8 @@ export interface ModelCatalogServiceDeps {
 export class ModelCatalogService {
   private prisma: PrismaClient
   private refreshAll: RefreshAllFn
-  private refreshForConnections: RefreshForConnectionsFn
-  private refreshByConnectionId: RefreshByIdFn
+  private refreshForGroups: RefreshForGroupsFn
+  private refreshByGroupId: RefreshByGroupIdFn
   private computeCapabilities: ComputeCapabilitiesFn
   private deriveChannelName: DeriveChannelNameFn
   private parseCapabilityEnvelope: typeof defaultParseCapabilityEnvelope
@@ -169,13 +172,13 @@ export class ModelCatalogService {
   constructor(deps: ModelCatalogServiceDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
     this.refreshAll = requireDep(deps.refreshAllModelCatalog, 'refreshAllModelCatalog')
-    this.refreshForConnections = requireDep(
-      deps.refreshModelCatalogForConnections,
-      'refreshModelCatalogForConnections',
+    this.refreshForGroups = requireDep(
+      deps.refreshModelCatalogForConnectionGroups,
+      'refreshModelCatalogForConnectionGroups',
     )
-    this.refreshByConnectionId = requireDep(
-      deps.refreshModelCatalogForConnectionId,
-      'refreshModelCatalogForConnectionId',
+    this.refreshByGroupId = requireDep(
+      deps.refreshModelCatalogForConnectionGroupId,
+      'refreshModelCatalogForConnectionGroupId',
     )
     this.computeCapabilities = requireDep(deps.computeCapabilities, 'computeCapabilities')
     this.deriveChannelName = requireDep(deps.deriveChannelName, 'deriveChannelName')
@@ -203,33 +206,36 @@ export class ModelCatalogService {
   }
 
   async listModels(actor?: Actor) {
-    const connections = await this.prisma.connection.findMany({ where: { ownerUserId: null, enable: true } })
-    if (connections.length === 0) {
+    const groups = await this.prisma.connectionGroup.findMany({
+      where: { ownerUserId: null, enable: true },
+      include: { credentials: true },
+    })
+    if (groups.length === 0) {
       return []
     }
-    const connectionIds = connections.map((item) => item.id)
-    const connMap = new Map(connections.map((item) => [item.id, item]))
+    const groupIds = groups.map((item) => item.id)
+    const groupMap = new Map(groups.map((item) => [item.id, item]))
     const loadRows = () =>
-      this.prisma.modelCatalog.findMany({ where: { connectionId: { in: connectionIds } } })
+      this.prisma.modelCatalog.findMany({ where: { connectionGroupId: { in: groupIds } } })
 
     let rows = await loadRows()
     const now = this.now()
     const needsRefresh: number[] = []
-    for (const conn of connections) {
-      const related = rows.filter((row) => row.connectionId === conn.id)
+    for (const group of groups) {
+      const related = rows.filter((row) => row.connectionGroupId === group.id)
       if (related.length === 0) {
-        needsRefresh.push(conn.id)
+        needsRefresh.push(group.id)
         continue
       }
       const expired = related.every((row) => row.expiresAt <= now)
       if (expired) {
-        needsRefresh.push(conn.id)
+        needsRefresh.push(group.id)
       }
     }
 
     if (needsRefresh.length) {
-      const targets = connections.filter((conn) => needsRefresh.includes(conn.id))
-      await this.refreshForConnections(targets)
+      const targets = groups.filter((group) => needsRefresh.includes(group.id))
+      await this.refreshForGroups(targets)
       rows = await loadRows()
     }
 
@@ -241,9 +247,9 @@ export class ModelCatalogService {
     })()
 
     const mapped = rows
-      .filter((row) => connMap.has(row.connectionId))
+      .filter((row) => groupMap.has(row.connectionGroupId))
       .map((row) => {
-        const conn = connMap.get(row.connectionId)!
+        const group = groupMap.get(row.connectionGroupId)!
         let tags: Array<{ name: string }> = []
         try {
           const parsed = JSON.parse(row.tagsJson || '[]')
@@ -276,9 +282,10 @@ export class ModelCatalogService {
           rawId: row.rawId,
           name: row.name,
           provider: row.provider,
-          channelName: this.deriveChannelName(conn.provider as any, conn.baseUrl),
-          connectionBaseUrl: conn.baseUrl,
-          connectionId: row.connectionId,
+          displayName: group.displayName,
+          channelName: this.deriveChannelName(group.provider as any, group.baseUrl),
+          connectionBaseUrl: group.baseUrl,
+          connectionId: group.id,
           connectionType: row.connectionType,
           modelType: row.modelType || 'chat',
           tags,
@@ -306,13 +313,13 @@ export class ModelCatalogService {
   }
 
   async saveOverride(payload: SaveOverridePayload) {
-    const connectionId = payload.connectionId
+    const connectionGroupId = payload.connectionId
     const rawId = (payload.rawId || '').trim()
-    if (!connectionId || !rawId) {
+    if (!connectionGroupId || !rawId) {
       throw new ModelCatalogServiceError('connectionId/rawId required')
     }
-    const connection = await this.prisma.connection.findUnique({ where: { id: connectionId } })
-    if (!connection) {
+    const group = await this.prisma.connectionGroup.findUnique({ where: { id: connectionGroupId } })
+    if (!group) {
       throw new ModelCatalogServiceError('Connection not found', 404)
     }
 
@@ -328,9 +335,11 @@ export class ModelCatalogService {
     const ttlSec = Number.parseInt(process.env.MODELS_TTL_S || '120', 10) || 120
     const now = this.now()
     const expiresAt = new Date(now.getTime() + ttlSec * 1000)
-    const modelId = (connection.prefixId ? `${connection.prefixId}.` : '') + rawId
+    const modelId = (group.prefixId ? `${group.prefixId}.` : '') + rawId
 
-    const existing = await this.prisma.modelCatalog.findFirst({ where: { connectionId, modelId } })
+    const existing = await this.prisma.modelCatalog.findFirst({
+      where: { connectionGroupId, modelId },
+    })
     const metaPayload = parseMetaObject(existing?.metaJson)
 
     if (Object.prototype.hasOwnProperty.call(payload, 'maxOutputTokens')) {
@@ -383,12 +392,12 @@ export class ModelCatalogService {
     if (!existing) {
       await this.prisma.modelCatalog.create({
         data: {
-          connectionId,
+          connectionGroupId,
           modelId,
           rawId,
           name: rawId,
-          provider: connection.provider,
-          connectionType: (connection.connectionType as any) || 'external',
+          provider: group.provider,
+          connectionType: (group.connectionType as any) || 'external',
           tagsJson: JSON.stringify(tags || []),
           capabilitiesJson: capabilitiesJson || '{}',
           metaJson,
@@ -413,8 +422,8 @@ export class ModelCatalogService {
       await this.prisma.modelCatalog.update({ where: { id: existing.id }, data: updateData })
     }
 
-    this.invalidateCompletionLimitCache(connectionId, rawId)
-    this.invalidateContextWindowCache(connectionId, rawId)
+    this.invalidateCompletionLimitCache(connectionGroupId, rawId)
+    this.invalidateContextWindowCache(connectionGroupId, rawId)
   }
 
   async deleteOverrides(payload: DeleteOverridesPayload) {
@@ -437,20 +446,22 @@ export class ModelCatalogService {
       throw new ModelCatalogServiceError('items required')
     }
 
-    const connectionIds = Array.from(new Set(normalized.map((item) => item.connectionId)))
-    const connections = await this.prisma.connection.findMany({
-      where: { id: { in: connectionIds } },
+    const connectionGroupIds = Array.from(new Set(normalized.map((item) => item.connectionId)))
+    const groups = await this.prisma.connectionGroup.findMany({
+      where: { id: { in: connectionGroupIds } },
       select: { id: true, prefixId: true },
     })
-    const prefixMap = new Map(connections.map((c) => [c.id, c.prefixId]))
+    const prefixMap = new Map(groups.map((c) => [c.id, c.prefixId]))
     const filters = normalized.map((item) => {
       const prefix = prefixMap.get(item.connectionId) || ''
       const modelId = prefix ? `${prefix}.${item.rawId}` : item.rawId
-      return { connectionId: item.connectionId, modelId }
+      return { connectionGroupId: item.connectionId, modelId }
     })
-    const result = await this.prisma.modelCatalog.deleteMany({ where: { OR: filters, manualOverride: true } })
-    for (const id of connectionIds) {
-      await this.refreshByConnectionId(id)
+    const result = await this.prisma.modelCatalog.deleteMany({
+      where: { OR: filters, manualOverride: true },
+    })
+    for (const id of connectionGroupIds) {
+      await this.refreshByGroupId(id)
     }
     return result.count
   }
@@ -459,7 +470,7 @@ export class ModelCatalogService {
     const rows = await this.prisma.modelCatalog.findMany({
       where: { manualOverride: true },
       select: {
-        connectionId: true,
+        connectionGroupId: true,
         rawId: true,
         modelId: true,
         tagsJson: true,
@@ -478,7 +489,7 @@ export class ModelCatalogService {
       })()
       const parsedCaps = this.parseCapabilityEnvelope(row.capabilitiesJson)
       return {
-        connectionId: row.connectionId,
+        connectionId: row.connectionGroupId,
         rawId: row.rawId,
         modelId: row.modelId,
         tags,

@@ -1,9 +1,9 @@
 import type { PrismaClient } from '@prisma/client'
-import type { Connection } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../db'
 import {
   PrismaModelResolverRepository,
   type ModelResolverRepository,
+  type ResolvedConnection,
 } from '../../repositories/model-resolver-repository'
 import type { Actor } from '../../types'
 import {
@@ -43,16 +43,15 @@ export class ModelResolverService {
   }
 
   /**
-   * 解析 modelId 对应的系统连接与原始模型 ID。
-   * 顺序：model_catalog 缓存 → prefix 规则 → 连接模型显式列表 → 第一个启用连接。
+   * 解析 modelId 对应的系统连接组与原始模型 ID。
+   * 顺序：model_catalog 缓存 → prefix 规则 → 凭据模型显式列表 → 第一个启用组。
    */
   async resolveModelIdForUser(
     userId: number,
     modelId: string,
-  ): Promise<{ connection: Connection; rawModelId: string; metaJson?: string | null } | null> {
+  ): Promise<{ connection: ResolvedConnection; rawModelId: string; metaJson?: string | null } | null> {
     const cleanModelId = (modelId || '').trim()
     if (!cleanModelId) return null
-    // 用户ID目前未用于筛选，但保留以便后续权限/私有连接扩展
     void userId
 
     const cached = await this.repository.findCachedModel(cleanModelId)
@@ -65,27 +64,52 @@ export class ModelResolverService {
       }
     }
 
-    const connections = await this.repository.listEnabledSystemConnections()
+    const groups = await this.repository.listEnabledSystemGroups()
 
-    let fallbackExact: { connection: Connection; rawId: string } | null = null
-    let fallbackFirst: { connection: Connection; rawId: string } | null = null
+    let fallbackExact: { connection: ResolvedConnection; rawId: string } | null = null
+    let fallbackFirst: { connection: ResolvedConnection; rawId: string } | null = null
 
-    for (const conn of connections) {
-      const prefix = (conn.prefixId || '').trim()
+    for (const group of groups) {
+      const enabledCredentials = group.credentials.filter((item) => item.enable)
+      const credentials = enabledCredentials.length > 0 ? enabledCredentials : group.credentials
+      if (credentials.length === 0) continue
+
+      const primary = credentials[0]!
+      const resolved = {
+        ...group,
+        credentialId: primary.id,
+        secretVaultId: primary.secretVaultId,
+        modelIdsJson: primary.modelIdsJson,
+        apiKeyLabel: primary.apiKeyLabel,
+      } satisfies ResolvedConnection
+
+      const prefix = (group.prefixId || '').trim()
       if (prefix && cleanModelId.startsWith(`${prefix}.`)) {
         const rawId = cleanModelId.slice(prefix.length + 1)
-        return { connection: conn, rawModelId: rawId }
+        return { connection: resolved, rawModelId: rawId }
       }
 
       if (!prefix) {
         if (!fallbackFirst) {
-          fallbackFirst = { connection: conn, rawId: cleanModelId }
+          fallbackFirst = { connection: resolved, rawId: cleanModelId }
         }
 
         if (!fallbackExact) {
-          const ids = parseModelIds(conn.modelIdsJson)
-          if (ids.includes(cleanModelId)) {
-            fallbackExact = { connection: conn, rawId: cleanModelId }
+          for (const credential of credentials) {
+            const ids = parseModelIds(credential.modelIdsJson)
+            if (ids.includes(cleanModelId)) {
+              fallbackExact = {
+                connection: {
+                  ...group,
+                  credentialId: credential.id,
+                  secretVaultId: credential.secretVaultId,
+                  modelIdsJson: credential.modelIdsJson,
+                  apiKeyLabel: credential.apiKeyLabel,
+                },
+                rawId: cleanModelId,
+              }
+              break
+            }
           }
         }
       }
@@ -110,9 +134,10 @@ export class ModelResolverService {
     actor?: Actor
     userId?: number | null
     modelId: string
+    /** Group id or legacy credential id (dual-read). */
     connectionId?: number
     rawId?: string
-  }): Promise<{ connection: Connection; rawModelId: string } | null> {
+  }): Promise<{ connection: ResolvedConnection; rawModelId: string } | null> {
     const userId = params.userId ?? 0
     const modelId = (params.modelId || '').trim()
 
@@ -122,7 +147,8 @@ export class ModelResolverService {
       return userId ? 'user' : 'anonymous'
     })()
 
-    const defaults: ModelAccessDefaults | null = actorType === 'admin' ? null : await this.getModelAccessDefaults()
+    const defaults: ModelAccessDefaults | null =
+      actorType === 'admin' ? null : await this.getModelAccessDefaults()
     const isAllowed = (metaJson?: string | null) => {
       if (actorType === 'admin') return true
       const access = this.resolveModelAccessPolicy({ metaJson, defaults: defaults! })
@@ -130,7 +156,7 @@ export class ModelResolverService {
     }
 
     if (params.connectionId && params.rawId) {
-      const connection = await this.repository.findEnabledSystemConnectionById(params.connectionId)
+      const connection = await this.repository.findEnabledResolvedConnectionById(params.connectionId)
       if (!connection) {
         return null
       }
