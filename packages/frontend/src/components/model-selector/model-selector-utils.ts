@@ -1,6 +1,6 @@
-import { deriveChannelName } from "@/lib/utils"
 import type { ModelItem } from "@/store/models-store"
 import { modelKeyFor } from "@/store/model-preference-store"
+import { formatModelSecondaryLabel } from "@/lib/model-display"
 import type { CapabilityFilter, SelectorView } from "./model-selector-types"
 import { PRIORITY_GROUP_ORDER } from "./model-selector-types"
 
@@ -154,8 +154,8 @@ export const buildModelCollections = ({
     }
 
     if (normalizedSearchTerm) {
-      const channel = model.channelName || deriveChannelName(model.provider, model.connectionBaseUrl)
-      const content = `${model.name} ${model.id} ${model.provider} ${channel}`.toLowerCase()
+      const secondary = formatModelSecondaryLabel(model)
+      const content = `${model.name} ${model.id} ${model.provider} ${model.displayName || ''} ${secondary}`.toLowerCase()
       if (!content.includes(normalizedSearchTerm)) {
         return false
       }

@@ -445,6 +445,11 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
                         </TableCell>
                         <TableCell className="py-3 px-3">
                           <div className="font-medium whitespace-normal break-words">{m.name || m.id}</div>
+                          {m.displayName && (
+                            <div className="mt-0.5 text-xs text-muted-foreground whitespace-normal break-words">
+                              {m.displayName}
+                            </div>
+                          )}
                           <div className="mt-1 flex items-center gap-2 flex-wrap text-xs">
                             <Badge variant="outline" className="text-micro font-normal">
                               {recommendTag(m)}

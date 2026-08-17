@@ -1,7 +1,8 @@
 import type { MouseEvent } from "react"
 import { Check, Star } from "lucide-react"
 import type { ModelItem } from "@/store/models-store"
-import { cn, deriveChannelName } from "@/lib/utils"
+import { cn } from "@/lib/utils"
+import { formatModelOptionLabel, formatModelSecondaryLabel } from "@/lib/model-display"
 import { modelKeyFor } from "@/store/model-preference-store"
 import { Skeleton } from "@/components/ui/skeleton"
 import { formatContextWindow } from "./model-selector-utils"
@@ -172,7 +173,8 @@ function ModelRows({
         const key = modelKeyFor(model)
         const isActive = isModelSelected(model)
         const isFavorite = favoriteModelKeys.has(key)
-        const channel = model.channelName || deriveChannelName(model.provider, model.connectionBaseUrl)
+        const secondary = formatModelSecondaryLabel(model)
+        const accessibleLabel = formatModelOptionLabel(model)
         const contextTokens =
           typeof model.contextWindow === "number" && model.contextWindow > 0
             ? formatContextWindow(model.contextWindow)
@@ -195,7 +197,8 @@ function ModelRows({
               type="button"
               className="min-w-0 flex-1 text-left outline-none"
               onClick={() => onSelectModel(model)}
-              title={model.name}
+              title={accessibleLabel}
+              aria-label={accessibleLabel}
             >
               <div className="flex min-w-0 items-center gap-2">
                 <span className="truncate text-sm font-semibold leading-5 text-foreground">
@@ -203,9 +206,11 @@ function ModelRows({
                 </span>
                 {isActive && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
               </div>
-              <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-micro leading-4 text-muted-foreground">
-                <span className="truncate">{model.provider} · {channel}</span>
-              </div>
+              {secondary && (
+                <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-micro leading-4 text-muted-foreground">
+                  <span className="truncate">{secondary}</span>
+                </div>
+              )}
             </button>
 
             <div className="ml-2 flex shrink-0 items-center gap-2 text-xs text-muted-foreground">

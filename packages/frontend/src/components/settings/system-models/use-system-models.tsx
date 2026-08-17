@@ -66,7 +66,7 @@ export function useSystemModels() {
     const filtered = (models || [])
       .filter((model: any) => {
         if (!kw) return true
-        return [model.id, model.rawId, model.name, model.provider].some((value) =>
+        return [model.id, model.rawId, model.name, model.provider, model.displayName].some((value) =>
           String(value || '').toLowerCase().includes(kw)
         )
       })

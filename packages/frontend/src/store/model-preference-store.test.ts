@@ -8,6 +8,7 @@ const makeModel = (override: Partial<ModelItem>): ModelItem => ({
   rawId: 'gpt-4o',
   name: 'GPT-4o',
   provider: 'openai',
+  displayName: 'Prod OpenAI',
   channelName: 'openai',
   connectionBaseUrl: 'https://api.example.com/v1',
   connectionId: 1,

@@ -583,6 +583,11 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                       GPT-4o mini
                     </div>
                     <div
+                      class="mt-0.5 text-xs text-muted-foreground whitespace-normal break-words"
+                    >
+                      官方 OpenAI
+                    </div>
+                    <div
                       class="mt-1 flex items-center gap-2 flex-wrap text-xs"
                     >
                       <div
@@ -714,6 +719,11 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                       class="font-medium whitespace-normal break-words"
                     >
                       Phi-3 Turbo
+                    </div>
+                    <div
+                      class="mt-0.5 text-xs text-muted-foreground whitespace-normal break-words"
+                    >
+                      Azure 生产
                     </div>
                     <div
                       class="mt-1 flex items-center gap-2 flex-wrap text-xs"
