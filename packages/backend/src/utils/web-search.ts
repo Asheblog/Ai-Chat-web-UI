@@ -237,19 +237,26 @@ export const formatHitsForModel = (query: string, hits: WebSearchHit[]): string 
   return `Web search results for "${query}":\n\n${lines.join('\n\n')}`
 }
 
+const isImageScopeOption = (scope?: string): boolean =>
+  (scope || '').trim().toLowerCase() === 'image'
+
 const runTavilySearch = async (query: string, opts: WebSearchOptions): Promise<WebSearchHit[]> => {
   if (!opts.apiKey) {
     throw new Error('Tavily API key is not configured')
   }
   const endpoint = opts.endpoint || 'https://api.tavily.com/search'
+  const isImageScope = isImageScopeOption(opts.scope)
   const payload: Record<string, unknown> = {
     api_key: opts.apiKey,
     query,
     max_results: clampLimit(opts.limit),
     include_answer: false,
-    // 官方默认 false；显式打开后每条 result 可带页面关联图
+    // 官方默认 false；显式打开后每条 result 可带页面关联图，并在响应顶层返回 query 相关图片
     include_images: true,
     search_depth: 'advanced',
+  }
+  if (isImageScope) {
+    payload.include_image_descriptions = true
   }
   const domains = normalizeDomains(opts.domains)
   if (domains.length > 0) {
@@ -267,6 +274,40 @@ const runTavilySearch = async (query: string, opts: WebSearchOptions): Promise<W
     throw new Error(`Tavily search failed: ${response.status} ${text}`)
   }
   const data = await response.json() as any
+
+  if (isImageScope) {
+    const topImages = Array.isArray(data?.images) ? data.images : []
+    return topImages
+      .map((item: any): WebSearchHit | null => {
+        if (typeof item === 'string') {
+          const imageUrl = item.trim()
+          if (!imageUrl) return null
+          return {
+            title: imageUrl,
+            url: imageUrl,
+            snippet: '',
+            imageUrl,
+            thumbnailUrl: imageUrl,
+          }
+        }
+        if (!item || typeof item !== 'object') return null
+        const imageUrl =
+          pickFirstString(item.url, item.imageUrl, item.image_url, item.src) || pickImageUrl(item)
+        if (!imageUrl) return null
+        const description = typeof item.description === 'string' ? item.description.trim() : ''
+        return {
+          title: description || imageUrl,
+          url: imageUrl,
+          snippet: description,
+          content: description,
+          imageUrl,
+          thumbnailUrl: pickThumbnailUrl(item) || imageUrl,
+        }
+      })
+      .filter((hit: WebSearchHit | null): hit is WebSearchHit => Boolean(hit))
+      .slice(0, clampLimit(opts.limit))
+  }
+
   const results = Array.isArray(data?.results) ? data.results : []
   return results.map((item: any) => ({
     title: item?.title || item?.url || 'Untitled',
@@ -431,6 +472,8 @@ const runExaSearch = async (query: string, opts: WebSearchOptions): Promise<WebS
     throw new Error('Exa API key is not configured')
   }
   const endpoint = opts.endpoint || 'https://api.exa.ai/search'
+  const isImageScope = isImageScopeOption(opts.scope)
+  const imageLinksCount = isImageScope ? 10 : 5
   const payload: Record<string, unknown> = {
     query,
     numResults: clampLimit(opts.limit),
@@ -438,7 +481,7 @@ const runExaSearch = async (query: string, opts: WebSearchOptions): Promise<WebS
     contents: {
       highlights: true,
       // Exa：代表图 image/favicon 随 contents 返回；再抽若干页内图片链接
-      extras: { imageLinks: 5 },
+      extras: { imageLinks: imageLinksCount },
     },
   }
   const domains = normalizeDomains(opts.domains)
@@ -461,6 +504,36 @@ const runExaSearch = async (query: string, opts: WebSearchOptions): Promise<WebS
   }
   const data = await response.json() as any
   const results = Array.isArray(data?.results) ? data.results : []
+
+  if (isImageScope) {
+    const flattened: WebSearchHit[] = []
+    const seen = new Set<string>()
+    for (const item of results) {
+      const pageUrl = typeof item?.url === 'string' ? item.url : ''
+      const title = item?.title || pageUrl || 'Untitled'
+      const highlights = Array.isArray(item?.highlights) ? item.highlights : []
+      const snippet = highlights[0] || ''
+      const cover = pickImageUrl(item)
+      const extraLinks = Array.isArray(item?.extras?.imageLinks)
+        ? item.extras.imageLinks.filter((value: unknown): value is string => typeof value === 'string' && value.trim().length > 0)
+        : []
+      for (const imageUrl of [cover, ...extraLinks]) {
+        const normalized = typeof imageUrl === 'string' ? imageUrl.trim() : ''
+        if (!normalized || seen.has(normalized)) continue
+        seen.add(normalized)
+        flattened.push({
+          title,
+          url: pageUrl || normalized,
+          snippet,
+          content: snippet,
+          imageUrl: normalized,
+          thumbnailUrl: normalized,
+        })
+      }
+    }
+    return flattened.slice(0, clampLimit(opts.limit))
+  }
+
   return results.map((item: any) => {
     const highlights = Array.isArray(item?.highlights) ? item.highlights : []
     const text = typeof item?.text === 'string' ? item.text : ''
@@ -482,7 +555,7 @@ export const runWebSearch = async (query: string, opts: WebSearchOptions): Promi
     case 'tavily':
       return runTavilySearch(query, opts)
     case 'brave':
-      if ((opts.scope || '').trim().toLowerCase() === 'image') {
+      if (isImageScopeOption(opts.scope)) {
         return runBraveImageSearch(query, opts)
       }
       return runBraveSearch(query, opts)

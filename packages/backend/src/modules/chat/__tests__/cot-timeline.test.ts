@@ -91,6 +91,19 @@ describe('buildInterleavedCotNodes', () => {
 })
 
 describe('resolveToolDisplay / buildToolStepTitle', () => {
+  it('labels web_search with scope=image as 图片检索', () => {
+    expect(
+      buildToolStepTitle({
+        id: 'evt-image',
+        tool: 'web_search',
+        identifier: 'web_search',
+        status: 'success',
+        query: '新闻配图',
+        details: { scope: 'image' },
+      } as any),
+    ).toBe('图片检索：新闻配图')
+  })
+
   test('web_search 使用 globe 与查询标题', () => {
     expect(resolveToolDisplay('web_search')).toEqual({ label: '联网搜索', iconKey: 'globe' })
     expect(

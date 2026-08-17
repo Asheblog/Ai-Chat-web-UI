@@ -73,6 +73,48 @@ describe('runWebSearch image mapping', () => {
     expect(hits[0].thumbnailUrl).toBe('https://cdn.example.com/a.jpg')
   })
 
+  test('tavily image scope maps top-level images with descriptions', async () => {
+    const fetchMock = jest.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body || '{}'))
+      expect(body.include_images).toBe(true)
+      expect(body.include_image_descriptions).toBe(true)
+      return new Response(
+        JSON.stringify({
+          images: [
+            {
+              url: 'https://cdn.example.com/top-a.jpg',
+              description: '新闻配图 A',
+            },
+            'https://cdn.example.com/top-b.jpg',
+          ],
+          results: [
+            {
+              title: 'News A',
+              url: 'https://example.com/a',
+              content: 'snippet-a',
+              images: ['https://cdn.example.com/page-a.jpg'],
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    }) as jest.MockedFunction<typeof fetch>
+    global.fetch = fetchMock
+
+    const hits = await runWebSearch('news images', {
+      engine: 'tavily',
+      apiKey: 'test-key',
+      scope: 'image',
+      limit: 5,
+    })
+
+    expect(hits).toHaveLength(2)
+    expect(hits[0].imageUrl).toBe('https://cdn.example.com/top-a.jpg')
+    expect(hits[0].snippet).toBe('新闻配图 A')
+    expect(hits[0].url).toBe('https://cdn.example.com/top-a.jpg')
+    expect(hits[1].imageUrl).toBe('https://cdn.example.com/top-b.jpg')
+  })
+
   test('brave maps nested thumbnail original/src', async () => {
     global.fetch = jest.fn(async () =>
       new Response(
@@ -167,5 +209,48 @@ describe('runWebSearch image mapping', () => {
 
     expect(hits[0].imageUrl).toBe('https://cdn.example.com/cover.png')
     expect(hits[0].thumbnailUrl).toBe('https://example.com/favicon.ico')
+  })
+
+  test('exa image scope flattens page images into image hits', async () => {
+    const fetchMock = jest.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body || '{}'))
+      expect(body.contents?.extras?.imageLinks).toBe(10)
+      return new Response(
+        JSON.stringify({
+          results: [
+            {
+              title: 'Exa News',
+              url: 'https://example.com/exa-news',
+              highlights: ['highlight'],
+              image: 'https://cdn.example.com/cover.png',
+              extras: {
+                imageLinks: [
+                  'https://cdn.example.com/extra1.jpg',
+                  'https://cdn.example.com/extra2.jpg',
+                ],
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    }) as jest.MockedFunction<typeof fetch>
+    global.fetch = fetchMock
+
+    const hits = await runWebSearch('exa images', {
+      engine: 'exa',
+      apiKey: 'test-key',
+      scope: 'image',
+      limit: 5,
+    })
+
+    expect(hits.map((hit) => hit.imageUrl)).toEqual([
+      'https://cdn.example.com/cover.png',
+      'https://cdn.example.com/extra1.jpg',
+      'https://cdn.example.com/extra2.jpg',
+    ])
+    expect(hits[0].url).toBe('https://example.com/exa-news')
+    expect(hits[1].url).toBe('https://example.com/exa-news')
+    expect(hits[1].title).toContain('Exa News')
   })
 })

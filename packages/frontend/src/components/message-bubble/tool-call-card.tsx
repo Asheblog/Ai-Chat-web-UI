@@ -20,11 +20,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { describeTool } from '@aichat/shared/tool-events'
+import { describeToolEvent } from '@aichat/shared/tool-events'
 import { cn } from '@/lib/utils'
 import type { ToolEvent } from '@/types'
-
-const formatToolName = (tool: string | undefined) => describeTool(tool)
 
 const statusMeta: Record<
   ToolEvent['status'],
@@ -175,7 +173,7 @@ export function ToolCallCard({ event, open, onOpenChange }: ToolCallCardProps) {
   const isControlled = open !== undefined
   const meta = statusMeta[event.status]
   const StatusIcon = meta.icon
-  const toolLabel = formatToolName(event.identifier || event.apiName || event.tool)
+  const toolLabel = describeToolEvent(event)
   const primaryText = resolvePrimaryText(event)
   const argumentText = pickString(
     event.argumentsText,
@@ -195,12 +193,18 @@ export function ToolCallCard({ event, open, onOpenChange }: ToolCallCardProps) {
   const eventTitle = pickString(event.details?.title) || eventUrl
   const leadImageUrl = pickString(event.details?.leadImageUrl)
   const imageCount = Array.isArray(event.details?.images) ? event.details.images.length : 0
+  const assessedImageCount = Array.isArray(event.details?.assessedImages)
+    ? event.details.assessedImages.length
+    : 0
   const engine = pickString(event.details?.engine)
   const language = toLanguageLabel(pickString(event.details?.queryLanguage))
   const taskType = pickString(event.details?.taskType)
+  const scope = pickString(event.details?.scope)
   const expandedQuery = pickString(event.details?.expandedQuery)
   const duration = formatDuration(event.details?.durationMs)
   const contextTags = [
+    scope === 'image' ? '范围: 图片' : null,
+    scope === 'image' && assessedImageCount > 0 ? `识图 ${assessedImageCount} 张` : null,
     engine ? `引擎: ${engine}` : null,
     language ? `语言: ${language}` : null,
     taskType ? `任务: ${taskType}` : null,
