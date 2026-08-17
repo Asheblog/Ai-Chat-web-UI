@@ -13,15 +13,25 @@ import {
   type PythonRuntimeService,
 } from '../services/python-runtime'
 import { RAG_SYSTEM_SETTINGS_KEYS } from '@aichat/shared'
+import type { VisionProxyService } from '../modules/chat/services/vision-proxy-service'
+import {
+  ImageTranscriptionProbeService,
+  type ProbeResult,
+} from '../services/settings/image-transcription-probe-service'
 
 export interface SettingsApiDeps {
   settingsFacade: SettingsFacade
   pythonRuntimeService: PythonRuntimeService
+  visionProxyService: VisionProxyService
+  imageTranscriptionProbeService?: Pick<ImageTranscriptionProbeService, 'probe'>
 }
 
 export const createSettingsApi = (deps: SettingsApiDeps) => {
   const facade = deps.settingsFacade
   const pythonRuntimeService = deps.pythonRuntimeService
+  const imageTranscriptionProbeService =
+    deps.imageTranscriptionProbeService ??
+    new ImageTranscriptionProbeService({ visionProxy: deps.visionProxyService })
   const settings = new Hono();
 
   const handleServiceError = (
@@ -255,6 +265,11 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
     packages: z.array(z.string().min(1).max(128)).min(1).max(128),
   })
 
+  const imageTranscriptionProbeSchema = z.object({
+    imageBase64: z.string().min(1).optional(),
+    mime: z.string().min(1).optional(),
+  })
+
   const modelPreferenceSchema = z.object({
     modelId: z.string().min(1).nullable().optional(),
     connectionId: z.number().int().positive().nullable().optional(),
@@ -317,6 +332,18 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
       }, 500);
     }
   });
+
+  settings.post(
+    '/image-transcription/probe',
+    actorMiddleware,
+    requireUserActor,
+    adminOnlyMiddleware,
+    zValidator('json', imageTranscriptionProbeSchema),
+    async (c) => {
+      const result: ProbeResult = await imageTranscriptionProbeService.probe(c.req.valid('json'))
+      return c.json<ApiResponse>({ success: true, data: result })
+    },
+  )
 
   settings.get('/python-runtime', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
     try {

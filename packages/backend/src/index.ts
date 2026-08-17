@@ -151,6 +151,7 @@ app.route('/api/chat', createChatApi({
 app.route('/api/settings', createSettingsApi({
   settingsFacade: container.settingsFacade,
   pythonRuntimeService: container.pythonRuntimeService,
+  visionProxyService: container.visionProxyService,
 }));
 app.route('/api/task-trace', createTaskTraceApi({
   taskTraceService: container.taskTraceService,

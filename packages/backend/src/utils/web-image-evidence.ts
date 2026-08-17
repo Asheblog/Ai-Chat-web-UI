@@ -129,7 +129,7 @@ export const prefilterWebImageCandidates = (
   return kept
 }
 
-const RELEVANCE_PROMPT = `判断这张图片与给定新闻/页面上下文是否相关。
+export const RELEVANCE_PROMPT = `判断这张图片与给定新闻/页面上下文是否相关。
 只输出一行 JSON，格式：{"relevance":"related|weakly_related|unrelated","description":"一句话描述图片内容"}
 规则：
 - related：图片直接表现新闻主体、现场、人物、图表结论
