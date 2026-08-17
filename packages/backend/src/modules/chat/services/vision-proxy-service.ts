@@ -47,14 +47,20 @@ export function shouldSendVisionReasoningEffort(effort: string): boolean {
 /**
  * Apply transcription reasoning onto an openai-style chat body (before responses conversion)
  * or ollama body. google_genai: no thinking params (YAGNI).
+ * Vendor thinking mirrors chat-request-builder (deepseek / openai_interleave).
  */
 export function applyVisionReasoningOptions(
   body: Record<string, unknown>,
   config: Pick<VisionProxyConfig, 'reasoningEnabled' | 'reasoningEffort' | 'ollamaThink'>,
   provider: string,
+  vendor?: string | null,
 ): void {
-  if (!config.reasoningEnabled) return
   if (provider === 'google_genai') return
+  // Vendor thinking is set even when reasoning is off (enabled|disabled), like chat-request-builder.
+  if (provider !== 'ollama' && (vendor === 'deepseek' || vendor === 'openai_interleave')) {
+    body.thinking = { type: config.reasoningEnabled ? 'enabled' : 'disabled' }
+  }
+  if (!config.reasoningEnabled) return
   if (provider === 'ollama') {
     if (config.ollamaThink) {
       body.think = true
@@ -217,9 +223,10 @@ export class VisionProxyService {
       max_tokens: 2000,
       stream: false,
     }
-    // openai-style: apply reasoning_effort on chatBody before responses conversion
+    // openai-style: apply reasoning/thinking on chatBody before responses conversion
+    // (convertChatCompletionsRequestToResponses keeps reasoning_effort→reasoning; strips thinking)
     if (provider !== 'ollama' && provider !== 'google_genai') {
-      applyVisionReasoningOptions(chatBody, config, provider)
+      applyVisionReasoningOptions(chatBody, config, provider, connection.vendor)
     }
     // F6: 各 provider 请求体格式差异在此收敛，openai/azure_openai/openai_responses 保持原样
     let body: Record<string, unknown>

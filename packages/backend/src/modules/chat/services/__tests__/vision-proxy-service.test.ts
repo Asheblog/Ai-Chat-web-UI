@@ -296,4 +296,23 @@ describe('VisionProxyService.transcribeImages', () => {
     const body = JSON.parse(fetchFn.mock.calls[0][1].body)
     expect(body.think).toBeUndefined()
   })
+
+  it('includes thinking enabled for deepseek vendor when reasoningEnabled', async () => {
+    prisma.connection.findUnique.mockResolvedValue({
+      provider: 'openai',
+      vendor: 'deepseek',
+      baseUrl: 'https://api.example.com/v1',
+      authType: 'bearer',
+      secretVaultId: null,
+      headersJson: '',
+      azureApiVersion: null,
+    })
+    const fetchFn = jest.fn().mockResolvedValue(okResponse({ choices: [{ message: { content: 'ok' } }] }))
+    await new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', {
+      ...config,
+      reasoningEnabled: true,
+    })
+    const body = JSON.parse(fetchFn.mock.calls[0][1].body)
+    expect(body.thinking).toEqual({ type: 'enabled' })
+  })
 })

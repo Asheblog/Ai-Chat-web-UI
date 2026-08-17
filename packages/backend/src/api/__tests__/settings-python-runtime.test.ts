@@ -131,6 +131,7 @@ describe('settings python-runtime api', () => {
     const app = createSettingsApi({
       settingsFacade: createFacadeMock(),
       pythonRuntimeService: runtime,
+      visionProxyService: {} as any,
     })
 
     const res = await app.request('http://localhost/python-runtime', {
@@ -150,6 +151,7 @@ describe('settings python-runtime api', () => {
     const app = createSettingsApi({
       settingsFacade: createFacadeMock(),
       pythonRuntimeService: runtime,
+      visionProxyService: {} as any,
     })
 
     const res = await app.request('http://localhost/python-runtime', {
@@ -179,6 +181,7 @@ describe('settings python-runtime api', () => {
     const app = createSettingsApi({
       settingsFacade: createFacadeMock(),
       pythonRuntimeService: runtime,
+      visionProxyService: {} as any,
     })
 
     const res = await app.request('http://localhost/python-runtime/uninstall', {
@@ -209,6 +212,7 @@ describe('settings python-runtime api', () => {
     const app = createSettingsApi({
       settingsFacade: createFacadeMock(),
       pythonRuntimeService: runtime,
+      visionProxyService: {} as any,
     })
 
     const res = await app.request('http://localhost/python-runtime/indexes', {
