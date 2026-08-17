@@ -147,8 +147,8 @@ describe("ModelsPage", () => {
     expect(within(section1).getByRole("table")).toBeInTheDocument()
     expect(within(section1).getByText("GPT-4o mini")).toBeInTheDocument()
     expect(within(section1).getByText("Phi-3 Turbo")).toBeInTheDocument()
-    expect(within(section1).getByText("官方 OpenAI")).toBeInTheDocument()
-    expect(within(section1).getByText("Azure 生产")).toBeInTheDocument()
+    expect(within(section1).getByText("官方 OpenAI · OpenAI")).toBeInTheDocument()
+    expect(within(section1).getByText("Azure 生产 · Azure")).toBeInTheDocument()
   })
 
   test("下分区渲染默认访问策略与模型访问覆写列表", () => {

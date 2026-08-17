@@ -585,7 +585,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                     <div
                       class="mt-0.5 text-xs text-muted-foreground whitespace-normal break-words"
                     >
-                      官方 OpenAI
+                      官方 OpenAI · OpenAI
                     </div>
                     <div
                       class="mt-1 flex items-center gap-2 flex-wrap text-xs"
@@ -594,11 +594,6 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                         class="inline-flex items-center rounded-full border px-2.5 py-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground text-micro font-normal"
                       >
                         推荐:通用对话
-                      </div>
-                      <div
-                        class="inline-flex items-center rounded-full border px-2.5 py-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80 text-micro font-normal"
-                      >
-                        OpenAI
                       </div>
                       <div
                         class="inline-flex items-center rounded-full border px-2.5 py-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-secondary/80 text-micro font-normal bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
@@ -723,7 +718,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                     <div
                       class="mt-0.5 text-xs text-muted-foreground whitespace-normal break-words"
                     >
-                      Azure 生产
+                      Azure 生产 · Azure
                     </div>
                     <div
                       class="mt-1 flex items-center gap-2 flex-wrap text-xs"
@@ -732,11 +727,6 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                         class="inline-flex items-center rounded-full border px-2.5 py-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground text-micro font-normal"
                       >
                         推荐:通用对话
-                      </div>
-                      <div
-                        class="inline-flex items-center rounded-full border px-2.5 py-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80 text-micro font-normal"
-                      >
-                        Azure
                       </div>
                       <div
                         class="inline-flex items-center rounded-full border px-2.5 py-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-secondary/80 text-micro font-normal bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
