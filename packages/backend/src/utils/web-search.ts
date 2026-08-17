@@ -311,6 +311,48 @@ const runBraveSearch = async (query: string, opts: WebSearchOptions): Promise<We
   }))
 }
 
+const runBraveImageSearch = async (query: string, opts: WebSearchOptions): Promise<WebSearchHit[]> => {
+  if (!opts.apiKey) {
+    throw new Error('Brave Search API key is not configured')
+  }
+  const endpoint =
+    opts.endpoint ||
+    `https://api.search.brave.com/res/v1/images/search?q=${encodeURIComponent(query)}&count=${clampLimit(opts.limit)}`
+  const response = await fetch(endpoint, {
+    method: 'GET',
+    headers: {
+      'X-Subscription-Token': opts.apiKey,
+      Accept: 'application/json',
+    },
+    signal: opts.signal,
+  })
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`Brave image search failed: ${response.status} ${text}`)
+  }
+  const data = await response.json() as any
+  const results = Array.isArray(data?.results) ? data.results : []
+  return results.map((item: any) => {
+    const directImage =
+      pickFirstString(
+        item?.imageUrl,
+        item?.image_url,
+        typeof item?.image === 'string' ? item.image : undefined,
+        item?.thumbnail?.src,
+        item?.thumbnail?.original,
+        item?.thumb,
+      ) || pickImageUrl(item)
+    return {
+      title: item?.title || item?.url || 'Untitled',
+      url: item?.url || item?.pageUrl || item?.page_url || '',
+      snippet: item?.description || item?.snippet || '',
+      content: item?.description,
+      imageUrl: directImage,
+      thumbnailUrl: pickThumbnailUrl(item) || directImage,
+    }
+  })
+}
+
 const sanitizeMetasoScope = (scope?: string) => {
   if (!scope) return 'webpage'
   const normalized = scope.trim().toLowerCase()
@@ -440,6 +482,9 @@ export const runWebSearch = async (query: string, opts: WebSearchOptions): Promi
     case 'tavily':
       return runTavilySearch(query, opts)
     case 'brave':
+      if ((opts.scope || '').trim().toLowerCase() === 'image') {
+        return runBraveImageSearch(query, opts)
+      }
       return runBraveSearch(query, opts)
     case 'metaso':
       return runMetasoSearch(query, opts)

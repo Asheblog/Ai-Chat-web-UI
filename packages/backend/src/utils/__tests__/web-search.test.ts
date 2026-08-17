@@ -105,6 +105,38 @@ describe('runWebSearch image mapping', () => {
     expect(hits[0].thumbnailUrl).toBe('https://imgs.search.brave.com/thumb.jpg')
   })
 
+  test('brave image scope calls image search endpoint and maps images', async () => {
+    const fetchMock = jest.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toContain('/res/v1/images/search')
+      return new Response(
+        JSON.stringify({
+          results: [
+            {
+              title: 'Brave Image',
+              url: 'https://example.com/brave-image-page',
+              description: 'image desc',
+              thumbnail: { src: 'https://imgs.search.brave.com/thumb.jpg' },
+              imageUrl: 'https://cdn.example.com/full.jpg',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    }) as jest.MockedFunction<typeof fetch>
+    global.fetch = fetchMock
+
+    const hits = await runWebSearch('brave image', {
+      engine: 'brave',
+      apiKey: 'test-key',
+      scope: 'image',
+      limit: 3,
+    })
+
+    expect(hits[0].url).toBe('https://example.com/brave-image-page')
+    expect(hits[0].imageUrl).toBe('https://cdn.example.com/full.jpg')
+    expect(hits[0].thumbnailUrl).toBe('https://imgs.search.brave.com/thumb.jpg')
+  })
+
   test('exa requests imageLinks and maps image + extras', async () => {
     const fetchMock = jest.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body || '{}'))

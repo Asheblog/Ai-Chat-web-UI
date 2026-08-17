@@ -19,6 +19,8 @@ export interface RemoteImageReadOptions {
 
 export interface RemoteImageReadResult {
   url: string
+  /** 调用方传入的原始 URL；可能与规范化后的 `url` 不同。 */
+  requestedUrl: string
   mime: string
   data: string
   alt?: string
@@ -105,6 +107,7 @@ export async function readRemoteImages(
 
       const nextItem: RemoteImageReadResult = {
         url: normalizedUrl,
+        requestedUrl: candidate.url.trim(),
         mime,
         data: buffer.toString('base64'),
         alt: candidate.alt,

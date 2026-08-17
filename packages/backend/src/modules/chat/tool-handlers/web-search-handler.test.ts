@@ -2,7 +2,29 @@ import type { WebSearchParallelResult } from '../../../utils/web-search'
 import {
   buildLanguageAwareSearchPlan,
   evaluateSearchEscalation,
+  formatAssessedImagesForModel,
 } from './web-search-handler'
+
+describe('formatAssessedImagesForModel', () => {
+  it('formats vision-filtered images for the model summary', () => {
+    const text = formatAssessedImagesForModel([
+      {
+        url: 'https://cdn.example.com/a.jpg',
+        description: '新闻现场',
+        relevance: 'related',
+        sourceUrl: 'https://news.example.com/a',
+      },
+    ])
+    expect(text).toContain('识图筛选图片证据')
+    expect(text).toContain('[related] 新闻现场')
+    expect(text).toContain('https://cdn.example.com/a.jpg')
+    expect(text).toContain('source: https://news.example.com/a')
+  })
+
+  it('returns empty string when no images', () => {
+    expect(formatAssessedImagesForModel([])).toBe('')
+  })
+})
 
 describe('buildLanguageAwareSearchPlan', () => {
   it('prioritizes metaso for Chinese query and keeps fallback engines', () => {

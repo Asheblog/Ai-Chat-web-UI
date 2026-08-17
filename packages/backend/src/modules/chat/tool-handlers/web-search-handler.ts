@@ -522,14 +522,34 @@ const buildEscalationQueryPlans = (
   }))
 }
 
+export const formatAssessedImagesForModel = (
+  images: Array<{ url: string; description?: string; relevance?: string; sourceUrl?: string }>,
+): string => {
+  if (!Array.isArray(images) || images.length === 0) return ''
+  return [
+    '识图筛选图片证据（相关/弱相关）：',
+    ...images.slice(0, 8).map((img, idx) => {
+      const relevance = img.relevance || 'related'
+      const description = img.description || '相关图片'
+      const source = img.sourceUrl ? ` | source: ${img.sourceUrl}` : ''
+      return `${idx + 1}. [${relevance}] ${description} | ${img.url}${source}`
+    }),
+  ].join('\n')
+}
+
 const buildSummaryForModel = (
   query: string,
   hits: Array<{ title: string; url: string; snippet?: string; content?: string }>,
   autoReadEvidence: AutoReadEvidenceItem[],
+  assessedImages: Array<{ url: string; description?: string; relevance?: string; sourceUrl?: string }> = [],
 ): string => {
   const base = formatHitsForModel(query, hits)
+  const assessedBlock = formatAssessedImagesForModel(assessedImages)
   if (autoReadEvidence.length === 0) {
-    return `${base}\n\n注：本轮未读取网页正文，仅基于搜索摘要。`
+    const note = assessedBlock
+      ? '注：本轮未读取网页正文；以下为经识图筛选的配图证据。'
+      : '注：本轮未读取网页正文，仅基于搜索摘要。'
+    return assessedBlock ? `${base}\n\n${note}\n\n${assessedBlock}` : `${base}\n\n${note}`
   }
 
   const successItems = autoReadEvidence.filter((item) => !item.error)
@@ -568,7 +588,8 @@ const buildSummaryForModel = (
     }
   }
 
-  return `${base}\n\n${lines.join('\n')}\n\n统计：自动读取成功 ${successItems.length} 条，失败 ${failedItems.length} 条。`
+  const body = `${base}\n\n${lines.join('\n')}\n\n统计：自动读取成功 ${successItems.length} 条，失败 ${failedItems.length} 条。`
+  return assessedBlock ? `${body}\n\n${assessedBlock}` : body
 }
 
 const slimHitsForModel = (hits: Array<{ title: string; url: string; snippet?: string; content?: string; imageUrl?: string; thumbnailUrl?: string; engine?: string; rank?: number; sourceEngines?: string[] }>) =>
@@ -662,6 +683,11 @@ export class WebSearchToolHandler implements IToolHandler {
               type: 'string',
               description: 'Search query describing the missing information',
             },
+            scope: {
+              type: 'string',
+              enum: ['webpage', 'image', 'document', 'paper', 'scholar', 'video', 'podcast'],
+              description: 'Optional search scope/type. Use "image" only when the research needs news/evidence images; the backend will run image-capable engines and run the existing vision relevance filter.',
+            },
           },
           required: ['query'],
         },
@@ -703,6 +729,9 @@ export class WebSearchToolHandler implements IToolHandler {
 
     const modelRequestedLimit = parseRequestedLimit(args.num_results)
     const appliedLimit = this.config.resultLimit
+    const requestedScope = typeof args.scope === 'string' ? args.scope.trim().toLowerCase() : ''
+    const validScopes = ['webpage', 'image', 'document', 'paper', 'scholar', 'video', 'podcast']
+    const effectiveScope = validScopes.includes(requestedScope) ? requestedScope : this.config.scope
     const expandedQueries = buildBilingualQueries(query, this.config)
     const activeEngines = pickActiveEngines(this.config)
     const routingPlan = buildLanguageAwareSearchPlan({
@@ -728,6 +757,7 @@ export class WebSearchToolHandler implements IToolHandler {
         queryCount: expandedQueries.length,
         requiredSources: routingPlan.requiredSources,
         highRisk: routingPlan.highRisk,
+        scope: effectiveScope,
       },
     })
 
@@ -853,7 +883,7 @@ export class WebSearchToolHandler implements IToolHandler {
         limit: appliedLimit,
         domains: this.config.domains,
         endpoint: this.config.endpoint,
-        scope: this.config.scope,
+        scope: effectiveScope,
         includeSummary: this.config.includeSummary,
         includeRawContent: this.config.includeRawContent,
         timeoutMs: parallelTimeoutMs,
@@ -899,7 +929,7 @@ export class WebSearchToolHandler implements IToolHandler {
             limit: appliedLimit,
             domains: this.config.domains,
             endpoint: this.config.endpoint,
-            scope: this.config.scope,
+            scope: effectiveScope,
             includeSummary: this.config.includeSummary,
             includeRawContent: this.config.includeRawContent,
             timeoutMs: parallelTimeoutMs,
@@ -923,8 +953,8 @@ export class WebSearchToolHandler implements IToolHandler {
       }
 
       const hits = searchResult.hits
-      const autoReadEnabled = this.config.autoReadAfterSearch !== false
-      const autoReadTopK = clampAutoReadTopK(this.config.autoReadTopK)
+      const autoReadEnabled = effectiveScope !== 'image' && this.config.autoReadAfterSearch !== false
+      const autoReadTopK = effectiveScope === 'image' ? 0 : clampAutoReadTopK(this.config.autoReadTopK)
       const autoReadParallelism = clampPositiveInt(
         this.config.autoReadParallelism,
         DEFAULT_AUTO_READ_PARALLELISM,
@@ -1161,7 +1191,6 @@ export class WebSearchToolHandler implements IToolHandler {
       const autoReadFailed = autoReadEvidence.length - autoReadSucceeded
       const taskSucceeded = searchResult.tasks.filter((item) => item.status === 'success').length
       const taskFailed = searchResult.tasks.length - taskSucceeded
-      const summary = buildSummaryForModel(query, hits, autoReadEvidence)
 
       const hitImageCandidates = hits.flatMap((hit) => {
         const urls = [hit.imageUrl, hit.thumbnailUrl].filter(
@@ -1198,6 +1227,13 @@ export class WebSearchToolHandler implements IToolHandler {
         description: item.description,
         relevance: item.relevance,
       }))
+      const assessedImagesForModel = assessedHitImagesForDetails.slice(0, 8).map((item) => ({
+        url: item.url,
+        description: item.description,
+        relevance: item.relevance,
+        sourceUrl: item.sourceUrl,
+      }))
+      const summary = buildSummaryForModel(query, hits, autoReadEvidence, assessedImagesForModel)
 
       context.sendToolEvent({
         id: callId,
@@ -1222,6 +1258,7 @@ export class WebSearchToolHandler implements IToolHandler {
           autoReadRequested: autoReadTargets.length,
           autoReadSucceeded,
           autoReadFailed,
+          scope: effectiveScope,
           requiredSources: routingPlan.requiredSources,
           highRisk: routingPlan.highRisk,
           escalationTriggered: escalationInfo.triggered,
@@ -1243,7 +1280,9 @@ export class WebSearchToolHandler implements IToolHandler {
             query,
             expandedQueries,
             engines: activeEngines,
+            scope: effectiveScope,
             hits: slimHitsForModel(hits),
+            assessedImages: assessedImagesForModel,
             taskResults: slimTaskResultsForModel(searchResult.tasks),
             summary: truncateText(summary, DEFAULT_MODEL_SUMMARY_CHARS),
             autoReadEvidence: slimEvidenceForModel(autoReadEvidence),
