@@ -91,3 +91,7 @@ plan.md
 # --- SDD workspace (scratch) ---
 .superpowers/
 .zcode/
+
+# --- Git worktrees ---
+.worktrees/
+worktrees/
