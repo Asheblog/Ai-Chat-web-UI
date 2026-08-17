@@ -459,6 +459,9 @@ export interface SystemSettings {
   imageTranscriptionEnabled?: boolean;
   imageTranscriptionConnectionId?: number | null;
   imageTranscriptionModelId?: string | null;
+  imageTranscriptionReasoningEnabled?: boolean;
+  imageTranscriptionReasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | '' | 'unset';
+  imageTranscriptionOllamaThink?: boolean;
   // RAG 文档解析设置
   ragEnabled?: boolean;
   ragEmbeddingConnectionId?: number | null;

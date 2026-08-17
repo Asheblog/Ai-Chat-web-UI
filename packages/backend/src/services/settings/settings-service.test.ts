@@ -221,4 +221,97 @@ describe('SettingsService', () => {
       }),
     )
   })
+
+  it('defaults image transcription reasoning keys when unset', async () => {
+    const previousEnabled = process.env.IMAGE_TRANSCRIPTION_REASONING_ENABLED
+    const previousEffort = process.env.IMAGE_TRANSCRIPTION_REASONING_EFFORT
+    const previousThink = process.env.IMAGE_TRANSCRIPTION_OLLAMA_THINK
+    delete process.env.IMAGE_TRANSCRIPTION_REASONING_ENABLED
+    delete process.env.IMAGE_TRANSCRIPTION_REASONING_EFFORT
+    delete process.env.IMAGE_TRANSCRIPTION_OLLAMA_THINK
+    try {
+      const { service, prisma } = buildService()
+      prisma.systemSetting.findMany.mockResolvedValueOnce([])
+
+      const adminActor = {
+        type: 'user',
+        id: 1,
+        username: 'admin',
+        role: 'ADMIN',
+        status: 'ACTIVE',
+        identifier: 'user:1',
+      } as any
+
+      const settings = await service.getSystemSettings(adminActor)
+      expect(settings.image_transcription_reasoning_enabled).toBe(false)
+      expect(settings.image_transcription_reasoning_effort).toBe('unset')
+      expect(settings.image_transcription_ollama_think).toBe(false)
+    } finally {
+      if (typeof previousEnabled === 'undefined') {
+        delete process.env.IMAGE_TRANSCRIPTION_REASONING_ENABLED
+      } else {
+        process.env.IMAGE_TRANSCRIPTION_REASONING_ENABLED = previousEnabled
+      }
+      if (typeof previousEffort === 'undefined') {
+        delete process.env.IMAGE_TRANSCRIPTION_REASONING_EFFORT
+      } else {
+        process.env.IMAGE_TRANSCRIPTION_REASONING_EFFORT = previousEffort
+      }
+      if (typeof previousThink === 'undefined') {
+        delete process.env.IMAGE_TRANSCRIPTION_OLLAMA_THINK
+      } else {
+        process.env.IMAGE_TRANSCRIPTION_OLLAMA_THINK = previousThink
+      }
+    }
+  })
+
+  it('exposes image transcription reasoning keys to non-admin users', async () => {
+    const { service, prisma } = buildService()
+    prisma.systemSetting.findMany.mockResolvedValueOnce([
+      { key: 'image_transcription_reasoning_enabled', value: 'true' },
+      { key: 'image_transcription_reasoning_effort', value: 'medium' },
+      { key: 'image_transcription_ollama_think', value: 'true' },
+    ])
+
+    const userActor = {
+      type: 'user',
+      id: 2,
+      username: 'user',
+      role: 'USER',
+      status: 'ACTIVE',
+      identifier: 'user:2',
+    } as any
+
+    const settings = await service.getSystemSettings(userActor)
+    expect(settings.image_transcription_reasoning_enabled).toBe(true)
+    expect(settings.image_transcription_reasoning_effort).toBe('medium')
+    expect(settings.image_transcription_ollama_think).toBe(true)
+  })
+
+  it('updates image transcription reasoning keys', async () => {
+    const { service, prisma } = buildService()
+    await service.updateSystemSettings({
+      image_transcription_reasoning_enabled: true,
+      image_transcription_reasoning_effort: 'high',
+      image_transcription_ollama_think: true,
+    })
+    expect(prisma.systemSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { key: 'image_transcription_reasoning_enabled' },
+        update: { value: 'true' },
+      }),
+    )
+    expect(prisma.systemSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { key: 'image_transcription_reasoning_effort' },
+        update: { value: 'high' },
+      }),
+    )
+    expect(prisma.systemSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { key: 'image_transcription_ollama_think' },
+        update: { value: 'true' },
+      }),
+    )
+  })
 })

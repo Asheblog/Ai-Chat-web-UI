@@ -209,6 +209,9 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
     image_transcription_enabled: z.boolean().optional(),
     image_transcription_connection_id: z.number().int().positive().nullable().optional(),
     image_transcription_model_id: z.string().min(1).nullable().optional(),
+    image_transcription_reasoning_enabled: z.boolean().optional(),
+    image_transcription_reasoning_effort: z.enum(['low', 'medium', 'high', 'max', 'xhigh', 'unset']).optional(),
+    image_transcription_ollama_think: z.boolean().optional(),
     // RAG 文档解析设置
     rag_enabled: z.boolean().optional(),
     rag_embedding_connection_id: z.number().int().positive().nullable().optional(),

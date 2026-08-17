@@ -401,6 +401,9 @@ export const getSystemSettings = async () => {
     if (typeof v === 'string' && v.trim().length > 0) return v
     return null
   })()
+  const imageTranscriptionReasoningEnabled = Boolean(raw.image_transcription_reasoning_enabled ?? false)
+  const imageTranscriptionReasoningEffort = (raw.image_transcription_reasoning_effort ?? 'unset') as any
+  const imageTranscriptionOllamaThink = Boolean(raw.image_transcription_ollama_think ?? false)
   return {
     data: {
       allowRegistration,
@@ -493,6 +496,9 @@ export const getSystemSettings = async () => {
       imageTranscriptionEnabled,
       imageTranscriptionConnectionId,
       imageTranscriptionModelId,
+      imageTranscriptionReasoningEnabled,
+      imageTranscriptionReasoningEffort,
+      imageTranscriptionOllamaThink,
       // RAG 设置
       ragEnabled: Boolean(raw.rag_enabled ?? false),
       ragEmbeddingConnectionId: (() => {
@@ -727,6 +733,15 @@ export const updateSystemSettings = async (
   }
   if (Object.prototype.hasOwnProperty.call(rest, 'imageTranscriptionModelId')) {
     patch.imageTranscriptionModelId = rest.imageTranscriptionModelId ?? null
+  }
+  if (typeof rest.imageTranscriptionReasoningEnabled === 'boolean') {
+    patch.imageTranscriptionReasoningEnabled = rest.imageTranscriptionReasoningEnabled
+  }
+  if (typeof rest.imageTranscriptionReasoningEffort === 'string') {
+    patch.imageTranscriptionReasoningEffort = rest.imageTranscriptionReasoningEffort
+  }
+  if (typeof rest.imageTranscriptionOllamaThink === 'boolean') {
+    patch.imageTranscriptionOllamaThink = rest.imageTranscriptionOllamaThink
   }
   // RAG 设置
   if (typeof rest.ragEnabled === 'boolean') patch.ragEnabled = rest.ragEnabled

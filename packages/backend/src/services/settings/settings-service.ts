@@ -469,6 +469,18 @@ export class SettingsService {
       image_transcription_enabled: this.parseBoolean(settingsObj.image_transcription_enabled, process.env.IMAGE_TRANSCRIPTION_ENABLED || 'false'),
       image_transcription_connection_id: settingsObj.image_transcription_connection_id ? Number(settingsObj.image_transcription_connection_id) : null,
       image_transcription_model_id: settingsObj.image_transcription_model_id || null,
+      image_transcription_reasoning_enabled: this.parseBoolean(
+        settingsObj.image_transcription_reasoning_enabled,
+        process.env.IMAGE_TRANSCRIPTION_REASONING_ENABLED || 'false',
+      ),
+      image_transcription_reasoning_effort:
+        settingsObj.image_transcription_reasoning_effort ||
+        process.env.IMAGE_TRANSCRIPTION_REASONING_EFFORT ||
+        'unset',
+      image_transcription_ollama_think: this.parseBoolean(
+        settingsObj.image_transcription_ollama_think,
+        process.env.IMAGE_TRANSCRIPTION_OLLAMA_THINK || 'false',
+      ),
       temperature_default: this.parseFloat(settingsObj.temperature_default, 0.7),
       // RAG 文档解析设置
       rag_enabled: this.parseBoolean(settingsObj.rag_enabled, 'false'),
@@ -554,6 +566,9 @@ export class SettingsService {
         image_transcription_enabled: formatted.image_transcription_enabled,
         image_transcription_connection_id: formatted.image_transcription_connection_id,
         image_transcription_model_id: formatted.image_transcription_model_id,
+        image_transcription_reasoning_enabled: formatted.image_transcription_reasoning_enabled,
+        image_transcription_reasoning_effort: formatted.image_transcription_reasoning_effort,
+        image_transcription_ollama_think: formatted.image_transcription_ollama_think,
       }
     }
     return formatted
@@ -669,6 +684,8 @@ export class SettingsService {
       SYSTEM_SETTINGS_FIELD_MAP.taskTraceAdminOnly,
       SYSTEM_SETTINGS_FIELD_MAP.titleSummaryEnabled,
       'image_transcription_enabled',
+      'image_transcription_reasoning_enabled',
+      'image_transcription_ollama_think',
       SYSTEM_SETTINGS_FIELD_MAP.ragEnabled,
       SYSTEM_SETTINGS_FIELD_MAP.knowledgeBaseEnabled,
       SYSTEM_SETTINGS_FIELD_MAP.knowledgeBaseAllowAnonymous,
@@ -717,6 +734,7 @@ export class SettingsService {
       { key: 'title_summary_model_source', value: payload.title_summary_model_source },
       { key: 'title_summary_model_id', value: payload.title_summary_model_id },
       { key: 'image_transcription_model_id', value: payload.image_transcription_model_id },
+      { key: 'image_transcription_reasoning_effort', value: payload.image_transcription_reasoning_effort },
       { key: 'rag_embedding_model_id', value: payload.rag_embedding_model_id },
     ]
     stringFields.forEach(({ key, value }) => {
