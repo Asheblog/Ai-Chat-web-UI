@@ -91,6 +91,7 @@
 - **Research Plan Approval Registry（研究计划审批注册表）**：与当前 SSE 流同生命周期的内存审批注册表，按 `sessionId + toolCallId` 登记待审批计划，由 `/chat/stream/research-plan/respond` 消费；不落库、不跨断线恢复
 - **Research Plan Revision（研究计划修订轮次）**：用户提出调整后模型重新生成计划的次数；0 为初版，最多 2 轮调整，第 2 轮后只允许开始或取消
 - **No-search Deep Research Fallback（无搜索深度研究降级）**：深度研究被启用但无可用搜索引擎时，先由后端合成 `research_plan` 选择卡让用户选择“基于已有知识继续 / 取消”；继续后直接生成标注未联网的报告，不进入计划确认
+- **Composer Deep Research Toggle（输入框深度研究开关）**：聊天输入框与欢迎页工具栏上的独立功能 chip（位于「联网」与「Python」之间）；开启后发送请求在 `skills.builtin` 中携带 `deep-research`；默认关闭并经 localStorage 记忆偏好；不强制联动「联网」开关；桌面与移动共用同一控件
 
 ## 移动客户端
 

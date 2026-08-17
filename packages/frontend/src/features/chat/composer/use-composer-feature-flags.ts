@@ -10,6 +10,8 @@ interface UseComposerFeatureFlagsOptions {
   persistWebSearchPreference: (value: boolean) => void
   storedPythonPreference?: boolean | null
   persistPythonPreference: (value: boolean) => void
+  storedDeepResearchPreference?: boolean | null
+  persistDeepResearchPreference: (value: boolean) => void
   isAdmin: boolean
   scopePreferenceKey?: string
 }
@@ -24,6 +26,8 @@ export const useComposerFeatureFlags = ({
   persistWebSearchPreference,
   storedPythonPreference,
   persistPythonPreference,
+  storedDeepResearchPreference,
+  persistDeepResearchPreference,
   isAdmin,
   scopePreferenceKey = DEFAULT_SCOPE_KEY,
 }: UseComposerFeatureFlagsOptions) => {
@@ -33,6 +37,7 @@ export const useComposerFeatureFlags = ({
   const [webSearchEnabled, setWebSearchEnabledState] = useState(false)
   const [webSearchScope, setWebSearchScope] = useState('webpage')
   const [pythonToolEnabled, setPythonToolEnabled] = useState(false)
+  const [deepResearchEnabled, setDeepResearchEnabled] = useState(false)
   const [traceEnabled, setTraceEnabled] = useState(false)
   const tracePreferenceRef = useRef<Record<number, boolean>>({})
 
@@ -120,6 +125,13 @@ export const useComposerFeatureFlags = ({
   }, [canUsePythonTool, pythonToolEnabled, storedPythonPreference])
 
   useEffect(() => {
+    const desired = typeof storedDeepResearchPreference === 'boolean' ? storedDeepResearchPreference : false
+    if (deepResearchEnabled !== desired) {
+      setDeepResearchEnabled(desired)
+    }
+  }, [deepResearchEnabled, storedDeepResearchPreference])
+
+  useEffect(() => {
     if (!canUseWebSearch || !isMetasoEngine) {
       setWebSearchScope('webpage')
       return
@@ -169,6 +181,11 @@ export const useComposerFeatureFlags = ({
     persistPythonPreference(value)
   }, [persistPythonPreference])
 
+  const setDeepResearchEnabledState = useCallback((value: boolean) => {
+    setDeepResearchEnabled(value)
+    persistDeepResearchPreference(value)
+  }, [persistDeepResearchPreference])
+
   const handleWebSearchScopeChange = useCallback((value: string) => {
     setWebSearchScope(value)
     try {
@@ -197,6 +214,8 @@ export const useComposerFeatureFlags = ({
     setWebSearchScope: handleWebSearchScopeChange,
     pythonToolEnabled,
     setPythonToolEnabled: setPythonToolEnabledState,
+    deepResearchEnabled,
+    setDeepResearchEnabled: setDeepResearchEnabledState,
     traceEnabled,
     onToggleTrace: handleTraceToggle,
     canUseTrace,

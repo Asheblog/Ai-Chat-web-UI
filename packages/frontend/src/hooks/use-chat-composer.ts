@@ -11,6 +11,7 @@ import { useAuthStore } from '@/store/auth-store'
 import { messageKey as toMessageKey } from '@/features/chat/store/utils'
 import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
 import { usePythonToolPreferenceStore } from '@/store/python-tool-preference-store'
+import { useDeepResearchPreferenceStore } from '@/store/deep-research-preference-store'
 import {
   useAdvancedRequest,
   useComposerFeatureFlags,
@@ -136,6 +137,8 @@ export function useChatComposer(options?: UseChatComposerOptions) {
   const persistWebSearchPreference = useWebSearchPreferenceStore((state) => state.setLastSelection)
   const storedPythonPreference = usePythonToolPreferenceStore((state) => state.lastSelection)
   const persistPythonPreference = usePythonToolPreferenceStore((state) => state.setLastSelection)
+  const storedDeepResearchPreference = useDeepResearchPreferenceStore((state) => state.lastSelection)
+  const persistDeepResearchPreference = useDeepResearchPreferenceStore((state) => state.setLastSelection)
 
   const {
     enabledExtraSkills,
@@ -180,6 +183,8 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     setWebSearchScope,
     pythonToolEnabled,
     setPythonToolEnabled,
+    deepResearchEnabled,
+    setDeepResearchEnabled,
     traceEnabled,
     onToggleTrace,
     canUseTrace,
@@ -198,6 +203,8 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     persistWebSearchPreference,
     storedPythonPreference,
     persistPythonPreference,
+    storedDeepResearchPreference,
+    persistDeepResearchPreference,
     isAdmin,
   })
 
@@ -490,6 +497,7 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     webSearchIncludeRaw: systemSettings?.webSearchIncludeRaw,
     canUsePythonTool,
     pythonToolEnabled,
+    deepResearchEnabled,
     thinkingEnabled,
     effort,
     ollamaThink,
@@ -598,6 +606,8 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     setPythonToolEnabled: setPythonToolEnabledState,
     canUsePythonTool,
     pythonToolDisabledNote,
+    deepResearchEnabled,
+    setDeepResearchEnabled,
     skillOptions,
     toggleSkillOption,
     ensureSkillsLoaded,

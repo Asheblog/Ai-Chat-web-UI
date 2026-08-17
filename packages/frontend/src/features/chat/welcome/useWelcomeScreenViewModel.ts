@@ -15,6 +15,7 @@ import {
 } from '@/store/model-preference-store'
 import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
 import { usePythonToolPreferenceStore } from '@/store/python-tool-preference-store'
+import { useDeepResearchPreferenceStore } from '@/store/deep-research-preference-store'
 import { useAdvancedRequest, useImageAttachments } from '@/features/chat/composer'
 import { buildWorkspaceFileManifest } from '@/features/chat/composer/workspace-file-manifest'
 import { useKnowledgeBase } from '@/hooks/use-knowledge-base'
@@ -64,6 +65,8 @@ export const useWelcomeScreenViewModel = () => {
   const [webSearchTouched, setWebSearchTouched] = useState(false)
   const [pythonToolEnabled, setPythonToolEnabled] = useState(false)
   const [pythonToolTouched, setPythonToolTouched] = useState(false)
+  const [deepResearchEnabled, setDeepResearchEnabled] = useState(false)
+  const [deepResearchTouched, setDeepResearchTouched] = useState(false)
   const [webSearchScope, setWebSearchScope] = useState('webpage')
   const [sessionPromptOpen, setSessionPromptOpen] = useState(false)
   const [sessionPromptDraft, setSessionPromptDraft] = useState('')
@@ -82,6 +85,8 @@ export const useWelcomeScreenViewModel = () => {
   const persistWebSearchPreference = useWebSearchPreferenceStore((state) => state.setLastSelection)
   const storedPythonPreference = usePythonToolPreferenceStore((state) => state.lastSelection)
   const persistPythonPreference = usePythonToolPreferenceStore((state) => state.setLastSelection)
+  const storedDeepResearchPreference = useDeepResearchPreferenceStore((state) => state.lastSelection)
+  const persistDeepResearchPreference = useDeepResearchPreferenceStore((state) => state.setLastSelection)
 
   const {
     customBodyInput,
@@ -305,6 +310,17 @@ export const useWelcomeScreenViewModel = () => {
       setPythonToolEnabled(false)
     }
   }, [canUsePythonTool, pythonToolEnabled, pythonToolTouched, storedPythonPreference])
+
+  useEffect(() => {
+    if (typeof storedDeepResearchPreference === 'boolean') {
+      setDeepResearchEnabled(storedDeepResearchPreference)
+      if (!deepResearchTouched) setDeepResearchTouched(true)
+      return
+    }
+    if (!deepResearchTouched) {
+      setDeepResearchEnabled(false)
+    }
+  }, [deepResearchTouched, storedDeepResearchPreference])
 
   // 当有草稿文件时自动启用 Python 工具，与聊天内行为一致
   useEffect(() => {
@@ -633,6 +649,9 @@ export const useWelcomeScreenViewModel = () => {
               : undefined
           const builtinSkills: string[] = []
           const skillOverrides: Record<string, Record<string, unknown>> = {}
+          if (deepResearchEnabled) {
+            builtinSkills.push('deep-research')
+          }
           if (webSearchEnabled && canUseWebSearch) {
             builtinSkills.push('web-search', 'url-reader')
             const webSearchOverride: Record<string, unknown> = {}
@@ -707,6 +726,7 @@ export const useWelcomeScreenViewModel = () => {
     systemSettings?.webSearchIncludeRaw,
     canUsePythonTool,
     pythonToolEnabled,
+    deepResearchEnabled,
     draftFiles,
     clearWorkspaceFiles,
     ensureExtraSkills,
@@ -842,6 +862,13 @@ export const useWelcomeScreenViewModel = () => {
         },
         canUsePythonTool,
         pythonToolDisabledNote,
+        deepResearchEnabled,
+        onToggleDeepResearch: (value: boolean) => {
+          const nextValue = !!value
+          setDeepResearchTouched(true)
+          setDeepResearchEnabled(nextValue)
+          persistDeepResearchPreference(nextValue)
+        },
         skillOptions,
         onToggleSkillOption: toggleSkillOption,
         onActivateSkillPanel: () => {

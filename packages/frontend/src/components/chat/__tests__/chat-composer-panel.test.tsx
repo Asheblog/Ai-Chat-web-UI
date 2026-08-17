@@ -20,6 +20,8 @@ const createProps = (
   pythonToolEnabled: false,
   onTogglePythonTool: vi.fn(),
   canUsePythonTool: true,
+  deepResearchEnabled: false,
+  onToggleDeepResearch: vi.fn(),
   skillOptions: [],
   onToggleSkillOption: vi.fn(),
   isVisionEnabled: true,

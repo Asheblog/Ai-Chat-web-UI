@@ -33,6 +33,8 @@ const createProps = (overrides: Partial<React.ComponentProps<typeof DesktopCompo
   onTogglePythonTool: vi.fn(),
   canUsePythonTool: true,
   pythonToolDisabledNote: undefined,
+  deepResearchEnabled: false,
+  onToggleDeepResearch: vi.fn(),
   skillOptions: [],
   onToggleSkillOption: vi.fn(),
   traceEnabled: false,

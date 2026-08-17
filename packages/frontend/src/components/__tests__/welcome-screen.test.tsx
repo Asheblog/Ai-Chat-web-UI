@@ -105,6 +105,8 @@ const createMockViewModel = () => ({
       onTogglePythonTool: vi.fn(),
       canUsePythonTool: true,
       pythonToolDisabledNote: undefined,
+      deepResearchEnabled: false,
+      onToggleDeepResearch: vi.fn(),
       skillOptions: [],
       onToggleSkillOption: vi.fn(),
       onOpenAdvanced: vi.fn(),

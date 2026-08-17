@@ -48,6 +48,8 @@ export interface ChatComposerPanelProps {
   onTogglePythonTool: (value: boolean) => void
   canUsePythonTool: boolean
   pythonToolDisabledNote?: string
+  deepResearchEnabled: boolean
+  onToggleDeepResearch: (value: boolean) => void
   skillOptions: ComposerSkillOption[]
   onToggleSkillOption: (skillId: number, enabled: boolean) => void
   // MCP 绑定
@@ -177,6 +179,8 @@ export function ChatComposerPanel({
   onTogglePythonTool,
   canUsePythonTool,
   pythonToolDisabledNote,
+  deepResearchEnabled,
+  onToggleDeepResearch,
   skillOptions,
   onToggleSkillOption,
   mcpGlobalEnabled,
@@ -718,6 +722,8 @@ export function ChatComposerPanel({
         onTogglePythonTool={onTogglePythonTool}
         canUsePythonTool={canUsePythonTool}
         pythonToolDisabledNote={pythonToolDisabledNote}
+        deepResearchEnabled={deepResearchEnabled}
+        onToggleDeepResearch={onToggleDeepResearch}
         skillOptions={skillOptions}
         onToggleSkillOption={onToggleSkillOption}
         mcpGlobalEnabled={mcpGlobalEnabled}
@@ -773,6 +779,8 @@ export function ChatComposerPanel({
         onTogglePythonTool={onTogglePythonTool}
         canUsePythonTool={canUsePythonTool}
         pythonToolDisabledNote={pythonToolDisabledNote}
+        deepResearchEnabled={deepResearchEnabled}
+        onToggleDeepResearch={onToggleDeepResearch}
         skillOptions={skillOptions}
         onToggleSkillOption={onToggleSkillOption}
         mcpGlobalEnabled={mcpGlobalEnabled}
