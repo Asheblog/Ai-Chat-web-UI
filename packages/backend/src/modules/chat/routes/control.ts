@@ -9,6 +9,7 @@ import type { ProviderType } from '../../../utils/providers';
 import { convertChatCompletionsRequestToResponses } from '../../../utils/openai-responses';
 import type { SecretVaultService } from '../../../services/secret-vault';
 import { ConnectionServiceError } from '../../../services/connections/connection-service';
+import { PrismaModelResolverRepository } from '../../../repositories/model-resolver-repository';
 
 const toContentfulStatus = (status: number): ContentfulStatusCode => {
   if (status === 101 || status === 204 || status === 205 || status === 304) {
@@ -116,15 +117,15 @@ export const registerChatControlRoutes = (router: Hono, deps: ChatControlRoutesD
       let rawId: string | null = null;
 
       if (body.connectionId) {
-        conn = await prisma.connection.findFirst({
-          where: { id: body.connectionId, ownerUserId: null },
-        });
+        const resolver = new PrismaModelResolverRepository(prisma)
+        conn = await resolver.findResolvedConnectionById(body.connectionId)
         if (!conn) return c.json<ApiResponse>({ success: false, error: 'Connection not found' }, 404);
         rawId = body.modelId || null;
       } else if (body.modelId) {
         const cached = await prisma.modelCatalog.findFirst({ where: { modelId: body.modelId } });
         if (!cached) return c.json<ApiResponse>({ success: false, error: 'Model not found' }, 404);
-        conn = await prisma.connection.findUnique({ where: { id: cached.connectionId } });
+        const resolver = new PrismaModelResolverRepository(prisma)
+        conn = await resolver.findResolvedConnectionById(cached.connectionGroupId);
         rawId = cached.rawId;
       } else {
         return c.json<ApiResponse>({ success: false, error: 'connectionId or modelId required' }, 400);

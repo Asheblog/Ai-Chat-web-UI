@@ -22,11 +22,13 @@ export interface SystemConnectionApiKey {
 
 export interface SystemConnectionGroup {
   id: number
+  displayName: string
   connectionIds: number[]
   provider: string
   vendor?: string | null
   baseUrl: string
   authType: string
+  headers?: Record<string, string> | null
   azureApiVersion?: string | null
   prefixId?: string | null
   tags: Array<{ name: string }>
@@ -38,10 +40,12 @@ export interface SystemConnectionGroup {
 }
 
 export interface SystemConnectionPayload {
+  displayName: string
   provider: string
   vendor?: string
   baseUrl: string
   authType: string
+  headers?: Record<string, string>
   azureApiVersion?: string
   prefixId?: string
   tags: Array<{ name: string }>

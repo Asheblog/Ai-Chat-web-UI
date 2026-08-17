@@ -24,6 +24,7 @@ const apiKeySchema = z.object({
 })
 
 const connectionSchema = z.object({
+  displayName: z.string().trim().min(1),
   provider: z.enum(['openai', 'openai_responses', 'azure_openai', 'ollama', 'google_genai']),
   vendor: vendorEnum.optional(),
   baseUrl: z.string().url(),
@@ -44,12 +45,15 @@ const importApiKeySchema = z.object({
   enable: z.boolean().optional().default(true),
 })
 
-const importConnectionSchema = connectionSchema.extend({
-  apiKeys: z.array(importApiKeySchema).min(1),
-})
+const importConnectionSchema = connectionSchema
+  .omit({ displayName: true })
+  .extend({
+    displayName: z.string().trim().min(1).optional(),
+    apiKeys: z.array(importApiKeySchema).min(1),
+  })
 
 const importPayloadSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.union([z.literal(1), z.literal(2)]),
   exportedAt: z.string().optional(),
   connections: z.array(importConnectionSchema),
   skippedKeys: z.number().optional(),

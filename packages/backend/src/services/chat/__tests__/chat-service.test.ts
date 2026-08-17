@@ -24,6 +24,30 @@ const baseSession = {
     provider: 'openai',
     baseUrl: 'https://api',
     prefixId: 'openai',
+    authType: 'bearer',
+    headersJson: '',
+    enable: true,
+    ownerUserId: null,
+    displayName: 'openai',
+    vendor: null,
+    azureApiVersion: null,
+    tagsJson: '[]',
+    defaultCapabilitiesJson: '{}',
+    connectionType: 'external',
+    createdAt: new Date('2024-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+    credentials: [
+      {
+        id: 30,
+        connectionGroupId: 3,
+        enable: true,
+        secretVaultId: 1,
+        apiKeyLabel: null,
+        modelIdsJson: '[]',
+        createdAt: new Date('2024-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2024-01-01T00:00:00.000Z'),
+      },
+    ],
   },
 }
 
@@ -49,7 +73,11 @@ describe('ChatService', () => {
         id: 1,
         userId: 1,
       },
-      include: { connection: true },
+      include: {
+        connection: {
+          include: { credentials: true },
+        },
+      },
     })
     expect(session.connection?.provider).toBe('openai')
   })

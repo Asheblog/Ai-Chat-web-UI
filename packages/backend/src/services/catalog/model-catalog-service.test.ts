@@ -2,7 +2,7 @@ import { ModelCatalogService, ModelCatalogServiceError } from './model-catalog-s
 
 const buildService = () => {
   const prisma = {
-    connection: {
+    connectionGroup: {
       findMany: jest.fn(),
       findUnique: jest.fn(),
     },
@@ -16,8 +16,8 @@ const buildService = () => {
   }
 
   const refreshAll = jest.fn()
-  const refreshForConnections = jest.fn()
-  const refreshById = jest.fn()
+  const refreshForGroups = jest.fn()
+  const refreshByGroupId = jest.fn()
   const computeCapabilities = jest.fn(() => ({} as any))
   const deriveChannelName = jest.fn(() => 'channel')
   const parseCapabilityEnvelope = jest.fn(() => ({ flags: undefined, source: null }))
@@ -38,8 +38,8 @@ const buildService = () => {
   const service = new ModelCatalogService({
     prisma: prisma as any,
     refreshAllModelCatalog: refreshAll,
-    refreshModelCatalogForConnections: refreshForConnections,
-    refreshModelCatalogForConnectionId: refreshById,
+    refreshModelCatalogForConnectionGroups: refreshForGroups,
+    refreshModelCatalogForConnectionGroupId: refreshByGroupId,
     computeCapabilities,
     deriveChannelName,
     parseCapabilityEnvelope,
@@ -55,8 +55,8 @@ const buildService = () => {
   return {
     prisma,
     refreshAll,
-    refreshForConnections,
-    refreshById,
+    refreshForGroups,
+    refreshByGroupId,
     computeCapabilities,
     deriveChannelName,
     parseCapabilityEnvelope,
@@ -69,38 +69,105 @@ const buildService = () => {
 }
 
 describe('ModelCatalogService', () => {
-  it('returns empty list when no connections exist', async () => {
+  it('returns empty list when no connection groups exist', async () => {
     const { prisma, service } = buildService()
-    prisma.connection.findMany.mockResolvedValueOnce([])
+    prisma.connectionGroup.findMany.mockResolvedValueOnce([])
     const result = await service.listModels()
     expect(result).toEqual([])
     expect(prisma.modelCatalog.findMany).not.toHaveBeenCalled()
   })
 
+  it('lists models with connectionId = group id and displayName', async () => {
+    const { prisma, service, deriveChannelName } = buildService()
+    prisma.connectionGroup.findMany.mockResolvedValueOnce([
+      {
+        id: 11,
+        displayName: 'Prod OpenAI',
+        provider: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        enable: true,
+        ownerUserId: null,
+        credentials: [],
+      },
+    ])
+    prisma.modelCatalog.findMany.mockResolvedValueOnce([
+      {
+        modelId: 'gpt-4o',
+        rawId: 'gpt-4o',
+        name: 'gpt-4o',
+        provider: 'openai',
+        connectionGroupId: 11,
+        connectionType: 'external',
+        modelType: 'chat',
+        tagsJson: '[]',
+        metaJson: '{}',
+        capabilitiesJson: '{}',
+        manualOverride: false,
+        expiresAt: new Date('2099-01-01T00:00:00Z'),
+      },
+    ])
+
+    const result = await service.listModels({
+      type: 'user',
+      id: 1,
+      username: 'admin',
+      role: 'ADMIN',
+      status: 'ACTIVE',
+      identifier: 'a1',
+    } as any)
+
+    expect(result).toHaveLength(1)
+    expect(result[0]?.connectionId).toBe(11)
+    expect(result[0]?.displayName).toBe('Prod OpenAI')
+    expect(deriveChannelName).toHaveBeenCalledWith('openai', 'https://api.openai.com/v1')
+  })
+
   it('creates override when entry does not exist', async () => {
-    const { prisma, service, invalidateCompletionLimitCache, invalidateContextWindowCache } = buildService()
-    prisma.connection.findUnique.mockResolvedValue({ id: 1, provider: 'openai', connectionType: 'external', prefixId: null })
+    const { prisma, service, invalidateCompletionLimitCache, invalidateContextWindowCache } =
+      buildService()
+    prisma.connectionGroup.findUnique.mockResolvedValue({
+      id: 1,
+      provider: 'openai',
+      connectionType: 'external',
+      prefixId: null,
+    })
     prisma.modelCatalog.findFirst.mockResolvedValue(null)
-    await service.saveOverride({ connectionId: 1, rawId: 'gpt-4', tagsInput: [{ name: 'test' }], maxOutputTokens: 1024 })
-    expect(prisma.modelCatalog.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ manualOverride: true, connectionId: 1, rawId: 'gpt-4' }),
-    }))
+    await service.saveOverride({
+      connectionId: 1,
+      rawId: 'gpt-4',
+      tagsInput: [{ name: 'test' }],
+      maxOutputTokens: 1024,
+    })
+    expect(prisma.modelCatalog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          manualOverride: true,
+          connectionGroupId: 1,
+          rawId: 'gpt-4',
+        }),
+      }),
+    )
     expect(invalidateCompletionLimitCache).toHaveBeenCalledWith(1, 'gpt-4')
     expect(invalidateContextWindowCache).toHaveBeenCalledWith(1, 'gpt-4')
   })
 
-  it('throws when connection missing on override save', async () => {
+  it('throws when connection group missing on override save', async () => {
     const { service, prisma } = buildService()
-    prisma.connection.findUnique.mockResolvedValue(null)
-    await expect(service.saveOverride({ connectionId: 1, rawId: 'missing' })).rejects.toThrow(ModelCatalogServiceError)
+    prisma.connectionGroup.findUnique.mockResolvedValue(null)
+    await expect(
+      service.saveOverride({ connectionId: 1, rawId: 'missing' }),
+    ).rejects.toThrow(ModelCatalogServiceError)
   })
 
-  it('deletes overrides in bulk and refreshes per connection', async () => {
-    const { service, prisma, refreshById } = buildService()
-    prisma.connection.findMany.mockResolvedValue([{ id: 1, prefixId: 'px' }])
+  it('deletes overrides in bulk and refreshes per connection group', async () => {
+    const { service, prisma, refreshByGroupId } = buildService()
+    prisma.connectionGroup.findMany.mockResolvedValue([{ id: 1, prefixId: 'px' }])
     prisma.modelCatalog.deleteMany.mockResolvedValue({ count: 2 })
-    const count = await service.deleteOverrides({ all: false, items: [{ connectionId: 1, rawId: 'model' }] })
+    const count = await service.deleteOverrides({
+      all: false,
+      items: [{ connectionId: 1, rawId: 'model' }],
+    })
     expect(count).toBe(2)
-    expect(refreshById).toHaveBeenCalledWith(1)
+    expect(refreshByGroupId).toHaveBeenCalledWith(1)
   })
 })

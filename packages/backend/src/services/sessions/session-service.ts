@@ -437,7 +437,7 @@ export class SessionService {
   private async persistPreferredModel(
     userId: number,
     modelId: string,
-    resolution: { connection: Prisma.ConnectionGetPayload<true>; rawModelId: string },
+    resolution: { connection: { id: number }; rawModelId: string },
   ) {
     await this.prisma.user.update({
       where: { id: userId },
@@ -456,7 +456,7 @@ export class SessionService {
       connectionId?: number
       rawId?: string
     },
-  ): Promise<{ connection: Prisma.ConnectionGetPayload<true>; rawModelId: string }> {
+  ): Promise<{ connection: { id: number }; rawModelId: string }> {
     const resolution = await this.modelResolverService.resolveModelForRequest({
       actor,
       userId: actor.type === 'user' ? actor.id : null,

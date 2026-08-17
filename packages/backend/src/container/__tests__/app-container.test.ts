@@ -1,10 +1,10 @@
 process.env.SECRET_VAULT_MASTER_KEY = 'test-master-key-32-bytes-long!!'
 
 jest.mock('../../utils/model-catalog', () => ({
-  refreshModelCatalogForConnection: jest.fn(),
+  refreshModelCatalogForConnectionGroup: jest.fn(),
   refreshAllModelCatalog: jest.fn(),
-  refreshModelCatalogForConnections: jest.fn(),
-  refreshModelCatalogForConnectionId: jest.fn(),
+  refreshModelCatalogForConnectionGroups: jest.fn(),
+  refreshModelCatalogForConnectionGroupId: jest.fn(),
 }))
 jest.mock('../../utils/providers', () => ({
   verifyConnection: jest.fn(),
@@ -16,12 +16,15 @@ import { createAppContainer } from '../app-container'
 import type { ModelResolverRepository } from '../../repositories/model-resolver-repository'
 
 const createMockRepository = () => ({
-  listSystemConnections: jest.fn().mockResolvedValue([]),
-  createSystemConnection: jest.fn(),
-  findSystemConnectionById: jest.fn(),
-  updateSystemConnection: jest.fn(),
-  deleteSystemConnection: jest.fn(),
-  deleteModelCatalogByConnectionId: jest.fn(),
+  listSystemGroups: jest.fn().mockResolvedValue([]),
+  findSystemGroupById: jest.fn(),
+  createSystemGroup: jest.fn(),
+  updateSystemGroup: jest.fn(),
+  deleteSystemGroup: jest.fn(),
+  createCredential: jest.fn(),
+  updateCredential: jest.fn(),
+  deleteCredential: jest.fn(),
+  deleteModelCatalogByConnectionGroupId: jest.fn(),
 })
 
 describe('AppContainer', () => {
@@ -41,14 +44,14 @@ describe('AppContainer', () => {
 
     await container.connectionService.listSystemConnections()
 
-    expect(repo.listSystemConnections).toHaveBeenCalled()
+    expect(repo.listSystemGroups).toHaveBeenCalled()
   })
 
   it('wires modelResolverService with injected repository', async () => {
     const repo: jest.Mocked<ModelResolverRepository> = {
       findCachedModel: jest.fn().mockResolvedValue(null),
-      listEnabledSystemConnections: jest.fn().mockResolvedValue([] as any),
-      findEnabledSystemConnectionById: jest.fn().mockResolvedValue(null),
+      listEnabledSystemGroups: jest.fn().mockResolvedValue([] as any),
+      findEnabledResolvedConnectionById: jest.fn().mockResolvedValue(null),
     }
     const container = createAppContainer({
       modelResolverRepository: repo,

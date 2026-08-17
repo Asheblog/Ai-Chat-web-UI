@@ -1,36 +1,28 @@
 "use client"
 
-import type { ReactNode } from "react"
-import { ChevronDown, Edit3, KeyRound, MoreHorizontal, Server, ShieldAlert, Trash2 } from "lucide-react"
+import { Edit3, MoreHorizontal, Server, ShieldAlert, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { cn, deriveChannelName, formatDate } from "@/lib/utils"
+import { cn, formatDate } from "@/lib/utils"
 import type { SystemConnectionGroup } from "@/services/system-connections"
 import {
+  connectionSecondaryLine,
   getGroupHealth,
   getModelCount,
   healthLabel,
-  providerLabel,
-  type EditorFocus,
 } from "./view-model"
 
 type SystemConnectionListProps = {
   connections: SystemConnectionGroup[]
   loading: boolean
-  expandedGroupId: number | null
-  onToggleGroup: (group: SystemConnectionGroup, focus?: EditorFocus) => void
-  onOpenGroup: (group: SystemConnectionGroup, focus?: EditorFocus) => void
+  onEdit: (group: SystemConnectionGroup) => void
   onDelete: (id: number) => void
-  renderEditor: (group: SystemConnectionGroup) => ReactNode
 }
 
 export function SystemConnectionList({
   connections,
   loading,
-  expandedGroupId,
-  onToggleGroup,
-  onOpenGroup,
+  onEdit,
   onDelete,
-  renderEditor,
 }: SystemConnectionListProps) {
   if (loading && connections.length === 0) {
     return (
@@ -48,7 +40,7 @@ export function SystemConnectionList({
     return (
       <section className="v2-panel p-4 shadow-none">
         <div className="rounded-md border border-dashed border-border bg-muted/40 px-4 py-12 text-center text-sm leading-6 text-muted-foreground">
-          暂无匹配连接。可以调整筛选条件，或新增一个 Provider 端点和 API Key。
+          暂无匹配连接。可以调整筛选条件，或新建一个连接。
         </div>
       </section>
     )
@@ -58,25 +50,18 @@ export function SystemConnectionList({
     <section className="v2-panel overflow-hidden bg-background/92 shadow-none">
       <div className="flex items-start gap-3 border-b border-primary/20 bg-primary/5 px-4 py-3 text-sm leading-6 text-primary">
         <MoreHorizontal className="mt-1 h-4 w-4 shrink-0" />
-        <span>连接行默认折叠。点击行尾“展开配置”，即可查看 Key 池、验证结果和高级设置。</span>
+        <span>点击「编辑」打开连接向导，修改显示名称、端点与高级配置。</span>
       </div>
 
       <div className="divide-y divide-border">
-        {connections.map((group) => {
-          const expanded = expandedGroupId === group.id
-          return (
-            <ConnectionRow
-              key={group.id}
-              group={group}
-              expanded={expanded}
-              onToggle={() => onToggleGroup(group)}
-              onOpen={(focus) => onOpenGroup(group, focus)}
-              onDelete={() => onDelete(group.id)}
-            >
-              {expanded ? renderEditor(group) : null}
-            </ConnectionRow>
-          )
-        })}
+        {connections.map((group) => (
+          <ConnectionRow
+            key={group.id}
+            group={group}
+            onEdit={() => onEdit(group)}
+            onDelete={() => onDelete(group.id)}
+          />
+        ))}
       </div>
     </section>
   )
@@ -84,28 +69,21 @@ export function SystemConnectionList({
 
 function ConnectionRow({
   group,
-  expanded,
-  onToggle,
-  onOpen,
+  onEdit,
   onDelete,
-  children,
 }: {
   group: SystemConnectionGroup
-  expanded: boolean
-  onToggle: () => void
-  onOpen: (focus: EditorFocus) => void
+  onEdit: () => void
   onDelete: () => void
-  children: ReactNode
 }) {
   const health = getGroupHealth(group)
   const modelCount = getModelCount(group)
-  const channelName = deriveChannelName(group.provider, group.baseUrl)
   const tags = group.tags.map((tag) => tag.name).filter(Boolean).slice(0, 3)
 
   return (
-    <article className={cn("bg-background transition-colors", expanded ? "bg-primary/5" : "hover:bg-accent")}>
+    <article className="bg-background transition-colors hover:bg-accent">
       <div className="grid gap-4 px-4 py-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(250px,0.9fr)_auto] lg:items-center">
-        <button type="button" onClick={onToggle} className="flex min-w-0 cursor-pointer items-start gap-3 text-left">
+        <button type="button" onClick={onEdit} className="flex min-w-0 cursor-pointer items-start gap-3 text-left">
           <span
             className={cn(
               "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border",
@@ -123,11 +101,12 @@ function ConnectionRow({
           </span>
           <span className="min-w-0">
             <span className="flex flex-wrap items-center gap-2">
-              <span className="truncate text-base font-semibold text-foreground">{channelName}</span>
-              <span className="v2-status">{providerLabel(group)}</span>
+              <span className="truncate text-base font-semibold text-foreground">{group.displayName}</span>
               {group.prefixId ? <span className="v2-status">{group.prefixId}</span> : null}
             </span>
-            <span className="mt-1 block truncate text-sm text-muted-foreground">{group.baseUrl}</span>
+            <span className="mt-1 block truncate text-sm text-muted-foreground">
+              {connectionSecondaryLine(group)}
+            </span>
             {tags.length > 0 ? (
               <span className="mt-2 flex flex-wrap gap-1.5">
                 {tags.map((tag) => (
@@ -147,7 +126,7 @@ function ConnectionRow({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-          <Button variant="outline" size="sm" onClick={() => onOpen("advanced")} className="h-9 bg-background">
+          <Button variant="outline" size="sm" onClick={onEdit} className="h-9 bg-background">
             <Edit3 className="mr-2 h-4 w-4" />
             编辑
           </Button>
@@ -155,15 +134,8 @@ function ConnectionRow({
             <Trash2 className="mr-2 h-4 w-4" />
             删除
           </Button>
-          <Button variant={expanded ? "secondary" : "outline"} size="sm" onClick={onToggle} className="h-9 bg-background">
-            <KeyRound className="mr-2 h-4 w-4" />
-            {expanded ? "收起" : "展开配置"}
-            <ChevronDown className={cn("ml-2 h-4 w-4 transition-transform", expanded && "rotate-180")} />
-          </Button>
         </div>
       </div>
-
-      {expanded ? <div className="border-t border-border bg-muted/40 px-4 py-4">{children}</div> : null}
     </article>
   )
 }
@@ -176,4 +148,3 @@ function Metric({ label, value }: { label: string; value: string | number }) {
     </div>
   )
 }
-

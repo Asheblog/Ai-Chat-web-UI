@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
-import type { Prisma, PrismaClient, Connection } from '@prisma/client'
+import type { Prisma, PrismaClient } from '@prisma/client'
+import type { ResolvedConnection } from '../../repositories/model-resolver-repository'
 import type { Actor } from '../../types'
 import { prisma as defaultPrisma } from '../../db'
 import type { ModelResolverService } from '../catalog/model-resolver-service'
@@ -73,14 +74,14 @@ type BattleRunControl = {
     promptImagePaths?: string[]
     expectedAnswerImagePaths?: string[]
     judgeThreshold: number
-    judgeModel: { connection: Connection; rawModelId: string }
+    judgeModel: { connection: ResolvedConnection; rawModelId: string }
     systemSettings: Record<string, string>
     singleModel?: {
-      model: { config: BattleModelInput; resolved: { connection: Connection; rawModelId: string } }
+      model: { config: BattleModelInput; resolved: { connection: ResolvedConnection; rawModelId: string } }
       questions: BattleRunQuestionConfig[]
     }
   }
-  resolvedModels?: Map<string, { config: BattleModelInput; resolved: { connection: Connection; rawModelId: string } }>
+  resolvedModels?: Map<string, { config: BattleModelInput; resolved: { connection: ResolvedConnection; rawModelId: string } }>
   cancelled: boolean
 }
 
@@ -285,18 +286,9 @@ export class BattleService {
         ].filter((value): value is number => typeof value === 'number'),
       ),
     )
-    const connections = connectionIds.length > 0
-      ? await this.prisma.connection.findMany({
-        where: { id: { in: connectionIds } },
-        select: { id: true, prefixId: true },
-      })
-      : []
-    const connectionMap = new Map(connections.map((c) => [c.id, c]))
+    const connectionMap = await this.loadLabelConnectionMap(connectionIds)
     const judgeConnection = run.judgeConnectionId
-      ? await this.prisma.connection.findFirst({
-        where: { id: run.judgeConnectionId },
-        select: { id: true, prefixId: true },
-      })
+      ? (await this.loadLabelConnectionMap([run.judgeConnectionId])).get(run.judgeConnectionId) ?? null
       : null
 
     const rawSummary = safeParseJson<Record<string, any>>(run.summaryJson, {})
@@ -1077,7 +1069,7 @@ export class BattleService {
       throw new Error('expectedAnswer 不能为空（需提供文本或图片）')
     }
 
-    let judgeResolution: { connection: Connection; rawModelId: string }
+    let judgeResolution: { connection: ResolvedConnection; rawModelId: string }
     const promptImagePaths = parseImagePathsJson(run.promptImagesJson)
     let promptImages: BattleUploadImage[]
     let expectedAnswerImages: BattleUploadImage[]
@@ -1248,10 +1240,7 @@ export class BattleService {
     const models = this.shareProjector.buildShareModels(configModels, results, configModel)
     const connectionMap = await this.buildShareConnectionMap(results, models)
     const judgeConnection = run.judgeConnectionId
-      ? await this.prisma.connection.findFirst({
-        where: { id: run.judgeConnectionId },
-        select: { id: true, prefixId: true },
-      })
+      ? (await this.loadLabelConnectionMap([run.judgeConnectionId])).get(run.judgeConnectionId) ?? null
       : null
     const summary = await this.resolveShareSummary(run, results)
     const liveAttempts = this.collectLiveAttempts(run.id, connectionMap)
@@ -1346,10 +1335,7 @@ export class BattleService {
     const models = this.shareProjector.buildShareModels(configModels, results, configModel)
     const connectionMap = await this.buildShareConnectionMap(results, models)
     const judgeConnection = run.judgeConnectionId
-      ? await this.prisma.connection.findFirst({
-        where: { id: run.judgeConnectionId },
-        select: { id: true, prefixId: true },
-      })
+      ? (await this.loadLabelConnectionMap([run.judgeConnectionId])).get(run.judgeConnectionId) ?? null
       : null
     const summary = await this.resolveShareSummary(run, results)
     const liveAttempts = this.collectLiveAttempts(run.id, connectionMap)
@@ -1621,7 +1607,7 @@ export class BattleService {
         modelResolution.connection.id,
         modelResolution.rawModelId,
       )
-      const resolvedModelMap = new Map<string, { config: BattleModelInput; resolved: { connection: Connection; rawModelId: string } }>()
+      const resolvedModelMap = new Map<string, { config: BattleModelInput; resolved: { connection: ResolvedConnection; rawModelId: string } }>()
       resolvedModelMap.set(modelKey, resolvedModel)
       const taskGroups = new Map<string, { queue: AttemptTask[]; running: boolean }>()
 
@@ -1977,7 +1963,7 @@ export class BattleService {
       })
 
       const taskGroups = new Map<string, { queue: AttemptTask[]; running: boolean }>()
-      const resolvedModelMap = new Map<string, { config: BattleModelInput; resolved: { connection: Connection; rawModelId: string } }>()
+      const resolvedModelMap = new Map<string, { config: BattleModelInput; resolved: { connection: ResolvedConnection; rawModelId: string } }>()
 
       runControl.runContext = {
         mode: 'multi_model',
@@ -2180,7 +2166,7 @@ export class BattleService {
 
   private createAttemptTask(params: {
     battleRunId: number
-    model: { config: BattleModelInput; resolved: { connection: Connection; rawModelId: string } }
+    model: { config: BattleModelInput; resolved: { connection: ResolvedConnection; rawModelId: string } }
     question: BattleRunQuestionConfig
     attemptIndex: number
     runControl: BattleRunControl
@@ -2239,8 +2225,8 @@ export class BattleService {
       promptImages: BattleUploadImage[]
       expectedAnswerImages: BattleUploadImage[]
       judgeThreshold: number
-      judgeModel: { connection: Connection; rawModelId: string }
-      model: { config: BattleModelInput; resolved: { connection: Connection; rawModelId: string } }
+      judgeModel: { connection: ResolvedConnection; rawModelId: string }
+      model: { config: BattleModelInput; resolved: { connection: ResolvedConnection; rawModelId: string } }
       attemptIndex: number
       systemSettings: Record<string, string>
       runControl?: BattleRunControl
@@ -3161,11 +3147,41 @@ export class BattleService {
     if (connectionIds.length === 0) {
       return new Map()
     }
-    const connections = await this.prisma.connection.findMany({
-      where: { id: { in: connectionIds } },
+    return this.loadLabelConnectionMap(connectionIds)
+  }
+
+  /** Dual-read group ids and legacy credential ids for label/prefix lookups. */
+  private async loadLabelConnectionMap(connectionIds: number[]): Promise<Map<number, LabelConnection>> {
+    const uniqueIds = Array.from(new Set(connectionIds.filter((id) => Number.isFinite(id))))
+    const map = new Map<number, LabelConnection>()
+    if (uniqueIds.length === 0) return map
+
+    const groups = await this.prisma.connectionGroup.findMany({
+      where: { id: { in: uniqueIds } },
       select: { id: true, prefixId: true },
     })
-    return new Map(connections.map((connection) => [connection.id, connection]))
+    for (const group of groups) {
+      map.set(group.id, group)
+    }
+
+    const missing = uniqueIds.filter((id) => !map.has(id))
+    if (missing.length > 0) {
+      const credentials = await this.prisma.connection.findMany({
+        where: { id: { in: missing } },
+        select: {
+          id: true,
+          group: { select: { id: true, prefixId: true } },
+        },
+      })
+      for (const credential of credentials) {
+        if (!credential.group) continue
+        map.set(credential.id, {
+          id: credential.group.id,
+          prefixId: credential.group.prefixId,
+        })
+      }
+    }
+    return map
   }
 
   private async resolveShareSummary(run: BattleRunRecord, results: BattleResultRecord[]) {
@@ -3284,8 +3300,8 @@ export class BattleService {
   }
 
   private async ensureVisionCapabilities(params: {
-    judge: { modelId: string; resolved: { connection: Connection; rawModelId: string } }
-    models: Array<{ modelId: string; resolved: { connection: Connection; rawModelId: string } }>
+    judge: { modelId: string; resolved: { connection: ResolvedConnection; rawModelId: string } }
+    models: Array<{ modelId: string; resolved: { connection: ResolvedConnection; rawModelId: string } }>
     promptHasImages: boolean
     expectedAnswerHasImages: boolean
   }) {
@@ -3339,7 +3355,7 @@ export class BattleService {
   private async isVisionEnabledModel(connectionId: number, rawModelId: string) {
     const row = await this.prisma.modelCatalog.findFirst({
       where: {
-        connectionId,
+        connectionGroupId: connectionId,
         rawId: rawModelId,
       },
       select: { capabilitiesJson: true },

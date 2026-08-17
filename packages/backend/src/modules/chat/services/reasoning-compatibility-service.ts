@@ -1,7 +1,7 @@
-import type { PrismaClient } from '@prisma/client';
-import { prisma as defaultPrisma } from '../../../db';
-import type { ProviderType } from '../../../utils/providers';
-import { BackendLogger as log } from '../../../utils/logger';
+import type { PrismaClient } from '@prisma/client'
+import { prisma as defaultPrisma } from '../../../db'
+import type { ProviderType } from '../../../utils/providers'
+import { BackendLogger as log } from '../../../utils/logger'
 
 const PROFILE_SETTING_KEY = 'reasoning_compat_profiles_v1';
 const PROFILE_MAX_ENTRIES = 300;
@@ -165,6 +165,7 @@ export class ReasoningCompatibilityService {
           if (!normalized) continue;
           this.profiles.set(normalized.key, normalized);
         }
+        await this.remapLegacyCredentialIds();
       } catch (error) {
         log.warn('[reasoning-compat] load profile failed', {
           error: error instanceof Error ? error.message : String(error),
@@ -175,6 +176,50 @@ export class ReasoningCompatibilityService {
       }
     })();
     await this.loadingPromise;
+  }
+
+  /** Remap stored credential connectionIds → group ids (dual-read after ConnectionGroup migration). */
+  private async remapLegacyCredentialIds() {
+    const ids = Array.from(new Set(Array.from(this.profiles.values()).map((p) => p.connectionId)));
+    if (ids.length === 0) return;
+
+    const groups = await this.prisma.connectionGroup.findMany({
+      where: { id: { in: ids } },
+      select: { id: true },
+    });
+    const groupIds = new Set(groups.map((g) => g.id));
+
+    const credentials = await this.prisma.connection.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, connectionGroupId: true },
+    });
+    const credToGroup = new Map(credentials.map((c) => [c.id, c.connectionGroupId]));
+
+    let changed = false;
+    const next = new Map<string, StoredProfile>();
+    for (const profile of this.profiles.values()) {
+      if (groupIds.has(profile.connectionId)) {
+        next.set(profile.key, profile);
+        continue;
+      }
+      const groupId = credToGroup.get(profile.connectionId);
+      if (groupId == null) {
+        next.set(profile.key, profile);
+        continue;
+      }
+      const remapped: StoredProfile = {
+        ...profile,
+        connectionId: groupId,
+        key: this.buildKey(profile.provider, groupId, profile.modelRawId),
+        updatedAt: new Date().toISOString(),
+      };
+      next.set(remapped.key, remapped);
+      changed = true;
+    }
+    this.profiles = next;
+    if (changed) {
+      this.scheduleFlush();
+    }
   }
 
   private scheduleFlush() {

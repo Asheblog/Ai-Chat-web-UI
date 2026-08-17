@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from '@prisma/client'
+import type { PrismaClient } from '@prisma/client'
 import type { z } from 'zod'
 import { prisma as defaultPrisma } from '../../../db'
 import type { UsageQuotaSnapshot } from '../../../types'
@@ -19,15 +19,12 @@ import type {
   PreStreamHistorySnapshot,
   SystemSettingsMap,
 } from './pre-stream-context'
+import type { SessionWithConnection, SessionWithResolvedConnection } from '../../../services/chat/chat-service'
 
 type SendMessagePayload = z.infer<typeof sendMessageSchema>
 
-type ChatSessionWithConnection = Prisma.ChatSessionGetPayload<{ include: { connection: true } }>
-type ChatSessionWithResolvedConnection = Omit<ChatSessionWithConnection, 'connectionId' | 'modelRawId' | 'connection'> & {
-  connectionId: number
-  modelRawId: string
-  connection: NonNullable<ChatSessionWithConnection['connection']>
-}
+type ChatSessionWithConnection = SessionWithConnection
+type ChatSessionWithResolvedConnection = SessionWithResolvedConnection
 
 interface NonStreamChatRequest {
   session: ChatSessionWithResolvedConnection

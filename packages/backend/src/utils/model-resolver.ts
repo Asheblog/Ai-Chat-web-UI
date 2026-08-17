@@ -1,5 +1,5 @@
-import type { Connection } from '@prisma/client'
 import { ModelResolverService } from '../services/catalog/model-resolver-service'
+import type { ResolvedConnection } from '../repositories/model-resolver-repository'
 import type { Actor } from '../types'
 
 let currentModelResolverService: ModelResolverService | null = null
@@ -24,7 +24,7 @@ export const getModelResolverService = (): ModelResolverService =>
 export async function resolveModelIdForUser(
   userId: number,
   modelId: string,
-): Promise<{ connection: Connection; rawModelId: string } | null> {
+): Promise<{ connection: ResolvedConnection; rawModelId: string } | null> {
   return resolveModelResolverService().resolveModelIdForUser(userId, modelId)
 }
 
@@ -35,3 +35,5 @@ export async function resolveModelForActor(params: { actor: Actor; modelId: stri
     modelId: params.modelId,
   })
 }
+
+export type { ResolvedConnection }

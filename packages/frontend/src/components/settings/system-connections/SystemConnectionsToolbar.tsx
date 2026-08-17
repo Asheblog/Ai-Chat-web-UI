@@ -106,7 +106,7 @@ export function SystemConnectionsToolbar({
           </Button>
           <Button onClick={onCreate} className="h-10">
             <Plus className="mr-2 h-4 w-4" />
-            新增连接
+            新建连接
           </Button>
         </div>
       </div>

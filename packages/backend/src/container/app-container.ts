@@ -66,9 +66,9 @@ import { VisionProxyService } from '../modules/chat/services/vision-proxy-servic
 import { AuthUtils } from '../utils/auth'
 import {
   refreshAllModelCatalog,
-  refreshModelCatalogForConnection,
-  refreshModelCatalogForConnections,
-  refreshModelCatalogForConnectionId,
+  refreshModelCatalogForConnectionGroup,
+  refreshModelCatalogForConnectionGroups,
+  refreshModelCatalogForConnectionGroupId,
 } from '../utils/model-catalog'
 import { verifyConnection, computeCapabilities, deriveChannelName } from '../utils/providers'
 import { parseCapabilityEnvelope, normalizeCapabilityFlags, serializeCapabilityEnvelope } from '../utils/capabilities'
@@ -343,7 +343,8 @@ export class AppContainer {
         repository: this.connectionRepository,
         secretVault: this.secretVault,
         // 刷新模型目录必须带上 vault，否则 bearer 连接会以空 Key 请求上游并 401
-        refreshModelCatalog: (conn) => refreshModelCatalogForConnection(conn, this.secretVault),
+        refreshModelCatalog: (group, credential) =>
+          refreshModelCatalogForConnectionGroup(group, credential, this.secretVault),
         verifyConnection,
         logger: log,
       })
@@ -484,10 +485,10 @@ export class AppContainer {
       new ModelCatalogService({
         prisma: this.context.prisma,
         refreshAllModelCatalog: () => refreshAllModelCatalog(this.secretVault),
-        refreshModelCatalogForConnections: (connections) =>
-          refreshModelCatalogForConnections(connections, this.secretVault),
-        refreshModelCatalogForConnectionId: (connectionId) =>
-          refreshModelCatalogForConnectionId(connectionId, this.secretVault),
+        refreshModelCatalogForConnectionGroups: (groups) =>
+          refreshModelCatalogForConnectionGroups(groups, this.secretVault),
+        refreshModelCatalogForConnectionGroupId: (connectionGroupId) =>
+          refreshModelCatalogForConnectionGroupId(connectionGroupId, this.secretVault),
         computeCapabilities,
         deriveChannelName,
         parseCapabilityEnvelope,

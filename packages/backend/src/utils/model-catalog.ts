@@ -1,4 +1,4 @@
-import type { Connection } from '@prisma/client'
+import type { Connection, ConnectionGroup } from '@prisma/client'
 import { prisma } from '../db'
 import fetch from 'node-fetch'
 import {
@@ -11,17 +11,23 @@ import {
 } from './providers'
 import type { SecretVaultService } from '../services/secret-vault'
 import { BackendLogger as log } from './logger'
-import { guessKnownContextWindow, guessKnownCompletionLimit, invalidateCompletionLimitCache, invalidateContextWindowCache } from './context-window'
+import {
+  guessKnownContextWindow,
+  guessKnownCompletionLimit,
+  invalidateCompletionLimitCache,
+  invalidateContextWindowCache,
+} from './context-window'
 import {
   createCapabilityEnvelope,
   mergeCapabilityLayers,
-  parseCapabilityEnvelope,
   serializeCapabilityEnvelope,
   normalizeCapabilityFlags,
   hasDefinedCapability,
   type CapabilityFlags,
   type CapabilityEnvelope,
 } from './capabilities'
+
+export type ConnectionGroupWithCredentials = ConnectionGroup & { credentials: Connection[] }
 
 const parseJsonArray = <T>(raw: string | null | undefined, fallback: T[]): T[] => {
   if (!raw) return fallback
@@ -57,24 +63,30 @@ const parseCapabilitiesFromJson = (raw: string | null | undefined): CapabilityFl
   }
 }
 
-const buildConfigFromConnection = async (conn: Connection, secretVault?: SecretVaultService): Promise<ConnectionConfig> => {
+export const buildConfigFromGroup = async (
+  group: ConnectionGroup,
+  credential: Connection,
+  secretVault?: SecretVaultService,
+): Promise<ConnectionConfig> => {
   let apiKey: string | undefined
-  if (conn.authType === 'bearer' && conn.secretVaultId && secretVault) {
-    apiKey = await secretVault.decryptById(conn.secretVaultId).catch(() => { throw new Error('无法解密 API Key：Secret Vault 解密失败') })
+  if (group.authType === 'bearer' && credential.secretVaultId && secretVault) {
+    apiKey = await secretVault.decryptById(credential.secretVaultId).catch(() => {
+      throw new Error('无法解密 API Key：Secret Vault 解密失败')
+    })
   }
   return {
-    provider: conn.provider as ConnectionConfig['provider'],
-    baseUrl: conn.baseUrl,
-    enable: conn.enable,
-    authType: conn.authType as ConnectionConfig['authType'],
+    provider: group.provider as ConnectionConfig['provider'],
+    baseUrl: group.baseUrl,
+    enable: group.enable && credential.enable,
+    authType: group.authType as ConnectionConfig['authType'],
     apiKey,
-    headers: parseJsonRecord(conn.headersJson),
-    azureApiVersion: conn.azureApiVersion || undefined,
-    prefixId: conn.prefixId || undefined,
-    tags: parseJsonArray(conn.tagsJson, []),
-    modelIds: parseJsonArray(conn.modelIdsJson, []),
-    connectionType: (conn.connectionType as any) || 'external',
-    defaultCapabilities: parseCapabilitiesFromJson(conn.defaultCapabilitiesJson),
+    headers: parseJsonRecord(group.headersJson),
+    azureApiVersion: group.azureApiVersion || undefined,
+    prefixId: group.prefixId || undefined,
+    tags: parseJsonArray(group.tagsJson, []),
+    modelIds: parseJsonArray(credential.modelIdsJson, []),
+    connectionType: (group.connectionType as ConnectionConfig['connectionType']) || 'external',
+    defaultCapabilities: parseCapabilitiesFromJson(group.defaultCapabilitiesJson),
   }
 }
 
@@ -101,61 +113,73 @@ export const setModelCatalogTtlSeconds = (value: number | null | undefined) => {
   }
 }
 
-const normalizeConnectionsToSystem = async () => {
-  const result = await prisma.connection.updateMany({
-    where: { ownerUserId: { not: null } },
-    data: { ownerUserId: null },
-  })
-  if (result.count > 0) {
-    log.info('已自动将个人直连转为系统连接', { affected: result.count })
-  }
-}
-
-const expireManual = async (connectionId: number) => {
+const expireManual = async (connectionGroupId: number) => {
   await prisma.modelCatalog.deleteMany({
     where: {
-      connectionId,
+      connectionGroupId,
       manualOverride: false,
     },
   })
 }
 
-export async function refreshModelCatalogForConnection(conn: Connection, secretVault?: SecretVaultService): Promise<{ connectionId: number; total: number }> {
-  if (conn.ownerUserId != null) {
-    log.debug('跳过个人连接的模型刷新', { connectionId: conn.id, ownerUserId: conn.ownerUserId })
-    return { connectionId: conn.id, total: 0 }
+export const pickCredentialForCatalogFetch = (
+  group: ConnectionGroup,
+  credentials: Connection[],
+): Connection | null => {
+  const enabled = credentials.filter((item) => item.enable)
+  const pool = enabled.length > 0 ? enabled : credentials
+  if (pool.length === 0) return null
+  if ((group.authType as ConnectionConfig['authType']) === 'none') {
+    return pool[0] ?? null
   }
-  const cfg = await buildConfigFromConnection(conn, secretVault)
+  return pool.find((item) => item.secretVaultId != null) ?? pool[0] ?? null
+}
+
+export async function refreshModelCatalogForConnectionGroup(
+  group: ConnectionGroup,
+  credentialForFetch: Connection,
+  secretVault?: SecretVaultService,
+): Promise<{ connectionGroupId: number; total: number }> {
+  if (group.ownerUserId != null) {
+    log.debug('跳过个人连接组的模型刷新', {
+      connectionGroupId: group.id,
+      ownerUserId: group.ownerUserId,
+    })
+    return { connectionGroupId: group.id, total: 0 }
+  }
+
+  const cfg = await buildConfigFromGroup(group, credentialForFetch, secretVault)
   const connectionCapabilityLayer = createCapabilityEnvelope(cfg.defaultCapabilities, 'connection_default')
   if (!cfg.enable) {
-    await expireManual(conn.id)
-    return { connectionId: conn.id, total: 0 }
+    await expireManual(group.id)
+    return { connectionGroupId: group.id, total: 0 }
   }
 
   let items: CatalogItem[] = []
   try {
     items = await fetchModelsForConnection(cfg)
   } catch (error) {
-    // 网络超时或连接失败时，记录警告但不阻塞其他连接的刷新
-    // 返回现有数据，避免清除缓存
     const isAbortError = error instanceof Error && error.name === 'AbortError'
-    const isNetworkError = error instanceof Error && (
-      error.message.includes('ECONNREFUSED') ||
-      error.message.includes('ETIMEDOUT') ||
-      error.message.includes('ENOTFOUND') ||
-      error.message.includes('fetch failed')
-    )
+    const isNetworkError =
+      error instanceof Error &&
+      (error.message.includes('ECONNREFUSED') ||
+        error.message.includes('ETIMEDOUT') ||
+        error.message.includes('ENOTFOUND') ||
+        error.message.includes('fetch failed'))
     if (isAbortError || isNetworkError) {
-      log.warn('刷新模型目录网络超时，跳过此连接', { connectionId: conn.id, provider: conn.provider })
-      return { connectionId: conn.id, total: 0 }
+      log.warn('刷新模型目录网络超时，跳过此连接组', {
+        connectionGroupId: group.id,
+        provider: group.provider,
+      })
+      return { connectionGroupId: group.id, total: 0 }
     }
-    log.warn('刷新模型目录失败', { connectionId: conn.id, provider: conn.provider, error })
+    log.warn('刷新模型目录失败', { connectionGroupId: group.id, provider: group.provider, error })
     throw error
   }
 
   const now = new Date()
   const expiresAt = new Date(now.getTime() + resolveTtlSeconds() * 1000)
-  const existing = await prisma.modelCatalog.findMany({ where: { connectionId: conn.id } })
+  const existing = await prisma.modelCatalog.findMany({ where: { connectionGroupId: group.id } })
   const existingMap = new Map(existing.map((row) => [row.modelId, row]))
 
   const seen = new Set<string>()
@@ -178,9 +202,9 @@ export async function refreshModelCatalogForConnection(conn: Connection, secretV
 
     if (cfg.provider === 'ollama' && item.rawId) {
       const ollamaKey = `${cfg.baseUrl.replace(/\/+$/, '')}:${item.rawId}`
-      const now = Date.now()
+      const nowMs = Date.now()
       const cached = ollamaShowCache.get(ollamaKey)
-      if (cached && cached.expiresAt > now) {
+      if (cached && cached.expiresAt > nowMs) {
         contextWindow = cached.value
       } else {
         const controller = new AbortController()
@@ -201,7 +225,10 @@ export async function refreshModelCatalogForConnection(conn: Connection, secretV
             }
           }
         } catch (error) {
-          log.debug('获取 Ollama 模型 context_window 失败', { model: item.rawId, error: (error as Error)?.message })
+          log.debug('获取 Ollama 模型 context_window 失败', {
+            model: item.rawId,
+            error: (error as Error)?.message,
+          })
         } finally {
           clearTimeout(timer)
           if (!controller.signal.aborted) {
@@ -209,11 +236,10 @@ export async function refreshModelCatalogForConnection(conn: Connection, secretV
           }
         }
 
-        const cacheValue = {
+        ollamaShowCache.set(ollamaKey, {
           value: contextWindow ?? null,
-          expiresAt: now + OLLAMA_CONTEXT_CACHE_TTL_MS,
-        }
-        ollamaShowCache.set(ollamaKey, cacheValue)
+          expiresAt: nowMs + OLLAMA_CONTEXT_CACHE_TTL_MS,
+        })
       }
     } else if (item.rawId) {
       const guessed = guessKnownContextWindow(cfg.provider, item.rawId)
@@ -252,9 +278,8 @@ export async function refreshModelCatalogForConnection(conn: Connection, secretV
     }
   }
 
-  // 预先准备所有数据，减少事务内的计算时间
   const toCreate: Array<{
-    connectionId: number
+    connectionGroupId: number
     modelId: string
     rawId: string
     name: string
@@ -302,7 +327,7 @@ export async function refreshModelCatalogForConnection(conn: Connection, secretV
 
     if (!row) {
       toCreate.push({
-        connectionId: conn.id,
+        connectionGroupId: group.id,
         modelId: key,
         rawId: item.rawId,
         name: item.name,
@@ -341,66 +366,83 @@ export async function refreshModelCatalogForConnection(conn: Connection, secretV
     .filter((row) => !seen.has(row.modelId) && !row.manualOverride)
     .map((row) => row.id)
 
-  // 使用事务批量执行所有数据库操作，减少锁持有时间
-  await prisma.$transaction(async (tx) => {
-    // 批量创建新模型
-    if (toCreate.length > 0) {
-      await tx.modelCatalog.createMany({ data: toCreate })
-    }
+  await prisma.$transaction(
+    async (tx) => {
+      if (toCreate.length > 0) {
+        await tx.modelCatalog.createMany({ data: toCreate })
+      }
 
-    // 批量更新现有模型
-    for (const item of toUpdate) {
-      await tx.modelCatalog.update({ where: { id: item.id }, data: item.data })
-    }
+      for (const item of toUpdate) {
+        await tx.modelCatalog.update({ where: { id: item.id }, data: item.data })
+      }
 
-    // 批量删除过期模型
-    if (staleIds.length > 0) {
-      await tx.modelCatalog.deleteMany({ where: { id: { in: staleIds } } })
-    }
-  }, {
-    timeout: 10000, // 10秒事务超时，避免长时间阻塞其他操作
-  })
+      if (staleIds.length > 0) {
+        await tx.modelCatalog.deleteMany({ where: { id: { in: staleIds } } })
+      }
+    },
+    {
+      timeout: 10000,
+    },
+  )
 
-  // 在事务外失效缓存
   for (const item of toCreate) {
-    invalidateContextWindowCache(conn.id, item.rawId)
-    invalidateCompletionLimitCache(conn.id, item.rawId)
+    invalidateContextWindowCache(group.id, item.rawId)
+    invalidateCompletionLimitCache(group.id, item.rawId)
   }
   for (const item of toUpdate) {
-    invalidateContextWindowCache(conn.id, item.rawId)
-    invalidateCompletionLimitCache(conn.id, item.rawId)
+    invalidateContextWindowCache(group.id, item.rawId)
+    invalidateCompletionLimitCache(group.id, item.rawId)
   }
 
-  return { connectionId: conn.id, total: items.length }
+  return { connectionGroupId: group.id, total: items.length }
 }
 
-export async function refreshModelCatalogForConnectionId(connectionId: number, secretVault?: SecretVaultService) {
-  const conn = await prisma.connection.findUnique({ where: { id: connectionId } })
-  if (!conn) return
-  await refreshModelCatalogForConnection(conn, secretVault)
+export async function refreshModelCatalogForConnectionGroupId(
+  connectionGroupId: number,
+  secretVault?: SecretVaultService,
+) {
+  const group = await prisma.connectionGroup.findUnique({
+    where: { id: connectionGroupId },
+    include: { credentials: true },
+  })
+  if (!group) return
+  const credential = pickCredentialForCatalogFetch(group, group.credentials)
+  if (!credential) return
+  await refreshModelCatalogForConnectionGroup(group, credential, secretVault)
 }
 
-export async function refreshModelCatalogForConnections(connections: Connection[], secretVault?: SecretVaultService) {
-  for (const conn of connections) {
+export async function refreshModelCatalogForConnectionGroups(
+  groups: ConnectionGroupWithCredentials[],
+  secretVault?: SecretVaultService,
+) {
+  for (const group of groups) {
     try {
-      await refreshModelCatalogForConnection(conn, secretVault)
+      const credential = pickCredentialForCatalogFetch(group, group.credentials)
+      if (!credential) continue
+      await refreshModelCatalogForConnectionGroup(group, credential, secretVault)
     } catch (error) {
-      log.warn('刷新模型目录出错，继续下一个', { connectionId: conn.id, error })
+      log.warn('刷新模型目录出错，继续下一个', { connectionGroupId: group.id, error })
     }
   }
 }
 
 export async function refreshAllModelCatalog(secretVault?: SecretVaultService) {
-  const connections = await prisma.connection.findMany({ where: { enable: true, ownerUserId: null } })
-  await refreshModelCatalogForConnections(connections, secretVault)
+  const groups = await prisma.connectionGroup.findMany({
+    where: { enable: true, ownerUserId: null },
+    include: { credentials: true },
+  })
+  await refreshModelCatalogForConnectionGroups(groups, secretVault)
 }
 
 let catalogTimer: NodeJS.Timeout | null = null
 
-export function scheduleModelCatalogAutoRefresh(options: { refreshIntervalMs?: number; secretVault?: SecretVaultService } = {}) {
-  const intervalMs = Number.isFinite(options.refreshIntervalMs) && (options.refreshIntervalMs as number) > 0
-    ? Math.floor(options.refreshIntervalMs as number)
-    : resolveTtlSeconds() * 1000
+export function scheduleModelCatalogAutoRefresh(
+  options: { refreshIntervalMs?: number; secretVault?: SecretVaultService } = {},
+) {
+  const intervalMs =
+    Number.isFinite(options.refreshIntervalMs) && (options.refreshIntervalMs as number) > 0
+      ? Math.floor(options.refreshIntervalMs as number)
+      : resolveTtlSeconds() * 1000
 
   if (catalogTimer) {
     clearInterval(catalogTimer)
@@ -414,11 +456,7 @@ export function scheduleModelCatalogAutoRefresh(options: { refreshIntervalMs?: n
     }
   }
 
-  normalizeConnectionsToSystem()
-    .catch((err) => log.warn('归并个人直连失败', err))
-    .finally(() => {
-      run().catch(() => {})
-    })
+  run().catch(() => {})
 
   catalogTimer = setInterval(() => {
     run().catch(() => {})

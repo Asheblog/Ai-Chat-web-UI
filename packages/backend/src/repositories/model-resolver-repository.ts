@@ -1,7 +1,15 @@
-import type { Connection, ModelCatalog, PrismaClient } from '@prisma/client'
+import type { Connection, ConnectionGroup, PrismaClient } from '@prisma/client'
+
+export type ResolvedConnection = ConnectionGroup & {
+  /** Selected credential id used for vault / key selection */
+  credentialId: number
+  secretVaultId: number | null
+  modelIdsJson: string
+  apiKeyLabel: string | null
+}
 
 export interface CachedModelWithConnection {
-  connection: Connection
+  connection: ResolvedConnection
   rawId: string
   modelId: string
   connectionId: number
@@ -10,8 +18,46 @@ export interface CachedModelWithConnection {
 
 export interface ModelResolverRepository {
   findCachedModel(modelId: string): Promise<CachedModelWithConnection | null>
-  listEnabledSystemConnections(): Promise<Connection[]>
-  findEnabledSystemConnectionById(id: number): Promise<Connection | null>
+  listEnabledSystemGroups(): Promise<Array<ConnectionGroup & { credentials: Connection[] }>>
+  /**
+   * Dual-read: group id, or legacy credential id → its group.
+   * Returns a ResolvedConnection (group fields + selected credential vault).
+   */
+  findEnabledResolvedConnectionById(id: number): Promise<ResolvedConnection | null>
+  /** Dual-read without enable filter (system soft-refs). */
+  findResolvedConnectionById(id: number): Promise<ResolvedConnection | null>
+}
+
+export const pickPrimaryCredential = (
+  group: ConnectionGroup,
+  credentials: Connection[],
+): Connection | null => {
+  const enabled = credentials.filter((item) => item.enable)
+  const pool = enabled.length > 0 ? enabled : credentials
+  if (pool.length === 0) return null
+  if (group.authType === 'none') {
+    return pool[0] ?? null
+  }
+  return pool.find((item) => item.secretVaultId != null) ?? pool[0] ?? null
+}
+
+export const toResolvedConnection = (
+  group: ConnectionGroup,
+  credential: Connection,
+): ResolvedConnection => ({
+  ...group,
+  credentialId: credential.id,
+  secretVaultId: credential.secretVaultId,
+  modelIdsJson: credential.modelIdsJson,
+  apiKeyLabel: credential.apiKeyLabel,
+})
+
+export const resolveConnectionFromGroup = (
+  group: ConnectionGroup & { credentials: Connection[] },
+): ResolvedConnection | null => {
+  const credential = pickPrimaryCredential(group, group.credentials)
+  if (!credential) return null
+  return toResolvedConnection(group, credential)
 }
 
 export class PrismaModelResolverRepository implements ModelResolverRepository {
@@ -27,40 +73,79 @@ export class PrismaModelResolverRepository implements ModelResolverRepository {
       select: {
         modelId: true,
         rawId: true,
-        connectionId: true,
-        connection: true,
+        connectionGroupId: true,
         metaJson: true,
+        connectionGroup: {
+          include: { credentials: true },
+        },
       },
     })
-    if (!row) return null
-    const { connection, rawId, modelId: cachedModelId, connectionId, metaJson } = row as ModelCatalog & {
-      connection: Connection
-    }
+    if (!row?.connectionGroup) return null
+
+    const credential = pickPrimaryCredential(row.connectionGroup, row.connectionGroup.credentials)
+    if (!credential) return null
+
     return {
-      connection,
-      rawId,
-      modelId: cachedModelId,
-      connectionId,
-      metaJson,
+      connection: toResolvedConnection(row.connectionGroup, credential),
+      rawId: row.rawId,
+      modelId: row.modelId,
+      connectionId: row.connectionGroupId,
+      metaJson: row.metaJson,
     }
   }
 
-  listEnabledSystemConnections() {
-    return this.prisma.connection.findMany({
+  listEnabledSystemGroups() {
+    return this.prisma.connectionGroup.findMany({
       where: {
         enable: true,
         ownerUserId: null,
       },
+      include: { credentials: true },
     })
   }
 
-  findEnabledSystemConnectionById(id: number) {
-    return this.prisma.connection.findFirst({
+  async findEnabledResolvedConnectionById(id: number): Promise<ResolvedConnection | null> {
+    const asGroup = await this.prisma.connectionGroup.findFirst({
       where: {
         id,
         enable: true,
         ownerUserId: null,
       },
+      include: { credentials: true },
     })
+    if (asGroup) {
+      return resolveConnectionFromGroup(asGroup)
+    }
+
+    const credential = await this.prisma.connection.findFirst({
+      where: { id, enable: true },
+      include: { group: true },
+    })
+    if (!credential?.group || credential.group.ownerUserId != null || !credential.group.enable) {
+      return null
+    }
+    return toResolvedConnection(credential.group, credential)
+  }
+
+  /**
+   * Dual-read without enable filter — for system soft-refs (title/vision/rag settings).
+   */
+  async findResolvedConnectionById(id: number): Promise<ResolvedConnection | null> {
+    const asGroup = await this.prisma.connectionGroup.findFirst({
+      where: { id, ownerUserId: null },
+      include: { credentials: true },
+    })
+    if (asGroup) {
+      return resolveConnectionFromGroup(asGroup)
+    }
+
+    const credential = await this.prisma.connection.findFirst({
+      where: { id },
+      include: { group: true },
+    })
+    if (!credential?.group || credential.group.ownerUserId != null) {
+      return null
+    }
+    return toResolvedConnection(credential.group, credential)
   }
 }

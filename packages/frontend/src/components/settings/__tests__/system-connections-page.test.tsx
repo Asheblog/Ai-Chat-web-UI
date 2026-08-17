@@ -40,6 +40,7 @@ vi.mock("@/components/ui/use-toast", () => ({
 
 const makeGroup = (overrides: Partial<SystemConnectionGroup>): SystemConnectionGroup => ({
   id: 1,
+  displayName: "默认连接",
   connectionIds: [1],
   provider: "openai",
   baseUrl: "https://api.openai.com/v1",
@@ -47,7 +48,7 @@ const makeGroup = (overrides: Partial<SystemConnectionGroup>): SystemConnectionG
   tags: [],
   connectionType: "external",
   defaultCapabilities: {},
-  apiKeys: [{ id: 1, apiKeyLabel: "Key 1", modelIds: [], enable: true }],
+  apiKeys: [{ id: 1, apiKeyLabel: "Key 1", modelIds: [], enable: true, hasStoredApiKey: true, apiKeyMasked: "sk-***" }],
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
   ...overrides,
@@ -55,22 +56,30 @@ const makeGroup = (overrides: Partial<SystemConnectionGroup>): SystemConnectionG
 
 /** 样例：2 组 openai + 1 组 ollama */
 const sampleConnections = [
-  makeGroup({ id: 1, provider: "openai" }),
-  makeGroup({ id: 2, provider: "openai", baseUrl: "https://openai.example.com/v1" }),
-  makeGroup({ id: 3, provider: "ollama", baseUrl: "http://localhost:11434", authType: "none" }),
+  makeGroup({ id: 1, displayName: "官方 OpenAI", provider: "openai" }),
+  makeGroup({
+    id: 2,
+    displayName: "兼容网关",
+    provider: "openai",
+    baseUrl: "https://openai.example.com/v1",
+  }),
+  makeGroup({
+    id: 3,
+    displayName: "本机 Ollama",
+    provider: "ollama",
+    baseUrl: "http://localhost:11434",
+    authType: "none",
+  }),
 ]
 
 const getCard = (provider: string) => screen.getByTestId(`provider-template-${provider}`)
-
-/** 可见的 Sheet 头部标题（忽略 Sheet 内部 sr-only 的 Dialog Title 重复节点） */
-const sheetHeading = (label: string) =>
-  within(screen.getByRole("dialog")).getByText(`配置 ${label}`, { ignore: ".sr-only" })
 
 beforeEach(() => {
   vi.clearAllMocks()
   toastSpy.mockClear()
   services.fetchSystemConnections.mockResolvedValue(sampleConnections)
   services.createSystemConnection.mockResolvedValue({})
+  services.updateSystemConnection.mockResolvedValue({})
   services.verifySystemConnection.mockResolvedValue({
     data: { results: [], successCount: 0, failureCount: 0, totalModels: 0 },
   })
@@ -114,7 +123,7 @@ describe("provider-templates 模板数据", () => {
   })
 })
 
-describe("SystemConnectionsPage 模板卡 + Sheet 配置抽屉", () => {
+describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
   test("渲染 6 张模板卡（OpenAI/Azure/Ollama/Google/Responses/交错思考 标签可见）", async () => {
     render(<SystemConnectionsPage />)
 
@@ -156,27 +165,66 @@ describe("SystemConnectionsPage 模板卡 + Sheet 配置抽屉", () => {
     expect(screen.getByText("全部连接列表、导入导出与 API Key 池")).toBeInTheDocument()
   })
 
-  test("点「配置」（Ollama 卡）→ Sheet 打开，标题「配置 Ollama」，表单预填 baseUrl 且 authType none", async () => {
+  test("列表主标题为 displayName，副标题为 provider · baseUrl", async () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
-    await userEvent.click(within(getCard("ollama")).getByText("配置"))
-    const dialog = await screen.findByRole("dialog")
+    await userEvent.click(screen.getByRole("button", { name: /高级管理/ }))
 
-    expect(sheetHeading("Ollama")).toBeInTheDocument()
-    expect(within(dialog).getByLabelText("API 端点")).toHaveValue("http://localhost:11434")
-
-    // 展开高级设置后可读认证方式 Select 值
-    await userEvent.click(within(dialog).getByRole("button", { name: /高级设置/ }))
-    expect(within(dialog).getByText("None")).toBeInTheDocument()
+    expect(screen.getByText("官方 OpenAI")).toBeInTheDocument()
+    expect(screen.getByText("本机 Ollama")).toBeInTheDocument()
+    expect(screen.getByText("OpenAI · https://api.openai.com/v1")).toBeInTheDocument()
+    expect(screen.getByText("Ollama · http://localhost:11434")).toBeInTheDocument()
   })
 
-  test("抽屉内点「创建连接」→ createSystemConnection 被调（payload.provider === ollama 且 baseUrl 预填）", async () => {
+  test("点模板卡 → Sheet 打开到基础信息步，预填 displayName/baseUrl", async () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
     await userEvent.click(within(getCard("ollama")).getByText("配置"))
     const dialog = await screen.findByRole("dialog")
+
+    expect(within(dialog).getByText("第 2 步 · 基础信息")).toBeInTheDocument()
+    expect(within(dialog).getByLabelText(/显示名称/)).toHaveValue("Ollama")
+    expect(within(dialog).getByLabelText(/API 端点|Base URL/i)).toHaveValue("http://localhost:11434")
+  })
+
+  test("创建时 displayName 必填：清空后点下一步会提示且不进入验证步", async () => {
+    render(<SystemConnectionsPage />)
+    await screen.findByText("OpenAI")
+
+    await userEvent.click(within(getCard("ollama")).getByText("配置"))
+    const dialog = await screen.findByRole("dialog")
+
+    const nameInput = within(dialog).getByLabelText(/显示名称/)
+    await userEvent.clear(nameInput)
+
+    await userEvent.click(within(dialog).getByRole("button", { name: /下一步|继续/ }))
+
+    await waitFor(() => {
+      expect(toastSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: expect.stringMatching(/未完成|无法|必填/),
+        }),
+      )
+    })
+    expect(services.createSystemConnection).not.toHaveBeenCalled()
+  })
+
+  test("向导：填写后进入验证步 → 创建连接发送 displayName", async () => {
+    render(<SystemConnectionsPage />)
+    await screen.findByText("OpenAI")
+
+    await userEvent.click(within(getCard("ollama")).getByText("配置"))
+    const dialog = await screen.findByRole("dialog")
+
+    const nameInput = within(dialog).getByLabelText(/显示名称/)
+    await userEvent.clear(nameInput)
+    await userEvent.type(nameInput, "本地推理")
+
+    await userEvent.click(within(dialog).getByRole("button", { name: /下一步|继续/ }))
+
+    expect(await within(dialog).findByRole("button", { name: "创建连接" })).toBeInTheDocument()
 
     await userEvent.click(within(dialog).getByRole("button", { name: "创建连接" }))
 
@@ -186,24 +234,27 @@ describe("SystemConnectionsPage 模板卡 + Sheet 配置抽屉", () => {
     const payload = services.createSystemConnection.mock.calls[0][0] as Record<string, unknown>
     expect(payload).toEqual(
       expect.objectContaining({
+        displayName: "本地推理",
         provider: "ollama",
         baseUrl: "http://localhost:11434",
         authType: "none",
         connectionType: "external",
       }),
     )
-    // 创建成功后 Sheet 关闭
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
     })
   })
 
-  test("抽屉内点「验证连接」→ verifySystemConnection 被调", async () => {
+  test("抽屉内点「验证连接」→ verifySystemConnection 被调且含 displayName", async () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
     await userEvent.click(within(getCard("ollama")).getByText("配置"))
-    const dialog = await screen.findByRole("dialog")
+    let dialog = await screen.findByRole("dialog")
+
+    await userEvent.click(within(dialog).getByRole("button", { name: /下一步|继续/ }))
+    dialog = screen.getByRole("dialog")
 
     await userEvent.click(within(dialog).getByRole("button", { name: "验证连接" }))
 
@@ -211,31 +262,43 @@ describe("SystemConnectionsPage 模板卡 + Sheet 配置抽屉", () => {
       expect(services.verifySystemConnection).toHaveBeenCalledTimes(1)
     })
     const payload = services.verifySystemConnection.mock.calls[0][0] as Record<string, unknown>
-    expect(payload).toEqual(expect.objectContaining({ provider: "ollama" }))
+    expect(payload).toEqual(
+      expect.objectContaining({
+        provider: "ollama",
+        displayName: "Ollama",
+      }),
+    )
   })
 
-  test("关闭 Sheet 后表单重置（再开 OpenAI 卡 → provider 为 openai）", async () => {
+  test("「新建连接」打开向导第 1 步（选择供应商）", async () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
-    // 先打开 Ollama 卡，关闭后表单重置
+    await userEvent.click(screen.getByRole("button", { name: /新建连接/ }))
+    const dialog = await screen.findByRole("dialog")
+
+    expect(within(dialog).getByText("第 1 步 · 选择供应商")).toBeInTheDocument()
+    expect(within(dialog).getByRole("button", { name: /Ollama/ })).toBeInTheDocument()
+  })
+
+  test("关闭 Sheet 后表单重置（再开 OpenAI 卡 → displayName/端点预填）", async () => {
+    render(<SystemConnectionsPage />)
+    await screen.findByText("OpenAI")
+
     await userEvent.click(within(getCard("ollama")).getByText("配置"))
     let dialog = await screen.findByRole("dialog")
-    expect(within(dialog).getByLabelText("API 端点")).toHaveValue("http://localhost:11434")
+    expect(within(dialog).getByLabelText(/API 端点|Base URL/i)).toHaveValue("http://localhost:11434")
 
     await userEvent.click(within(dialog).getByRole("button", { name: "Close" }))
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
     })
 
-    // 再开 OpenAI 卡 → provider 为 openai，端点预填官方值
     await userEvent.click(within(getCard("openai")).getByText("配置"))
     dialog = await screen.findByRole("dialog")
 
-    expect(sheetHeading("OpenAI")).toBeInTheDocument()
-    expect(within(dialog).getByText("OpenAI")).toBeInTheDocument() // Provider Select 值
-    expect(within(dialog).getByLabelText("API 端点")).toHaveValue("https://api.openai.com/v1")
-    expect(within(dialog).getByLabelText("API Key")).toHaveValue("")
+    expect(within(dialog).getByLabelText(/显示名称/)).toHaveValue("OpenAI")
+    expect(within(dialog).getByLabelText(/API 端点|Base URL/i)).toHaveValue("https://api.openai.com/v1")
   })
 
   test("加载中渲染骨架（fetch 未返回时）", () => {
@@ -250,18 +313,30 @@ describe("SystemConnectionsPage 模板卡 + Sheet 配置抽屉", () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
-    // 卡片本身可点击打开
     await userEvent.click(getCard("google_genai"))
     expect(await screen.findByRole("dialog")).toBeInTheDocument()
-    expect(sheetHeading("Google")).toBeInTheDocument()
+    expect(within(screen.getByRole("dialog")).getByLabelText(/显示名称/)).toHaveValue("Google")
   })
 
-  test("高级管理内列表展开后保留编辑入口（连接行可见）", async () => {
+  test("列表编辑打开同一向导 Sheet，主屏含 displayName", async () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
     await userEvent.click(screen.getByRole("button", { name: /高级管理/ }))
-    expect(screen.getByText("https://api.openai.com/v1")).toBeInTheDocument()
-    expect(screen.getByText("http://localhost:11434")).toBeInTheDocument()
+    const editButtons = screen.getAllByRole("button", { name: /编辑/ })
+    await userEvent.click(editButtons[0])
+
+    const dialog = await screen.findByRole("dialog")
+    expect(within(dialog).getByLabelText(/显示名称/)).toHaveValue("官方 OpenAI")
+    expect(within(dialog).getByLabelText(/API 端点|Base URL/i)).toHaveValue("https://api.openai.com/v1")
+  })
+
+  test("高级管理内列表可见连接行（displayName）", async () => {
+    render(<SystemConnectionsPage />)
+    await screen.findByText("OpenAI")
+
+    await userEvent.click(screen.getByRole("button", { name: /高级管理/ }))
+    expect(screen.getByText("官方 OpenAI")).toBeInTheDocument()
+    expect(screen.getByText("本机 Ollama")).toBeInTheDocument()
   })
 })

@@ -13,6 +13,7 @@ import { CustomRequestEditor } from '@/components/chat/custom-request-editor'
 import { ModelSelector } from '@/components/model-selector'
 import { useModelsStore, type ModelItem } from '@/store/models-store'
 import { modelKeyFor } from '@/store/model-preference-store'
+import { formatModelSecondaryLabel } from '@/lib/model-display'
 import { useSettingsStore } from '@/store/settings-store'
 import { ChevronRight, X } from 'lucide-react'
 import type { JudgeConfig, ModelConfigState, UseBattleFlowReturn } from '../hooks/useBattleFlow'
@@ -122,7 +123,9 @@ export function ConfigStep({
                                         <div className="flex items-start justify-between gap-3">
                                             <div>
                                                 <div className="font-medium text-sm">{item.model.name}</div>
-                                                <div className="text-xs text-muted-foreground">{item.model.provider}</div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    {formatModelSecondaryLabel(item.model)}
+                                                </div>
                                             </div>
                                             <Button
                                                 variant="ghost"

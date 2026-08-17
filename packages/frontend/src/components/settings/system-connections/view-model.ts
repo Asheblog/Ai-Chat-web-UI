@@ -1,9 +1,9 @@
-import { deriveChannelName } from "@/lib/utils"
 import type { SystemConnectionGroup } from "@/services/system-connections"
 import { SPECIAL_VENDOR_DEEPSEEK, SPECIAL_VENDOR_OPENAI_INTERLEAVE } from "./constants"
 
 export type HealthState = "healthy" | "warning" | "error"
-export type DetailIntent = "view" | "create"
+export type WizardMode = "create" | "edit"
+export type WizardStep = 1 | 2 | 3
 export type EditorFocus = "basic" | "advanced" | "keys" | "verify"
 
 export const STATUS_FILTERS = [
@@ -88,15 +88,19 @@ export function filterConnections({
 
     if (!normalizedQuery) return true
     const searchable = [
+      group.displayName,
       providerLabel(group),
       group.provider,
       group.baseUrl,
       group.prefixId ?? "",
-      deriveChannelName(group.provider, group.baseUrl),
       ...group.tags.map((tag) => tag.name),
       ...group.apiKeys.map((key) => key.apiKeyLabel || ""),
     ]
     return searchable.some((value) => value.toLowerCase().includes(normalizedQuery))
   })
+}
+
+export function connectionSecondaryLine(group: SystemConnectionGroup) {
+  return `${providerLabel(group)} · ${group.baseUrl}`
 }
 

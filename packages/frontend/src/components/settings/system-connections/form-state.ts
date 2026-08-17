@@ -22,9 +22,11 @@ export interface ConnectionKeyFormState {
 }
 
 export interface ConnectionFormState {
+  displayName: string
   provider: string
   baseUrl: string
   authType: string
+  headers: string
   azureApiVersion: string
   prefixId: string
   tags: string
@@ -50,9 +52,11 @@ export const createEmptyKey = (index = 0): ConnectionKeyFormState => ({
 })
 
 export const DEFAULT_FORM: ConnectionFormState = {
+  displayName: "",
   provider: "openai",
   baseUrl: "",
   authType: "bearer",
+  headers: "",
   azureApiVersion: "",
   prefixId: "",
   tags: "",
@@ -76,6 +80,36 @@ const buildModelIds = (raw: string) => {
     .filter(Boolean)
 }
 
+const serializeHeaders = (headers?: Record<string, string> | null) => {
+  if (!headers || Object.keys(headers).length === 0) return ""
+  try {
+    return JSON.stringify(headers, null, 2)
+  } catch {
+    return ""
+  }
+}
+
+const parseHeaders = (raw: string): Record<string, string> | undefined => {
+  const trimmed = raw.trim()
+  if (!trimmed) return undefined
+  try {
+    const parsed = JSON.parse(trimmed) as unknown
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("headers must be an object")
+    }
+    const result: Record<string, string> = {}
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value !== "string") {
+        throw new Error("header values must be strings")
+      }
+      result[key] = value
+    }
+    return result
+  } catch {
+    throw new Error("Headers 需为 JSON 对象，例如 {\"X-Custom\":\"value\"}")
+  }
+}
+
 const mapProviderSelection = (
   value: string,
   editingVendor?: string | null,
@@ -96,11 +130,14 @@ export const buildPayload = (
   editingVendor?: string | null,
 ): SystemConnectionPayload => {
   const { provider, vendor } = mapProviderSelection(form.provider, editingVendor)
+  const headers = parseHeaders(form.headers)
   return {
+    displayName: form.displayName.trim(),
     provider,
     ...(vendor ? { vendor } : {}),
     baseUrl: form.baseUrl.trim(),
     authType: form.authType,
+    ...(headers ? { headers } : {}),
     azureApiVersion: form.azureApiVersion.trim() || undefined,
     prefixId: form.prefixId.trim() || undefined,
     tags: buildTags(form.tags),
@@ -123,9 +160,11 @@ export const createFormFromGroup = (group: SystemConnectionGroup): ConnectionFor
       : group.provider || "openai"
 
   return {
+    displayName: group.displayName || "",
     provider: providerSelection,
     baseUrl: group.baseUrl || "",
     authType: group.authType || "bearer",
+    headers: serializeHeaders(group.headers),
     azureApiVersion: group.azureApiVersion || "",
     prefixId: group.prefixId || "",
     tags: (group.tags || []).map((item) => item?.name).filter(Boolean).join(","),
@@ -148,9 +187,11 @@ export const createFormFromGroup = (group: SystemConnectionGroup): ConnectionFor
 
 export const createFormFromTemplate = (template: ProviderTemplate): ConnectionFormState => ({
   // openai_interleave 直接作 provider 值，沿用 mapProviderSelection 语义（其即 provider 选项值）
+  displayName: template.label,
   provider: template.provider,
   baseUrl: template.baseUrl,
   authType: template.authType,
+  headers: "",
   azureApiVersion: template.azureApiVersion ?? "",
   prefixId: "",
   tags: "",
@@ -159,8 +200,15 @@ export const createFormFromTemplate = (template: ProviderTemplate): ConnectionFo
 })
 
 export const validateForm = (form: ConnectionFormState, editing: SystemConnectionGroup | null) => {
+  if (!form.displayName.trim()) return "请填写显示名称"
   if (!form.baseUrl.trim()) return "请填写 Base URL"
   if (form.keys.length === 0) return "至少需要一个 API Key 条目"
+
+  try {
+    parseHeaders(form.headers)
+  } catch (error) {
+    return error instanceof Error ? error.message : "Headers 格式无效"
+  }
 
   for (let index = 0; index < form.keys.length; index += 1) {
     const key = form.keys[index]
@@ -176,3 +224,17 @@ export const validateForm = (form: ConnectionFormState, editing: SystemConnectio
   return null
 }
 
+/** 仅校验向导第 2 步基础字段（进入验证步前） */
+export const validateBasicFields = (form: ConnectionFormState) => {
+  if (!form.displayName.trim()) return "请填写显示名称"
+  if (!form.baseUrl.trim()) return "请填写 Base URL"
+  if (form.keys.length === 0) return "至少需要一个 API Key 条目"
+  for (let index = 0; index < form.keys.length; index += 1) {
+    const key = form.keys[index]
+    const label = key.apiKeyLabel.trim() || `Key ${index + 1}`
+    if (form.authType === "bearer" && !key.apiKey.trim() && !key.hasStoredApiKey) {
+      return `${label} 还没有可用的 API Key`
+    }
+  }
+  return null
+}

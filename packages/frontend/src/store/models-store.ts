@@ -6,6 +6,8 @@ export type ModelItem = {
   rawId: string
   name: string
   provider: string
+  /** Connection group display name (stable source label). */
+  displayName?: string
   channelName: string
   connectionBaseUrl: string
   connectionId: number

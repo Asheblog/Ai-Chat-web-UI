@@ -1,7 +1,8 @@
 import * as React from "react"
 import { ChevronDown } from "lucide-react"
 import type { ModelItem } from "@/store/models-store"
-import { cn, deriveChannelName } from "@/lib/utils"
+import { cn } from "@/lib/utils"
+import { formatModelSecondaryLabel } from "@/lib/model-display"
 import { Button } from "@/components/ui/button"
 
 interface ModelSelectorTriggerProps
@@ -16,9 +17,7 @@ export const ModelSelectorTrigger = React.forwardRef<
   React.ElementRef<typeof Button>,
   ModelSelectorTriggerProps
 >(({ open, selected, className, displayVariant, selectorSize, ...buttonProps }, ref) => {
-  const selectedSource = selected
-    ? `${selected.provider} · ${selected.channelName || deriveChannelName(selected.provider, selected.connectionBaseUrl)}`
-    : null
+  const selectedSource = selected ? formatModelSecondaryLabel(selected) : null
   const defaultSizeClass =
     selectorSize === "sm"
       ? "h-9 min-w-[180px] px-2.5"
@@ -51,7 +50,7 @@ export const ModelSelectorTrigger = React.forwardRef<
             <span className="block truncate text-sm font-medium">
               {selected ? selected.name : "选择模型"}
             </span>
-            {selected && (
+            {selected && selectedSource && (
               <span className="block truncate text-micro text-muted-foreground">
                 {selectedSource}
               </span>

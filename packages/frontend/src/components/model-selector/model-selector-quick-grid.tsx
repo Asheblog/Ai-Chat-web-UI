@@ -1,6 +1,10 @@
 import { Check } from "lucide-react"
 import type { ModelItem } from "@/store/models-store"
 import { cn } from "@/lib/utils"
+import {
+  collectDuplicateModelNames,
+  formatModelOptionLabel,
+} from "@/lib/model-display"
 import { modelKeyFor } from "@/store/model-preference-store"
 
 interface ModelSelectorQuickGridProps {
@@ -18,6 +22,8 @@ export function ModelSelectorQuickGrid({
     return null
   }
 
+  const duplicateNames = collectDuplicateModelNames(quickModels)
+
   return (
     <div className="border-b border-border/60 px-3 py-2.5">
       <div className="mb-2 flex items-center justify-between text-micro text-muted-foreground">
@@ -28,6 +34,9 @@ export function ModelSelectorQuickGrid({
         {quickModels.map((model) => {
           const key = modelKeyFor(model)
           const isActive = isModelSelected(model)
+          const accessibleLabel = formatModelOptionLabel(model)
+          const showDisplayName =
+            Boolean(model.displayName) && duplicateNames.has(model.name)
 
           return (
             <button
@@ -35,15 +44,22 @@ export function ModelSelectorQuickGrid({
               type="button"
               onClick={() => onSelectModel(model)}
               className={cn(
-                "inline-flex h-9 max-w-[210px] shrink-0 items-center gap-2 rounded-md border px-3 text-left text-xs transition-colors",
+                "inline-flex max-w-[210px] shrink-0 items-center gap-2 rounded-md border px-3 text-left text-xs transition-colors",
+                showDisplayName ? "min-h-9 py-1.5" : "h-9",
                 isActive
                   ? "border-primary/45 bg-primary/8 text-primary"
                   : "border-border/60 bg-background text-foreground hover:border-primary/35 hover:bg-primary/5"
               )}
-              title={model.name}
+              title={accessibleLabel}
+              aria-label={accessibleLabel}
             >
               <span className="min-w-0">
                 <span className="block truncate font-medium">{model.name}</span>
+                {showDisplayName && (
+                  <span className="block truncate text-micro text-muted-foreground">
+                    {model.displayName}
+                  </span>
+                )}
               </span>
               {isActive && <Check className="h-3.5 w-3.5 shrink-0" />}
             </button>
