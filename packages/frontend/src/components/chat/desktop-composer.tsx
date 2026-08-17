@@ -63,6 +63,8 @@ interface DesktopComposerProps {
   onTogglePythonTool: (value: boolean) => void
   canUsePythonTool: boolean
   pythonToolDisabledNote?: string
+  deepResearchEnabled: boolean
+  onToggleDeepResearch: (value: boolean) => void
   skillOptions: ComposerSkillOption[]
   onToggleSkillOption: (skillId: number, enabled: boolean) => void
   // MCP 绑定
@@ -126,6 +128,8 @@ export function DesktopComposer({
   onTogglePythonTool,
   canUsePythonTool,
   pythonToolDisabledNote,
+  deepResearchEnabled,
+  onToggleDeepResearch,
   skillOptions,
   onToggleSkillOption,
   mcpGlobalEnabled,
@@ -256,6 +260,8 @@ export function DesktopComposer({
                 onToggleWebSearch={onToggleWebSearch}
                 canUseWebSearch={canUseWebSearch}
                 webSearchDisabledNote={webSearchDisabledNote}
+                deepResearchEnabled={deepResearchEnabled}
+                onToggleDeepResearch={onToggleDeepResearch}
                 pythonToolEnabled={pythonToolEnabled}
                 onTogglePythonTool={onTogglePythonTool}
                 canUsePythonTool={canUsePythonTool}

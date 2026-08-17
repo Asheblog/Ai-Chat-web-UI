@@ -31,6 +31,7 @@ interface UseSendCommandParams {
   webSearchIncludeRaw?: boolean
   canUsePythonTool: boolean
   pythonToolEnabled: boolean
+  deepResearchEnabled?: boolean
   thinkingEnabled: boolean
   effort: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset'
   ollamaThink: boolean
@@ -73,6 +74,7 @@ export const useSendCommand = (params: UseSendCommandParams) => {
     webSearchIncludeRaw,
     canUsePythonTool,
     pythonToolEnabled,
+    deepResearchEnabled = false,
     thinkingEnabled,
     effort,
     ollamaThink,
@@ -135,6 +137,9 @@ export const useSendCommand = (params: UseSendCommandParams) => {
         : enabledExtraSkills
       const builtinSkills: string[] = []
       const skillOverrides: Record<string, Record<string, unknown>> = {}
+      if (deepResearchEnabled) {
+        builtinSkills.push('deep-research')
+      }
       if (webSearchEnabled && canUseWebSearch) {
         builtinSkills.push('web-search', 'url-reader')
         const webSearchOverride: Record<string, unknown> = {}
@@ -203,6 +208,7 @@ export const useSendCommand = (params: UseSendCommandParams) => {
     webSearchIncludeRaw,
     canUsePythonTool,
     pythonToolEnabled,
+    deepResearchEnabled,
     thinkingEnabled,
     effort,
     ollamaThink,

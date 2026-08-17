@@ -94,6 +94,8 @@ interface WelcomeFormProps {
       onTogglePythonTool: (value: boolean) => void
       canUsePythonTool: boolean
       pythonToolDisabledNote?: string
+      deepResearchEnabled: boolean
+      onToggleDeepResearch: (value: boolean) => void
       skillOptions: Array<{
         skillId: number
         versionId: number | null
@@ -250,6 +252,8 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
               onToggleWebSearch={advancedOptions.onToggleWebSearch}
               canUseWebSearch={advancedOptions.canUseWebSearch}
               webSearchDisabledNote={advancedOptions.webSearchDisabledNote}
+              deepResearchEnabled={advancedOptions.deepResearchEnabled}
+              onToggleDeepResearch={advancedOptions.onToggleDeepResearch}
               pythonToolEnabled={advancedOptions.pythonToolEnabled}
               onTogglePythonTool={advancedOptions.onTogglePythonTool}
               canUsePythonTool={advancedOptions.canUsePythonTool}

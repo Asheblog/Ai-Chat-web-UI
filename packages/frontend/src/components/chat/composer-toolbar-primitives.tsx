@@ -1,5 +1,5 @@
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
-import { BookOpen, Brain, Code2, Globe2 } from 'lucide-react'
+import { BookOpen, Brain, Code2, Globe2, Microscope } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export const composerInnerEditorClass =
@@ -95,6 +95,8 @@ interface ComposerFeatureControlsProps {
   onToggleWebSearch: (value: boolean) => void
   canUseWebSearch: boolean
   webSearchDisabledNote?: string
+  deepResearchEnabled: boolean
+  onToggleDeepResearch: (value: boolean) => void
   pythonToolEnabled: boolean
   onTogglePythonTool: (value: boolean) => void
   canUsePythonTool: boolean
@@ -112,6 +114,8 @@ export function ComposerFeatureControls({
   onToggleWebSearch,
   canUseWebSearch,
   webSearchDisabledNote,
+  deepResearchEnabled,
+  onToggleDeepResearch,
   pythonToolEnabled,
   onTogglePythonTool,
   canUsePythonTool,
@@ -155,6 +159,13 @@ export function ComposerFeatureControls({
         label="联网"
         title={!canUseWebSearch ? webSearchDisabledNote : undefined}
         onClick={() => onToggleWebSearch(!webSearchEnabled)}
+      />
+      <ComposerFeatureChip
+        active={deepResearchEnabled}
+        disabled={disabled}
+        icon={<Microscope className={composerToolbarIconClass} />}
+        label="深度研究"
+        onClick={() => onToggleDeepResearch(!deepResearchEnabled)}
       />
       <ComposerFeatureChip
         active={pythonToolEnabled}

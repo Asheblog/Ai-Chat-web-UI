@@ -32,6 +32,7 @@ const makeBaseParams = () => ({
   isMetasoEngine: false,
   canUsePythonTool: true,
   pythonToolEnabled: true,
+  deepResearchEnabled: false,
   thinkingEnabled: false,
   effort: 'unset' as const,
   ollamaThink: false,
@@ -186,6 +187,54 @@ describe('useSendCommand with workspace files', () => {
     expect(message).toContain('/workspace/input/x1y2z3.xlsx')
     // Should NOT include the error file
     expect(message).not.toContain('data.csv')
+  })
+})
+
+describe('useSendCommand deep research skill', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('includes deep-research in builtin skills when enabled', async () => {
+    const params = {
+      ...makeBaseParams(),
+      input: '研究一下量子计算',
+      pythonToolEnabled: false,
+      deepResearchEnabled: true,
+    }
+    const { result } = renderHook(() => useSendCommand(params))
+
+    await act(async () => {
+      await result.current()
+    })
+
+    expect(mockStreamMessage).toHaveBeenCalledOnce()
+    const options = mockStreamMessage.mock.calls[0][3] as {
+      skills?: { builtin?: string[] }
+    }
+    expect(options.skills?.builtin).toContain('deep-research')
+    expect(options.skills?.builtin ?? []).not.toContain('web-search')
+    expect(options.skills?.builtin ?? []).not.toContain('url-reader')
+  })
+
+  it('omits deep-research from builtin skills when disabled', async () => {
+    const params = {
+      ...makeBaseParams(),
+      input: '普通提问',
+      pythonToolEnabled: false,
+      deepResearchEnabled: false,
+    }
+    const { result } = renderHook(() => useSendCommand(params))
+
+    await act(async () => {
+      await result.current()
+    })
+
+    expect(mockStreamMessage).toHaveBeenCalledOnce()
+    const options = mockStreamMessage.mock.calls[0][3] as {
+      skills?: { builtin?: string[] }
+    }
+    expect(options.skills?.builtin ?? []).not.toContain('deep-research')
   })
 })
 

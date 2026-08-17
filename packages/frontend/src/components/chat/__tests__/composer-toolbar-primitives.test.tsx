@@ -33,6 +33,8 @@ describe('composer toolbar adaptive layout', () => {
           webSearchEnabled={false}
           onToggleWebSearch={() => undefined}
           canUseWebSearch
+          deepResearchEnabled={false}
+          onToggleDeepResearch={() => undefined}
           pythonToolEnabled={false}
           onTogglePythonTool={() => undefined}
           canUsePythonTool
@@ -46,5 +48,24 @@ describe('composer toolbar adaptive layout', () => {
     const python = screen.getByRole('button', { name: 'Python' })
     expect(python.className).toContain('composer-toolbar-btn')
     expect(python.querySelector('svg')?.getAttribute('class') ?? '').toContain('composer-toolbar-icon')
+  })
+
+  it('renders a deep research toggle between web search and Python', () => {
+    render(
+      <ComposerFeatureControls
+        thinkingEnabled={false}
+        onToggleThinking={() => undefined}
+        webSearchEnabled={false}
+        onToggleWebSearch={() => undefined}
+        canUseWebSearch
+        deepResearchEnabled={false}
+        onToggleDeepResearch={() => undefined}
+        pythonToolEnabled={false}
+        onTogglePythonTool={() => undefined}
+        canUsePythonTool
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: '深度研究' })).toBeInTheDocument()
   })
 })

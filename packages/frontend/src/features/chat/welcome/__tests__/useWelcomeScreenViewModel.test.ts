@@ -134,6 +134,10 @@ vi.mock('@/store/python-tool-preference-store', () => ({
   usePythonToolPreferenceStore: () => ({ lastSelection: null, setLastSelection: vi.fn() }),
 }))
 
+vi.mock('@/store/deep-research-preference-store', () => ({
+  useDeepResearchPreferenceStore: () => ({ lastSelection: null, setLastSelection: vi.fn() }),
+}))
+
 // --- Mock advanced request ---
 vi.mock('@/features/chat/composer', () => ({
   useAdvancedRequest: () => ({
