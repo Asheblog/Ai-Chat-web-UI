@@ -7,6 +7,7 @@ import { stripToolProgressFromReasoning } from './strip-tool-progress-from-reaso
 import type { ToolCallStatus } from './chat-stream-contract.js'
 import {
   describeTool,
+  describeToolEvent,
   mergeAndSortToolEvents,
   resolveEventStatus,
   resolveReasoningOffsetStart,
@@ -248,7 +249,7 @@ export const resolveToolDisplay = (tool?: string | null): ToolDisplayMeta => {
 
 export const buildToolStepTitle = (event: ToolEvent): string => {
   const toolId = event.identifier || event.apiName || event.tool
-  const { label } = resolveToolDisplay(toolId)
+  const label = describeToolEvent(event)
   const query =
     (typeof event.query === 'string' && event.query.trim()) ||
     (typeof event.details?.originalQuery === 'string' && event.details.originalQuery.trim()) ||

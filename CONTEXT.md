@@ -46,7 +46,7 @@
 
 ## 搜索
 
-- **Web Search（联网搜索）**：通过外部搜索引擎（tavily、brave、exa、metaso）检索网页；在各引擎能力范围内默认请求/解析结果配图（Tavily `include_images`、Exa `contents.extras.imageLinks`、Brave `thumbnail`、Metaso `imageUrl`/`thumbnail`），再经识图筛选；支持可选 `scope`（含 `image`）：Metaso 走图片域、Brave 调用独立图片搜索 API，Tavily/Exa 仍以网页结果中的配图为主；`scope=image` 时跳过自动读正文，但仍对 hit 配图做识图相关性筛选并把相关/弱相关图回传模型
+- **Web Search（联网搜索）**：通过外部搜索引擎（tavily、brave、exa、metaso）检索网页；在各引擎能力范围内默认请求/解析结果配图（Tavily `include_images`、Exa `contents.extras.imageLinks`、Brave `thumbnail`、Metaso `imageUrl`/`thumbnail`），再经识图筛选；支持可选 `scope`（含 `image`）：Metaso 走图片域、Brave 调用独立图片搜索 API；Tavily 在 `scope=image` 时开启 `include_image_descriptions` 并把响应顶层 `images`（query 相关图）合成为图片 hit；Exa 在 `scope=image` 时加大 `imageLinks` 并把页面代表图/页内图展平成图片 hit；`scope=image` 时跳过自动读正文，但仍对 hit 配图做识图相关性筛选并把相关/弱相关图回传模型；CoT/工具卡对 `scope=image` 展示为「图片检索」并标注「范围: 图片」
 - **Read URL（网页读取）**：抓取并解析指定 URL 的正文内容；会抽取页面候选图，并在图片转写代理就绪时做识图相关性判定
 - **Auto Read（自动读取）**：搜索完成后自动触发网页读取，读取搜索结果中的网页。在 UI 中归入其所属的搜索合并组内部；同样走网页图识图筛选
 - **Web Evidence Image（联网证据图）**：经识图判定为「相关 / 弱相关」后进入助手答案的网页配图；无关图丢弃，不进入答案区与模型主证据；来源包括搜索 hit 配图、图片域搜索结果与读页抽取图

@@ -246,6 +246,20 @@ export const describeTool = (tool?: string | null) => {
   return tool
 }
 
+/** 按工具事件细节解析展示名（例如 web_search + scope=image → 图片检索） */
+export const describeToolEvent = (event: {
+  tool?: string | null
+  identifier?: string | null
+  apiName?: string | null
+  details?: Record<string, unknown> | null
+}): string => {
+  const toolId = event.identifier || event.apiName || event.tool
+  if (toolId === 'web_search' && event.details?.scope === 'image') {
+    return '图片检索'
+  }
+  return describeTool(toolId)
+}
+
 export interface ToolTimelineSummary {
   total: number
   summaryText: string
@@ -265,7 +279,7 @@ export interface ToolTimelineSummary {
 export const buildToolSummary = (toolEvents?: ToolEvent[]): ToolTimelineSummary | null => {
   if (!toolEvents || toolEvents.length === 0) return null
 
-  const toolCounts = new Map<string, number>()
+  const labelCounts = new Map<string, number>()
   let successCount = 0
   let runningCount = 0
   let pendingCount = 0
@@ -278,8 +292,8 @@ export const buildToolSummary = (toolEvents?: ToolEvent[]): ToolTimelineSummary 
 
   toolEvents.forEach((event) => {
     const status = resolveEventStatus(event)
-    const toolName = event.identifier || event.apiName || event.tool
-    toolCounts.set(toolName, (toolCounts.get(toolName) || 0) + 1)
+    const label = describeToolEvent(event)
+    labelCounts.set(label, (labelCounts.get(label) || 0) + 1)
     if (status === 'success') successCount += 1
     else if (status === 'pending') pendingCount += 1
     else if (status === 'rejected') rejectedCount += 1
@@ -320,8 +334,8 @@ export const buildToolSummary = (toolEvents?: ToolEvent[]): ToolTimelineSummary 
     parts.push(`自动读取 ${readTaskCount} 次`)
   }
 
-  const labelParts = Array.from(toolCounts.entries()).map(
-    ([tool, count]) => `${describeTool(tool)} ${count} 次`,
+  const labelParts = Array.from(labelCounts.entries()).map(
+    ([label, count]) => `${label} ${count} 次`,
   )
 
   return {
