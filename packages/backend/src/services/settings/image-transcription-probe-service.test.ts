@@ -1,6 +1,16 @@
 import { ImageTranscriptionProbeService } from './image-transcription-probe-service'
 import type { VisionProxyService } from '../../modules/chat/services/vision-proxy-service'
 
+/** Independent PNG IHDR reader — do not import production helpers here. */
+const readPngSizeFromBase64 = (base64: string): { width: number; height: number } => {
+  const buffer = Buffer.from(base64, 'base64')
+  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  if (buffer.length < 24 || !buffer.subarray(0, 8).equals(signature) || buffer.toString('ascii', 12, 16) !== 'IHDR') {
+    throw new Error('not a PNG with IHDR')
+  }
+  return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) }
+}
+
 const createPrismaMock = (settings: Record<string, string>) =>
   ({
     systemSetting: {
@@ -51,6 +61,23 @@ describe('ImageTranscriptionProbeService', () => {
       expect.stringContaining('探针上下文：一张测试图片'),
       expect.objectContaining({ connectionId: 7, modelId: 'vision-test' }),
     )
+  })
+
+  it('uses a default probe image large enough for OpenCode Go / MiMo vision APIs', async () => {
+    // Production: 1x1 PNG is rejected with HTTP 400 "Invalid request parameters"; 32x32 succeeds.
+    const visionProxy = createVisionProxyMock()
+    visionProxy.transcribeImages.mockResolvedValue({ description: 'ok', modelRawId: 'vision-test' })
+    const service = new ImageTranscriptionProbeService({
+      prisma: createPrismaMock(readySettings),
+      visionProxy: visionProxy as unknown as VisionProxyService,
+    })
+
+    await service.probe()
+
+    const image = visionProxy.transcribeImages.mock.calls[0]?.[0]?.[0]
+    expect(image?.mime).toBe('image/png')
+    const size = readPngSizeFromBase64(image.data)
+    expect(size).toEqual({ width: 64, height: 64 })
   })
 
   it('stops after transcription fails and exposes the original error', async () => {

@@ -5,6 +5,7 @@ import { buildHeaders, type ProviderType, type AuthType } from '../../../utils/p
 import { convertChatCompletionsRequestToResponses, extractTextFromResponsesResponse } from '../../../utils/openai-responses'
 import { BackendLogger as log } from '../../../utils/logger'
 import { PrismaModelResolverRepository } from '../../../repositories/model-resolver-repository'
+import { ensureMinVisionImages } from './vision-image-prepare'
 
 export interface VisionProxyConfig {
   enabled: boolean
@@ -176,6 +177,7 @@ export class VisionProxyService {
     if (!Array.isArray(images) || images.length === 0) {
       throw new VisionProxyServiceError('没有可转写的图片', 400)
     }
+    const preparedImages = await ensureMinVisionImages(images)
     const resolver = new PrismaModelResolverRepository(this.prisma)
     const connection = await resolver.findResolvedConnectionById(config.connectionId!)
     if (!connection) {
@@ -206,7 +208,7 @@ export class VisionProxyService {
 
     const userText = `请描述以上图片。${question?.trim() ? `\n用户问题：${question.trim()}` : ''}`
     const parts: Array<Record<string, unknown>> = [{ type: 'text', text: userText }]
-    for (const image of images) {
+    for (const image of preparedImages) {
       parts.push({
         type: 'image_url',
         image_url: { url: `data:${image.mime};base64,${image.data}` },
@@ -233,7 +235,7 @@ export class VisionProxyService {
     if (provider === 'google_genai') {
       // Gemini generateContent 多模态格式：contents[].parts 内混排 text 与 inline_data
       const geminiParts: Array<Record<string, unknown>> = [{ text: userText }]
-      for (const image of images) {
+      for (const image of preparedImages) {
         geminiParts.push({
           inline_data: { mime_type: image.mime, data: image.data },
         })
@@ -260,7 +262,7 @@ export class VisionProxyService {
           {
             role: 'user',
             content: userText,
-            images: images.map((image) => image.data),
+            images: preparedImages.map((image) => image.data),
           },
         ],
         stream: false,

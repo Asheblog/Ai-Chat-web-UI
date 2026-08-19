@@ -6,6 +6,7 @@ import {
   type VisionProxyService,
 } from '../../modules/chat/services/vision-proxy-service'
 import { parseImageRelevance, RELEVANCE_PROMPT } from '../../utils/web-image-evidence'
+import { BUILT_IN_PROBE_IMAGE_BASE64, BUILT_IN_PROBE_IMAGE_MIME } from './vision-probe-image'
 
 export type ProbeStepName = 'transcribe' | 'relevance'
 
@@ -27,10 +28,6 @@ export interface ImageTranscriptionProbeServiceDeps {
   visionProxy: VisionProxyService
   now?: () => number
 }
-
-const BUILT_IN_PROBE_IMAGE_BASE64 =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL2iQAAAABJRU5ErkJggg=='
-const BUILT_IN_PROBE_IMAGE_MIME = 'image/png'
 
 const toDurationMs = (startedAt: number, now: () => number): number =>
   Math.max(0, Math.round(now() - startedAt))

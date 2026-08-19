@@ -189,6 +189,27 @@ describe('VisionProxyService.transcribeImages', () => {
     expect(body.messages[1].content[1].image_url.url).toContain('data:image/png;base64,')
   })
 
+  it('upscales 1x1 png before sending because OpenCode Go / MiMo reject tiny images', async () => {
+    mockResolvedGroup({
+      provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
+      headersJson: '', azureApiVersion: null,
+    })
+    const fetchFn = jest.fn().mockResolvedValue(okResponse({ choices: [{ message: { content: 'ok' } }] }))
+    const tinyPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL2iQAAAABJRU5ErkJggg=='
+    await new VisionProxyService({ prisma, fetchFn }).transcribeImages(
+      [{ data: tinyPng, mime: 'image/png' }],
+      '',
+      config,
+    )
+    const body = JSON.parse(fetchFn.mock.calls[0][1].body)
+    const dataUrl = body.messages[1].content[1].image_url.url as string
+    const payload = dataUrl.split(',')[1]
+    const buffer = Buffer.from(payload, 'base64')
+    expect(buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toBe(true)
+    expect(buffer.readUInt32BE(16)).toBeGreaterThanOrEqual(32)
+    expect(buffer.readUInt32BE(20)).toBeGreaterThanOrEqual(32)
+  })
+
   it('parses google_genai response', async () => {
     mockResolvedGroup({
       provider: 'google_genai', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', authType: 'bearer', secretVaultId: null,
