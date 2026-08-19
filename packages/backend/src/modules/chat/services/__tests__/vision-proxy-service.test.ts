@@ -381,6 +381,32 @@ describe('VisionProxyService.transcribeImages', () => {
     expect(body.think).toBeUndefined()
   })
 
+  it('maps AbortError to 转写模型请求超时', async () => {
+    mockResolvedGroup({
+      provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
+      headersJson: '', azureApiVersion: null,
+    })
+    const abort = Object.assign(new Error('The operation was aborted'), { name: 'AbortError' })
+    const fetchFn = jest.fn().mockRejectedValue(abort)
+    await expect(new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', config)).rejects.toMatchObject({
+      statusCode: 504,
+      message: '转写模型请求超时',
+    })
+  })
+
+  it('maps TimeoutError to 转写模型请求超时', async () => {
+    mockResolvedGroup({
+      provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
+      headersJson: '', azureApiVersion: null,
+    })
+    const timeout = Object.assign(new Error('The operation timed out'), { name: 'TimeoutError' })
+    const fetchFn = jest.fn().mockRejectedValue(timeout)
+    await expect(new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', config)).rejects.toMatchObject({
+      statusCode: 504,
+      message: '转写模型请求超时',
+    })
+  })
+
   it('includes thinking enabled for deepseek vendor when reasoningEnabled', async () => {
     mockResolvedGroup({
       provider: 'openai',

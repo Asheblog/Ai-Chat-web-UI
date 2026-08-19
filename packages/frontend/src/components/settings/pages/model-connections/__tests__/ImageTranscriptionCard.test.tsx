@@ -198,6 +198,13 @@ describe("ImageTranscriptionCard", () => {
     expect(screen.getByText("转写模型请求失败（HTTP 502）")).toBeInTheDocument()
   })
 
+  it("tells the user the probe can take 10–30 seconds", () => {
+    render(
+      <ImageTranscriptionCard settings={configuredSettings as any} update={vi.fn()} />,
+    )
+    expect(screen.getByText(/测试约 10–30 秒，请勿关闭页面/)).toBeInTheDocument()
+  })
+
   it("probe reject shows destructive toast", async () => {
     apiMocks.probeImageTranscription.mockRejectedValue(new Error("network down"))
 
@@ -211,6 +218,46 @@ describe("ImageTranscriptionCard", () => {
         expect.objectContaining({
           title: "测试失败",
           description: "network down",
+          variant: "destructive",
+        }),
+      )
+    })
+  })
+
+  it("maps gateway 504 to 转写模型请求超时", async () => {
+    const gatewayError = Object.assign(new Error("Request failed with status code 504"), {
+      response: { status: 504, data: "<html>504 Gateway Time-out</html>" },
+    })
+    apiMocks.probeImageTranscription.mockRejectedValue(gatewayError)
+
+    render(<ImageTranscriptionCard settings={configuredSettings as any} update={vi.fn()} />)
+    await userEvent.click(screen.getByRole("button", { name: "测试转写代理" }))
+
+    await waitFor(() => {
+      expect(toastSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "测试失败",
+          description: "转写模型请求超时",
+          variant: "destructive",
+        }),
+      )
+    })
+  })
+
+  it("maps axios timeout to 转写模型请求超时", async () => {
+    const timeoutError = Object.assign(new Error("timeout of 50000ms exceeded"), {
+      code: "ECONNABORTED",
+    })
+    apiMocks.probeImageTranscription.mockRejectedValue(timeoutError)
+
+    render(<ImageTranscriptionCard settings={configuredSettings as any} update={vi.fn()} />)
+    await userEvent.click(screen.getByRole("button", { name: "测试转写代理" }))
+
+    await waitFor(() => {
+      expect(toastSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "测试失败",
+          description: "转写模型请求超时",
           variant: "destructive",
         }),
       )

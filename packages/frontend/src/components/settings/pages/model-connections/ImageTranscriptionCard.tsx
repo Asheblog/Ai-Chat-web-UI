@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { Image as ImageIcon } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CardDescription, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -12,15 +11,13 @@ import { useToast } from "@/components/ui/use-toast"
 import { FeatureCard } from "@/components/settings/components/feature-card"
 import { SettingRow } from "@/components/settings/components/setting-row"
 import { useSystemConnections } from "@/components/settings/system-connections/use-system-connections"
-import {
-  probeImageTranscription,
-  type ImageTranscriptionProbeResult,
-} from "@/features/settings/api"
+import { probeImageTranscription, type ImageTranscriptionProbeResult } from "@/features/settings/api"
 import { useSystemSettings } from "@/hooks/use-system-settings"
 import { getAggregatedModels } from "@/features/system/api"
 import { deriveChannelName } from "@/lib/utils"
 import type { ModelItem } from "@/store/models-store"
 import type { SystemSettings } from "@/types"
+import { probeFailureMessage, ProbeResultPanel } from "./image-transcription-probe-result"
 
 const REASONING_EFFORT_OPTIONS = [
   { value: "unset", label: "unset" },
@@ -30,11 +27,6 @@ const REASONING_EFFORT_OPTIONS = [
   { value: "max", label: "max" },
   { value: "xhigh", label: "xhigh" },
 ] as const
-
-const STEP_LABELS: Record<string, string> = {
-  transcribe: "转写",
-  relevance: "相关性",
-}
 
 export interface ImageTranscriptionCardProps {
   settings: SystemSettings
@@ -100,13 +92,11 @@ export function ImageTranscriptionCard({ settings, update }: ImageTranscriptionC
       }
       setProbeResult(data)
     } catch (err: unknown) {
-      const maybe = err as {
-        response?: { data?: { error?: string } }
-        message?: string
-      }
-      const message =
-        maybe?.response?.data?.error || maybe?.message || "测试转写代理失败"
-      toast({ title: "测试失败", description: message, variant: "destructive" })
+      toast({
+        title: "测试失败",
+        description: probeFailureMessage(err),
+        variant: "destructive",
+      })
     } finally {
       setProbing(false)
     }
@@ -164,7 +154,7 @@ export function ImageTranscriptionCard({ settings, update }: ImageTranscriptionC
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <span className="text-xs text-muted-foreground">
-              开关默认关闭；需选择转写模型后生效。可一键验证转写与相关性链路。
+              开关默认关闭；需选择转写模型后生效。测试约 10–30 秒，请勿关闭页面。
             </span>
             <Button
               type="button"
@@ -211,44 +201,6 @@ export function ImageTranscriptionCard({ settings, update }: ImageTranscriptionC
         </Select>
       </SettingRow>
     </FeatureCard>
-  )
-}
-
-function ProbeResultPanel({ result }: { result: ImageTranscriptionProbeResult }) {
-  return (
-    <div className="space-y-2 rounded-lg border border-border/70 bg-card/50 p-3">
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-medium text-foreground">探针结果</span>
-        <Badge variant={result.ok ? "default" : "destructive"}>
-          {result.ok ? "成功" : "失败"}
-        </Badge>
-      </div>
-      <ul className="space-y-2">
-        {result.steps.map((step) => (
-          <li
-            key={step.name}
-            className="rounded-md border border-border/60 px-3 py-2 text-sm"
-          >
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium text-foreground">
-                {STEP_LABELS[step.name] ?? step.name}
-              </span>
-              <span className="text-xs text-muted-foreground">{step.name}</span>
-              <Badge variant={step.ok ? "outline" : "destructive"}>
-                {step.ok ? "通过" : "未通过"}
-              </Badge>
-              <span className="text-xs text-muted-foreground">{step.durationMs} ms</span>
-            </div>
-            {step.detail ? (
-              <p className="mt-1 break-words text-muted-foreground">{step.detail}</p>
-            ) : null}
-            {step.error ? (
-              <p className="mt-1 break-words text-destructive">{step.error}</p>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-    </div>
   )
 }
 

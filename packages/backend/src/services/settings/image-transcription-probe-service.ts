@@ -29,6 +29,9 @@ export interface ImageTranscriptionProbeServiceDeps {
   now?: () => number
 }
 
+/** Stay under typical reverse-proxy 60s; two probe calls run in parallel. */
+export const PROBE_STEP_TIMEOUT_MS = 40_000
+
 const toDurationMs = (startedAt: number, now: () => number): number =>
   Math.max(0, Math.round(now() - startedAt))
 
@@ -91,54 +94,53 @@ export class ImageTranscriptionProbeService {
     const imageBase64 = options.imageBase64 ?? BUILT_IN_PROBE_IMAGE_BASE64
     const mime = options.mime ?? BUILT_IN_PROBE_IMAGE_MIME
     const image = { data: imageBase64, mime }
-    const steps: ProbeStep[] = []
+    const probeConfig = {
+      ...config,
+      reasoningEnabled: false,
+      ollamaThink: false,
+    }
 
-    const transcribeStartedAt = this.now()
-    try {
+    // Connectivity check only: admin reasoning/high effort can take >60s and get cut by OpenResty.
+    const transcribePromise = this.runStep('transcribe', imageBase64, async () => {
       const result = await this.visionProxy.transcribeImages(
         [image],
         '探针：请简要描述图片。',
-        config,
+        probeConfig,
+        { timeoutMs: PROBE_STEP_TIMEOUT_MS },
       )
-      steps.push({
-        name: 'transcribe',
-        ok: true,
-        durationMs: toDurationMs(transcribeStartedAt, this.now),
-        detail: redactImageData(result.description, imageBase64),
-      })
-    } catch (error) {
-      steps.push({
-        name: 'transcribe',
-        ok: false,
-        durationMs: toDurationMs(transcribeStartedAt, this.now),
-        error: safeErrorMessage(error, imageBase64),
-      })
-      return { ok: false, steps }
-    }
-
-    const relevanceStartedAt = this.now()
-    try {
+      return redactImageData(result.description, imageBase64)
+    })
+    const relevancePromise = this.runStep('relevance', imageBase64, async () => {
       const result = await this.visionProxy.transcribeImages(
         [image],
         `${RELEVANCE_PROMPT}探针上下文：一张测试图片`,
-        config,
+        probeConfig,
+        { timeoutMs: PROBE_STEP_TIMEOUT_MS },
       )
       const parsed = parseImageRelevance(result.description)
-      steps.push({
-        name: 'relevance',
-        ok: true,
-        durationMs: toDurationMs(relevanceStartedAt, this.now),
-        detail: redactImageData(`${parsed.relevance}：${parsed.description}`, imageBase64),
-      })
-    } catch (error) {
-      steps.push({
-        name: 'relevance',
-        ok: false,
-        durationMs: toDurationMs(relevanceStartedAt, this.now),
-        error: safeErrorMessage(error, imageBase64),
-      })
-    }
+      return redactImageData(`${parsed.relevance}：${parsed.description}`, imageBase64)
+    })
 
+    const steps = await Promise.all([transcribePromise, relevancePromise])
     return { ok: steps.every((step) => step.ok), steps }
+  }
+
+  private async runStep(
+    name: ProbeStepName,
+    imageBase64: string,
+    work: () => Promise<string>,
+  ): Promise<ProbeStep> {
+    const startedAt = this.now()
+    try {
+      const detail = await work()
+      return { name, ok: true, durationMs: toDurationMs(startedAt, this.now), detail }
+    } catch (error) {
+      return {
+        name,
+        ok: false,
+        durationMs: toDurationMs(startedAt, this.now),
+        error: safeErrorMessage(error, imageBase64),
+      }
+    }
   }
 }

@@ -112,6 +112,15 @@ export function buildVisionAttachmentHint(count: number): string {
   return `[用户附件] 本消息含 ${n} 张图片。你无法直接看到图片，请先调用 analyze_visual_media 查看后再回答。`
 }
 
+const DEFAULT_TRANSCRIPTION_TIMEOUT_MS = 60_000
+
+function resolveTranscriptionTimeoutMs(timeoutMs?: number): number {
+  if (typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0) {
+    return Math.floor(timeoutMs)
+  }
+  return DEFAULT_TRANSCRIPTION_TIMEOUT_MS
+}
+
 export function parseStoredImageDescriptions(json: string | null | undefined): ImageDescription[] | null {
   if (!json) return null
   try {
@@ -170,6 +179,7 @@ export class VisionProxyService {
     images: Array<{ data: string; mime: string }>,
     question: string,
     config: VisionProxyConfig,
+    options?: { timeoutMs?: number },
   ): Promise<{ description: string; modelRawId: string }> {
     if (!isVisionProxyReady(config)) {
       throw new VisionProxyServiceError('图片转写代理未配置（请管理员在系统设置中配置转写模型）', 400)
@@ -296,7 +306,7 @@ export class VisionProxyService {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(60000),
+        signal: AbortSignal.timeout(resolveTranscriptionTimeoutMs(options?.timeoutMs)),
       })
       if (!response.ok) {
         const errorText = await response.text().catch(() => '')
@@ -347,6 +357,10 @@ export class VisionProxyService {
     } catch (error) {
       if (error instanceof VisionProxyServiceError) {
         throw error
+      }
+      const name = error instanceof Error ? error.name : ''
+      if (name === 'TimeoutError' || name === 'AbortError') {
+        throw new VisionProxyServiceError('转写模型请求超时', 504)
       }
       log.error('[vision-proxy] unexpected error', { error })
       throw new VisionProxyServiceError(

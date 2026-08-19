@@ -878,6 +878,8 @@ export type ImageTranscriptionProbeResult = {
   steps: ImageTranscriptionProbeStep[]
 }
 
+export const IMAGE_TRANSCRIPTION_PROBE_TIMEOUT_MS = 50_000
+
 export const probeImageTranscription = async (payload?: {
   imageBase64?: string
   mime?: string
@@ -885,6 +887,7 @@ export const probeImageTranscription = async (payload?: {
   const response = await client.post<ApiResponse<ImageTranscriptionProbeResult>>(
     '/settings/image-transcription/probe',
     payload ?? {},
+    { timeout: IMAGE_TRANSCRIPTION_PROBE_TIMEOUT_MS },
   )
   return response.data
 }

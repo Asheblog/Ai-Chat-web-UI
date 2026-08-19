@@ -1,4 +1,4 @@
-import { ImageTranscriptionProbeService } from './image-transcription-probe-service'
+import { ImageTranscriptionProbeService, PROBE_STEP_TIMEOUT_MS } from './image-transcription-probe-service'
 import type { VisionProxyService } from '../../modules/chat/services/vision-proxy-service'
 
 /** Independent PNG IHDR reader — do not import production helpers here. */
@@ -60,7 +60,55 @@ describe('ImageTranscriptionProbeService', () => {
       [expect.objectContaining({ mime: 'image/png' })],
       expect.stringContaining('探针上下文：一张测试图片'),
       expect.objectContaining({ connectionId: 7, modelId: 'vision-test' }),
+      { timeoutMs: PROBE_STEP_TIMEOUT_MS },
     )
+  })
+
+  it('disables reasoning on probe calls so OpenResty 60s gateways are not cut off', async () => {
+    const visionProxy = createVisionProxyMock()
+    visionProxy.transcribeImages.mockResolvedValue({ description: 'ok', modelRawId: 'vision-test' })
+    const service = new ImageTranscriptionProbeService({
+      prisma: createPrismaMock({
+        ...readySettings,
+        image_transcription_reasoning_enabled: 'true',
+        image_transcription_reasoning_effort: 'high',
+        image_transcription_ollama_think: 'true',
+      }),
+      visionProxy: visionProxy as unknown as VisionProxyService,
+    })
+
+    await service.probe()
+
+    expect(visionProxy.transcribeImages).toHaveBeenCalledTimes(2)
+    for (const call of visionProxy.transcribeImages.mock.calls) {
+      expect(call[2]).toEqual(
+        expect.objectContaining({
+          reasoningEnabled: false,
+          ollamaThink: false,
+        }),
+      )
+    }
+  })
+
+  it('runs transcribe and relevance in parallel so wall time is one upstream call', async () => {
+    const visionProxy = createVisionProxyMock()
+    let inFlight = 0
+    let maxInFlight = 0
+    visionProxy.transcribeImages.mockImplementation(async () => {
+      inFlight += 1
+      maxInFlight = Math.max(maxInFlight, inFlight)
+      await Promise.resolve()
+      inFlight -= 1
+      return { description: 'ok', modelRawId: 'vision-test' }
+    })
+    const service = new ImageTranscriptionProbeService({
+      prisma: createPrismaMock(readySettings),
+      visionProxy: visionProxy as unknown as VisionProxyService,
+    })
+
+    await service.probe()
+
+    expect(maxInFlight).toBe(2)
   })
 
   it('uses a default probe image large enough for OpenCode Go / MiMo vision APIs', async () => {
@@ -80,9 +128,10 @@ describe('ImageTranscriptionProbeService', () => {
     expect(size).toEqual({ width: 64, height: 64 })
   })
 
-  it('stops after transcription fails and exposes the original error', async () => {
+  it('still reports transcription failure when relevance is run in parallel', async () => {
     const visionProxy = createVisionProxyMock()
     visionProxy.transcribeImages.mockRejectedValueOnce(new Error('转写模型请求失败（HTTP 502）'))
+    visionProxy.transcribeImages.mockResolvedValueOnce({ description: '{"relevance":"related","description":"ok"}', modelRawId: 'vision-test' })
     const service = new ImageTranscriptionProbeService({
       prisma: createPrismaMock(readySettings),
       visionProxy: visionProxy as unknown as VisionProxyService,
@@ -90,17 +139,17 @@ describe('ImageTranscriptionProbeService', () => {
 
     const result = await service.probe()
 
-    expect(result).toEqual({
-      ok: false,
-      steps: [
+    expect(result.ok).toBe(false)
+    expect(result.steps).toEqual(
+      expect.arrayContaining([
         expect.objectContaining({
           name: 'transcribe',
           ok: false,
           error: '转写模型请求失败（HTTP 502）',
         }),
-      ],
-    })
-    expect(visionProxy.transcribeImages).toHaveBeenCalledTimes(1)
+      ]),
+    )
+    expect(visionProxy.transcribeImages).toHaveBeenCalledTimes(2)
   })
 
   it('returns a structured failed step when the proxy is not configured', async () => {
