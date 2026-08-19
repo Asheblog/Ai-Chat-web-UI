@@ -109,8 +109,6 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
 
   return (
     <AuthFormLayout
-      title="登录"
-      description="登录账号以继续使用"
       error={
         errorMessage ? (
           <span className="flex items-center gap-2">
