@@ -52,6 +52,7 @@
 - **Web Evidence Image（联网证据图）**：经识图判定为「相关 / 弱相关」后进入助手答案的网页配图；无关图丢弃，不进入答案区与模型主证据；来源包括搜索 hit 配图、图片域搜索结果与读页抽取图
 - **Evidence Stack Layout（上文下图）**：含联网证据图时，助手消息采用正文在上、相关图片横排在下的 `stack` 布局（`data-render-mode=evidence-stack`）；AI 生图仍可用侧栏并排
 - **Illustrated Research Report（图文研究报告）**：深度研究最终 Markdown 可在正文嵌入经筛选的证据图；`export_pdf` 可选 `images` 参数仅下载模型声明的公网图片 URL，内嵌为 `data:` URL 写入 HTML/PDF（figure/figcaption），禁止 PDF 渲染时任意外联远程图
+- **Playwright-managed Chromium（托管 Chromium）**：`export_pdf` 与可选的 URL Reader 浏览器回退使用与 `playwright-core` 版本匹配的 Chromium（镜像内 `PLAYWRIGHT_BROWSERS_PATH`）；不默认依赖发行版 apt `/usr/bin/chromium`（容器中常因 CDP 不兼容而启动失败）；仅在显式配置非系统路径或 Playwright 浏览器缺失时回退系统 Chrome/Chromium
 - **搜索批次**：同一轮搜索任务下发起的搜索调用集合，在工具区块内合并展示
 - **并行搜索**：多个搜索引擎同时查询，属于同一批次
 

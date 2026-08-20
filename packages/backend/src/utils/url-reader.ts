@@ -6,10 +6,13 @@
 
 import { JSDOM } from 'jsdom'
 import { Readability } from '@mozilla/readability'
-import { existsSync } from 'node:fs'
 import { isIP } from 'node:net'
 import path from 'node:path'
 import { BackendLogger as log } from './logger'
+import {
+  readPlaywrightChromiumExecutablePath,
+  resolveBrowserExecutablePath as resolveSharedBrowserExecutablePath,
+} from './browser-executable'
 
 export type UrlReadErrorCode =
   | 'INVALID_URL'
@@ -1311,50 +1314,19 @@ const clampBrowserWaitMs = (value?: number): number => {
   return Math.max(0, Math.min(MAX_BROWSER_WAIT_MS, Math.floor(value as number)))
 }
 
-const windowsBrowserCandidates = (): string[] => {
-  const roots = [
-    process.env.PROGRAMFILES,
-    process.env['PROGRAMFILES(X86)'],
-    process.env.LOCALAPPDATA,
-  ].filter(Boolean) as string[]
-  return roots.flatMap((root) => [
-    path.join(root, 'Google', 'Chrome', 'Application', 'chrome.exe'),
-    path.join(root, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
-  ])
-}
-
-const wslBrowserCandidates = [
-  '/mnt/c/Program Files/Google/Chrome/Application/chrome.exe',
-  '/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-  '/mnt/c/Program Files/Microsoft/Edge/Application/msedge.exe',
-  '/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-]
-
-const linuxBrowserCandidates = [
-  '/usr/bin/chromium',
-  '/usr/bin/chromium-browser',
-  '/usr/bin/google-chrome',
-  '/usr/bin/google-chrome-stable',
-  '/usr/bin/microsoft-edge',
-  '/snap/bin/chromium',
-]
-
 const resolveBrowserExecutablePath = (explicitPath?: string): string | undefined => {
-  const candidates = [
+  let playwrightPath: string | undefined
+  try {
+    // Lazy import keeps unit tests that mock playwright-core lightweight.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const playwright = require('playwright-core') as { chromium?: { executablePath?: () => string } }
+    playwrightPath = readPlaywrightChromiumExecutablePath(playwright.chromium)
+  } catch {
+    playwrightPath = undefined
+  }
+  return resolveSharedBrowserExecutablePath({
     explicitPath,
-    process.env.URL_READER_BROWSER_EXECUTABLE_PATH,
-    process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
-    process.env.CHROME_PATH,
-    ...linuxBrowserCandidates,
-    ...wslBrowserCandidates,
-    ...windowsBrowserCandidates(),
-  ].filter(Boolean) as string[]
-  return candidates.find((candidate) => {
-    try {
-      return existsSync(candidate)
-    } catch {
-      return false
-    }
+    playwrightExecutablePath: playwrightPath,
   })
 }
 

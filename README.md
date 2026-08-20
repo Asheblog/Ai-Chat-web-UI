@@ -9,7 +9,7 @@
 ## ✨ 功能亮点
 
 - **多模型统一接入**：OpenAI 兼容、OpenAI Responses、Azure OpenAI、Ollama、Google Gemini 五大协议，DeepSeek / GLM / Qwen / GPT 等模型一次配置、随时切换，上下文窗口与能力自动识别
-- **原生工具链**：联网搜索（Tavily / Brave / Exa / Metaso，并行多引擎）、网页读取（本地多引擎 + 浏览器渲染 fallback）、Python 沙箱执行、RAG 知识库与文档解析
+- **原生工具链**：联网搜索（Tavily / Brave / Exa / Metaso，并行多引擎）、网页读取（本地多引擎 + 浏览器渲染 fallback）、Python 沙箱执行、深度研究（计划确认 → 举证 → `export_pdf`）、RAG 知识库与文档解析
 - **图片转写代理（Vision Transcription Proxy）**：DeepSeek、GLM 等纯文本模型也能「看图」——发送图片时自动转交管理员指定的识图模型转写为文字描述并注入主模型；工具流 / 自动转写两种模式自动判定，转写结果持久化复用
 - **Skill 插件系统**：内置 Skill + GitHub 第三方 Skill 的安装、审批、激活、会话绑定与审计；可执行型第三方 Skill 强制沙箱隔离、能力按声明授权
 - **Workspace Agent**：会话级 Docker 隔离沙箱，内置受管 Python 运行时（缺库自动安装）、文件读写、Git 克隆；并发槽位排队、超时自动杀容器回收
@@ -25,7 +25,7 @@
 ### 前置要求
 
 - Docker 20.0+ 与 Docker Compose 2.0+
-- 内存 ≥ 2GB，磁盘 ≥ 1GB
+- 内存 ≥ 2GB，磁盘 ≥ 2GB（镜像含 Playwright Chromium，供深度研究 PDF / 网页渲染使用）
 
 ### 1) 准备环境变量
 

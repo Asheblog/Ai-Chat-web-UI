@@ -17,6 +17,7 @@ import {
   renderMarkdownToPdfFile,
 } from '../../../services/reports/pdf-report-service'
 import { readRemoteImages } from '../../../utils/remote-image-reader'
+import { BackendLogger as log } from '../../../utils/logger'
 import type {
   IToolHandler,
   PdfExportHandlerConfig,
@@ -269,13 +270,18 @@ export class ExportPdfToolHandler implements IToolHandler {
       const renderPdf = this.config.renderPdf ?? renderMarkdownToPdfFile
       const result = await renderPdf(markdown, pdfPath, {
         title,
-        browserExecutablePath: this.config.browserExecutablePath,
+        executablePath: this.config.browserExecutablePath,
         imageSources,
       })
       pdfGenerated = result.sizeBytes > 0
     } catch (error) {
       pdfError = error instanceof Error ? error.message : 'Chromium PDF 渲染失败'
       await fs.rm(pdfPath, { force: true }).catch(() => {})
+      log.error('export_pdf: Chromium PDF render failed', {
+        title,
+        sessionId: context.sessionId,
+        pdfError,
+      })
       context.sendToolEvent({
         id: callId,
         tool: this.toolName,

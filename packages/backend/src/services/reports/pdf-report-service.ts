@@ -2,16 +2,18 @@
  * PDF report renderer for deep research reports.
  *
  * Markdown -> print-oriented HTML -> Chromium page.pdf().
- * Uses playwright-core with an explicit system Chromium executable in
- * production; development environments can point the executable path through
- * DEEP_RESEARCH_PDF_CHROMIUM_EXECUTABLE or the existing
- * URL_READER_BROWSER_EXECUTABLE_PATH variable.
+ * Uses playwright-core. Prefer Playwright-managed Chromium (installed in the
+ * Docker image under PLAYWRIGHT_BROWSERS_PATH); optional overrides:
+ * DEEP_RESEARCH_PDF_CHROMIUM_EXECUTABLE / URL_READER_BROWSER_EXECUTABLE_PATH.
  */
 
 import fs from 'node:fs/promises'
-import { existsSync } from 'node:fs'
 import MarkdownIt from 'markdown-it'
 import { chromium } from 'playwright-core'
+import {
+  readPlaywrightChromiumExecutablePath,
+  resolveBrowserExecutablePath,
+} from '../../utils/browser-executable'
 
 const md = new MarkdownIt({
   html: false,
@@ -78,6 +80,7 @@ interface PdfBrowserLike {
 }
 
 type PdfChromiumLike = {
+  executablePath?: () => string
   launch(options: {
     executablePath?: string
     headless?: boolean
@@ -242,20 +245,19 @@ export const buildReportHtml = (input: ReportHtmlInput): string => {
 </html>`
 }
 
-const resolveExecutablePath = (explicit?: string): string | undefined => {
-  const candidates = [
-    explicit,
-    process.env.DEEP_RESEARCH_PDF_CHROMIUM_EXECUTABLE,
-    process.env.URL_READER_BROWSER_EXECUTABLE_PATH,
-    process.platform === 'linux' ? '/usr/bin/chromium' : undefined,
-  ]
-  for (const candidate of candidates) {
-    const normalized = (candidate || '').trim()
-    if (normalized && existsSync(normalized)) {
-      return normalized
-    }
-  }
-  return undefined
+const resolveExecutablePath = (
+  explicit?: string,
+  chromiumLike: PdfChromiumLike = chromium,
+): string | undefined => {
+  const playwrightPath = readPlaywrightChromiumExecutablePath(chromiumLike)
+  const resolved = resolveBrowserExecutablePath({
+    explicitPath: explicit,
+    playwrightExecutablePath: playwrightPath,
+  })
+  if (resolved) return resolved
+  throw new Error(
+    'Chromium executable unavailable for PDF rendering: install Playwright Chromium in the image, or set DEEP_RESEARCH_PDF_CHROMIUM_EXECUTABLE / URL_READER_BROWSER_EXECUTABLE_PATH',
+  )
 }
 
 export const renderHtmlToPdfBuffer = async (
@@ -265,10 +267,17 @@ export const renderHtmlToPdfBuffer = async (
     chromiumLike?: PdfChromiumLike
   } = {},
 ): Promise<Buffer> => {
-  const browser = await (options.chromiumLike ?? chromium).launch({
+  const chromiumLike = options.chromiumLike ?? chromium
+  const executablePath = resolveExecutablePath(options.executablePath, chromiumLike)
+  const browser = await chromiumLike.launch({
     headless: true,
-    executablePath: resolveExecutablePath(options.executablePath),
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+    executablePath,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+    ],
   })
 
   try {

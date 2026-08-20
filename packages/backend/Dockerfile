@@ -6,7 +6,7 @@ ENV NODE_ENV=production
 ENV PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x"
 ENV DATABASE_URL="file:/app/data/app.db"
 ENV APP_DATA_DIR="/app/data"
-ENV URL_READER_BROWSER_EXECUTABLE_PATH="/usr/bin/chromium"
+ENV PLAYWRIGHT_BROWSERS_PATH="/ms-playwright"
 
 # 安装必要的系统依赖（最小化安装）
 RUN apt-get update && \
@@ -90,6 +90,8 @@ ENV NODE_ENV=production
 ENV PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x"
 ENV DATABASE_URL="file:/app/data/app.db"
 ENV APP_DATA_DIR="/app/data"
+# Playwright-managed Chromium lives here; prefer it over apt chromium for CDP stability.
+ENV PLAYWRIGHT_BROWSERS_PATH="/ms-playwright"
 
 # 只安装运行时必需的系统依赖
 RUN apt-get update && \
@@ -99,7 +101,6 @@ RUN apt-get update && \
         dumb-init \
         docker.io \
         git \
-        chromium \
         fonts-noto-cjk \
         python3 \
         python3-venv \
@@ -121,6 +122,12 @@ COPY --from=build --chown=backend:nodejs /app/node_modules /app/node_modules
 COPY --from=build --chown=backend:nodejs /app/pnpm-workspace.yaml /app/pnpm-workspace.yaml
 COPY --from=build --chown=backend:nodejs /app/packages/shared /app/packages/shared
 COPY --from=build --chown=backend:nodejs /app/packages/backend /app/packages/backend
+
+# Install Playwright Chromium matching playwright-core (used by export_pdf + url reader).
+# Prefer this over apt `/usr/bin/chromium`, which often fails CDP launch in containers.
+RUN cd /app/packages/backend && \
+    node -e "const {spawnSync}=require('child_process'); const cli=require.resolve('playwright-core/cli.js'); const r=spawnSync(process.execPath,[cli,'install','--with-deps','chromium'],{stdio:'inherit'}); process.exit(r.status ?? 1)" && \
+    chown -R backend:nodejs /ms-playwright
 
 # 创建数据和日志目录
 RUN mkdir -p /app/data /app/logs && \

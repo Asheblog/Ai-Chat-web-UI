@@ -106,6 +106,7 @@ describe('ExportPdfToolHandler', () => {
 
   it('falls back to markdown/html artifacts when pdf rendering fails', async () => {
     const filesSeen: Array<{ absolutePath: string; relativePath: string }> = []
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
     setWorkspaceService({
       ensureWorkspace: async (sessionId: number) => ({
         sessionId,
@@ -133,20 +134,24 @@ describe('ExportPdfToolHandler', () => {
       },
     } as any)
 
-    const handler = new ExportPdfToolHandler({
-      enabled: true,
-      renderPdf: async () => {
-        throw new Error('no chromium')
-      },
-    })
-    const result = await handler.handle(
-      { id: 'call_3', function: { name: 'export_pdf', arguments: '{}' } },
-      { title: 'Fallback', markdown: '# Fallback' },
-      baseContext as any,
-    )
+    try {
+      const handler = new ExportPdfToolHandler({
+        enabled: true,
+        renderPdf: async () => {
+          throw new Error('no chromium')
+        },
+      })
+      const result = await handler.handle(
+        { id: 'call_3', function: { name: 'export_pdf', arguments: '{}' } },
+        { title: 'Fallback', markdown: '# Fallback' },
+        baseContext as any,
+      )
 
-    expect(filesSeen.some((file) => file.relativePath.endsWith('.pdf'))).toBe(false)
-    expect(filesSeen.some((file) => file.relativePath.endsWith('.html'))).toBe(true)
-    expect(result.message.content).toContain('"pdf_generated":false')
+      expect(filesSeen.some((file) => file.relativePath.endsWith('.pdf'))).toBe(false)
+      expect(filesSeen.some((file) => file.relativePath.endsWith('.html'))).toBe(true)
+      expect(result.message.content).toContain('"pdf_generated":false')
+    } finally {
+      errorSpy.mockRestore()
+    }
   })
 })

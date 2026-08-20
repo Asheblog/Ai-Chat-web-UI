@@ -7,7 +7,7 @@
 - Docker 20.0+
 - Docker Compose 2.0+
 - 至少2GB可用内存
-- 至少1GB可用磁盘空间
+- 至少2GB可用磁盘空间（生产镜像含 Playwright Chromium，供深度研究 PDF / URL Reader 浏览器回退）
 
 ### 一键启动
 

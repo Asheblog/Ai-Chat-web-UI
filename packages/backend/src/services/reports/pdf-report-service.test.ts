@@ -1,3 +1,6 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import {
   buildReportHtml,
   renderHtmlToPdfBuffer,
@@ -41,7 +44,10 @@ describe('pdf-report-service', () => {
     const pdfBytes = Buffer.from('%PDF-1.4\nfake')
     let closed = false
     const setContent = jest.fn().mockResolvedValue(undefined)
+    const fakeChrome = path.join(os.tmpdir(), `aichat-pdf-chrome-${Date.now()}`)
+    fs.writeFileSync(fakeChrome, 'chrome')
     const chromiumLike = {
+      executablePath: () => fakeChrome,
       launch: jest.fn().mockResolvedValue({
         newContext: jest.fn().mockResolvedValue({
           newPage: jest.fn().mockResolvedValue({
@@ -55,12 +61,48 @@ describe('pdf-report-service', () => {
       }),
     }
 
-    const result = await renderHtmlToPdfBuffer('<html></html>', {
-      chromiumLike: chromiumLike as any,
-    })
+    try {
+      const result = await renderHtmlToPdfBuffer('<html></html>', {
+        chromiumLike: chromiumLike as any,
+      })
 
-    expect(result.toString('utf8')).toContain('%PDF')
-    expect(setContent).toHaveBeenCalledWith('<html></html>', { waitUntil: 'load', timeout: 30_000 })
-    expect(closed).toBe(true)
+      expect(result.toString('utf8')).toContain('%PDF')
+      expect(chromiumLike.launch).toHaveBeenCalledWith(
+        expect.objectContaining({ executablePath: fakeChrome }),
+      )
+      expect(setContent).toHaveBeenCalledWith('<html></html>', { waitUntil: 'load', timeout: 30_000 })
+      expect(closed).toBe(true)
+    } finally {
+      fs.rmSync(fakeChrome, { force: true })
+    }
+  })
+
+  it('accepts an explicit executablePath for launch', async () => {
+    const pdfBytes = Buffer.from('%PDF-1.4\nfake')
+    const fakeChrome = path.join(os.tmpdir(), `aichat-pdf-alias-${Date.now()}`)
+    fs.writeFileSync(fakeChrome, 'chrome')
+    const chromiumLike = {
+      launch: jest.fn().mockResolvedValue({
+        newContext: jest.fn().mockResolvedValue({
+          newPage: jest.fn().mockResolvedValue({
+            setContent: jest.fn().mockResolvedValue(undefined),
+            pdf: jest.fn().mockResolvedValue(pdfBytes),
+          }),
+        }),
+        close: jest.fn().mockResolvedValue(undefined),
+      }),
+    }
+
+    try {
+      await renderHtmlToPdfBuffer('<html></html>', {
+        executablePath: fakeChrome,
+        chromiumLike: chromiumLike as any,
+      })
+      expect(chromiumLike.launch).toHaveBeenCalledWith(
+        expect.objectContaining({ executablePath: fakeChrome }),
+      )
+    } finally {
+      fs.rmSync(fakeChrome, { force: true })
+    }
   })
 })

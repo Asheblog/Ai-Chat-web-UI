@@ -65,7 +65,9 @@ services:
       - URL_READER_MAX_CONTENT_LENGTH=${URL_READER_MAX_CONTENT_LENGTH:-100000}
       - URL_READER_MAX_BODY_BYTES=${URL_READER_MAX_BODY_BYTES:-8388608}
       - URL_READER_BROWSER_ENABLE=${URL_READER_BROWSER_ENABLE:-true}
-      - URL_READER_BROWSER_EXECUTABLE_PATH=${URL_READER_BROWSER_EXECUTABLE_PATH:-/usr/bin/chromium}
+      # Leave empty to prefer Playwright-managed Chromium installed in the image.
+      # Set explicitly only when you intentionally want a custom Chrome/Chromium binary.
+      - URL_READER_BROWSER_EXECUTABLE_PATH=${URL_READER_BROWSER_EXECUTABLE_PATH:-}
       - URL_READER_RENDER_WAIT_MS=${URL_READER_RENDER_WAIT_MS:-1200}
       - NEXT_PUBLIC_API_URL=/api
       - BACKEND_HOST=127.0.0.1

@@ -205,11 +205,12 @@ src/
 ### 构建镜像
 
 ```bash
-# 生产环境构建
-docker build -t aichat-backend .
+# 在仓库根目录构建（context 必须是 monorepo 根）
+# 生产镜像会安装与 playwright-core 匹配的 Chromium（PLAYWRIGHT_BROWSERS_PATH=/ms-playwright）
+docker build -f packages/backend/Dockerfile --target production -t aichat-backend:local .
 
-# 开发环境构建
-docker build --target development -t aichat-backend:dev .
+# 开发阶段镜像
+docker build -f packages/backend/Dockerfile --target development -t aichat-backend:dev .
 ```
 
 ### 运行容器

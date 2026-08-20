@@ -30,7 +30,8 @@ research, reads source pages, writes a cited Markdown report, and calls the new
    - emits tool events and the existing `artifact` stream event.
 4. PDF exporter:
    - `markdown-it` converts report Markdown to print-oriented HTML;
-   - `playwright-core` + system Chromium renders `page.pdf()`;
+   - `playwright-core` + Playwright-managed Chromium (installed in the Docker
+     image under `PLAYWRIGHT_BROWSERS_PATH`) renders `page.pdf()`;
    - deterministic HTML template with print CSS.
 5. Production Docker: install CJK fonts (`fonts-noto-cjk`) so Chinese reports
    render correctly.

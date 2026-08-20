@@ -1,5 +1,6 @@
 declare module 'playwright-core' {
   export const chromium: {
+    executablePath(): string
     launch(options: {
       executablePath?: string
       headless?: boolean
