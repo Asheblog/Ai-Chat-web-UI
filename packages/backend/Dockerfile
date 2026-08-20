@@ -125,8 +125,9 @@ COPY --from=build --chown=backend:nodejs /app/packages/backend /app/packages/bac
 
 # Install Playwright Chromium matching playwright-core (used by export_pdf + url reader).
 # Prefer this over apt `/usr/bin/chromium`, which often fails CDP launch in containers.
+# cli.js is not in package "exports"; resolve via package.json then join.
 RUN cd /app/packages/backend && \
-    node -e "const {spawnSync}=require('child_process'); const cli=require.resolve('playwright-core/cli.js'); const r=spawnSync(process.execPath,[cli,'install','--with-deps','chromium'],{stdio:'inherit'}); process.exit(r.status ?? 1)" && \
+    node -e "const {spawnSync}=require('child_process'); const path=require('path'); const cli=path.join(path.dirname(require.resolve('playwright-core/package.json')),'cli.js'); const r=spawnSync(process.execPath,[cli,'install','--with-deps','chromium'],{stdio:'inherit'}); process.exit(r.status ?? 1)" && \
     chown -R backend:nodejs /ms-playwright
 
 # 创建数据和日志目录
