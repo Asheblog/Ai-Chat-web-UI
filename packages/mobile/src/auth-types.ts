@@ -1,10 +1,7 @@
-export type MobileUser = {
-  id: number;
-  username: string;
-  role: "ADMIN" | "USER";
-  status: "PENDING" | "ACTIVE" | "DISABLED";
-  avatarUrl?: string | null;
-};
+import type { AuthUser } from "@aichat/shared/api-contract";
+
+// 移动端用户视图与 shared AuthUser 保持一致（额外字段为可选，不影响消费）。
+export type MobileUser = AuthUser;
 
 export type AuthSession = {
   token: string;

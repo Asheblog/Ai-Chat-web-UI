@@ -1,4 +1,5 @@
 import type { ToolEvent } from "@aichat/shared/tool-events";
+import type { Pagination } from "@aichat/shared/api-contract";
 
 export type ChatMessageRole = "user" | "assistant" | "system" | "compressedGroup";
 
@@ -15,12 +16,7 @@ export type ChatMessage = {
   createdAt: string;
 };
 
-export type MessagePagination = {
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
-};
+export type MessagePagination = Pagination;
 
 export type MessageListPayload = {
   messages: ChatMessage[];

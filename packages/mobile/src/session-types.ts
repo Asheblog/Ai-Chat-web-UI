@@ -1,3 +1,5 @@
+import type { Pagination } from "@aichat/shared/api-contract";
+
 export type ChatSession = {
   id: number;
   userId?: number | null;
@@ -14,12 +16,7 @@ export type ChatSession = {
   };
 };
 
-export type SessionPagination = {
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
-};
+export type SessionPagination = Pagination;
 
 export type SessionListPayload = {
   sessions: ChatSession[];

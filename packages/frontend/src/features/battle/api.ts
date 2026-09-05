@@ -1,5 +1,6 @@
 import { apiHttpClient, handleUnauthorizedRedirect } from '@/lib/api'
 import { DEFAULT_API_BASE_URL } from '@/lib/http/client'
+import { readSseStream } from '@aichat/shared/sse-reader'
 import type {
   ApiResponse,
   BattleContentInput,
@@ -103,13 +104,6 @@ export async function* streamBattle(
     throw error
   }
 
-  const reader = response.body?.getReader()
-  const decoder = new TextDecoder()
-  if (!reader) {
-    throw new Error('Response body is not readable')
-  }
-
-  let buffer = ''
   let completed = false
   let aborted = false
   const onAbort = () => {
@@ -118,38 +112,26 @@ export async function* streamBattle(
   options?.signal?.addEventListener('abort', onAbort)
 
   try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (value) {
-        buffer += decoder.decode(value, { stream: true })
-        while (true) {
-          const newlineIndex = buffer.indexOf('\n')
-          if (newlineIndex === -1) break
-          const rawLine = buffer.slice(0, newlineIndex)
-          buffer = buffer.slice(newlineIndex + 1)
-          const line = rawLine.replace(/\r$/, '')
-          if (!line || line.startsWith(':')) continue
-          if (!line.startsWith('data:')) continue
-          const payloadRaw = line.slice(5).trimStart()
-          if (!payloadRaw) continue
-          if (payloadRaw === '[DONE]') {
-            completed = true
-            return
-          }
-          try {
-            const parsed = JSON.parse(payloadRaw) as BattleStreamEvent
-            if (parsed?.type === 'complete') {
-              completed = true
-            }
-            if (parsed) {
-              yield parsed
-            }
-          } catch {
-            // ignore malformed chunks
-          }
-        }
+    for await (const line of readSseStream(response)) {
+      if (!line || line.startsWith(':')) continue
+      if (!line.startsWith('data:')) continue
+      const payloadRaw = line.slice(5).trimStart()
+      if (!payloadRaw) continue
+      if (payloadRaw === '[DONE]') {
+        completed = true
+        return
       }
-      if (done) break
+      try {
+        const parsed = JSON.parse(payloadRaw) as BattleStreamEvent
+        if (parsed?.type === 'complete') {
+          completed = true
+        }
+        if (parsed) {
+          yield parsed
+        }
+      } catch {
+        // ignore malformed chunks
+      }
     }
   } catch (error: any) {
     if (options?.signal?.aborted || aborted || error?.name === 'AbortError') {
@@ -158,7 +140,6 @@ export async function* streamBattle(
     throw error
   } finally {
     options?.signal?.removeEventListener('abort', onAbort)
-    reader.releaseLock()
   }
 
   if (!completed) {
@@ -297,13 +278,6 @@ export async function* rejudgeWithNewAnswer(
     throw error
   }
 
-  const reader = response.body?.getReader()
-  const decoder = new TextDecoder()
-  if (!reader) {
-    throw new Error('Response body is not readable')
-  }
-
-  let buffer = ''
   let completed = false
   let aborted = false
   const onAbort = () => {
@@ -312,38 +286,26 @@ export async function* rejudgeWithNewAnswer(
   options?.signal?.addEventListener('abort', onAbort)
 
   try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (value) {
-        buffer += decoder.decode(value, { stream: true })
-        while (true) {
-          const newlineIndex = buffer.indexOf('\n')
-          if (newlineIndex === -1) break
-          const rawLine = buffer.slice(0, newlineIndex)
-          buffer = buffer.slice(newlineIndex + 1)
-          const line = rawLine.replace(/\r$/, '')
-          if (!line || line.startsWith(':')) continue
-          if (!line.startsWith('data:')) continue
-          const payloadRaw = line.slice(5).trimStart()
-          if (!payloadRaw) continue
-          if (payloadRaw === '[DONE]') {
-            completed = true
-            return
-          }
-          try {
-            const parsed = JSON.parse(payloadRaw) as RejudgeStreamEvent
-            if (parsed?.type === 'rejudge_complete') {
-              completed = true
-            }
-            if (parsed) {
-              yield parsed
-            }
-          } catch {
-            // ignore malformed chunks
-          }
-        }
+    for await (const line of readSseStream(response)) {
+      if (!line || line.startsWith(':')) continue
+      if (!line.startsWith('data:')) continue
+      const payloadRaw = line.slice(5).trimStart()
+      if (!payloadRaw) continue
+      if (payloadRaw === '[DONE]') {
+        completed = true
+        return
       }
-      if (done) break
+      try {
+        const parsed = JSON.parse(payloadRaw) as RejudgeStreamEvent
+        if (parsed?.type === 'rejudge_complete') {
+          completed = true
+        }
+        if (parsed) {
+          yield parsed
+        }
+      } catch {
+        // ignore malformed chunks
+      }
     }
   } catch (error: any) {
     if (options?.signal?.aborted || aborted || error?.name === 'AbortError') {
@@ -352,7 +314,6 @@ export async function* rejudgeWithNewAnswer(
     throw error
   } finally {
     options?.signal?.removeEventListener('abort', onAbort)
-    reader.releaseLock()
   }
 
   if (!completed) {

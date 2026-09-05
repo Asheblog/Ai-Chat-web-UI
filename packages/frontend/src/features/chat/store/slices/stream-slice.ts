@@ -1,5 +1,6 @@
 import { shouldIgnoreReasoningMeta } from '@aichat/shared/strip-tool-progress-from-reasoning'
 import { upsertToolEventFromChunk } from '@aichat/shared/stream-message-reducer'
+import { computeStreamMetrics as computeTimingMetrics } from '@aichat/shared/stream-metrics'
 import {
   cancelAgentStream,
   cancelStream,
@@ -43,34 +44,40 @@ const computeStreamMetrics = (
   const completionTokens = normalizeNumber(usage?.completion_tokens)
   const totalTokens = normalizeNumber(usage?.total_tokens)
 
-  const firstTokenLatencyMs =
-    startedAt != null && firstChunkAt != null && firstChunkAt >= startedAt
-      ? firstChunkAt - startedAt
-      : null
-  const responseTimeMs =
+  const resolvedCompletionTokens =
+    completionTokens != null
+      ? completionTokens
+      : totalTokens != null && promptTokens != null
+        ? totalTokens - promptTokens
+        : null
+
+  const timingMetrics =
     startedAt != null && completedAt != null && completedAt >= startedAt
-      ? completedAt - startedAt
+      ? computeTimingMetrics({
+          timing: {
+            requestStartedAt: startedAt,
+            firstChunkAt,
+            completedAt,
+          },
+          completionTokens: resolvedCompletionTokens ?? 0,
+        })
       : null
+
   const speedDurationMs =
     completedAt != null
       ? completedAt - (firstChunkAt ?? startedAt ?? completedAt)
       : null
   const tokensPerSecond =
-    completionTokens != null && speedDurationMs != null && speedDurationMs > 0
-      ? completionTokens / (speedDurationMs / 1000)
+    resolvedCompletionTokens != null && speedDurationMs != null && speedDurationMs > 0
+      ? (timingMetrics?.tokensPerSecond ?? null)
       : null
 
   const metrics: MessageStreamMetrics = {
-    firstTokenLatencyMs,
-    responseTimeMs,
+    firstTokenLatencyMs: timingMetrics?.firstTokenLatencyMs ?? null,
+    responseTimeMs: timingMetrics?.responseTimeMs ?? null,
     tokensPerSecond,
     promptTokens,
-    completionTokens:
-      completionTokens != null
-        ? completionTokens
-        : totalTokens != null && promptTokens != null
-          ? totalTokens - promptTokens
-          : null,
+    completionTokens: resolvedCompletionTokens,
     totalTokens,
   }
   const hasValue = Object.values(metrics).some((value) => typeof value === 'number')

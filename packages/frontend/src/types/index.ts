@@ -4,6 +4,46 @@ import type {
   ResearchPlanApprovalState,
   ResearchPlanPayload,
 } from '@aichat/shared/chat-stream-contract'
+import type {
+  ApiResponse,
+  AuthResponse,
+  ModelPreferenceDTO,
+  RegisterResponse,
+} from '@aichat/shared/api-contract'
+import type {
+  ActorQuota,
+  GeneratedImage,
+  ToolCallPhase,
+  ToolCallSource,
+  ToolInterventionState,
+  UsageStats,
+  WebSearchHit,
+  WorkspaceArtifact,
+} from '@aichat/shared/api-contract'
+import type {
+  RichMessageEvidenceConfidence,
+  RichMessagePayload,
+} from '@aichat/shared/rich-payload'
+import type {
+  SystemSettings,
+  WebSearchBilingualMode,
+  WebSearchEngine,
+  WebSearchMergeStrategy,
+} from '@aichat/shared/settings-codec'
+
+export type {
+  ApiResponse,
+  AuthResponse,
+  ModelPreferenceDTO,
+  RegisterResponse,
+} from '@aichat/shared/api-contract'
+
+export type {
+  SystemSettings,
+  WebSearchBilingualMode,
+  WebSearchEngine,
+  WebSearchMergeStrategy,
+} from '@aichat/shared/settings-codec'
 
 export interface User {
   id: number;
@@ -15,35 +55,10 @@ export interface User {
   personalPrompt?: string | null;
 }
 
-export interface ModelPreferenceDTO {
-  modelId: string | null;
-  connectionId: number | null;
-  rawId: string | null;
-}
-
-export interface AuthResponse {
-  user: User;
-  token: string;
-}
-
-export interface RegisterResponse {
-  user: User;
-  token?: string;
-}
-
-export type ActorQuotaScope = 'USER' | 'ANON';
-
-export interface ActorQuota {
-  scope: ActorQuotaScope;
-  identifier: string;
-  dailyLimit: number;
-  usedCount: number;
-  remaining: number | null;
-  lastResetAt: string;
-  unlimited: boolean;
-  customDailyLimit: number | null;
-  usingDefaultLimit: boolean;
-}
+export type {
+  ActorQuota,
+  ActorQuotaScope,
+} from '@aichat/shared/api-contract'
 
 export type AnonymousActorProfile = {
   type: 'anonymous';
@@ -114,26 +129,10 @@ export interface CreateSessionRequest {
 }
 
 // 消息类型
-// AI 生成的图片类型
-export interface GeneratedImage {
-  url?: string;           // 图片 URL（云端存储）
-  base64?: string;        // Base64 数据
-  mime?: string;          // MIME 类型 (image/png, image/jpeg 等)
-  revisedPrompt?: string; // 模型修正后的提示词 (DALL-E 特有)
-  width?: number;
-  height?: number;
-}
+// AI 生成的图片类型（与 shared 保持一致）
+export type { GeneratedImage } from '@aichat/shared/api-contract'
 
-export interface WorkspaceArtifact {
-  id: number;
-  fileName: string;
-  mimeType: string;
-  sizeBytes: number;
-  expiresAt: string | Date;
-  downloadUrl: string;
-  messageId?: number | null;
-  expired?: boolean;
-}
+export type { WorkspaceArtifact } from '@aichat/shared/api-contract'
 
 export interface CompressedGroupMessage {
   id: number;
@@ -142,39 +141,16 @@ export interface CompressedGroupMessage {
   createdAt: string;
 }
 
-export type RichMessageLayout = 'auto' | 'side-by-side' | 'stack';
-export type RichMessageImageSource = 'generated' | 'attachment' | 'external';
-export type RichMessageEvidenceKind = 'web' | 'document' | 'generated' | 'upload' | 'unknown';
-export type RichMessageEvidenceConfidence = 'high' | 'medium' | 'low';
-
-export interface RichMessageTextPart {
-  type: 'text';
-  text: string;
-  format: 'markdown';
-}
-
-export interface RichMessageImagePart {
-  type: 'image';
-  url: string;
-  source: RichMessageImageSource;
-  sourceKind?: RichMessageEvidenceKind;
-  alt?: string;
-  width?: number | null;
-  height?: number | null;
-  title?: string;
-  sourceUrl?: string;
-  sourceLabel?: string;
-  confidence?: RichMessageEvidenceConfidence;
-  refId?: string;
-  meta?: Record<string, unknown>;
-}
-
-export type RichMessagePart = RichMessageTextPart | RichMessageImagePart;
-
-export interface RichMessagePayload {
-  layout: RichMessageLayout;
-  parts: RichMessagePart[];
-}
+export type {
+  RichMessageEvidenceConfidence,
+  RichMessageEvidenceKind,
+  RichMessageImagePart,
+  RichMessageImageSource,
+  RichMessageLayout,
+  RichMessagePart,
+  RichMessagePayload,
+  RichMessageTextPart,
+} from '@aichat/shared/rich-payload'
 
 export interface Message {
   id: number | string;
@@ -354,133 +330,8 @@ export interface SystemSetting {
   value: string;
 }
 
-export type WebSearchEngine = 'tavily' | 'brave' | 'metaso' | 'exa';
-export type WebSearchBilingualMode = 'off' | 'conditional' | 'always';
-export type WebSearchMergeStrategy = 'hybrid_score_v1';
-
-export interface SystemSettings {
-  allowRegistration: boolean;
-  brandText?: string;
-  brandPrimary?: string;
-  brandPrimaryForeground?: string;
-  brandBackground?: string;
-  brandSurface?: string;
-  brandForeground?: string;
-  brandMutedForeground?: string;
-  assistantAvatarUpload?: { data: string; mime: string } | null;
-  assistantAvatarRemove?: boolean;
-  // 流式/稳定性相关（系统级）
-  sseHeartbeatIntervalMs?: number;
-  providerMaxIdleMs?: number;
-  providerTimeoutMs?: number;
-  providerInitialGraceMs?: number;
-  providerReasoningIdleMs?: number;
-  reasoningKeepaliveIntervalMs?: number;
-  usageEmit?: boolean;
-  usageProviderOnly?: boolean;
-  contextCompressionEnabled?: boolean;
-  contextCompressionThresholdRatio?: number;
-  contextCompressionTailMessages?: number;
-  // 推理链相关（可选）
-  reasoningEnabled?: boolean;
-  reasoningSaveToDb?: boolean;
-  reasoningTagsMode?: 'default' | 'custom' | 'off';
-  reasoningCustomTags?: string;
-  streamDeltaChunkSize?: number;
-  streamDeltaFlushIntervalMs?: number;
-  streamReasoningFlushIntervalMs?: number;
-  streamKeepaliveIntervalMs?: number;
-  // 供应商参数（可选）
-  openaiReasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | '' | 'unset';
-  reasoningMaxOutputTokensDefault?: number | null;
-  temperatureDefault?: number | null;
-  ollamaThink?: boolean;
-  chatImageRetentionDays?: number;
-  assistantReplyHistoryLimit?: number | null;
-  siteBaseUrl?: string;
-  anonymousRetentionDays?: number;
-  anonymousDailyQuota?: number;
-  defaultUserDailyQuota?: number;
-  battleAllowAnonymous?: boolean;
-  battleAllowUsers?: boolean;
-  battleAnonymousDailyQuota?: number;
-  battleUserDailyQuota?: number;
-  battleRetentionDays?: number;
-  modelAccessDefaultAnonymous?: 'allow' | 'deny';
-  modelAccessDefaultUser?: 'allow' | 'deny';
-  webSearchAgentEnable?: boolean;
-  webSearchEnabledEngines?: WebSearchEngine[];
-  webSearchEngineOrder?: WebSearchEngine[];
-  webSearchResultLimit?: number;
-  webSearchDomainFilter?: string[];
-  webSearchHasApiKey?: boolean;
-  webSearchHasApiKeyTavily?: boolean;
-  webSearchHasApiKeyBrave?: boolean;
-  webSearchHasApiKeyMetaso?: boolean;
-  webSearchHasApiKeyExa?: boolean;
-  webSearchApiKeyExa?: string;
-  webSearchScope?: string;
-  webSearchIncludeSummary?: boolean;
-  webSearchIncludeRaw?: boolean;
-  webSearchParallelMaxEngines?: number;
-  webSearchParallelMaxQueriesPerCall?: number;
-  webSearchParallelTimeoutMs?: number;
-  webSearchParallelMergeStrategy?: WebSearchMergeStrategy;
-  webSearchAutoBilingual?: boolean;
-  webSearchAutoBilingualMode?: WebSearchBilingualMode;
-  webSearchAutoReadParallelism?: number;
-  pythonToolEnable?: boolean;
-  chatDynamicSkillRuntimeEnabled?: boolean;
-  pythonToolTimeoutMs?: number;
-  pythonToolMaxOutputChars?: number;
-  pythonToolMaxSourceChars?: number;
-  agentMaxToolIterations?: number;
-  mcpGlobalEnabled?: boolean;
-  assistantAvatarUrl?: string | null;
-  chatSystemPrompt?: string;
-  webSearchApiKeyTavily?: string;
-  webSearchApiKeyBrave?: string;
-  webSearchApiKeyMetaso?: string;
-  taskTraceEnabled?: boolean;
-  taskTraceDefaultOn?: boolean;
-  taskTraceAdminOnly?: boolean;
-  taskTraceEnv?: 'dev' | 'prod' | 'both';
-  taskTraceRetentionDays?: number;
-  taskTraceMaxEvents?: number;
-  taskTraceIdleTimeoutMs?: number;
-  chatMaxConcurrentStreams?: number;
-  // 标题智能总结设置
-  titleSummaryEnabled?: boolean;
-  titleSummaryMaxLength?: number;
-  titleSummaryModelSource?: 'current' | 'specified';
-  titleSummaryConnectionId?: number | null;
-  titleSummaryModelId?: string | null;
-  // 图片转写设置
-  imageTranscriptionEnabled?: boolean;
-  imageTranscriptionConnectionId?: number | null;
-  imageTranscriptionModelId?: string | null;
-  imageTranscriptionReasoningEnabled?: boolean;
-  imageTranscriptionReasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | '' | 'unset';
-  imageTranscriptionOllamaThink?: boolean;
-  // RAG 文档解析设置
-  ragEnabled?: boolean;
-  ragEmbeddingConnectionId?: number | null;
-  ragEmbeddingModelId?: string;
-  ragEmbeddingBatchSize?: number;
-  ragEmbeddingConcurrency?: number;
-  ragTopK?: number;
-  ragRelevanceThreshold?: number;
-  ragMaxContextTokens?: number;
-  ragChunkSize?: number;
-  ragChunkOverlap?: number;
-  ragMaxFileSizeMb?: number;
-  ragMaxPages?: number;
-  ragRetentionDays?: number;
-  // 知识库设置
-  knowledgeBaseEnabled?: boolean;
-  knowledgeBaseAllowAnonymous?: boolean;
-  knowledgeBaseAllowUsers?: boolean;
-}
+// SystemSettings / WebSearchEngine / WebSearchBilingualMode / WebSearchMergeStrategy
+// 已收敛至 @aichat/shared/settings-codec，见文件顶部 re-export。
 
 export interface PythonRuntimeIndexes {
   indexUrl?: string;
@@ -582,13 +433,7 @@ export interface ChatState {
   activeStreamCount?: number;
 }
 
-export interface WebSearchHit {
-  title: string;
-  url: string;
-  snippet?: string;
-  imageUrl?: string;
-  thumbnailUrl?: string;
-}
+export type { WebSearchHit } from '@aichat/shared/api-contract'
 
 export interface ToolEventDetails {
   // 通用工具调用字段（ToolCall V2）
@@ -664,22 +509,11 @@ export interface ToolEventDetails {
   [key: string]: unknown;
 }
 
-export type ToolCallPhase =
-  | 'arguments_streaming'
-  | 'pending_approval'
-  | 'executing'
-  | 'result'
-  | 'error'
-  | 'rejected'
-  | 'aborted';
-
-export type ToolCallSource = 'builtin' | 'plugin' | 'mcp' | 'workspace' | 'system';
-
-export interface ToolInterventionState {
-  status?: 'pending' | 'approved' | 'rejected' | 'aborted' | 'none';
-  rejectedReason?: string;
-  approvalMode?: 'auto-run' | 'allow-list' | 'manual';
-}
+export type {
+  ToolCallPhase,
+  ToolCallSource,
+  ToolInterventionState,
+} from '@aichat/shared/api-contract'
 
 export interface ToolEvent {
   // 兼容字段（旧链路）
@@ -967,120 +801,16 @@ export interface SettingsState {
   assistantAvatarReadyFor: string | null;
 }
 
-// API 响应类型
-export interface ApiResponse<T = any> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-}
+// API 响应类型（已收敛至 @aichat/shared/api-contract，见文件顶部 re-export）
 
-// 流式响应类型
-export interface ChatStreamChunk {
-  type?:
-    | 'content'
-    | 'usage'
-    | 'start'
-    | 'end'
-    | 'complete'
-    | 'error'
-    | 'reasoning'
-    | 'reasoning_unavailable'
-    | 'quota'
-    | 'tool_call'
-    | 'image'
-    | 'artifact'
-    | 'compression_applied'
-    | 'skill_approval_request'
-    | 'skill_approval_result';
-  content?: string;
-  messageId?: number | null;
-  assistantMessageId?: number | null;
-  assistantClientMessageId?: string | null;
-  usage?: UsageStats;
-  done?: boolean;
-  duration?: number;
-  error?: string;
-  /** 错误类型（用于区分不同类型的错误） */
-  errorType?: ApiErrorType;
-  /** 错误处理建议 */
-  suggestion?: string;
-  keepalive?: boolean;
-  idleMs?: number;
-  quota?: ActorQuota;
-  callId?: string;
-  source?: ToolCallSource;
-  identifier?: string;
-  apiName?: string;
-  tool?: string;
-  phase?: ToolCallPhase;
-  id?: string;
-  stage?: 'start' | 'result' | 'error';
-  status?: 'running' | 'success' | 'error' | 'pending' | 'rejected' | 'aborted';
-  query?: string;
-  hits?: WebSearchHit[];
-  argumentsText?: string;
-  argumentsPatch?: string;
-  resultText?: string;
-  resultJson?: unknown;
-  /** 工具执行摘要 */
-  summary?: string;
-  meta?: Record<string, unknown>;
-  details?: ToolEventDetails;
-  intervention?: ToolInterventionState;
-  thoughtSignature?: string | null;
-  /** 后端计算的性能指标（仅在 complete 事件中） */
-  metrics?: {
-    firstTokenLatencyMs?: number | null;
-    responseTimeMs?: number | null;
-    tokensPerSecond?: number | null;
-  };
-  /** 生成的图片（type='image' 时） */
-  generatedImages?: GeneratedImage[];
-  artifacts?: WorkspaceArtifact[];
-  requestId?: number;
-  skillId?: number;
-  skillSlug?: string;
-  skillVersionId?: number;
-  toolCallId?: string;
-  reason?: string;
-  decision?: 'approved' | 'denied' | 'expired';
-  expiresAt?: string | Date;
-  unavailableCode?: string;
-  unavailableReason?: string;
-  unavailableSuggestion?: string;
-  reasoningProtocol?: 'chat_completions' | 'responses';
-  reasoningDecision?: string;
-  compression?: {
-    groupId: number;
-    compressedCount: number;
-    thresholdTokens: number;
-    beforeTokens: number;
-    afterTokens: number;
-    tailMessages: number;
-  };
-}
+// 流式响应类型（已收敛至 @aichat/shared/chat-stream-contract）
+export type { ChatStreamChunk } from '@aichat/shared/api-contract'
 
-/** API 错误类型 */
-export type ApiErrorType =
-  | 'content_moderation'    // 内容审查/安全过滤
-  | 'context_length'        // 上下文长度超限
-  | 'rate_limit'            // 请求频率限制
-  | 'quota_exceeded'        // 配额耗尽
-  | 'authentication'        // 认证失败
-  | 'invalid_request'       // 无效请求
-  | 'server_error'          // 服务器错误
-  | 'network'               // 网络错误
-  | 'unknown';              // 未知错误
+/** API 错误类型（已收敛至 @aichat/shared/chat-stream-contract） */
+export type { ApiErrorType } from '@aichat/shared/api-contract'
 
-// Usage 统计类型（OpenAI 兼容字段为主）
-export interface UsageStats {
-  prompt_tokens?: number;
-  completion_tokens?: number;
-  total_tokens?: number;
-  context_limit?: number | null;
-  context_remaining?: number | null;
-}
+// Usage 统计类型（OpenAI 兼容字段为主，已收敛至 shared）
+export type { UsageStats } from '@aichat/shared/api-contract'
 
 export interface UsageTotals {
   prompt_tokens: number;

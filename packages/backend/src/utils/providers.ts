@@ -1,6 +1,7 @@
 import { BackendLogger as log } from './logger'
 import type { CapabilityFlags, CapabilitySource } from './capabilities'
 import { hasDefinedCapability } from './capabilities'
+import { deriveChannelName as deriveChannelNameShared } from '@aichat/shared/model-display'
 
 export type ProviderType = 'openai' | 'openai_responses' | 'azure_openai' | 'ollama' | 'google_genai'
 export type AuthType = 'bearer' | 'none' | 'session' | 'system_oauth' | 'microsoft_entra_id'
@@ -93,53 +94,12 @@ export function computeCapabilities(rawId: string, tags?: Array<{ name: string }
   return caps
 }
 
-const CHANNEL_PREFIX_BLACKLIST = new Set(['api', 'app', 'prod', 'dev', 'test', 'staging', 'stage', 'ai', 'llm', 'model', 'models', 'gateway', 'gw'])
-const GENERIC_TLDS = new Set(['com', 'net', 'org', 'gov', 'edu', 'co', 'ai', 'io', 'app', 'dev', 'cn', 'uk'])
-
-function parseUrlCandidate(input?: string): URL | null {
-  if (!input) return null
-  const tryParse = (value: string): URL | null => {
-    try {
-      return new URL(value)
-    } catch {
-      return null
-    }
-  }
-  const direct = tryParse(input)
-  if (direct) return direct
-  if (!/^https?:\/\//i.test(input)) {
-    return tryParse(`https://${input}`)
-  }
-  return null
-}
-
-export function deriveChannelName(provider: ProviderType, baseUrl?: string): string {
-  const fallback = provider
-  const parsed = parseUrlCandidate(baseUrl)
-  if (!parsed) return fallback
-
-  const hostname = parsed.hostname.toLowerCase()
-  if (!hostname) return fallback
-
-  let parts = hostname.split('.').filter(Boolean)
-  if (parts.length > 1 && CHANNEL_PREFIX_BLACKLIST.has(parts[0])) {
-    parts = parts.slice(1)
-  }
-
-  if (parts.length === 0) return fallback
-  if (parts.length === 1) {
-    return parts[0]
-  }
-
-  let candidate = parts[parts.length - 2]
-  if (GENERIC_TLDS.has(candidate) && parts.length >= 3) {
-    candidate = parts[parts.length - 3]
-  }
-  candidate = candidate || parts[parts.length - 1]
-  if (!candidate || candidate.length < 2) return fallback
-
-  return candidate
-}
+/**
+ * 渠道名推导已收敛至 @aichat/shared/model-display（backend / frontend 共用）。
+ * 保留本文件导出以兼容存量 import 路径。
+ */
+export const deriveChannelName = (provider: ProviderType, baseUrl?: string): string =>
+  deriveChannelNameShared(provider, baseUrl)
 
 async function getAzureAccessToken(): Promise<string | null> {
   try {

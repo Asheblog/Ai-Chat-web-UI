@@ -1,6 +1,7 @@
 import { BackendLogger as log } from '../../../utils/logger'
 import { persistAssistantFinalResponse as defaultPersistFinal } from '../assistant-message-service'
 import type { TaskTraceRecorder } from '../../../utils/task-trace'
+import { computeStreamMetrics as computeStreamMetricsShared } from '@aichat/shared/stream-metrics'
 
 export type ProviderUsageSnapshot = {
   prompt_tokens?: number
@@ -102,35 +103,17 @@ export interface ComputeMetricsParams {
 }
 
 /**
- * 计算流式响应的性能指标（纯计算，不涉及持久化）
+ * 计算流式响应的性能指标（纯计算，不涉及持久化）。
+ * 核心实现已收敛至 @aichat/shared/stream-metrics；此处保留取整包装，
+ * 维持后端持久化字段的历史精度。
  */
 export const computeStreamMetrics = (params: ComputeMetricsParams): StreamMetrics => {
-  const { timing, completionTokens } = params
-  const startedAt = Math.max(0, Number(timing.requestStartedAt) || Date.now())
-  const completedAt = Math.max(0, Number(timing.completedAt) || Date.now())
-  const firstChunkCandidate = Number(timing.firstChunkAt)
-  const firstChunkAt =
-    Number.isFinite(firstChunkCandidate) && firstChunkCandidate >= startedAt
-      ? Math.min(firstChunkCandidate, completedAt)
-      : null
-  const firstTokenLatencyMs =
-    firstChunkAt != null ? Math.max(0, Math.round(firstChunkAt - startedAt)) : null
-  const responseTimeMs = Math.max(0, Math.round(completedAt - startedAt))
-
-  // speedAnchorAt: 用于 TPS 计算的时间窗口起点
-  const speedCandidate = Number(timing.speedStartedAt)
-  const speedStartedAt =
-    Number.isFinite(speedCandidate) && speedCandidate >= startedAt
-      ? Math.min(speedCandidate, completedAt)
-      : null
-  const speedAnchorAt = speedStartedAt ?? firstChunkAt ?? startedAt
-  const speedWindowMs = Math.max(1, completedAt - speedAnchorAt || completedAt - startedAt || 1)
-  const tokensPerSecond = completionTokens > 0 ? completionTokens / (speedWindowMs / 1000) : 0
-
+  const metrics = computeStreamMetricsShared(params)
   return {
-    firstTokenLatencyMs,
-    responseTimeMs,
-    tokensPerSecond,
+    firstTokenLatencyMs:
+      metrics.firstTokenLatencyMs == null ? null : Math.max(0, Math.round(metrics.firstTokenLatencyMs)),
+    responseTimeMs: Math.max(0, Math.round(metrics.responseTimeMs)),
+    tokensPerSecond: metrics.tokensPerSecond,
   }
 }
 

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Prisma, type ChatSession } from '@prisma/client';
 import { shouldIgnoreReasoningMeta } from '@aichat/shared/strip-tool-progress-from-reasoning';
+import { computeStreamMetrics } from '@aichat/shared/stream-metrics';
 import { prisma } from '../../db';
 import { BackendLogger as log } from '../../utils/logger';
 import { buildChatProviderRequest } from '../../utils/chat-provider';
@@ -1153,14 +1154,18 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         traceMetadataExtras.providerUsageSource = providerUsageValid ? 'provider' : 'fallback';
 
         const completedAt = Date.now();
-        const firstTokenLatencyMs =
-          firstChunkAt != null ? Math.max(0, firstChunkAt - startedAt) : null;
-        const responseTimeMs = Math.max(0, completedAt - startedAt);
-        const speedWindowMs = completedAt - (firstChunkAt ?? startedAt);
+        const streamMetrics = computeStreamMetrics({
+          timing: {
+            requestStartedAt: startedAt,
+            firstChunkAt,
+            completedAt,
+          },
+          completionTokens: finalUsageNumbers.completion,
+        });
+        const firstTokenLatencyMs = streamMetrics.firstTokenLatencyMs;
+        const responseTimeMs = streamMetrics.responseTimeMs;
         const tokensPerSecond =
-          finalUsageNumbers.completion > 0 && speedWindowMs > 0
-            ? finalUsageNumbers.completion / (speedWindowMs / 1000)
-            : null;
+          finalUsageNumbers.completion > 0 ? streamMetrics.tokensPerSecond : null;
 
         let persistedAssistantMessageId: number | null = activeAssistantMessageId;
         try {

@@ -2,6 +2,7 @@ import {
   normalizeStreamChunk,
   parseStreamLines,
 } from '@aichat/shared/chat-stream-parser'
+import { readSseStream } from '@aichat/shared/sse-reader'
 import type { ChatStreamChunk } from '@aichat/shared/chat-stream-contract'
 
 const STREAM_DEBUG_ENABLED =
@@ -18,44 +19,26 @@ export async function* parseEventStream(
   streamKey: string,
   onCleanup: () => void,
 ): AsyncGenerator<ChatStreamChunk, void, unknown> {
-  const reader = response.body?.getReader()
-  const decoder = new TextDecoder()
-
-  if (!reader) {
-    throw new Error('Response body is not readable')
-  }
-
-  let buffer = ''
   let completed = false
 
   try {
-    let terminated = false
-    while (!terminated) {
-      const { done, value } = await reader.read()
-      if (value) {
-        const decoded = decoder.decode(value, { stream: true })
-        buffer += decoded
-        if (STREAM_DEBUG_ENABLED) {
-          console.debug('[streamChat] chunk', decoded.slice(0, 120))
-        }
-        const batch = parseStreamLines(buffer)
-        buffer = batch.remaining
-        if (batch.completed) {
-          completed = true
-        }
-        for (const chunk of batch.chunks) {
-          yield chunk
-        }
-        // error/run_error 事件后立即终止循环，不等待底层流 close
-        if (batch.terminated) {
-          terminated = true
-          break
-        }
+    for await (const line of readSseStream(response)) {
+      if (STREAM_DEBUG_ENABLED) {
+        console.debug('[streamChat] line', line.slice(0, 120))
       }
-      if (done) break
+      const batch = parseStreamLines(`${line}\n`)
+      if (batch.completed) {
+        completed = true
+      }
+      for (const chunk of batch.chunks) {
+        yield chunk
+      }
+      // error/run_error 事件后立即终止循环，不等待底层流 close
+      if (batch.terminated) {
+        break
+      }
     }
   } finally {
-    reader.releaseLock()
     onCleanup()
   }
 

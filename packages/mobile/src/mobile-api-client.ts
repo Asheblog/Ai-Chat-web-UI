@@ -1,14 +1,9 @@
 import type { AuthSession, MobileUser, RegisterResult } from "./auth-types";
 import { parseStreamLines } from "./chat-stream-parser";
+import { readSseStream } from "@aichat/shared/sse-reader";
+import type { ApiResponse } from "@aichat/shared/api-contract";
 import type { ChatStreamChunk, MessageListPayload, StreamMessagePayload } from "./chat-types";
 import type { ChatSession, CreateSessionPayload, ModelItem, SessionListPayload } from "./session-types";
-
-type ApiResponse<T = unknown> = {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-};
 
 type AuthPayload = {
   user?: MobileUser;
@@ -178,42 +173,21 @@ export class MobileApiClient {
       throw new MobileApiError(message ?? `发送失败，服务端返回 ${response.status}。`, response.status);
     }
 
-    const reader = response.body?.getReader?.();
-    if (!reader) {
+    if (!response.body || typeof response.body.getReader !== "function") {
       throw new MobileApiError("当前 Expo Go 运行环境不支持流式读取，请升级 Expo Go 或使用兼容的开发构建。");
     }
 
-    const decoder = new TextDecoder();
-    let buffer = "";
     let completed = false;
 
-    try {
-      let terminated = false;
-      while (!terminated) {
-        const { done, value } = await reader.read();
-
-        if (value) {
-          buffer += decoder.decode(value, { stream: true });
-          const parsed = parseStreamLines(buffer);
-          buffer = parsed.remaining;
-          completed ||= parsed.completed;
-          terminated ||= parsed.terminated;
-          for (const chunk of parsed.chunks) {
-            yield chunk;
-          }
-        }
-
-        if (done) {
-          const parsed = parseStreamLines(buffer, true);
-          completed ||= parsed.completed;
-          for (const chunk of parsed.chunks) {
-            yield chunk;
-          }
-          break;
-        }
+    for await (const line of readSseStream(response)) {
+      const parsed = parseStreamLines(`${line}\n`);
+      completed ||= parsed.completed;
+      for (const chunk of parsed.chunks) {
+        yield chunk;
       }
-    } finally {
-      reader.releaseLock();
+      if (parsed.terminated) {
+        break;
+      }
     }
 
     if (!completed) {

@@ -1,8 +1,6 @@
-export interface ModelPreference {
-  modelId: string | null;
-  connectionId: number | null;
-  rawId: string | null;
-}
+import type { ModelPreference } from '@aichat/shared/api-contract'
+
+export type { ModelPreference } from '@aichat/shared/api-contract'
 
 export interface User {
   id: number;
@@ -84,39 +82,16 @@ export interface Message {
   streamError?: string | null;
 }
 
-export type RichMessageLayout = 'auto' | 'side-by-side' | 'stack';
-export type RichMessageImageSource = 'generated' | 'attachment' | 'external';
-export type RichMessageEvidenceKind = 'web' | 'document' | 'generated' | 'upload' | 'unknown';
-export type RichMessageEvidenceConfidence = 'high' | 'medium' | 'low';
-
-export interface RichMessageTextPart {
-  type: 'text';
-  text: string;
-  format: 'markdown';
-}
-
-export interface RichMessageImagePart {
-  type: 'image';
-  url: string;
-  source: RichMessageImageSource;
-  sourceKind?: RichMessageEvidenceKind;
-  alt?: string;
-  width?: number | null;
-  height?: number | null;
-  title?: string;
-  sourceUrl?: string;
-  sourceLabel?: string;
-  confidence?: RichMessageEvidenceConfidence;
-  refId?: string;
-  meta?: Record<string, unknown>;
-}
-
-export type RichMessagePart = RichMessageTextPart | RichMessageImagePart;
-
-export interface RichMessagePayload {
-  layout: RichMessageLayout;
-  parts: RichMessagePart[];
-}
+export type {
+  RichMessageEvidenceConfidence,
+  RichMessageEvidenceKind,
+  RichMessageImagePart,
+  RichMessageImageSource,
+  RichMessageLayout,
+  RichMessagePart,
+  RichMessagePayload,
+  RichMessageTextPart,
+} from '@aichat/shared/rich-payload'
 
 export interface SystemSetting {
   key: string;
@@ -145,22 +120,7 @@ export interface LoginRequest {
   password: string;
 }
 
-export interface AuthResponse {
-  user: Omit<User, 'createdAt'>;
-  token: string;
-}
-
-export interface RegisterResponse {
-  user: {
-    id: number;
-    username: string;
-    role: 'ADMIN' | 'USER';
-    status: 'PENDING' | 'ACTIVE' | 'DISABLED';
-    avatarUrl?: string | null;
-    personalPrompt?: string | null;
-  };
-  token?: string;
-}
+export type { AuthResponse, RegisterResponse } from '@aichat/shared/api-contract'
 
 export type UsageQuotaScope = 'USER' | 'ANON';
 
@@ -204,12 +164,7 @@ export interface ActorContext {
   assistantAvatarUrl?: string | null;
 }
 
-export interface ApiResponse<T = any> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-}
+export type { ApiResponse } from '@aichat/shared/api-contract'
 
 export interface StreamingChatResponse {
   id: string;
