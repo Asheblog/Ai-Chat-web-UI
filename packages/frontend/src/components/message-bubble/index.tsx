@@ -316,7 +316,6 @@ function MessageBubbleComponent({
             shouldShowStreamingPlaceholder={shouldShowStreamingPlaceholder}
             isStreaming={Boolean(isStreaming)}
             isRendering={isRendering}
-            toolEvents={toolTimeline}
           />
 
           {!isUser && artifacts.length > 0 && (

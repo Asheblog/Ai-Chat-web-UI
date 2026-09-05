@@ -264,9 +264,6 @@ const HISTORY_LIST_DETAIL_KEYS = [
   'approval',
 ] as const
 
-/** richPayload 证据图所需；投影前保留，响应前由 projectToolEventsForHistoryList 去掉。 */
-const HISTORY_LIST_RICH_IMAGE_DETAIL_KEYS = ['assessedImages', 'images', 'leadImageUrl'] as const
-
 export type ParseToolLogsOptions = {
   mode?: 'full' | 'history-list'
 }
@@ -284,7 +281,6 @@ const countValidHits = (hits: unknown): number => {
 
 /**
  * 历史消息列表投影：去掉 hits[] 与大体量 details，保留 CoT 时间线必需字段。
- * richPayload 应在投影前用完整 toolEvents 构建。
  */
 export const projectToolEventsForHistoryList = (entries: ToolLogEntry[]): ToolLogEntry[] => {
   if (!Array.isArray(entries) || entries.length === 0) return []
@@ -452,10 +448,6 @@ export const parseToolLogsJson = (
           const normalized: ToolLogDetails = {};
           if (mode === 'history-list') {
             for (const key of HISTORY_LIST_DETAIL_KEYS) {
-              const value = candidate[key]
-              if (value != null) (normalized as Record<string, unknown>)[key] = value
-            }
-            for (const key of HISTORY_LIST_RICH_IMAGE_DETAIL_KEYS) {
               const value = candidate[key]
               if (value != null) (normalized as Record<string, unknown>)[key] = value
             }

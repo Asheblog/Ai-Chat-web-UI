@@ -346,7 +346,7 @@ describe('projectToolEventsForHistoryList', () => {
 })
 
 describe('parseToolLogsJson history-list mode', () => {
-  test('does not materialize hits arrays and keeps assessedImages for richPayload', () => {
+  test('does not materialize hits arrays or rich image details in history-list mode', () => {
     const raw = JSON.stringify([
       {
         id: 'call_1',
@@ -377,9 +377,9 @@ describe('parseToolLogsJson history-list mode', () => {
     expect(events[0].details?.hitsCount).toBe(12)
     expect(events[0].details?.engine).toBe('tavily')
     expect(events[0].details?.reasoningOffsetStart).toBe(10)
-    expect(events[0].details?.assessedImages).toEqual([
-      expect.objectContaining({ url: 'https://cdn.example.com/e.png' }),
-    ])
+    expect(events[0].details).not.toHaveProperty('assessedImages')
+    expect(events[0].details).not.toHaveProperty('images')
+    expect(events[0].details).not.toHaveProperty('leadImageUrl')
     expect(events[0].details).not.toHaveProperty('excerpt')
     expect(events[0].details).not.toHaveProperty('stdout')
   })

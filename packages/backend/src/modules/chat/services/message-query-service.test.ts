@@ -172,7 +172,7 @@ describe('ChatMessageQueryService', () => {
     expect(result.messages[0].toolEvents?.[0]?.details).not.toHaveProperty('assessedImages')
     const richPayload = (result.messages[0] as any).richPayload
     expect(richPayload).toBeTruthy()
-    expect(richPayload).toMatchObject({ layout: 'stack' })
+    expect(richPayload).toMatchObject({ layout: 'side-by-side' })
     expect(richPayload.parts).toEqual(
       expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'hi' })]),
     )
@@ -188,12 +188,10 @@ describe('ChatMessageQueryService', () => {
           source: 'generated',
           url: 'https://cdn.example.com/generated/a.png',
         }),
-        expect.objectContaining({
-          type: 'image',
-          source: 'external',
-          url: 'https://cdn.example.com/evidence.png',
-        }),
       ]),
+    )
+    expect(richPayload?.parts).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ source: 'external' })]),
     )
     expect(result.pagination).toEqual({ page: 1, limit: 2, total: 1, totalPages: 1 })
   })

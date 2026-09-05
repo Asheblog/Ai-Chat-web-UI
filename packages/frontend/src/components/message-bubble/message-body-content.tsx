@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import Image from 'next/image'
 import { ChevronDown } from 'lucide-react'
-import type { GeneratedImage, MessageMeta, RichMessageImagePart, RichMessagePayload, ToolEvent } from '@/types'
+import type { GeneratedImage, MessageMeta, RichMessageImagePart, RichMessagePayload } from '@/types'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { cn } from '@/lib/utils'
 import { ImageLightbox, useImageLightbox } from '@/components/ui/image-lightbox'
@@ -25,95 +25,40 @@ const resolveGeneratedImageUrl = (image: GeneratedImage): string | null => {
   return null
 }
 
-const extractExternalImagesFromToolEvents = (toolEvents: ToolEvent[] | undefined): RichMessageImagePart[] => {
-  if (!Array.isArray(toolEvents) || toolEvents.length === 0) return []
-  const images: RichMessageImagePart[] = []
-  const seen = new Set<string>()
-
-  for (const event of toolEvents) {
-    const assessed = Array.isArray(event.details?.assessedImages) ? event.details.assessedImages : []
-    for (const item of assessed) {
-      const url = typeof item.url === 'string' ? item.url.trim() : ''
-      if (!url || seen.has(url)) continue
-      if (item.confidence === 'low') continue
-      if (item.confidence !== 'high' && item.confidence !== 'medium') continue
-      seen.add(url)
-      images.push({
-        type: 'image',
-        source: 'external',
-        sourceKind: event.tool === 'read_url' ? 'document' : 'web',
-        url,
-        sourceUrl: item.sourceUrl || event.details?.url || event.query,
-        title: item.title || item.alt,
-        alt: item.title || item.alt || item.description,
-        confidence: item.confidence,
-        meta: item.description ? { description: item.description } : undefined,
-      })
-    }
-  }
-
-  return images
-}
-
 const buildAssistantRichPayload = (
   meta: MessageMeta,
   content: string,
-  toolEvents?: ToolEvent[],
 ): RichMessagePayload | null => {
   const payload = meta.richPayload
-  const externalFromTools = extractExternalImagesFromToolEvents(toolEvents)
   if (payload && Array.isArray(payload.parts) && payload.parts.length > 0) {
-    if (externalFromTools.length === 0) return payload
-    const existingUrls = new Set(
-      payload.parts
-        .filter((part): part is RichMessageImagePart => part.type === 'image')
-        .map((part) => part.url),
-    )
-    const missing = externalFromTools.filter((part) => !existingUrls.has(part.url))
-    if (missing.length === 0) return payload
-    const mergedParts = [...payload.parts, ...missing]
-    const hasText = mergedParts.some((part) => part.type === 'text')
-    const hasWeb = mergedParts.some(
-      (part) => part.type === 'image' && part.source === 'external',
-    )
-    return {
-      layout: hasText && hasWeb ? 'stack' : payload.layout,
-      parts: mergedParts.map((part, index) =>
-        part.type === 'image' ? { ...part, refId: part.refId ?? `img-${index + 1}` } : part,
-      ),
-    }
+    return payload
   }
 
   const generated = Array.isArray(meta.generatedImages) ? meta.generatedImages : []
   const text = typeof content === 'string' ? content : ''
   const hasText = text.trim().length > 0
-  const imageParts: RichMessageImagePart[] = [
-    ...generated
-      .map((image, index) => {
-        const url = resolveGeneratedImageUrl(image)
-        if (!url) return null
-        return {
-          type: 'image' as const,
-          url,
-          source: 'generated' as const,
-          sourceKind: 'generated' as const,
-          title: image.revisedPrompt,
-          width: image.width ?? null,
-          height: image.height ?? null,
-          alt: image.revisedPrompt || `AI 生成图片 ${index + 1}`,
-          refId: `img-${index + 1}`,
-        }
-      })
-      .filter((item): item is NonNullable<typeof item> => Boolean(item)),
-    ...externalFromTools,
-  ]
+  const imageParts: RichMessageImagePart[] = generated
+    .map((image, index) => {
+      const url = resolveGeneratedImageUrl(image)
+      if (!url) return null
+      return {
+        type: 'image' as const,
+        url,
+        source: 'generated' as const,
+        sourceKind: 'generated' as const,
+        title: image.revisedPrompt,
+        width: image.width ?? null,
+        height: image.height ?? null,
+        alt: image.revisedPrompt || `AI 生成图片 ${index + 1}`,
+        refId: `img-${index + 1}`,
+      }
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
 
   if (imageParts.length === 0) return null
 
-  const hasWebEvidence = imageParts.some((part) => part.source === 'external')
-
   return {
-    layout: hasText ? (hasWebEvidence ? 'stack' : 'side-by-side') : 'stack',
+    layout: hasText ? 'side-by-side' : 'stack',
     parts: [
       ...(hasText ? [{ type: 'text' as const, text, format: 'markdown' as const }] : []),
       ...imageParts.map((part, index) => ({ ...part, refId: part.refId ?? `img-${index + 1}` })),
@@ -130,7 +75,6 @@ interface MessageBodyContentProps {
   shouldShowStreamingPlaceholder: boolean
   isStreaming: boolean
   isRendering: boolean
-  toolEvents?: ToolEvent[]
 }
 
 export function MessageBodyContent({
@@ -142,13 +86,12 @@ export function MessageBodyContent({
   shouldShowStreamingPlaceholder,
   isStreaming,
   isRendering,
-  toolEvents,
 }: MessageBodyContentProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const lightbox = useImageLightbox()
   const assistantRichPayload = useMemo(
-    () => (isUser ? null : buildAssistantRichPayload(meta, content, toolEvents)),
-    [content, isUser, meta, toolEvents],
+    () => (isUser ? null : buildAssistantRichPayload(meta, content)),
+    [content, isUser, meta],
   )
 
   // 计算内容行数和是否需要折叠

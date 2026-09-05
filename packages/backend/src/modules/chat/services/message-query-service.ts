@@ -477,7 +477,7 @@ export class ChatMessageQueryService {
     })
   }
 
-  /** 列表页投影：richPayload 已由完整/半完整 toolEvents 构建，再瘦身 toolEvents。 */
+  /** 列表页投影：richPayload 已由附件/生图构建，再瘦身 toolEvents。 */
   private projectMessageForHistoryList(message: NormalizedMessage): NormalizedMessage {
     if (!Array.isArray(message.toolEvents) || message.toolEvents.length === 0) {
       return message
@@ -516,7 +516,6 @@ export class ChatMessageQueryService {
       content: raw.content,
       attachmentRelativePaths: rel,
       generatedImages: Array.isArray(raw.generatedImages) ? raw.generatedImages : [],
-      toolEvents,
       baseUrl,
       resolveChatImageUrls: this.resolveChatImageUrls,
     })

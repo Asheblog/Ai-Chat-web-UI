@@ -576,7 +576,6 @@ export class ShareService {
         generatedImages: (Array.isArray(msg.generatedImages)
           ? msg.generatedImages
           : []) as GeneratedImageRecord[],
-        toolEvents,
         baseUrl,
         resolveChatImageUrls,
       })

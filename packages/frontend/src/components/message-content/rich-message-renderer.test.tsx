@@ -16,7 +16,7 @@ describe('RichMessageRenderer', () => {
     expect(screen.getByText('纯文本回答')).toBeInTheDocument()
   })
 
-  it('renders external web evidence as text-above images-below stack', () => {
+  it('drops external web evidence images and renders text only', () => {
     render(
       <RichMessageRenderer
         payload={{
@@ -39,14 +39,44 @@ describe('RichMessageRenderer', () => {
     )
 
     const root = screen.getByTestId('rich-message-renderer')
-    expect(root).toHaveAttribute('data-layout', 'stack')
-    expect(root).toHaveAttribute('data-render-mode', 'evidence-stack')
-    expect(root).not.toHaveClass('lg:grid')
+    expect(root).toHaveAttribute('data-layout', 'auto')
+    expect(root).not.toHaveAttribute('data-render-mode')
     expect(screen.getByText('今日要闻：')).toBeInTheDocument()
-    expect(screen.getByText('证据图 1')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '查看原图' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '查看原文' })).toBeInTheDocument()
+    expect(screen.queryByText('证据图 1')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '查看原图' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '查看原文' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /查看图片/ })).not.toBeInTheDocument()
+  })
+
+  it('keeps generated images while dropping external evidence in mixed payload', () => {
+    render(
+      <RichMessageRenderer
+        payload={{
+          layout: 'side-by-side',
+          parts: [
+            { type: 'text', text: '这是 AI 生图结果', format: 'markdown' },
+            {
+              type: 'image',
+              url: 'https://example.com/generated-1.png',
+              source: 'generated',
+              sourceKind: 'generated',
+            },
+            {
+              type: 'image',
+              url: 'https://example.com/evidence-1.png',
+              source: 'external',
+              sourceKind: 'web',
+              title: '证据图 1',
+              confidence: 'high',
+            },
+          ],
+        }}
+      />,
+    )
+
+    const root = screen.getByTestId('rich-message-renderer')
+    expect(root).toHaveAttribute('data-layout', 'side-by-side')
+    expect(screen.getByRole('button', { name: '查看图片（1 张）' })).toBeInTheDocument()
   })
 
   it('keeps side-by-side layout for non-web mixed payload', () => {
@@ -70,7 +100,6 @@ describe('RichMessageRenderer', () => {
     const root = screen.getByTestId('rich-message-renderer')
     expect(root).toHaveClass('lg:grid')
     expect(root).toHaveClass('lg:grid-cols-12')
-    expect(root).toHaveAttribute('data-render-mode', 'default')
   })
 
   it('renders stack layout for image-only payload', async () => {

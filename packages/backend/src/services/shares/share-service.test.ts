@@ -164,7 +164,7 @@ describe('ShareService', () => {
     )
     const createPayload = prisma.chatShare.create.mock.calls[0]?.[0]
     const persistedPayload = JSON.parse(createPayload?.data?.payloadJson ?? '{}') as any
-    expect(persistedPayload?.messages?.[0]?.richPayload).toMatchObject({ layout: 'stack' })
+    expect(persistedPayload?.messages?.[0]?.richPayload).toMatchObject({ layout: 'side-by-side' })
     expect(persistedPayload?.messages?.[0]?.richPayload?.parts).toEqual(
       expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Hello' })]),
     )
@@ -180,19 +180,15 @@ describe('ShareService', () => {
           source: 'generated',
           url: 'https://cdn.example.com/generated/1.png',
         }),
-        expect.objectContaining({
-          type: 'image',
-          source: 'external',
-          url: 'https://example.com/cover.png',
-          sourceUrl: 'https://example.com',
-          confidence: 'high',
-        }),
       ]),
+    )
+    expect(persistedPayload?.messages?.[0]?.richPayload?.parts).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ source: 'external' })]),
     )
     expect(result.title).toBe('Custom Title')
     expect(result.messageCount).toBe(1)
     const resultRichPayload = (result.messages[0] as any).richPayload
-    expect(resultRichPayload).toMatchObject({ layout: 'stack' })
+    expect(resultRichPayload).toMatchObject({ layout: 'side-by-side' })
     expect(resultRichPayload.parts).toEqual(
       expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Hello' })]),
     )
