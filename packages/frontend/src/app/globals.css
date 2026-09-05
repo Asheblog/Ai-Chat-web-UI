@@ -356,7 +356,7 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
   animation: blink 1s step-end infinite;
 }
 
-/* 思维链 / 工具调用折叠态：单行滚屏 */
+/* 工具调用折叠态：单行横向滚屏（思维链折叠态已改为单行上下滚屏） */
 @keyframes cot-single-line-scroll {
   from {
     transform: translateX(0);

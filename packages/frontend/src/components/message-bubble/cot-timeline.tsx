@@ -16,7 +16,7 @@ import { CotToolGroupStep, CotToolStep } from './cot-step-parts'
 import { ResearchPlanCard } from './research-plan-card'
 import { usePersistedExpand } from './use-persisted-expand'
 import { FadeScrollContainer } from './fade-scroll-container'
-import { SingleLineScroller } from './single-line-scroller'
+import { VerticalLineScroller } from './vertical-line-scroller'
 
 const REASONING_VISIBILITY_STORAGE_KEY = 'aichat.cot_reasoning_visibility'
 const TOOL_VISIBILITY_STORAGE_KEY = 'aichat.cot_tool_visibility'
@@ -231,33 +231,37 @@ function CotReasoningCard({
       <div className="overflow-hidden rounded-lg border border-border/60 bg-background/50">
         <button
           type="button"
-          className="flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-2 text-left transition-colors duration-200 hover:bg-muted/40"
+          className="flex w-full cursor-pointer flex-col gap-1.5 px-3 py-2 text-left transition-colors duration-200 hover:bg-muted/40"
           onClick={() => {
             toggle()
             onInteract?.()
           }}
           aria-expanded={expanded}
         >
-          <div className="flex shrink-0 items-center gap-2 text-sm font-medium text-muted-foreground">
-            <Lightbulb className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-            <span>深度思考</span>
-            {isStreamingTail && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
-            {!isStreamingTail && durationText && (
-              <span className="text-xs text-muted-foreground">· {durationText}</span>
-            )}
+          <div className="flex w-full items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-muted-foreground">
+              <Lightbulb className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+              <span className="shrink-0">深度思考</span>
+              {isStreamingTail && (
+                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+              )}
+              {!isStreamingTail && durationText && (
+                <span className="shrink-0 text-xs text-muted-foreground">· {durationText}</span>
+              )}
+            </div>
+            <ChevronDown
+              className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
+                expanded ? 'rotate-180' : ''
+              }`}
+            />
           </div>
           {!expanded && (
-            <SingleLineScroller
+            <VerticalLineScroller
               text={text}
-              className="min-w-0 flex-1 text-xs text-muted-foreground"
+              className="w-full pl-[22px] text-xs text-muted-foreground"
               active={Boolean(isStreamingTail)}
             />
           )}
-          <ChevronDown
-            className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
-              expanded ? 'rotate-180' : ''
-            }`}
-          />
         </button>
         {expanded && (
           <div className="border-t border-border/60 px-3 py-2.5">
