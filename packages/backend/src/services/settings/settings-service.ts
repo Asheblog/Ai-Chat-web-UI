@@ -6,9 +6,9 @@ import {
   invalidateQuotaPolicyCache as defaultInvalidateQuotaPolicyCache,
   invalidateBattlePolicyCache as defaultInvalidateBattlePolicyCache,
   invalidateReasoningMaxOutputTokensDefaultCache as defaultInvalidateReasoningMaxOutputTokensDefaultCache,
-} from '../../utils/system-settings'
-import { invalidateTaskTraceConfig as defaultInvalidateTaskTraceConfig } from '../../utils/task-trace'
-import { syncSharedAnonymousQuota as defaultSyncSharedAnonymousQuota } from '../../utils/quota'
+} from './legacy-utils'
+import { invalidateTaskTraceConfig as defaultInvalidateTaskTraceConfig } from '../task-trace/legacy-utils'
+import { syncSharedAnonymousQuota as defaultSyncSharedAnonymousQuota } from '../quota/legacy-utils'
 import {
   replaceProfileImage as defaultReplaceProfileImage,
   resolveProfileImageUrl,

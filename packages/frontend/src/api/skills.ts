@@ -1,0 +1,159 @@
+import { apiHttpClient } from '@/api/http'
+import type {
+  ApiResponse,
+  SkillApprovalRequestItem,
+  SkillExecutionAuditItem,
+  SkillBindingItem,
+  SkillCatalogItem,
+  SkillStoreResponseData,
+  SessionSkillOptionsData,
+  SkillUninstallPreviewData,
+} from '@/types'
+
+const client = apiHttpClient
+
+export const listSkillCatalog = async (params?: {
+  all?: boolean
+  includeVersions?: boolean
+}) => {
+  const query: Record<string, string> = {}
+  if (params?.all) query.all = '1'
+  if (params?.includeVersions) query.includeVersions = '1'
+  const response = await client.get<ApiResponse<SkillCatalogItem[]>>('/skills/catalog', {
+    params: query,
+  })
+  return response.data
+}
+
+export const installSkillFromGithub = async (payload: { source: string; token?: string }) => {
+  const response = await client.post<ApiResponse>('/skills/install', payload)
+  return response.data
+}
+
+export const listSkillStore = async (params?: {
+  q?: string
+  sourceKey?: string
+  refresh?: boolean
+}) => {
+  const query: Record<string, string> = {}
+  if (params?.q) query.q = params.q
+  if (params?.sourceKey) query.sourceKey = params.sourceKey
+  if (params?.refresh) query.refresh = '1'
+  const response = await client.get<ApiResponse<SkillStoreResponseData>>('/skills/store', {
+    params: query,
+  })
+  return response.data
+}
+
+export const installSkillFromStore = async (payload: { itemKey: string }) => {
+  const response = await client.post<ApiResponse>('/skills/install', payload)
+  return response.data
+}
+
+export const listSessionSkillOptions = async (sessionId: number) => {
+  const response = await client.get<ApiResponse<SessionSkillOptionsData>>('/skills/session-options', {
+    params: { sessionId },
+  })
+  return response.data
+}
+
+export const updateSessionSkillBinding = async (
+  sessionId: number,
+  payload: { skillId: number; versionId: number; enabled: boolean },
+) => {
+  const response = await client.put<ApiResponse<SkillBindingItem>>(`/skills/sessions/${sessionId}`, payload)
+  return response.data
+}
+
+export const deleteSkill = async (skillId: number) => {
+  const response = await client.delete<ApiResponse>(`/skills/${skillId}`)
+  return response.data
+}
+
+export const previewSkillUninstall = async (skillId: number) => {
+  const response = await client.get<ApiResponse<SkillUninstallPreviewData>>(`/skills/${skillId}/uninstall-plan`)
+  return response.data
+}
+
+export const approveSkillVersion = async (skillId: number, versionId: number) => {
+  const response = await client.post<ApiResponse>(`/skills/${skillId}/versions/${versionId}/approve`)
+  return response.data
+}
+
+export const activateSkillVersion = async (
+  skillId: number,
+  versionId: number,
+  payload?: { makeDefault?: boolean },
+) => {
+  const response = await client.post<ApiResponse>(
+    `/skills/${skillId}/versions/${versionId}/activate`,
+    payload || {},
+  )
+  return response.data
+}
+
+export const upsertSkillBinding = async (payload: {
+  skillId: number
+  versionId?: number | null
+  scopeType: 'system' | 'user' | 'session' | 'battle_model'
+  scopeId: string
+  enabled?: boolean
+  policy?: Record<string, unknown>
+  overrides?: Record<string, unknown>
+}) => {
+  const response = await client.post<ApiResponse<SkillBindingItem>>('/skills/bindings', payload)
+  return response.data
+}
+
+export const listSkillBindings = async (params?: { scopeType?: string; scopeId?: string }) => {
+  const response = await client.get<ApiResponse<SkillBindingItem[]>>('/skills/bindings', { params })
+  return response.data
+}
+
+export const deleteSkillBinding = async (bindingId: number) => {
+  const response = await client.delete<ApiResponse>(`/skills/bindings/${bindingId}`)
+  return response.data
+}
+
+export const respondSkillApproval = async (
+  requestId: number,
+  payload: { approved: boolean; note?: string },
+) => {
+  const response = await client.post<ApiResponse>(`/skills/approvals/${requestId}/respond`, payload)
+  return response.data
+}
+
+export const listSkillApprovals = async (params?: {
+  status?: 'pending' | 'approved' | 'denied' | 'expired'
+  scopeType?: 'system' | 'user' | 'session' | 'battle_model'
+  scopeId?: string
+  skillId?: number
+  limit?: number
+}) => {
+  const response = await client.get<ApiResponse<SkillApprovalRequestItem[]>>('/skills/approvals', {
+    params,
+  })
+  return response.data
+}
+
+export const listSkillAudits = async (params?: {
+  page?: number
+  pageSize?: number
+  skillId?: number
+  versionId?: number
+  sessionId?: number
+  battleRunId?: number
+  toolName?: string
+  approvalStatus?: 'approved' | 'denied' | 'expired' | 'skipped'
+  hasError?: boolean
+}) => {
+  const response = await client.get<ApiResponse<{
+    items: SkillExecutionAuditItem[]
+    page: number
+    pageSize: number
+    total: number
+    hasMore: boolean
+  }>>('/skills/audits', { params })
+  return response.data
+}
+

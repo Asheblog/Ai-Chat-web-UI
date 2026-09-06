@@ -9,8 +9,8 @@ import { HealthService, HealthServiceError } from './health-service'
 import { AppInfoService } from './app-info-service'
 import {
   syncSharedAnonymousQuota as defaultSyncSharedAnonymousQuota,
-} from '../../utils/quota'
-import { invalidateQuotaPolicyCache as defaultInvalidateQuotaPolicyCache } from '../../utils/system-settings'
+} from '../quota/legacy-utils'
+import { invalidateQuotaPolicyCache as defaultInvalidateQuotaPolicyCache } from './legacy-utils'
 
 export interface SettingsFacadeDeps {
   settingsService: SettingsService

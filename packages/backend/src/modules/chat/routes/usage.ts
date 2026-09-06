@@ -1,8 +1,8 @@
 import type { Hono } from 'hono';
 import type { PrismaClient } from '@prisma/client';
 import { actorMiddleware } from '../../../middleware/auth';
-import { Tokenizer } from '../../../utils/tokenizer';
-import { resolveContextLimit } from '../../../utils/context-window';
+import { Tokenizer } from '../../../services/tokenizer/legacy-utils';
+import { resolveContextLimit } from '../../../services/context/legacy-utils';
 import type { Actor, ApiResponse } from '../../../types';
 import type { ChatService } from '../../../services/chat';
 import { aggregateUsageMetricTotals } from '../usage-metrics';

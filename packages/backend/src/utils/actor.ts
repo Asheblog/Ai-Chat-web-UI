@@ -1,5 +1,5 @@
 import type { Actor } from '../types'
-import { getQuotaPolicy } from './system-settings'
+import { getQuotaPolicy } from '../services/settings/legacy-utils'
 
 export interface AnonymousSessionContext {
   anonymousKey: string

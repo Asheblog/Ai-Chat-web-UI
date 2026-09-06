@@ -1,11 +1,11 @@
 /**
- * Anonymous Cleanup Utils - 代理层
+ * Anonymous Cleanup 兼容代理层。
  *
- * 委托给 AnonymousCleanupService，可由容器显式绑定。
+ * 从 utils/anonymous-cleanup.ts 迁移至 services 层，避免 utils 依赖 services。
  */
 
-import type { CleanupOptions } from '../services/cleanup/anonymous-cleanup-service'
-import type { AnonymousCleanupService } from '../services/cleanup/anonymous-cleanup-service'
+import type { CleanupOptions } from './anonymous-cleanup-service'
+import type { AnonymousCleanupService } from './anonymous-cleanup-service'
 
 // Re-export types
 export type { CleanupOptions }

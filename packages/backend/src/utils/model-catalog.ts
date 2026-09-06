@@ -16,7 +16,7 @@ import {
   guessKnownCompletionLimit,
   invalidateCompletionLimitCache,
   invalidateContextWindowCache,
-} from './context-window'
+} from '../services/context/legacy-utils'
 import {
   createCapabilityEnvelope,
   mergeCapabilityLayers,

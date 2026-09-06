@@ -1,12 +1,12 @@
 import type { PrismaClient } from '@prisma/client'
 import type { z } from 'zod'
 import { prisma as defaultPrisma } from '../db'
-import { Tokenizer } from '../utils/tokenizer'
+import { Tokenizer } from '../services/tokenizer/legacy-utils'
 import {
   resolveCompletionLimit as defaultResolveCompletionLimit,
   resolveContextLimit as defaultResolveContextLimit,
-} from '../utils/context-window'
-import { cleanupExpiredChatImages as defaultCleanupExpiredChatImages } from '../utils/chat-images'
+} from '../services/context/legacy-utils'
+import { cleanupExpiredChatImages as defaultCleanupExpiredChatImages } from '../services/attachment/legacy-utils'
 import { SecretVaultService } from '../services/secret-vault'
 import { ConnectionServiceError } from '../services/connections/connection-service'
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../config/storage'

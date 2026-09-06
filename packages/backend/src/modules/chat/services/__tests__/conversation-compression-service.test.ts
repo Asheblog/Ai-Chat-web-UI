@@ -1,5 +1,5 @@
 import { ConversationCompressionService } from "../conversation-compression-service"
-import { Tokenizer } from "../../../../utils/tokenizer"
+import { Tokenizer } from "../../../../services/tokenizer/legacy-utils"
 
 type MockPrisma = {
   systemSetting: {

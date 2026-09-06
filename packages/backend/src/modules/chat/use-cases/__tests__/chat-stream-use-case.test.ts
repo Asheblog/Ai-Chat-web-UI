@@ -11,24 +11,25 @@ jest.mock('../../services/message-service', () => ({
 }))
 
 // Mock quota utils
-jest.mock('../../../../utils/quota', () => ({
+jest.mock('../../../../services/quota/legacy-utils', () => ({
   __esModule: true,
   consumeActorQuota: jest.fn().mockResolvedValue({ success: true, snapshot: null }),
   serializeQuotaSnapshot: jest.fn().mockReturnValue({}),
 }))
 
-// Mock chat-images
-jest.mock('../../../../utils/chat-images', () => ({
+// Mock chat-images（服务代理与纯函数已拆分）
+jest.mock('../../../../services/attachment/legacy-utils', () => ({
   __esModule: true,
   cleanupExpiredChatImages: jest.fn().mockResolvedValue(undefined),
   loadPersistedChatImages: jest.fn().mockResolvedValue([]),
-  determineChatImageBaseUrl: jest.fn().mockReturnValue(''),
-  CHAT_IMAGE_DEFAULT_RETENTION_DAYS: 30,
-  persistChatImages: jest.fn().mockResolvedValue(undefined),
-  validateChatImages: jest.fn().mockResolvedValue(undefined),
 }))
 
-// Mock task-trace
+jest.mock('../../../../utils/chat-images', () => ({
+  __esModule: true,
+  determineChatImageBaseUrl: jest.fn().mockReturnValue(''),
+}))
+
+// Mock task-trace（Recorder 纯工具与配置代理已拆分）
 jest.mock('../../../../utils/task-trace', () => ({
   __esModule: true,
   TaskTraceRecorder: {
@@ -39,8 +40,12 @@ jest.mock('../../../../utils/task-trace', () => ({
       setMessageContext: jest.fn(),
     }),
   },
-  shouldEnableTaskTrace: jest.fn().mockResolvedValue({ enabled: false, traceLevel: 'off', config: { idleTimeoutMs: 0, maxEvents: 0 } }),
   summarizeSseLine: jest.fn(),
+}))
+
+jest.mock('../../../../services/task-trace/legacy-utils', () => ({
+  __esModule: true,
+  shouldEnableTaskTrace: jest.fn().mockResolvedValue({ enabled: false, traceLevel: 'off', config: { idleTimeoutMs: 0, maxEvents: 0 } }),
 }))
 
 // Mock stream-state
@@ -64,7 +69,7 @@ jest.mock('../../../../services/document-services-factory', () => ({
 }))
 
 // Mock anonymous-cleanup
-jest.mock('../../../../utils/anonymous-cleanup', () => ({
+jest.mock('../../../../services/cleanup/legacy-utils', () => ({
   __esModule: true,
   cleanupAnonymousSessions: jest.fn().mockResolvedValue(undefined),
 }))

@@ -1,11 +1,11 @@
 import { VisionProxyToolHandler } from '../vision-proxy-handler'
 import { VisionProxyServiceError } from '../../services/vision-proxy-service'
 
-jest.mock('../../../../utils/chat-images', () => ({
+jest.mock('../../../../services/attachment/legacy-utils', () => ({
   loadPersistedChatImages: jest.fn(),
 }))
 
-import { loadPersistedChatImages } from '../../../../utils/chat-images'
+import { loadPersistedChatImages } from '../../../../services/attachment/legacy-utils'
 
 const config = {
   enabled: true,

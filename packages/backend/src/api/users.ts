@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
 import type { ApiResponse } from '../types'
-import { serializeQuotaSnapshot } from '../utils/quota'
+import { serializeQuotaSnapshot } from '../services/quota/legacy-utils'
 import { UserServiceError, type ListStatus } from '../services/users'
 import type { UserService } from '../services/users/user-service'
 

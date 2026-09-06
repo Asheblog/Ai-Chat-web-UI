@@ -1,7 +1,13 @@
-import type { Actor, UsageQuotaSnapshot } from '../types'
-import { QuotaService, SHARED_ANONYMOUS_IDENTIFIER } from '../services/quota/quota-service'
+/**
+ * Quota 兼容代理层。
+ *
+ * 从 utils/quota.ts 迁移至 services 层，避免 utils 依赖 services。
+ */
 
-export type { ConsumeQuotaOptions, InspectQuotaOptions, ProcessResult } from '../services/quota/quota-service'
+import type { Actor, UsageQuotaSnapshot } from '../../types'
+import { QuotaService, SHARED_ANONYMOUS_IDENTIFIER } from './quota-service'
+
+export type { ConsumeQuotaOptions, InspectQuotaOptions, ProcessResult } from './quota-service'
 
 interface QuotaUtilsDeps {
   quotaService: QuotaService

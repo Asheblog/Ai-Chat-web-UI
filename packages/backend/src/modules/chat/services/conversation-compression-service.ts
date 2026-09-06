@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../../db'
-import { Tokenizer } from '../../../utils/tokenizer'
-import { resolveContextLimit as defaultResolveContextLimit } from '../../../utils/context-window'
+import { Tokenizer } from '../../../services/tokenizer/legacy-utils'
+import { resolveContextLimit as defaultResolveContextLimit } from '../../../services/context/legacy-utils'
 import type { SecretVaultService } from '../../../services/secret-vault'
 import {
   buildHeaders,

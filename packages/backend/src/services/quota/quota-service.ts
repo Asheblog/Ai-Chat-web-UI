@@ -1,7 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
 import type { Actor, UsageQuotaSnapshot, UsageQuotaScope } from '../../types'
 import { prisma as defaultPrisma } from '../../db'
-import { getQuotaPolicy as defaultGetQuotaPolicy } from '../../utils/system-settings'
+import { getQuotaPolicy as defaultGetQuotaPolicy } from '../settings/legacy-utils'
 
 const SHARED_ANONYMOUS_IDENTIFIER = 'anon:shared' as const
 

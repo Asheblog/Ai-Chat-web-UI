@@ -1,4 +1,10 @@
-import { ContextWindowService } from '../services/context/context-window-service'
+/**
+ * Context Window 兼容代理层。
+ *
+ * 从 utils/context-window.ts 迁移至 services 层，避免 utils 依赖 services。
+ */
+
+import { ContextWindowService } from './context-window-service'
 
 type Provider = 'openai' | 'azure_openai' | 'ollama' | 'google_genai' | string | null | undefined
 export interface ResolveContextLimitOptions {

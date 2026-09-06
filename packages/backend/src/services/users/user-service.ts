@@ -2,7 +2,7 @@ import type { Prisma, PrismaClient } from '@prisma/client'
 import type { UsageQuotaSnapshot } from '../../types'
 import { prisma as defaultPrisma } from '../../db'
 import { AuthUtils as defaultAuthUtils } from '../../utils/auth'
-import { inspectActorQuota as defaultInspectActorQuota } from '../../utils/quota'
+import { inspectActorQuota as defaultInspectActorQuota } from '../quota/legacy-utils'
 
 export class UserServiceError extends Error {
   statusCode: number

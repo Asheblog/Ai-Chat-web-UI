@@ -1,6 +1,12 @@
-import { TokenizerService } from '../services/tokenizer/tokenizer-service'
+/**
+ * Tokenizer 兼容代理层。
+ *
+ * 从 utils/tokenizer.ts 迁移至 services 层，避免 utils 依赖 services。
+ */
 
-export { TokenizerService } from '../services/tokenizer/tokenizer-service'
+import { TokenizerService } from './tokenizer-service'
+
+export { TokenizerService } from './tokenizer-service'
 
 interface TokenizerUtilsDeps {
   tokenizerService: TokenizerService

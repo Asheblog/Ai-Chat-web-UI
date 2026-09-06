@@ -4,13 +4,15 @@ import { z } from 'zod';
 import type { ApiResponse, Actor, Message, UsageQuotaSnapshot } from '../../../types';
 import type { ProviderType } from '../../../utils/providers';
 import { buildChatProviderRequest } from '../../../utils/chat-provider';
-import { Tokenizer } from '../../../utils/tokenizer';
-import { cleanupExpiredChatImages, loadPersistedChatImages, determineChatImageBaseUrl } from '../../../utils/chat-images';
+import { Tokenizer } from '../../../services/tokenizer/legacy-utils';
+import { cleanupExpiredChatImages, loadPersistedChatImages } from '../../../services/attachment/legacy-utils';
+import { determineChatImageBaseUrl } from '../../../utils/chat-images';
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../../../config/storage';
-import { consumeActorQuota, serializeQuotaSnapshot } from '../../../utils/quota';
-import { cleanupAnonymousSessions } from '../../../utils/anonymous-cleanup';
-import { resolveContextLimit, resolveCompletionLimit } from '../../../utils/context-window';
-import { TaskTraceRecorder, shouldEnableTaskTrace, summarizeSseLine, type TaskTraceStatus } from '../../../utils/task-trace';
+import { consumeActorQuota, serializeQuotaSnapshot } from '../../../services/quota/legacy-utils';
+import { cleanupAnonymousSessions } from '../../../services/cleanup/legacy-utils';
+import { resolveContextLimit, resolveCompletionLimit } from '../../../services/context/legacy-utils';
+import { TaskTraceRecorder, summarizeSseLine, type TaskTraceStatus } from '../../../utils/task-trace';
+import { shouldEnableTaskTrace } from '../../../services/task-trace/legacy-utils';
 import { createReasoningState, DEFAULT_REASONING_TAGS, extractByTags } from '../../../utils/reasoning-tags';
 import {
   createAgentWebSearchResponse,

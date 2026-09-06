@@ -1,17 +1,18 @@
 /**
- * System Settings Utils - 代理层
+ * System Settings 兼容代理层。
  *
+ * 从 utils/system-settings.ts 迁移至 services 层，避免 utils 依赖 services。
  * 委托给 SystemSettingsService，可由容器显式绑定。
  */
 
 import type { Prisma, PrismaClient } from '@prisma/client'
-import { prisma } from '../db'
+import { prisma } from '../../db'
 import {
   SystemSettingsService,
   type SystemQuotaPolicy,
   type BattleUsagePolicy,
   type ModelAccessDefaults,
-} from '../services/settings/system-settings-service'
+} from './system-settings-service'
 
 // Re-export type
 export type { SystemQuotaPolicy, BattleUsagePolicy, ModelAccessDefaults }

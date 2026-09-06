@@ -1,12 +1,13 @@
 import type { Message as PrismaMessage, PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../../db'
 import type { Actor, UsageQuotaSnapshot } from '../../../types'
-import { persistChatImages as defaultPersistChatImages, validateChatImages } from '../../../utils/chat-images'
+import { persistChatImages as defaultPersistChatImages } from '../../../services/attachment/legacy-utils'
+import { validateChatImages } from '../../../utils/chat-images'
 import {
   consumeActorQuota as defaultConsumeActorQuota,
   inspectActorQuota as defaultInspectActorQuota,
-} from '../../../utils/quota'
-import { getQuotaPolicy } from '../../../utils/system-settings'
+} from '../../../services/quota/legacy-utils'
+import { getQuotaPolicy } from '../../../services/settings/legacy-utils'
 import { MESSAGE_DEDUPE_WINDOW_MS, QuotaExceededError } from '../chat-common'
 
 type IncomingImage = { data: string; mime: string }

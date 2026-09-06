@@ -6,8 +6,8 @@
 
 import type { PrismaClient } from '@prisma/client'
 import type { Actor, Message, UsageQuotaSnapshot } from '../../../types'
-import { consumeActorQuota } from '../../../utils/quota'
-import { loadPersistedChatImages } from '../../../utils/chat-images'
+import { consumeActorQuota } from '../../../services/quota/legacy-utils'
+import { loadPersistedChatImages } from '../../../services/attachment/legacy-utils'
 import { createUserMessageWithQuota } from './message-service'
 import { QuotaExceededError } from '../chat-common'
 import { upsertAssistantMessageByClientId } from '../assistant-message-service'

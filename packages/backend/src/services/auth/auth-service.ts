@@ -6,7 +6,7 @@ import {
   determineProfileImageBaseUrl as defaultDetermineProfileImageBaseUrl,
   resolveProfileImageUrl as defaultResolveProfileImageUrl,
 } from '../../utils/profile-images'
-import { inspectActorQuota as defaultInspectActorQuota } from '../../utils/quota'
+import { inspectActorQuota as defaultInspectActorQuota } from '../quota/legacy-utils'
 
 export class AuthServiceError extends Error {
   statusCode: number

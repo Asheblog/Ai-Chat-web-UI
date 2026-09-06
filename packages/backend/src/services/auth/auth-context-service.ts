@@ -3,7 +3,7 @@ import type { PrismaClient } from '@prisma/client'
 import type { Actor, AnonymousActor, UserActor } from '../../types'
 import { prisma as defaultPrisma } from '../../db'
 import { AuthUtils as defaultAuthUtils } from '../../utils/auth'
-import { getQuotaPolicy as defaultGetQuotaPolicy } from '../../utils/system-settings'
+import { getQuotaPolicy as defaultGetQuotaPolicy } from '../settings/legacy-utils'
 
 const ANON_KEY_REGEX = /^[a-zA-Z0-9_-]{10,128}$/
 

@@ -79,18 +79,18 @@ import {
   invalidateBattlePolicyCache,
   invalidateReasoningMaxOutputTokensDefaultCache,
   configureSystemSettingsUtils,
-} from '../utils/system-settings'
+} from '../services/settings/legacy-utils'
 import {
   invalidateCompletionLimitCache,
   invalidateContextWindowCache,
   configureContextWindowUtils,
-} from '../utils/context-window'
-import { invalidateTaskTraceConfig, configureTaskTraceUtils } from '../utils/task-trace'
-import { syncSharedAnonymousQuota, configureQuotaUtils } from '../utils/quota'
+} from '../services/context/legacy-utils'
+import { invalidateTaskTraceConfig, configureTaskTraceUtils } from '../services/task-trace/legacy-utils'
+import { syncSharedAnonymousQuota, configureQuotaUtils } from '../services/quota/legacy-utils'
 import { replaceProfileImage } from '../utils/profile-images'
-import { deleteAttachmentsForSessions, configureChatImagesUtils } from '../utils/chat-images'
-import { configureAnonymousCleanupUtils } from '../utils/anonymous-cleanup'
-import { configureTokenizerUtils } from '../utils/tokenizer'
+import { deleteAttachmentsForSessions, configureChatImagesUtils } from '../services/attachment/legacy-utils'
+import { configureAnonymousCleanupUtils } from '../services/cleanup/legacy-utils'
+import { configureTokenizerUtils } from '../services/tokenizer/legacy-utils'
 import { BackendLogger as log } from '../utils/logger'
 import { ServiceRegistry } from './service-registry'
 import { SERVICE_KEYS } from './service-keys'

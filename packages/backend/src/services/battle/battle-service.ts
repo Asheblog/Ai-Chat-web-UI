@@ -5,8 +5,9 @@ import type { Actor } from '../../types'
 import { prisma as defaultPrisma } from '../../db'
 import type { ModelResolverService } from '../catalog/model-resolver-service'
 import { consumeBattleQuota } from '../../utils/battle-quota'
-import { getBattlePolicy } from '../../utils/system-settings'
-import { TaskTraceRecorder, shouldEnableTaskTrace, truncateString, type TaskTraceStatus } from '../../utils/task-trace'
+import { getBattlePolicy } from '../settings/legacy-utils'
+import { TaskTraceRecorder, truncateString, type TaskTraceStatus } from '../../utils/task-trace'
+import { shouldEnableTaskTrace } from '../task-trace/legacy-utils'
 import {
   parseCapabilityEnvelope,
 } from '../../utils/capabilities'

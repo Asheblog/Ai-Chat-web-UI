@@ -4,7 +4,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { actorMiddleware, requireUserActor } from '../middleware/auth';
 import type { AuthResponse, RegisterResponse, ApiResponse, ActorContext, Actor } from '../types';
-import { serializeQuotaSnapshot } from '../utils/quota';
+import { serializeQuotaSnapshot } from '../services/quota/legacy-utils';
 import { AuthServiceError, type AuthService } from '../services/auth/auth-service';
 import type { AppConfig } from '../config/app-config';
 

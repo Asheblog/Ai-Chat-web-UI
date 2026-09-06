@@ -3,12 +3,12 @@ import { zValidator } from '@hono/zod-validator';
 import type { PrismaClient } from '@prisma/client';
 import { actorMiddleware } from '../../../middleware/auth';
 import type { Actor, ApiResponse, UsageQuotaSnapshot } from '../../../types';
-import { serializeQuotaSnapshot } from '../../../utils/quota';
-import { cleanupAnonymousSessions } from '../../../utils/anonymous-cleanup';
+import { serializeQuotaSnapshot } from '../../../services/quota/legacy-utils';
+import { cleanupAnonymousSessions } from '../../../services/cleanup/legacy-utils';
 import { BackendLogger as log } from '../../../utils/logger';
-import { TaskTraceRecorder, shouldEnableTaskTrace, type TaskTraceStatus } from '../../../utils/task-trace';
+import { TaskTraceRecorder, type TaskTraceStatus, truncateString } from '../../../utils/task-trace';
+import { shouldEnableTaskTrace } from '../../../services/task-trace/legacy-utils';
 import { redactHeadersForTrace, summarizeBodyForTrace, summarizeErrorForTrace } from '../../../utils/trace-helpers';
-import { truncateString } from '../../../utils/task-trace';
 import {
   QuotaExceededError,
   extendAnonymousSession,

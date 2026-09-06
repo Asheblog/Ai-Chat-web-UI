@@ -9,9 +9,9 @@ import { getModelResolverService } from '../utils/model-resolver';
 import { buildHeaders, type ProviderType } from '../utils/providers';
 import { buildChatProviderRequest, flattenMessageContent } from '../utils/chat-provider';
 import type { SecretVaultService } from '../services/secret-vault';
-import { TaskTraceRecorder, shouldEnableTaskTrace, type TaskTraceStatus } from '../utils/task-trace';
+import { TaskTraceRecorder, type TaskTraceStatus, truncateString } from '../utils/task-trace';
+import { shouldEnableTaskTrace } from '../services/task-trace/legacy-utils';
 import { redactHeadersForTrace, summarizeBodyForTrace, summarizeErrorForTrace } from '../utils/trace-helpers';
-import { truncateString } from '../utils/task-trace';
 import type { Actor } from '../types';
 
 import type { Message as MessageEntity } from '@prisma/client';

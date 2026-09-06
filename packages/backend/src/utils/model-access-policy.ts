@@ -4,7 +4,7 @@
  * 委托给 SystemSettingsService 工具绑定。
  */
 
-import { getSystemSettingsServiceForUtils } from './system-settings'
+import { getSystemSettingsServiceForUtils } from '../services/settings/legacy-utils'
 import type { Actor } from '../types'
 
 export type ModelAccessTriState = 'allow' | 'deny' | 'inherit'

@@ -1,5 +1,5 @@
 import type { IToolHandler, ToolCall, ToolCallContext, ToolDefinition, ToolHandlerResult } from './types'
-import { loadPersistedChatImages } from '../../../utils/chat-images'
+import { loadPersistedChatImages } from '../../../services/attachment/legacy-utils'
 import { VisionProxyService, type VisionProxyConfig } from '../services/vision-proxy-service'
 
 /**

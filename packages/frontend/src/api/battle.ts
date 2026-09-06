@@ -1,0 +1,325 @@
+import { apiHttpClient, DEFAULT_API_BASE_URL, handleUnauthorizedRedirect } from '@/api/http'
+import { readSseStream } from '@aichat/shared/sse-reader'
+import type {
+  ApiResponse,
+  BattleContentInput,
+  BattleRunDetail,
+  BattleRunListResponse,
+  BattleRunSummary,
+  BattleShare,
+  BattleStreamEvent,
+  RejudgeExpectedAnswerInput,
+  RejudgeStreamEvent,
+  SkillRuntimeReference,
+} from '@/types'
+
+const client = apiHttpClient
+
+interface BattleModelPayload {
+  modelId: string
+  connectionId?: number
+  rawId?: string
+  skills?: {
+    builtin?: string[]
+    enabled?: SkillRuntimeReference[]
+    overrides?: Record<string, Record<string, unknown>>
+  }
+  extraPrompt?: string
+  custom_body?: Record<string, any>
+  custom_headers?: Array<{ name: string; value: string }>
+  reasoningEnabled?: boolean
+  reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh'
+  ollamaThink?: boolean
+}
+
+export interface MultiModelBattleStreamPayload {
+  mode: 'multi_model'
+  title?: string
+  prompt: BattleContentInput
+  expectedAnswer: BattleContentInput
+  judge: {
+    modelId: string
+    connectionId?: number
+    rawId?: string
+  }
+  judgeThreshold?: number
+  runsPerModel: number
+  passK: number
+  models: BattleModelPayload[]
+  maxConcurrency?: number
+}
+
+export type BattleStreamPayload = MultiModelBattleStreamPayload
+
+const buildValidationMessage = (payload: any): string | null => {
+  if (!payload) return null
+  const issues = payload?.error?.issues
+  if (Array.isArray(issues) && issues.length > 0) {
+    const message = typeof issues[0]?.message === 'string' ? issues[0].message.trim() : ''
+    if (message) return message
+  }
+  if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error
+  if (typeof payload?.message === 'string' && payload.message.trim()) return payload.message
+  return null
+}
+
+export async function* streamBattle(
+  payload: BattleStreamPayload,
+  options?: { signal?: AbortSignal },
+): AsyncGenerator<BattleStreamEvent, void, unknown> {
+  let response: Response
+  try {
+    response = await fetch(`${DEFAULT_API_BASE_URL}/battle/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      },
+      body: JSON.stringify(payload),
+      credentials: 'include',
+      signal: options?.signal,
+    })
+  } catch (error: any) {
+    if (options?.signal?.aborted) return
+    throw error
+  }
+
+  if (response.status === 401) {
+    handleUnauthorizedRedirect()
+    throw new Error('Unauthorized')
+  }
+
+  if (!response.ok) {
+    let payload: any = null
+    try {
+      payload = await response.json()
+    } catch {
+      // ignore
+    }
+    const detail = buildValidationMessage(payload)
+    const error: any = new Error(detail || `HTTP error ${response.status}`)
+    error.status = response.status
+    error.payload = payload
+    throw error
+  }
+
+  let completed = false
+  let aborted = false
+  const onAbort = () => {
+    aborted = true
+  }
+  options?.signal?.addEventListener('abort', onAbort)
+
+  try {
+    for await (const line of readSseStream(response)) {
+      if (!line || line.startsWith(':')) continue
+      if (!line.startsWith('data:')) continue
+      const payloadRaw = line.slice(5).trimStart()
+      if (!payloadRaw) continue
+      if (payloadRaw === '[DONE]') {
+        completed = true
+        return
+      }
+      try {
+        const parsed = JSON.parse(payloadRaw) as BattleStreamEvent
+        if (parsed?.type === 'complete') {
+          completed = true
+        }
+        if (parsed) {
+          yield parsed
+        }
+      } catch {
+        // ignore malformed chunks
+      }
+    }
+  } catch (error: any) {
+    if (options?.signal?.aborted || aborted || error?.name === 'AbortError') {
+      return
+    }
+    throw error
+  } finally {
+    options?.signal?.removeEventListener('abort', onAbort)
+  }
+
+  if (!completed) {
+    if (options?.signal?.aborted || aborted) return
+    const error: any = new Error('Stream closed before completion')
+    error.code = 'STREAM_INCOMPLETE'
+    throw error
+  }
+}
+
+export const listBattleRuns = async (params?: { page?: number; limit?: number }) => {
+  const response = await client.get<ApiResponse<BattleRunListResponse>>('/battle/runs', { params })
+  return response.data
+}
+
+export const getBattleRun = async (runId: number) => {
+  const response = await client.get<ApiResponse<BattleRunDetail>>(`/battle/runs/${runId}`)
+  return response.data
+}
+
+export const deleteBattleRun = async (runId: number) => {
+  const response = await client.delete<ApiResponse>(`/battle/runs/${runId}`)
+  return response.data
+}
+
+export interface BattleGlobalClearResult {
+  deletedRuns: number
+  deletedResults: number
+  deletedShares: number
+  deletedImages: number
+  vacuumScheduled: boolean
+  vacuumMode: 'async'
+}
+
+export const deleteAllBattleRunsGlobal = async () => {
+  const response = await client.delete<ApiResponse<BattleGlobalClearResult>>('/battle/admin/runs/all')
+  return response.data
+}
+
+export const cancelBattleRun = async (runId: number) => {
+  const response = await client.post<ApiResponse<{
+    status: BattleRunSummary['status']
+    summary: BattleRunSummary['summary']
+  }>>(`/battle/runs/${runId}/cancel`)
+  return response.data
+}
+
+export interface BattleAttemptActionPayload {
+  modelId?: string
+  connectionId?: number
+  rawId?: string
+  questionIndex?: number
+  attemptIndex: number
+}
+
+export const cancelBattleAttempt = async (runId: number, payload: BattleAttemptActionPayload) => {
+  const response = await client.post<ApiResponse>(`/battle/runs/${runId}/attempts/cancel`, payload)
+  return response.data
+}
+
+export const retryBattleAttempt = async (runId: number, payload: BattleAttemptActionPayload) => {
+  const response = await client.post<ApiResponse>(`/battle/runs/${runId}/attempts/retry`, payload)
+  return response.data
+}
+
+export const retryBattleJudgeResult = async (resultId: number) => {
+  const response = await client.post<ApiResponse>(`/battle/results/${resultId}/judge/retry`)
+  return response.data
+}
+
+export const retryBattleJudgeRun = async (runId: number, payload?: { resultIds?: number[] }) => {
+  const response = await client.post<ApiResponse>(`/battle/runs/${runId}/judge/retry`, payload || {})
+  return response.data
+}
+
+export const createBattleShare = async (runId: number, payload?: { title?: string; expiresInHours?: number | null }) => {
+  const response = await client.post<ApiResponse<BattleShare>>(`/battle/runs/${runId}/share`, payload || {})
+  return response.data
+}
+
+export const getBattleShare = async (token: string) => {
+  const response = await client.get<ApiResponse<BattleShare>>(`/battle/shares/${token}`)
+  return response.data
+}
+
+export interface RejudgePayload {
+  expectedAnswer: RejudgeExpectedAnswerInput
+  resultIds?: number[]
+  questionIndices?: number[]
+  judge?: {
+    modelId: string
+    connectionId?: number
+    rawId?: string
+  }
+  judgeThreshold?: number
+}
+
+export async function* rejudgeWithNewAnswer(
+  runId: number,
+  payload: RejudgePayload,
+  options?: { signal?: AbortSignal },
+): AsyncGenerator<RejudgeStreamEvent, void, unknown> {
+  let response: Response
+  try {
+    response = await fetch(`${DEFAULT_API_BASE_URL}/battle/runs/${runId}/rejudge`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      },
+      body: JSON.stringify(payload),
+      credentials: 'include',
+      signal: options?.signal,
+    })
+  } catch (error: any) {
+    if (options?.signal?.aborted) return
+    throw error
+  }
+
+  if (response.status === 401) {
+    handleUnauthorizedRedirect()
+    throw new Error('Unauthorized')
+  }
+
+  if (!response.ok) {
+    let errPayload: any = null
+    try {
+      errPayload = await response.json()
+    } catch {
+      // ignore
+    }
+    const detail = buildValidationMessage(errPayload)
+    const error: any = new Error(detail || `HTTP error ${response.status}`)
+    error.status = response.status
+    error.payload = errPayload
+    throw error
+  }
+
+  let completed = false
+  let aborted = false
+  const onAbort = () => {
+    aborted = true
+  }
+  options?.signal?.addEventListener('abort', onAbort)
+
+  try {
+    for await (const line of readSseStream(response)) {
+      if (!line || line.startsWith(':')) continue
+      if (!line.startsWith('data:')) continue
+      const payloadRaw = line.slice(5).trimStart()
+      if (!payloadRaw) continue
+      if (payloadRaw === '[DONE]') {
+        completed = true
+        return
+      }
+      try {
+        const parsed = JSON.parse(payloadRaw) as RejudgeStreamEvent
+        if (parsed?.type === 'rejudge_complete') {
+          completed = true
+        }
+        if (parsed) {
+          yield parsed
+        }
+      } catch {
+        // ignore malformed chunks
+      }
+    }
+  } catch (error: any) {
+    if (options?.signal?.aborted || aborted || error?.name === 'AbortError') {
+      return
+    }
+    throw error
+  } finally {
+    options?.signal?.removeEventListener('abort', onAbort)
+  }
+
+  if (!completed) {
+    if (options?.signal?.aborted || aborted) return
+    const error: any = new Error('Stream closed before completion')
+    error.code = 'STREAM_INCOMPLETE'
+    throw error
+  }
+}
+

@@ -3,7 +3,7 @@ import { prisma as defaultPrisma } from '../../db'
 import {
   getReasoningMaxOutputTokensDefault as defaultGetReasoningMaxOutputTokensDefault,
   getSystemContextTokenLimit as defaultGetSystemContextTokenLimit,
-} from '../../utils/system-settings'
+} from '../settings/legacy-utils'
 
 type Provider = 'openai' | 'azure_openai' | 'ollama' | 'google_genai' | string | null | undefined
 

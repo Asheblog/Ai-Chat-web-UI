@@ -1,6 +1,7 @@
 import type { Message, PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../db'
-import { persistChatImages as defaultPersistChatImages, validateChatImages } from '../../utils/chat-images'
+import { persistChatImages as defaultPersistChatImages } from '../attachment/legacy-utils'
+import { validateChatImages } from '../../utils/chat-images'
 
 type IncomingImage = { data: string; mime: string }
 

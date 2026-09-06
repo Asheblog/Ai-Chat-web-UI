@@ -1,7 +1,7 @@
 import type { Actor, UsageQuotaSnapshot } from '../types'
 import { QuotaService } from '../services/quota/quota-service'
 import type { ConsumeQuotaOptions, InspectQuotaOptions } from '../services/quota/quota-service'
-import { getBattleQuotaPolicy } from './system-settings'
+import { getBattleQuotaPolicy } from '../services/settings/legacy-utils'
 
 const battleQuotaService = new QuotaService({
   getQuotaPolicy: getBattleQuotaPolicy,

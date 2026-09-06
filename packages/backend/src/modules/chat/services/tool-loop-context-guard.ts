@@ -1,4 +1,4 @@
-import { Tokenizer } from '../../../utils/tokenizer'
+import { Tokenizer } from '../../../services/tokenizer/legacy-utils'
 
 export type ToolLoopGuardMode = 'normal' | 'aggressive'
 

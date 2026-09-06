@@ -1,4 +1,4 @@
-jest.mock('../../../../utils/system-settings', () => ({
+jest.mock('../../../../services/settings/legacy-utils', () => ({
   getQuotaPolicy: jest.fn(async () => ({
     anonymousDailyQuota: 10,
     defaultUserDailyQuota: 100,

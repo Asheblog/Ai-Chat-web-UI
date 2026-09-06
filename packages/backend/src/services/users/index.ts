@@ -1,6 +1,6 @@
 import { prisma } from '../../db'
 import { AuthUtils } from '../../utils/auth'
-import { inspectActorQuota } from '../../utils/quota'
+import { inspectActorQuota } from '../quota/legacy-utils'
 import { BackendLogger as log } from '../../utils/logger'
 import { UserService } from './user-service'
 
