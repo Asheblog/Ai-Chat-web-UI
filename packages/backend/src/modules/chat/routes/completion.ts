@@ -27,7 +27,7 @@ import {
   loadPreStreamTurnContext,
   loadPreStreamHistorySnapshot,
   ungroupedMessagesFromSnapshot,
-} from '../services/pre-stream-context';
+} from '../../../services/chat/request-context';
 
 export interface ChatCompletionRoutesDeps {
   prisma: PrismaClient

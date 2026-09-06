@@ -8,7 +8,7 @@ import {
   evaluatePlanProgress,
   buildTaskPlanningPrompt,
   type TaskPlan,
-} from '../task-planning'
+} from '../../../agent-runtime/task-planning'
 
 describe('task-planning', () => {
   describe('buildTaskPlanningPrompt', () => {

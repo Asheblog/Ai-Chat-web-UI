@@ -3,7 +3,7 @@ import type {
   AgentWebSearchConflictEscalation,
   AgentWebSearchEngine,
   AgentWebSearchLocaleRouting,
-} from './agent-tool-config'
+} from '../../agent-runtime/agent-tool-config'
 
 const WEB_SEARCH_ENGINES: AgentWebSearchEngine[] = ['tavily', 'brave', 'metaso', 'exa']
 const ROUTING_CN_FIRST: AgentWebSearchLocaleRouting = {

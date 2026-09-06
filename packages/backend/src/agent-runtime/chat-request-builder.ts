@@ -1,5 +1,4 @@
 import type { PrismaClient } from '@prisma/client'
-import type { z } from 'zod'
 import { prisma as defaultPrisma } from '../db'
 import { Tokenizer } from '../services/tokenizer/legacy-utils'
 import {
@@ -16,18 +15,17 @@ import {
   type ProviderType,
 } from '../utils/providers'
 import { buildChatProviderRequest } from '../utils/chat-provider'
-import { sendMessageSchema } from '../modules/chat/chat-common'
+import type { RequestGenerationOptions } from './request-options'
 import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills, type RequestedSkillsPayload } from '../modules/skills/types'
 import { buildVisionAttachmentHint, type ImageDescription } from '../services/vision/vision-proxy-service'
-import { buildTaskPlanningPrompt } from '../modules/chat/task-planning'
+import { buildTaskPlanningPrompt } from './task-planning'
 import {
   loadSystemSettingsMap,
   type PreStreamHistorySnapshot,
   type SystemSettingsMap,
-} from '../modules/chat/services/pre-stream-context'
+} from '../services/chat/request-context'
 import type { SessionWithConnection, SessionWithResolvedConnection } from '../services/chat/chat-service'
 
-type SendMessagePayload = z.infer<typeof sendMessageSchema>
 type ChatSessionWithConnection = SessionWithConnection
 type ChatSessionWithResolvedConnection = SessionWithResolvedConnection
 
@@ -63,7 +61,7 @@ export interface PreparedChatRequest {
 
 export interface PrepareChatRequestParams {
   session: ChatSessionWithResolvedConnection
-  payload: SendMessagePayload
+  payload: RequestGenerationOptions
   content: string
   images?: Array<{ data: string; mime: string }>
   historyUpperBound?: Date | null
@@ -642,7 +640,7 @@ export class ChatRequestBuilder {
   }
 
   private resolveReasoningOptions(params: {
-    payload: SendMessagePayload
+    payload: RequestGenerationOptions
     session: ChatSessionWithConnection
     settings: Record<string, string>
   }) {

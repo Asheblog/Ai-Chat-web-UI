@@ -1,5 +1,6 @@
 import type { ResolvedConnection } from '../../repositories/model-resolver-repository'
 import { ChatRequestBuilder, type PreparedChatRequest } from '../../agent-runtime/chat-request-builder'
+import type { RequestGenerationOptions } from '../../agent-runtime/request-options'
 import { ProviderRequester, type ProviderRequester as ProviderRequesterType } from '../../agent-runtime/provider-requester'
 import { buildChatProviderRequest } from '../../utils/chat-provider'
 import {
@@ -65,8 +66,6 @@ const normalizeJudgeScore = (value: unknown) => {
   }
   return Math.min(1, Math.max(0, score))
 }
-
-// resolveMaxToolIterations / buildUsage 已收敛至 modules/chat/services/stream-utils（battle 与 chat 共用）
 
 const normalizeTextOnlyContent = (content: unknown): unknown => {
   if (!Array.isArray(content) || content.length === 0) {
@@ -190,9 +189,7 @@ export class BattleExecutor {
       ...(requestedSkills.overrides ? { overrides: requestedSkills.overrides } : {}),
     }
 
-    const payload: any = {
-      sessionId: 0,
-      content: prompt,
+    const payload: RequestGenerationOptions = {
       reasoningEnabled: modelConfig.reasoningEnabled,
       reasoningEffort: modelConfig.reasoningEffort,
       ollamaThink: modelConfig.ollamaThink,
@@ -265,9 +262,7 @@ export class BattleExecutor {
     const expectedImageCount = Array.isArray(expectedAnswerImages) ? expectedAnswerImages.length : 0
     const judgePrompt = this.buildJudgePrompt(prompt, expectedAnswer, answer, questionImageCount, expectedImageCount)
     const session = this.buildVirtualSession(judgeModel.connection, judgeModel.rawModelId)
-    const payload: any = {
-      sessionId: 0,
-      content: judgePrompt,
+    const payload: RequestGenerationOptions = {
       contextEnabled: false,
       custom_body: { temperature: 0 },
     }

@@ -10,7 +10,7 @@ jest.mock('../../../../db', () => ({
   prisma: {},
 }))
 
-import { ChatRequestBuilder } from '../chat-request-builder'
+import { ChatRequestBuilder } from '../../../../agent-runtime/chat-request-builder'
 import { ConnectionServiceError } from '../../../../services/connections/connection-service'
 
 const baseSession = {

@@ -118,8 +118,8 @@ jest.mock('../../../../services/vision/vision-proxy-service', () => ({
   loadVisionProxyConfig: jest.fn(),
 }))
 
-jest.mock('../../agent-tool-config', () => {
-  const actual = jest.requireActual('../../agent-tool-config')
+jest.mock('../../../../agent-runtime/agent-tool-config', () => {
+  const actual = jest.requireActual('../../../../agent-runtime/agent-tool-config')
   return {
     __esModule: true,
     ...actual,
@@ -142,7 +142,7 @@ import {
   parseStoredImageDescriptions,
 } from '../../../../services/vision/vision-proxy-service'
 import { resolveModelCapabilitiesForSession } from '../../../../utils/model-capabilities'
-import { computeAgentToolFlags } from '../../agent-tool-config'
+import { computeAgentToolFlags } from '../../../../agent-runtime/agent-tool-config'
 
 // visionProxyService 实例：deps 构造与用例断言共用同一 mock
 const visionProxyService = { transcribeImages: jest.fn() }
@@ -251,7 +251,7 @@ describe('createChatStreamHandler error handling', () => {
     ;(parseStoredImageDescriptions as jest.Mock).mockReturnValue(null)
     ;(computeAgentToolFlags as jest.Mock).mockImplementation(
       (...args: unknown[]) =>
-        jest.requireActual('../../agent-tool-config').computeAgentToolFlags(...args),
+        jest.requireActual('../../../../agent-runtime/agent-tool-config').computeAgentToolFlags(...args),
     )
     visionProxyService.transcribeImages.mockReset()
   })

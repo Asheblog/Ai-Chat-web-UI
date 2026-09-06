@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { IToolHandler, ToolCall, ToolCallContext, ToolDefinition, ToolHandlerFactoryParams, ToolHandlerResult } from '../chat/tool-handlers/types'
+import type { IToolHandler, ToolCall, ToolCallContext, ToolDefinition, ToolHandlerFactoryParams, ToolHandlerResult } from '../../agent-runtime/tool-handler-types'
 import { createToolHandlerRegistry, ToolHandlerRegistry } from '../chat/tool-handlers'
 import { prisma as defaultPrisma } from '../../db'
 import { resolveSkillPolicy } from './skill-policy-engine'

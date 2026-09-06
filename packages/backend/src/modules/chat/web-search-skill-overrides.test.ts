@@ -1,5 +1,5 @@
 import { applyWebSearchSkillOverrides } from './web-search-skill-overrides'
-import type { AgentWebSearchConfig } from './agent-tool-config'
+import type { AgentWebSearchConfig } from '../../agent-runtime/agent-tool-config'
 
 const createBaseConfig = (): AgentWebSearchConfig => ({
   enabled: true,

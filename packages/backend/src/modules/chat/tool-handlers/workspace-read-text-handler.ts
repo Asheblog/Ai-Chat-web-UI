@@ -10,7 +10,7 @@ import type {
   ToolDefinition,
   ToolHandlerResult,
   WorkspaceHandlerConfig,
-} from './types'
+} from '../../../agent-runtime/tool-handler-types'
 
 export class WorkspaceReadTextToolHandler implements IToolHandler {
   readonly toolName = 'workspace_read_text'

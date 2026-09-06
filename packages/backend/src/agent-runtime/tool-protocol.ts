@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import type { ToolCall, ToolDefinition, ToolHandlerResult } from '../modules/chat/tool-handlers/types'
+import type { ToolCall, ToolDefinition, ToolHandlerResult } from './tool-handler-types'
 import { convertOpenAIReasoningPayload } from '../utils/providers'
-import { resolveToolProviderAdapter } from '../modules/chat/provider-adapters'
+import { resolveToolProviderAdapter } from './provider-adapters'
 
 export type ToolSchema = 'tools' | 'functions' | 'text'
 

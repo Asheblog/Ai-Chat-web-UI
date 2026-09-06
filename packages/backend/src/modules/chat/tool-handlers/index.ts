@@ -28,7 +28,7 @@ export type {
   ResearchPlanApprovalGateResult,
   ToolHandlerTermination,
   ToolLogDetails,
-} from './types'
+} from '../../../agent-runtime/tool-handler-types'
 
 // 处理器实现
 export { WebSearchToolHandler } from './web-search-handler'

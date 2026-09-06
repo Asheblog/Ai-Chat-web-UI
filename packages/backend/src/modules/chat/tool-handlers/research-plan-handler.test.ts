@@ -5,7 +5,7 @@ import type {
   ResearchPlanApprovalGateInput,
   ResearchPlanApprovalGateResult,
   ToolCallContext,
-} from './types'
+} from '../../../agent-runtime/tool-handler-types'
 
 const makeContext = (): ToolCallContext & { events: Record<string, unknown>[] } => {
   const events: Record<string, unknown>[] = []

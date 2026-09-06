@@ -456,7 +456,6 @@ export const createBattleApi = (deps: BattleApiDeps) => {
 
     const requestSignal = c.req.raw.signal
     const keepaliveIntervalMs = await resolveStreamKeepaliveIntervalMs()
-    let unsubscribe: (() => void) | null = null
 
     return createSseResponse(
       async (ctx) => {
@@ -478,7 +477,7 @@ export const createBattleApi = (deps: BattleApiDeps) => {
           return
         }
 
-        unsubscribe = svc.subscribeRunEvents(share.battleRunId, (event) => {
+        const unsubscribe = svc.subscribeRunEvents(share.battleRunId, (event) => {
           if (ctx.isClosed()) return
           switch (event.type) {
             case 'attempt_start':
@@ -503,27 +502,21 @@ export const createBattleApi = (deps: BattleApiDeps) => {
             default:
               break
           }
-          if (event.type === 'run_complete' || event.type === 'run_cancelled') {
+          if (event.type === 'run_complete' || event.type === 'run_cancelled' || event.type === 'error') {
             send({ type: 'share_complete', status: event.type })
             ctx.close()
           }
         })
+        if (unsubscribe) ctx.onClose(unsubscribe)
 
         if (!unsubscribe) {
           send({ type: 'share_complete', status: 'inactive' })
           ctx.close()
         }
+        await ctx.closed
       },
       {
         signal: requestSignal,
-        onAbort: () => {
-          try {
-            unsubscribe?.()
-          } catch {
-            // ignore
-          }
-          unsubscribe = null
-        },
       },
     )
   })

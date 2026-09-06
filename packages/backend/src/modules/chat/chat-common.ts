@@ -6,14 +6,10 @@ import { getAppConfig, type AppConfig } from '../../config/app-config';
 
 let chatConfig: AppConfig = getAppConfig();
 
-export let BACKOFF_429_MS = chatConfig.retry.upstream429Ms;
-export let BACKOFF_5XX_MS = chatConfig.retry.upstream5xxMs;
 export let MESSAGE_DEDUPE_WINDOW_MS = chatConfig.chat.messageDedupeWindowMs;
 
 export const setChatConfig = (config: AppConfig) => {
   chatConfig = config;
-  BACKOFF_429_MS = chatConfig.retry.upstream429Ms;
-  BACKOFF_5XX_MS = chatConfig.retry.upstream5xxMs;
   MESSAGE_DEDUPE_WINDOW_MS = chatConfig.chat.messageDedupeWindowMs;
 };
 

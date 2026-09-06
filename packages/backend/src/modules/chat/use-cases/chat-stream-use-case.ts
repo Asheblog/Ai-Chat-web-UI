@@ -34,12 +34,12 @@ import {
   updateStreamMetaController,
   deletePendingStreamCancelKey,
 } from '../../chat/stream-state';
-import type { ChatRequestBuilder } from '../services/chat-request-builder';
+import type { ChatRequestBuilder } from '../../../agent-runtime/chat-request-builder';
 import {
   resolveMaxToolIterations,
   sanitizeScope,
   extractUsageNumbers,
-} from '../services/stream-utils';
+} from '../../../agent-runtime/stream-utils';
 import {
   type ReasoningCompatibilityService,
   type AttemptTracker,
@@ -50,8 +50,6 @@ import { redactHeadersForTrace, summarizeBodyForTrace, summarizeErrorForTrace } 
 import { truncateString } from '../../../utils/task-trace';
 import { parseApiError, getFriendlyErrorMessage } from '../../../utils/api-error-parser';
 import {
-  BACKOFF_429_MS,
-  BACKOFF_5XX_MS,
   ProviderChatCompletionResponse,
   QuotaExceededError,
   extendAnonymousSession,
@@ -73,8 +71,8 @@ import {
   parseStoredImageDescriptions,
   type VisionProxyService,
 } from '../services/vision-proxy-service';
-import { buildAgentVisionProxyConfig, computeAgentToolFlags } from '../agent-tool-config';
-import type { ProviderRequester } from '../services/provider-requester';
+import { buildAgentVisionProxyConfig, computeAgentToolFlags } from '../../../agent-runtime/agent-tool-config';
+import type { ProviderRequester } from '../../../agent-runtime/provider-requester';
 import type { NonStreamFallbackService } from '../services/non-stream-fallback-service';
 import type { AssistantProgressService } from '../services/assistant-progress-service';
 import { extractOpenAIResponsesStreamEvent } from '../../../utils/openai-responses';
@@ -90,7 +88,7 @@ import {
   loadPreStreamTurnContext,
   loadPreStreamHistorySnapshot,
   ungroupedMessagesFromSnapshot,
-} from '../services/pre-stream-context';
+} from '../../../services/chat/request-context';
 import { RAGContextBuilder } from '../../chat/rag-context-builder';
 import type { RAGService } from '../../../services/document/rag-service';
 import { getDocumentServices } from '../../../services/document-services-factory';

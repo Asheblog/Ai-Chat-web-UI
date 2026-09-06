@@ -13,12 +13,12 @@ import { extractReasoningFromResponsesResponse, extractTextFromResponsesResponse
 import {
   type ChatRequestBuilder,
   type PreparedChatRequest,
-} from './chat-request-builder'
-import type { ProviderRequester } from './provider-requester'
+} from '../../../agent-runtime/chat-request-builder'
+import type { ProviderRequester } from '../../../agent-runtime/provider-requester'
 import type {
   PreStreamHistorySnapshot,
   SystemSettingsMap,
-} from './pre-stream-context'
+} from '../../../services/chat/request-context'
 import type { SessionWithConnection, SessionWithResolvedConnection } from '../../../services/chat/chat-service'
 
 type SendMessagePayload = z.infer<typeof sendMessageSchema>

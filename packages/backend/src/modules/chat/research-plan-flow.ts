@@ -4,7 +4,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import type { ToolCall, ToolHandlerResult } from './tool-handlers/types'
+import type { ToolCall, ToolHandlerResult } from '../../agent-runtime/tool-handler-types'
 import { RESEARCH_PLAN_TOOL_NAME } from './research-plan-tool'
 
 export interface ResearchPlanGateState {

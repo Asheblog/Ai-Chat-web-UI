@@ -19,7 +19,7 @@ import type {
   ToolCallContext,
   ToolDefinition,
   ToolHandlerResult,
-} from './types'
+} from '../../../agent-runtime/tool-handler-types'
 
 export class ResearchPlanToolHandler implements IToolHandler {
   readonly toolName = 'research_plan'

@@ -15,7 +15,7 @@ import type {
   ToolDefinition,
   ToolHandlerResult,
   WorkspaceHandlerConfig,
-} from './types'
+} from '../../../agent-runtime/tool-handler-types'
 
 const sanitizeRepoFolderName = (value: string) => {
   const trimmed = (value || '').trim()

@@ -250,7 +250,11 @@ export class AppContainer {
       new StreamSettingsService({ prisma: this.context.prisma })
     registry.register(SERVICE_KEYS.streamSettingsService, this.streamSettingsService)
 
-    this.providerRequester = deps.providerRequester ?? new ProviderRequester()
+    this.providerRequester = deps.providerRequester ?? new ProviderRequester({
+      retry: this.context.config.retry,
+      fetchImpl: this.context.fetchImpl,
+      logger: this.context.logger,
+    })
     registry.register(SERVICE_KEYS.providerRequester, this.providerRequester)
 
     this.imageGenerationService =
@@ -393,6 +397,7 @@ export class AppContainer {
         // 否则 bearer 连接无法解密 API Key
         executor: new BattleExecutor({
           requestBuilder: this.chatRequestBuilder,
+          requester: this.providerRequester,
         }),
       })
     registry.register(SERVICE_KEYS.battleService, this.battleService)

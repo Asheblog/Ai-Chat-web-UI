@@ -18,7 +18,7 @@ import type {
   ToolDefinition,
   ToolHandlerResult,
   DocumentHandlerConfig,
-} from './types'
+} from '../../../agent-runtime/tool-handler-types'
 
 export class DocumentToolHandlerAdapter implements IToolHandler {
   readonly toolName = 'document_tools'

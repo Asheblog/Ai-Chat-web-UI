@@ -14,7 +14,7 @@ import { BackendLogger as log } from '../../../utils/logger'
 import {
   loadSystemSettingsMap,
   type SystemSettingsMap,
-} from './pre-stream-context'
+} from '../../../services/chat/request-context'
 import type { SessionWithConnection } from '../../../services/chat/chat-service'
 
 type ChatSessionWithConnection = SessionWithConnection

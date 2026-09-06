@@ -7,7 +7,7 @@ declare const jest: any
 import { UrlReaderToolHandler } from './url-reader-handler'
 import * as urlReaderModule from '../../../utils/url-reader'
 import { readRemoteImages } from '../../../utils/remote-image-reader'
-import type { ToolCallContext } from './types'
+import type { ToolCallContext } from '../../../agent-runtime/tool-handler-types'
 
 const mockedReadRemoteImages = readRemoteImages as any
 

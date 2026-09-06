@@ -10,7 +10,7 @@ import type {
   ToolDefinition,
   ToolHandlerResult,
   ToolHandlerFactoryParams,
-} from './types'
+} from '../../../agent-runtime/tool-handler-types'
 import { WebSearchToolHandler } from './web-search-handler'
 import { PythonToolHandler } from './python-handler'
 import { UrlReaderToolHandler } from './url-reader-handler'

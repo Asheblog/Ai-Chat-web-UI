@@ -1,5 +1,5 @@
 /**
- * 轻量 Task Planning 机制
+ * Chat / Battle 共用的轻量 Task Planning 机制
  *
  * 这是"prompt 级"的计划机制，不是独立的 LLM 调用。
  * 计划从 LLM 的 reasoning/thinking 文本中提取，不增加额外 token 消耗。

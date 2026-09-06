@@ -1,5 +1,5 @@
 import { BattleExecutor } from './battle-executor'
-import type { PreparedChatRequest } from '../../modules/chat/services/chat-request-builder'
+import type { PreparedChatRequest } from '../../agent-runtime/chat-request-builder'
 
 const buildPreparedRequest = (messages: any[]): PreparedChatRequest => ({
   promptTokens: 10,

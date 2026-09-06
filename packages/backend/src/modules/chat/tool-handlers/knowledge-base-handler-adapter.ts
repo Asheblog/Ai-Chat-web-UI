@@ -22,7 +22,7 @@ import type {
   ToolDefinition,
   ToolHandlerResult,
   KnowledgeBaseHandlerConfig,
-} from './types'
+} from '../../../agent-runtime/tool-handler-types'
 
 export class KnowledgeBaseToolHandlerAdapter implements IToolHandler {
   readonly toolName = 'knowledge_base_tools'

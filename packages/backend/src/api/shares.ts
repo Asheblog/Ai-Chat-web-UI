@@ -168,7 +168,6 @@ export const createSharesApi = (deps: SharesApiDeps) => {
 
     const requestSignal = c.req.raw.signal
     const keepaliveIntervalMs = await resolveStreamKeepaliveIntervalMs()
-    let unsubscribe: (() => void) | null = null
 
     return createSseResponse(
       async (ctx) => {
@@ -247,7 +246,7 @@ export const createSharesApi = (deps: SharesApiDeps) => {
         }
 
         // Subscribe first to avoid TOCTOU window
-        unsubscribe = chatSessionEventBus.subscribe(share.sessionId, async (event) => {
+        const unsubscribe = chatSessionEventBus.subscribe(share.sessionId, async (event) => {
           if (ctx.isClosed()) return
           if (!initialized) {
             pendingEvents.push(event)
@@ -256,9 +255,11 @@ export const createSharesApi = (deps: SharesApiDeps) => {
           if (draining) return
           await processEvent(event)
         })
+        ctx.onClose(unsubscribe)
 
         // Query DB for actual message status to correctly pre-count
         const messageStatuses = await svc.getMessageStreamStatuses(streamingMessageIds)
+        if (ctx.isClosed()) return
         for (const m of messageStatuses) {
           if (m.streamStatus !== 'streaming' && m.streamStatus !== 'pending') {
             completedMessageIds.add(m.id)
@@ -284,17 +285,10 @@ export const createSharesApi = (deps: SharesApiDeps) => {
             ctx.close()
           }
         }
+        await ctx.closed
       },
       {
         signal: requestSignal,
-        onAbort: () => {
-          try {
-            unsubscribe?.()
-          } catch {
-            // ignore
-          }
-          unsubscribe = null
-        },
       },
     )
   })

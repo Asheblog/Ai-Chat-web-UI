@@ -69,6 +69,14 @@ for (const rootRel of ROOTS) {
       const spec = match[1] || match[2]
       const target = resolveImport(spec, file, rootRel, fileSet)
       if (target) deps.push(target)
+      if (
+        rootRel === 'packages/backend/src' &&
+        file.includes('/agent-runtime/') &&
+        !file.endsWith('.test.ts') &&
+        target?.includes('/modules/chat/')
+      ) {
+        failures.push(`${file}: agent-runtime must not import modules/chat; inject inputs or use shared runtime/services`)
+      }
     }
 
     // HTTP/API layer must not reach into the Prisma singleton.

@@ -2,7 +2,7 @@
  * 深度研究计划工具定义与参数解析/校验。
  */
 
-import type { ToolDefinition } from './tool-handlers/types'
+import type { ToolDefinition } from '../../agent-runtime/tool-handler-types'
 
 export const RESEARCH_PLAN_TOOL_NAME = 'research_plan'
 export const RESEARCH_PLAN_DELIVERABLE = 'markdown_report_with_citations_pdf'

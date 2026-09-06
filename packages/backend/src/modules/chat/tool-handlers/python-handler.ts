@@ -13,7 +13,7 @@ import type {
   ToolDefinition,
   ToolHandlerResult,
   PythonHandlerConfig,
-} from './types'
+} from '../../../agent-runtime/tool-handler-types'
 
 export class PythonToolHandler implements IToolHandler {
   readonly toolName = 'python_runner'

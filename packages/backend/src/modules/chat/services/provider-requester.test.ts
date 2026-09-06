@@ -1,4 +1,4 @@
-import { ProviderRequester } from './provider-requester'
+import { ProviderRequester } from '../../../agent-runtime/provider-requester'
 
 describe('ProviderRequester', () => {
   beforeEach(() => {

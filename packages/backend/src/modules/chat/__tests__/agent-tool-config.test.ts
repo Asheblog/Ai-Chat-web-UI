@@ -1,5 +1,5 @@
-import { buildAgentVisionProxyConfig, computeAgentToolFlags } from '../agent-tool-config'
-import type { AgentWebSearchConfig, AgentPythonToolConfig, AgentWorkspaceToolConfig, AgentUrlReaderConfig } from '../agent-tool-config'
+import { buildAgentVisionProxyConfig, computeAgentToolFlags } from '../../../agent-runtime/agent-tool-config'
+import type { AgentWebSearchConfig, AgentPythonToolConfig, AgentWorkspaceToolConfig, AgentUrlReaderConfig } from '../../../agent-runtime/agent-tool-config'
 import { BUILTIN_SKILL_SLUGS } from '../../skills/types'
 
 const webSearchConfig: AgentWebSearchConfig = {

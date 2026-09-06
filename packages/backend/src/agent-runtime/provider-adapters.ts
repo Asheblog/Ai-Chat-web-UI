@@ -1,4 +1,4 @@
-import type { ToolDefinition } from './tool-handlers/types'
+import type { ToolDefinition } from './tool-handler-types'
 
 export type ToolProviderAdapter = (toolDefinitions: ToolDefinition[]) => Record<string, unknown>
 

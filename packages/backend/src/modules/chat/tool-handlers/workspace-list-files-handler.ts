@@ -11,7 +11,7 @@ import type {
   ToolDefinition,
   ToolHandlerResult,
   WorkspaceHandlerConfig,
-} from './types'
+} from '../../../agent-runtime/tool-handler-types'
 
 interface ListedEntry {
   path: string

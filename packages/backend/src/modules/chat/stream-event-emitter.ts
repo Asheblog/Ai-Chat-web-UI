@@ -8,7 +8,7 @@ import { shouldIgnoreReasoningMeta } from '@aichat/shared/strip-tool-progress-fr
 import { summarizeSsePayload } from '../../utils/task-trace';
 import type { TaskTraceRecorder } from '../../utils/task-trace';
 import type { ToolLogManager } from './tool-log-manager';
-import { normalizeToolCallEventPayload } from './tool-call-event';
+import { normalizeToolCallEventPayload } from '../../agent-runtime/tool-call-event';
 
 export interface StreamEventEmitterOptions {
   encoder: InstanceType<typeof TextEncoder>;

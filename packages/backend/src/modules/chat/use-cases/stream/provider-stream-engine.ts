@@ -1,4 +1,4 @@
-import type { ProviderRequester } from '../../services/provider-requester'
+import type { ProviderRequester } from '../../../../agent-runtime/provider-requester'
 import type { NonStreamFallbackService } from '../../services/non-stream-fallback-service'
 
 export class ProviderStreamEngine {

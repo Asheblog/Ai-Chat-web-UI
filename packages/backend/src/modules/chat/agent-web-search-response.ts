@@ -28,7 +28,7 @@ import {
 } from './stream-state';
 import type { RAGService } from '../../services/document/rag-service';
 import { enrichToolEventReasoningOffsets } from '@aichat/shared/tool-events';
-import { normalizeToolCallEventPayload } from './tool-call-event';
+import { normalizeToolCallEventPayload } from '../../agent-runtime/tool-call-event';
 import {
   sendUnsupportedToolError,
   type PdfExportHandlerConfig,
@@ -55,8 +55,8 @@ import {
 import {
   type ToolSchema,
   buildToolRequest,
-} from './tool-protocol';
-import { runToolOrchestration } from './tool-orchestrator';
+} from '../../agent-runtime/tool-protocol';
+import { runToolOrchestration } from '../../agent-runtime/tool-orchestrator';
 import { guardToolLoopMessages } from './services/tool-loop-context-guard';
 import {
   extractMissingFunctionCallOutputId,
@@ -71,7 +71,7 @@ import {
   buildAgentPythonToolConfig,
   buildAgentUrlReaderConfig,
   buildAgentWorkspaceToolConfig,
-} from './agent-tool-config';
+} from '../../agent-runtime/agent-tool-config';
 import type { ProviderType } from '../../utils/providers';
 import { resolveModelCapabilitiesForSession } from '../../utils/model-capabilities';
 import { createSkillRegistry } from '../skills/skill-registry';

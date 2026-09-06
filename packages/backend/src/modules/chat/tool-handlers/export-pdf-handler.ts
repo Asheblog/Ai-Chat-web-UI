@@ -25,7 +25,7 @@ import type {
   ToolCallContext,
   ToolDefinition,
   ToolHandlerResult,
-} from './types'
+} from '../../../agent-runtime/tool-handler-types'
 
 const DEFAULT_MAX_MARKDOWN_CHARS = 200_000
 const DEFAULT_MAX_TITLE_CHARS = 200

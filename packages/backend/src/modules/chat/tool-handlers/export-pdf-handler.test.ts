@@ -10,7 +10,7 @@ import {
   workspaceService,
   setWorkspaceService,
 } from '../../../services/workspace/workspace-service'
-import type { PdfExportHandlerConfig } from './types'
+import type { PdfExportHandlerConfig } from '../../../agent-runtime/tool-handler-types'
 
 const baseContext = {
   sessionId: 1,

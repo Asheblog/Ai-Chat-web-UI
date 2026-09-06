@@ -21,8 +21,10 @@ export interface SseStreamContext {
   /** 发送原始 SSE 文本（如 `: ping\n\n`）。 */
   sendRaw(payload: string): boolean
   isClosed(): boolean
-  /** 标记下游已关闭，后续 send 不再投递。 */
-  markClosed(reason?: string): void
+  /** 所有关闭路径完成清理后解决；订阅型生产者须等待此信号。 */
+  readonly closed: Promise<void>
+  /** 注册幂等关闭清理；已关闭时立即执行。 */
+  onClose(cleanup: () => void): void
   /** 启动心跳；payload 为字符串或返回字符串的函数。 */
   startHeartbeat(intervalMs: number, payload?: string | (() => string)): void
   stopHeartbeat(): void
@@ -42,11 +44,35 @@ export const createSseResponse = (
   run: (ctx: SseStreamContext) => Promise<void> | void,
   options: CreateSseResponseOptions = {},
 ): Response => {
+  let disconnect = () => {}
   const stream = new ReadableStream({
-    async start(controller) {
+    start(controller) {
       const encoder = new TextEncoder()
       let downstreamClosed = false
       let heartbeatTimer: ReturnType<typeof setInterval> | null = null
+      const cleanups = new Set<() => void>()
+      let resolveClosed!: () => void
+      const closed = new Promise<void>((resolve) => { resolveClosed = resolve })
+
+      const clean = (cleanup: () => void) => {
+        try { cleanup() } catch { /* Continue releasing other resources. */ }
+      }
+
+      const finish = (sendDone: boolean) => {
+        if (downstreamClosed) return
+        downstreamClosed = true
+        ctx.stopHeartbeat()
+        options.signal?.removeEventListener('abort', disconnect)
+        for (const cleanup of cleanups) clean(cleanup)
+        cleanups.clear()
+        if (sendDone) {
+          try {
+            controller.enqueue(encoder.encode(options.donePayload ?? 'data: [DONE]\n\n'))
+          } catch { /* The reader may already have cancelled. */ }
+        }
+        try { controller.close() } catch { /* Already cancelled downstream. */ }
+        resolveClosed()
+      }
 
       const enqueue = (payload: string): boolean => {
         if (downstreamClosed) return false
@@ -54,7 +80,7 @@ export const createSseResponse = (
           controller.enqueue(encoder.encode(payload))
           return true
         } catch {
-          downstreamClosed = true
+          disconnect()
           return false
         }
       }
@@ -63,74 +89,54 @@ export const createSseResponse = (
         send: (event) => enqueue(`data: ${JSON.stringify(event)}\n\n`),
         sendRaw: enqueue,
         isClosed: () => downstreamClosed,
-        markClosed: () => {
-          downstreamClosed = true
+        closed,
+        onClose: (cleanup) => {
+          if (downstreamClosed) clean(cleanup)
+          else cleanups.add(cleanup)
         },
         startHeartbeat: (intervalMs, payload = ': ping\n\n') => {
-          if (heartbeatTimer || intervalMs <= 0) return
+          if (downstreamClosed || heartbeatTimer !== null || intervalMs <= 0) return
           heartbeatTimer = setInterval(() => {
             const next = typeof payload === 'function' ? payload() : payload
             enqueue(next)
           }, intervalMs)
         },
         stopHeartbeat: () => {
-          if (heartbeatTimer) {
+          if (heartbeatTimer !== null) {
             clearInterval(heartbeatTimer)
             heartbeatTimer = null
           }
         },
-        close: () => {
-          if (downstreamClosed) return
-          downstreamClosed = true
-          ctx.stopHeartbeat()
-          try {
-            controller.enqueue(encoder.encode(options.donePayload ?? 'data: [DONE]\n\n'))
-          } catch {
-            // ignore
-          }
-          try {
-            controller.close()
-          } catch {
-            // ignore
-          }
-        },
+        close: () => finish(true),
       }
 
-      const handleAbort = () => {
-        try {
-          options.onAbort?.(ctx)
-        } catch {
-          // ignore
-        }
+      disconnect = () => {
+        if (downstreamClosed) return
+        finish(false)
+        clean(() => options.onAbort?.(ctx))
       }
 
       if (options.signal) {
         if (options.signal.aborted) {
-          handleAbort()
+          disconnect()
         } else {
-          options.signal.addEventListener('abort', handleAbort, { once: true })
+          options.signal.addEventListener('abort', disconnect, { once: true })
         }
       }
 
-      try {
-        await run(ctx)
-      } catch (error) {
+      // Do not return the producer promise: cancellation must not wait for background work.
+      const execute = async () => {
         try {
-          options.onError?.(error, ctx)
-        } catch {
-          // ignore
+          if (!ctx.isClosed()) await run(ctx)
+        } catch (error) {
+          clean(() => options.onError?.(error, ctx))
+        } finally {
+          ctx.close()
         }
-      } finally {
-        if (options.signal) {
-          try {
-            options.signal.removeEventListener('abort', handleAbort)
-          } catch {
-            // ignore
-          }
-        }
-        ctx.close()
       }
+      void execute()
     },
+    cancel: () => disconnect(),
   })
 
   return new Response(stream, { headers: SSE_HEADERS })

@@ -7,7 +7,7 @@ import type {
   ToolDefinition,
   ToolHandlerResult,
   ToolHandlerTermination,
-} from '../modules/chat/tool-handlers/types'
+} from './tool-handler-types'
 import {
   type LegacyFunctionCall,
   type ToolSchema,

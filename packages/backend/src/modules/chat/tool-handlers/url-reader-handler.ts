@@ -17,7 +17,7 @@ import type {
   ToolCallContext,
   ToolDefinition,
   ToolHandlerResult,
-} from './types'
+} from '../../../agent-runtime/tool-handler-types'
 import {
   isVisionProxyReady,
   type VisionProxyConfig,

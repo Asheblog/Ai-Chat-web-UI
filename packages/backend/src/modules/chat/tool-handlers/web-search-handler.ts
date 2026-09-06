@@ -24,7 +24,7 @@ import type {
   ToolHandlerResult,
   ToolLogDetails,
   WebSearchHandlerConfig,
-} from './types'
+} from '../../../agent-runtime/tool-handler-types'
 import {
   isVisionProxyReady,
   type VisionProxyConfig,

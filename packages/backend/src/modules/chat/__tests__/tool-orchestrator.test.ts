@@ -1,4 +1,4 @@
-import { runToolOrchestration } from '../tool-orchestrator'
+import { runToolOrchestration } from '../../../agent-runtime/tool-orchestrator'
 
 const buildNonStreamResponseLike = (content: string, usage?: Record<string, unknown>) =>
   ({

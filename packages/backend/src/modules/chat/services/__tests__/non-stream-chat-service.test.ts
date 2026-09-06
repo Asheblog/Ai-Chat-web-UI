@@ -7,7 +7,7 @@ jest.mock('../../../../utils/providers', () => ({
 }))
 
 import { ChatCompletionServiceError, NonStreamChatService } from '../non-stream-chat-service'
-import type { PreparedChatRequest } from '../chat-request-builder'
+import type { PreparedChatRequest } from '../../../../agent-runtime/chat-request-builder'
 
 const buildPrepared = (): PreparedChatRequest => ({
   promptTokens: 120,

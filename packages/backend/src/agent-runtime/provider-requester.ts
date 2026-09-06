@@ -1,4 +1,4 @@
-import { BACKOFF_429_MS, BACKOFF_5XX_MS } from '../modules/chat/chat-common'
+import { getAppConfig, type RetryConfig } from '../config/app-config'
 import { redactHeadersForTrace, summarizeBodyForTrace, summarizeErrorForTrace } from '../utils/trace-helpers'
 import type { TaskTraceRecorder } from '../utils/task-trace'
 
@@ -18,6 +18,7 @@ export interface ProviderRequestContext {
 export interface ProviderRequesterDeps {
   fetchImpl?: typeof fetch
   logger?: Pick<typeof console, 'warn'>
+  retry?: RetryConfig
 }
 
 export interface RequestWithBackoffParams {
@@ -32,10 +33,12 @@ export interface RequestWithBackoffParams {
 export class ProviderRequester {
   private fetchImpl: typeof fetch
   private logger?: Pick<typeof console, 'warn'>
+  private readonly retry: RetryConfig
 
   constructor(deps: ProviderRequesterDeps = {}) {
     this.fetchImpl = deps.fetchImpl ?? fetch
     this.logger = deps.logger ?? console
+    this.retry = { ...(deps.retry ?? getAppConfig().retry) }
   }
 
   async requestWithBackoff(params: RequestWithBackoffParams): Promise<Response> {
@@ -60,14 +63,14 @@ export class ProviderRequester {
         attempt,
       )
       if (response.status === 429) {
-        this.logger?.warn?.('Provider rate limited (429), backing off...', { backoffMs: BACKOFF_429_MS })
+        this.logger?.warn?.('Provider rate limited (429), backing off...', { backoffMs: this.retry.upstream429Ms })
         logTrace('http:provider_retry', {
           route: params.context.route,
           attempt,
           status: response.status,
-          backoffMs: BACKOFF_429_MS,
+          backoffMs: this.retry.upstream429Ms,
         })
-        await new Promise((r) => setTimeout(r, BACKOFF_429_MS))
+        await new Promise((r) => setTimeout(r, this.retry.upstream429Ms))
         attempt += 1
         response = await this.providerRequestOnce(
           params.request,
@@ -79,15 +82,15 @@ export class ProviderRequester {
       } else if (response.status >= 500) {
         this.logger?.warn?.('Provider 5xx, backing off...', {
           status: response.status,
-          backoffMs: BACKOFF_5XX_MS,
+          backoffMs: this.retry.upstream5xxMs,
         })
         logTrace('http:provider_retry', {
           route: params.context.route,
           attempt,
           status: response.status,
-          backoffMs: BACKOFF_5XX_MS,
+          backoffMs: this.retry.upstream5xxMs,
         })
-        await new Promise((r) => setTimeout(r, BACKOFF_5XX_MS))
+        await new Promise((r) => setTimeout(r, this.retry.upstream5xxMs))
         attempt += 1
         response = await this.providerRequestOnce(
           params.request,

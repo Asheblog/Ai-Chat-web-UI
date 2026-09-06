@@ -22,7 +22,7 @@ import {
 } from '../use-cases/chat-stream-use-case'
 import { proxyChatStreamToExecution } from '../../execution/chat-stream-proxy'
 import { chatSessionEventBus } from '../services/chat-session-event-bus'
-import { normalizeToolCallEventPayload } from '../tool-call-event'
+import { normalizeToolCallEventPayload } from '../../../agent-runtime/tool-call-event'
 import {
   cancelResearchPlanApprovalByMessage,
   respondResearchPlanApproval,
