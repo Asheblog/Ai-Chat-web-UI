@@ -141,6 +141,7 @@ export function ConfigStep({
                                             <div className="flex items-center justify-between">
                                                 <span className="text-xs text-muted-foreground">联网搜索</span>
                                                 <Switch
+                                                    aria-label="联网搜索"
                                                     checked={item.webSearchEnabled && availability.canUseWebSearch}
                                                     disabled={!availability.canUseWebSearch}
                                                     onCheckedChange={(checked) =>
@@ -158,6 +159,7 @@ export function ConfigStep({
                                             <div className="flex items-center justify-between">
                                                 <span className="text-xs text-muted-foreground">Python 工具</span>
                                                 <Switch
+                                                    aria-label="Python 工具"
                                                     checked={item.pythonEnabled && availability.canUsePython}
                                                     disabled={!availability.canUsePython}
                                                     onCheckedChange={(checked) =>
@@ -178,6 +180,7 @@ export function ConfigStep({
                                             <div className="flex items-center justify-between">
                                                 <span className="text-xs text-muted-foreground">思考模式</span>
                                                 <Switch
+                                                    aria-label="思考模式"
                                                     checked={item.reasoningEnabled}
                                                     onCheckedChange={(checked) =>
                                                         onUpdateModelConfig(item.key, (prev) => ({
@@ -201,7 +204,7 @@ export function ConfigStep({
                                                             }))
                                                         }
                                                     >
-                                                        <SelectTrigger className="w-24 h-8 text-xs">
+                                                        <SelectTrigger className="w-24 h-8 text-xs" aria-label="思考强度">
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                         <SelectContent>
@@ -215,19 +218,6 @@ export function ConfigStep({
                                                 </div>
                                             )}
 
-                                            {/* Ollama Think Toggle */}
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-xs text-muted-foreground">Ollama Think</span>
-                                                <Switch
-                                                    checked={item.ollamaThink}
-                                                    onCheckedChange={(checked) =>
-                                                        onUpdateModelConfig(item.key, (prev) => ({
-                                                            ...prev,
-                                                            ollamaThink: Boolean(checked),
-                                                        }))
-                                                    }
-                                                />
-                                            </div>
                                         </div>
 
                                         <Button

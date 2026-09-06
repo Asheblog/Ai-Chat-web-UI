@@ -27,7 +27,6 @@ export interface ConnectionFormState {
   baseUrl: string
   authType: string
   headers: string
-  azureApiVersion: string
   prefixId: string
   tags: string
   connectionType: string
@@ -57,7 +56,6 @@ export const DEFAULT_FORM: ConnectionFormState = {
   baseUrl: "",
   authType: "bearer",
   headers: "",
-  azureApiVersion: "",
   prefixId: "",
   tags: "",
   connectionType: "external",
@@ -138,7 +136,6 @@ export const buildPayload = (
     baseUrl: form.baseUrl.trim(),
     authType: form.authType,
     ...(headers ? { headers } : {}),
-    azureApiVersion: form.azureApiVersion.trim() || undefined,
     prefixId: form.prefixId.trim() || undefined,
     tags: buildTags(form.tags),
     connectionType: form.connectionType,
@@ -165,7 +162,6 @@ export const createFormFromGroup = (group: SystemConnectionGroup): ConnectionFor
     baseUrl: group.baseUrl || "",
     authType: group.authType || "bearer",
     headers: serializeHeaders(group.headers),
-    azureApiVersion: group.azureApiVersion || "",
     prefixId: group.prefixId || "",
     tags: (group.tags || []).map((item) => item?.name).filter(Boolean).join(","),
     connectionType: group.connectionType || "external",
@@ -192,7 +188,6 @@ export const createFormFromTemplate = (template: ProviderTemplate): ConnectionFo
   baseUrl: template.baseUrl,
   authType: template.authType,
   headers: "",
-  azureApiVersion: template.azureApiVersion ?? "",
   prefixId: "",
   tags: "",
   connectionType: "external",

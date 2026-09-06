@@ -28,7 +28,6 @@ const readyVisionConfig: VisionProxyConfig = {
   modelId: 'vision-model',
   reasoningEnabled: false,
   reasoningEffort: '',
-  ollamaThink: false,
 }
 
 describe('web-image-evidence', () => {

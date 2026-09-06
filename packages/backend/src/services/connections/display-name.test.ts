@@ -29,10 +29,10 @@ describe('connection group display names', () => {
     expect(
       seedDisplayName({
         prefixId: '',
-        provider: 'ollama',
+        provider: 'openai',
         baseUrl: '',
       }),
-    ).toBe('ollama')
+    ).toBe('openai')
   })
 
   test('allocates incrementing suffixes without changing the seed', () => {

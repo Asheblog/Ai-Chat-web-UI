@@ -147,10 +147,6 @@ export const normalizeConfigModels = (raw: unknown): BattleRunConfigModel[] => {
           ? model.reasoningEnabled
           : null
       const reasoningEffort = normalizeReasoningEffort(model.reasoningEffort)
-      const ollamaThink =
-        typeof model.ollamaThink === 'boolean'
-          ? model.ollamaThink
-          : null
       return {
         modelId,
         connectionId: isFiniteNumber(model.connectionId) ? model.connectionId : null,
@@ -161,7 +157,6 @@ export const normalizeConfigModels = (raw: unknown): BattleRunConfigModel[] => {
         ...(customBody ? { customBody } : {}),
         reasoningEnabled,
         reasoningEffort,
-        ollamaThink,
       }
     })
     .filter((item): item is NonNullable<typeof item> => item !== null)
@@ -189,10 +184,6 @@ export const normalizeConfigModel = (raw: unknown): BattleRunConfigModel | null 
       ? model.reasoningEnabled
       : null
   const reasoningEffort = normalizeReasoningEffort(model.reasoningEffort)
-  const ollamaThink =
-    typeof model.ollamaThink === 'boolean'
-      ? model.ollamaThink
-      : null
   return {
     modelId,
     connectionId: isFiniteNumber(model.connectionId) ? model.connectionId : null,
@@ -203,7 +194,6 @@ export const normalizeConfigModel = (raw: unknown): BattleRunConfigModel | null 
     ...(customBody ? { customBody } : {}),
     reasoningEnabled,
     reasoningEffort,
-    ollamaThink,
   }
 }
 

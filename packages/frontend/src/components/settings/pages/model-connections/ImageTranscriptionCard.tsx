@@ -45,7 +45,6 @@ export function ImageTranscriptionCard({ settings, update }: ImageTranscriptionC
   const modelId = settings.imageTranscriptionModelId ?? null
   const reasoningEnabled = settings.imageTranscriptionReasoningEnabled === true
   const reasoningEffort = settings.imageTranscriptionReasoningEffort || "unset"
-  const ollamaThink = settings.imageTranscriptionOllamaThink === true
   const { connections } = useSystemConnections()
   const [models, setModels] = useState<ModelItem[]>([])
   const [probing, setProbing] = useState(false)
@@ -140,13 +139,6 @@ export function ImageTranscriptionCard({ settings, update }: ImageTranscriptionC
                 ))}
               </SelectContent>
             </Select>
-          </SettingRow>
-          <SettingRow title="Ollama Think" description="上游为 Ollama 时按需启用 think">
-            <Switch
-              checked={ollamaThink}
-              onCheckedChange={(v) => update({ imageTranscriptionOllamaThink: !!v })}
-              aria-label="Ollama Think"
-            />
           </SettingRow>
         </>
       }

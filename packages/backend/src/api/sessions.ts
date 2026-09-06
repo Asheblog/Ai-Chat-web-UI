@@ -14,7 +14,6 @@ const createSessionSchema = z.object({
   rawId: z.string().min(1).optional(),
   reasoningEnabled: z.boolean().optional(),
   reasoningEffort: z.enum(['low', 'medium', 'high', 'max', 'xhigh']).optional(),
-  ollamaThink: z.boolean().optional(),
   systemPrompt: z.string().max(MAX_SYSTEM_PROMPT_LENGTH).optional(),
   knowledgeBaseIds: z.array(z.number().int().positive()).max(10).optional(),
 })
@@ -24,7 +23,6 @@ const updateSessionSchema = z.object({
   pinned: z.boolean().optional(),
   reasoningEnabled: z.boolean().optional(),
   reasoningEffort: z.enum(['low', 'medium', 'high', 'max', 'xhigh']).optional(),
-  ollamaThink: z.boolean().optional(),
   systemPrompt: z.string().max(MAX_SYSTEM_PROMPT_LENGTH).nullable().optional(),
   knowledgeBaseIds: z.array(z.number().int().positive()).max(10).optional(),
 })

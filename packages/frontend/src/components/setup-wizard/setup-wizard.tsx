@@ -251,7 +251,7 @@ export function SetupWizard() {
     if (!isAdmin) return '需要管理员登录才能继续初始化。'
     switch (step) {
       case 'connections':
-        return '添加至少一个系统级连接（OpenAI/Azure/Ollama/Google 等）。'
+        return '添加至少一个系统级连接（OpenAI / Google / DeepSeek 等）。'
       case 'models':
         return '确保至少存在一个可用的对话模型（chat/both）。'
       case 'finish':

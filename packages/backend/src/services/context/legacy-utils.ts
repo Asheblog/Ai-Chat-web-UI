@@ -6,7 +6,7 @@
 
 import { ContextWindowService } from './context-window-service'
 
-type Provider = 'openai' | 'azure_openai' | 'ollama' | 'google_genai' | string | null | undefined
+type Provider = string | null | undefined
 export interface ResolveContextLimitOptions {
   connectionId?: number | null
   rawModelId?: string | null

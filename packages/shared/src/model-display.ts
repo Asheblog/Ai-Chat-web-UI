@@ -92,9 +92,7 @@ export type ModelDisplaySource = {
 export const modelProviderLabel = (provider?: string | null): string => {
   const value = nonEmpty(provider)
   if (!value) return ''
-  if (value === 'azure_openai') return 'Azure'
   if (value === 'google_genai') return 'Google'
-  if (value === 'ollama') return 'Ollama'
   if (value === 'openai_responses') return 'OpenAI Responses'
   if (value === 'openai') return 'OpenAI'
   return value

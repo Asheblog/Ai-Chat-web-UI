@@ -2,7 +2,6 @@ import { Hono } from 'hono';
 import type { ContentfulStatusCode, StatusCode } from 'hono/utils/http-status';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
-import { randomUUID } from 'node:crypto';
 
 import { actorMiddleware, requireUserActor } from '../middleware/auth';
 import { getModelResolverService } from '../utils/model-resolver';
@@ -173,7 +172,6 @@ async function buildProviderRequest(opts: ProviderRequestOptions) {
     baseUrl,
     rawModelId: opts.rawModelId,
     body: opts.body,
-    azureApiVersion: opts.connection.azureApiVersion,
     stream: Boolean(opts.body?.stream),
   })
 
@@ -218,24 +216,6 @@ async function buildEmbeddingsRequest(opts: EmbeddingsRequestOptions) {
     if (opts.body.dimensions) {
       payload.dimensions = opts.body.dimensions;
     }
-  } else if (opts.provider === 'azure_openai') {
-    const apiVersion = opts.connection.azureApiVersion || '2024-02-15-preview';
-    url = `${baseUrl}/openai/deployments/${encodeURIComponent(opts.rawModelId)}/embeddings?api-version=${encodeURIComponent(apiVersion)}`;
-    payload = {
-      input: opts.body.input,
-      encoding_format: opts.body.encoding_format || 'float',
-    };
-    if (opts.body.dimensions) {
-      payload.dimensions = opts.body.dimensions;
-    }
-  } else if (opts.provider === 'ollama') {
-    url = `${baseUrl}/api/embeddings`;
-    // Ollama 使用不同的 API 格式，只支持单个文本
-    const input = opts.body.input;
-    payload = {
-      model: opts.rawModelId,
-      prompt: Array.isArray(input) ? input[0] : input,
-    };
   } else if (opts.provider === 'google_genai') {
     url = `${baseUrl}/models/${encodeURIComponent(opts.rawModelId)}:embedContent`;
     const text = Array.isArray(opts.body.input) ? opts.body.input[0] : opts.body.input;
@@ -278,68 +258,9 @@ async function requestWithBackoff(
   }
 }
 
-function convertOllamaChunkToOpenAI(
-  chunk: any,
-  model: string,
-  requestId: string,
-  created: number,
-) {
-  const data = {
-    id: requestId,
-    object: 'chat.completion.chunk',
-    created,
-    model,
-    choices: [
-      {
-        index: 0,
-        delta: {} as Record<string, any>,
-        finish_reason: chunk.done ? 'stop' : null,
-      },
-    ],
-  };
 
-  const message = chunk.message || {};
-  if (message.content) {
-    data.choices[0].delta.content = message.content;
-  }
-  if (chunk.done) {
-    data.choices[0].delta = {};
-  }
-  return `data: ${JSON.stringify(data)}\n\n`;
-}
 
-function convertOllamaFinalToOpenAI(chunk: any, model: string, requestId: string, created: number) {
-  const usage = chunk
-    ? {
-        prompt_tokens: Number(chunk.prompt_eval_count || chunk.prompt_tokens || 0) || 0,
-        completion_tokens: Number(chunk.eval_count || chunk.completion_tokens || 0) || 0,
-      }
-    : { prompt_tokens: 0, completion_tokens: 0 };
 
-  const total = usage.prompt_tokens + usage.completion_tokens;
-
-  return {
-    id: requestId,
-    object: 'chat.completion',
-    created,
-    model,
-    choices: [
-      {
-        index: 0,
-        message: {
-          role: chunk?.message?.role || 'assistant',
-          content: chunk?.message?.content || '',
-        },
-        finish_reason: 'stop',
-      },
-    ],
-    usage: {
-      prompt_tokens: usage.prompt_tokens,
-      completion_tokens: usage.completion_tokens,
-      total_tokens: total,
-    },
-  };
-}
 
 function formatMessage(message: MessageEntity) {
   return {
@@ -529,86 +450,7 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps) => {
         }
 
         if (body.stream) {
-          if (provider === 'ollama') {
-            const reader = response.body?.getReader();
-            if (!reader) {
-              traceStatus = 'error'
-              traceError = 'Stream not supported by provider response'
-              traceRecorder.log('http:client_response', {
-                route: '/v1/chat/completions',
-                direction: 'inbound',
-                userId: user.id,
-                actor: actor.identifier,
-                stream: true,
-                provider,
-                status: 500,
-                error: 'Stream not supported by provider response',
-              })
-              return c.json({ error: 'stream_error', message: 'Stream not supported by provider response' }, 500);
-            }
 
-            const encoder = new TextEncoder();
-            const decoder = new TextDecoder();
-            const requestId = `chatcmpl-${randomUUID()}`;
-            const created = Math.floor(Date.now() / 1000);
-            let buffer = '';
-
-            const stream = new ReadableStream({
-              async pull(controller) {
-                const { value, done } = await reader.read();
-                if (done) {
-                  controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-                  controller.close();
-                  return;
-                }
-
-                buffer += decoder.decode(value, { stream: true });
-
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-
-                for (const line of lines) {
-                  const trimmed = line.trim();
-                  if (!trimmed) continue;
-                  try {
-                    const parsed = JSON.parse(trimmed);
-                    const payload = convertOllamaChunkToOpenAI(
-                      parsed,
-                      body.model,
-                      requestId,
-                      created,
-                    );
-                    controller.enqueue(encoder.encode(payload));
-
-                    if (parsed.done) {
-                      const finalPayload = convertOllamaFinalToOpenAI(parsed, body.model, requestId, created);
-                      controller.enqueue(
-                        encoder.encode(`data: ${JSON.stringify(finalPayload)}\n\n`),
-                      );
-                    }
-                  } catch {
-                    // Ignore malformed lines
-                  }
-                }
-              },
-              cancel() {
-                reader.cancel().catch(() => {});
-              },
-            });
-
-            traceRecorder.log('http:client_response', {
-              route: '/v1/chat/completions',
-              direction: 'inbound',
-              userId: user.id,
-              actor: actor.identifier,
-              stream: true,
-              provider,
-              status: 200,
-              mode: 'ollama-stream',
-            })
-            traceStatus = 'completed'
-            return c.newResponse(stream as any, 200, sseHeaders);
-          }
 
           const headers = new Headers(sseHeaders);
           const providerContentType = response.headers.get('Content-Type');
@@ -629,29 +471,7 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps) => {
           return c.newResponse(response.body as any, 200, Object.fromEntries(headers));
         }
 
-        if (provider === 'ollama') {
-          const json = await response.json() as {
-            message?: { content?: string | null };
-            prompt_eval_count?: number | null;
-            eval_count?: number | null;
-            [key: string]: unknown;
-          };
-          const requestId = `chatcmpl-${randomUUID()}`;
-          const created = Math.floor(Date.now() / 1000);
-          const result = convertOllamaFinalToOpenAI(json, body.model, requestId, created)
-          traceRecorder.log('http:client_response', {
-            route: '/v1/chat/completions',
-            direction: 'inbound',
-            userId: user.id,
-            actor: actor.identifier,
-            stream: false,
-            provider,
-            status: 200,
-            body: summarizeBodyForTrace(result),
-          })
-          traceStatus = 'completed'
-          return c.json(result);
-        }
+
 
         const json = await response.json();
         traceRecorder.log('http:client_response', {
@@ -774,72 +594,7 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps) => {
         }
 
         if (body.stream) {
-          if (provider === 'ollama') {
-            const reader = response.body?.getReader();
-            if (!reader) {
-              return c.json({ error: 'stream_error', message: 'Stream not supported by provider response' }, 500);
-            }
 
-            const encoder = new TextEncoder();
-            const decoder = new TextDecoder();
-            const responseId = `resp-${randomUUID()}`;
-            const created = Math.floor(Date.now() / 1000);
-            let buffer = '';
-
-            const stream = new ReadableStream({
-              async pull(controller) {
-                const { value, done } = await reader.read();
-                if (done) {
-                  controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-                  controller.close();
-                  return;
-                }
-
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-
-                for (const line of lines) {
-                  const trimmed = line.trim();
-                  if (!trimmed) continue;
-                  try {
-                    const parsed = JSON.parse(trimmed);
-                    const deltaText = parsed?.message?.content || '';
-                    const eventPayload = {
-                      id: responseId,
-                      object: 'response.delta',
-                      created,
-                      model: body.model,
-                      type: 'response.delta',
-                      data: {
-                        type: 'output_text.delta',
-                        delta: deltaText,
-                      },
-                    };
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(eventPayload)}\n\n`));
-                    if (parsed.done) {
-                      const finalPayload = {
-                        id: responseId,
-                        object: 'response.completed',
-                        created,
-                        model: body.model,
-                        type: 'response.completed',
-                        data: null,
-                      };
-                      controller.enqueue(encoder.encode(`data: ${JSON.stringify(finalPayload)}\n\n`));
-                    }
-                  } catch {
-                    // ignore errors
-                  }
-                }
-              },
-              cancel() {
-                reader.cancel().catch(() => {});
-              },
-            });
-
-            return c.newResponse(stream as any, 200, sseHeaders);
-          }
 
           const headers = new Headers(sseHeaders);
           const providerContentType = response.headers.get('Content-Type');
@@ -849,43 +604,7 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps) => {
           return c.newResponse(response.body as any, 200, Object.fromEntries(headers));
         }
 
-        if (provider === 'ollama') {
-          const json = await response.json() as {
-            message?: { content?: string | null };
-            prompt_eval_count?: number | null;
-            eval_count?: number | null;
-            [key: string]: unknown;
-          };
-          const responseId = `resp-${randomUUID()}`;
-          const created = Math.floor(Date.now() / 1000);
-          const text = json?.message?.content || '';
-          const usage = {
-            prompt_tokens: Number(json?.prompt_eval_count || 0) || 0,
-            completion_tokens: Number(json?.eval_count || 0) || 0,
-          };
-          const total = usage.prompt_tokens + usage.completion_tokens;
-          const payload = {
-            id: responseId,
-            object: 'response',
-            created,
-            model: body.model,
-            output: [
-              {
-                type: 'message',
-                message: {
-                  role: 'assistant',
-                  content: [{ type: 'text', text }],
-                },
-              },
-            ],
-            usage: {
-              prompt_tokens: usage.prompt_tokens,
-              completion_tokens: usage.completion_tokens,
-              total_tokens: total,
-            },
-          };
-          return c.json(payload);
-        }
+
 
         const raw = await response.json();
         return c.json(raw);
@@ -1017,22 +736,7 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps) => {
           });
         }
 
-        // 转换 Ollama 响应为 OpenAI 格式
-        if (provider === 'ollama') {
-          const json = (await response.json()) as { embedding: number[] };
-          return c.json({
-            object: 'list',
-            data: [
-              {
-                object: 'embedding',
-                embedding: json.embedding || [],
-                index: 0,
-              },
-            ],
-            model: body.model,
-            usage: { prompt_tokens: 0, total_tokens: 0 },
-          });
-        }
+
 
         // 转换 Google Generative AI 响应为 OpenAI 格式
         if (provider === 'google_genai') {
@@ -1051,7 +755,7 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps) => {
           });
         }
 
-        // OpenAI / Azure 直接返回
+        // OpenAI 直接返回
         const json = await response.json();
         return c.json(json);
       } catch (error: any) {

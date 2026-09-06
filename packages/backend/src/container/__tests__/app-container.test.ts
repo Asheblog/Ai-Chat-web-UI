@@ -50,7 +50,7 @@ describe('AppContainer', () => {
   it('wires modelResolverService with injected repository', async () => {
     const repo: jest.Mocked<ModelResolverRepository> = {
       findCachedModel: jest.fn().mockResolvedValue(null),
-      listEnabledSystemGroups: jest.fn().mockResolvedValue([] as any),
+      listSystemGroupsForResolution: jest.fn().mockResolvedValue([] as any),
       findEnabledResolvedConnectionById: jest.fn().mockResolvedValue(null),
     }
     const container = createAppContainer({

@@ -67,7 +67,7 @@ export function getImageGenerationApiType(modelId: string, provider?: string): I
   
   // 如果 provider 是 OpenAI 兼容类型，使用 openai-compat API
   // 这包括通过第三方代理（如 CLIProxyAPI）转发的 Gemini 模型
-  if (provider === 'openai' || provider === 'openai_responses' || provider === 'azure_openai') {
+  if (provider === 'openai' || provider === 'openai_responses') {
     return 'openai-compat';
   }
   

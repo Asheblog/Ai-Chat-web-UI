@@ -144,23 +144,9 @@ export const registerChatControlRoutes = (router: Hono, deps: ChatControlRoutesD
         ...extraHeaders,
       };
 
-      if (provider === 'ollama') {
-        const res = await fetch(`${baseUrl}/api/generate`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ model: rawId, prompt: body.prompt, stream: !!body.stream }),
-        });
-        const text = await res.text();
-        return c.text(text, toContentfulStatus(res.status));
-      } else if (provider === 'openai' || provider === 'openai_responses' || provider === 'azure_openai') {
+      if (provider === 'openai' || provider === 'openai_responses') {
         const messages = [{ role: 'user', content: body.prompt }];
-        let url = '';
-        if (provider === 'openai') url = `${baseUrl}/chat/completions`;
-        else if (provider === 'openai_responses') url = `${baseUrl}/responses`;
-        else {
-          const v = conn.azureApiVersion || '2024-02-15-preview';
-          url = `${baseUrl}/openai/deployments/${encodeURIComponent(rawId!)}/chat/completions?api-version=${encodeURIComponent(v)}`;
-        }
+        const url = provider === 'openai' ? `${baseUrl}/chat/completions` : `${baseUrl}/responses`;
         const res = await fetch(url, {
           method: 'POST',
           headers,

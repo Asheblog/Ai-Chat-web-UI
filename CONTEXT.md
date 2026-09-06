@@ -64,6 +64,9 @@
 
 ## 模型连接身份
 
+- **Supported Provider Protocol（受支持供应商协议）**：当前可配置和调用的模型协议，包括 OpenAI Chat Completions、OpenAI Responses 与 Google Generative AI；DeepSeek 与交错思考属于 OpenAI 协议下的供应商配置
+- **Retired Provider Connection（已停用协议连接）**：使用 Azure OpenAI 或 Ollama 专属协议的历史连接；保留连接身份、凭据与对话关联，但不参与连接管理、模型选择、导入或上游调用
+
 - **Connection Group（连接组）**：供应商端点的稳定配置单位，持有协议类型、Base URL、显示名、prefix 与默认能力；其主键不因 Key 增删而变化
 - **Connection Display Name（连接显示名）**：连接组的人读名称，系统级连接组范围内必填且唯一；只用于展示、搜索与管理，不进入上游调用的 wire 身份
 - **Connection Credential（连接凭据）**：连接组内的单条 API Key 及其启用状态与密钥引用；属于组内实现细节，不单独出现在模型选择器中
@@ -89,7 +92,7 @@ _Avoid_：用最小 Key 行 ID 冒充连接组身份；用 channelName / prefixI
 - **Settings Top-Level Group（设置顶级分组）**：系统设置左侧导航的一级分组（模型与连接 / 功能与工具 / 成员与安全 / 系统与数据 / 高级设置），把相关设置页面组织在同一操作语境下；「概览」为独立顶级叶子
 - **Settings Page（设置页面）**：顶级分组下的具体配置页面，是右侧内容区渲染的最小页面单位；共 13 个（概览、供应商与连接、模型管理、图片转写、搜索与知识库、工具与扩展、MCP 管理、用户与注册、Skill 治理、品牌与界面、日志与审计、数据与维护、推理与网络）
 - **Feature Card（功能卡）**：设置页内的白话化配置卡片（图标 + 标题 + 白话描述 + 主开关 + 常用项 + 「更多参数」折叠），默认折叠高级参数；来自 `components/settings/components/feature-card.tsx`
-- **Vision Transcription Proxy（图片转写代理）**：主模型不支持识图（vision）时，将用户消息中的图片自动交给管理员指定的识图模型转写为文字描述的系统能力；由系统设置「图片转写代理」开关（默认关闭）+ 连接 + 模型配置，作用于所有用户；同一转写模型也用于联网证据图的相关性判定（相关 / 弱相关 / 无关）；设置页提供管理员探针（转写 + 相关性）；转写调用可选 reasoning/effort/ollamaThink（默认关）
+- **Vision Transcription Proxy（图片转写代理）**：主模型不支持识图（vision）时，将用户消息中的图片自动交给管理员指定的识图模型转写为文字描述的系统能力；由系统设置「图片转写代理」开关（默认关闭）+ 连接 + 模型配置，作用于所有用户；同一转写模型也用于联网证据图的相关性判定（相关 / 弱相关 / 无关）；设置页提供管理员探针（转写 + 相关性）；转写调用可选 reasoning/effort（默认关）
 - **Image Transcription（图片转写）**：指定识图模型将图片附件转换为文字描述的过程；结果持久化到用户消息的 imageDescriptions 字段，后续轮次直接复用（转写一次）
 - **Visual Analysis Tool（视觉分析工具）**：内置工具 `analyze_visual_media`，仅在主聊天流处于工具流且主模型无 vision 时注入；主模型可自主多次调用，描述以工具结果回传并随工具事件持久化；工具流下会向前缀注入「用户附件」提醒（含张数），引导主模型先调用该工具再回答
 - **Web Image Relevance Filter（网页图相关性筛选）**：爬虫/搜索抽到候选图后，先启发式去掉 logo/过小图，再调用识图模型判定与页面/查询上下文是否相关；仅相关与弱相关写入 `assessedImages`，供工具卡展示与深度研究报告选图，不再进入正文 Rich Payload / 答案区；判定失败 warn 日志后跳过该图

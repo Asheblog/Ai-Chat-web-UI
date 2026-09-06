@@ -11,6 +11,7 @@ jest.mock('../../services/message-service', () => ({
   })),
 }))
 jest.mock('../../../../utils/providers', () => ({
+  ...jest.requireActual('../../../../utils/providers'),
   convertOpenAIReasoningPayload: (payload: any) => payload,
 }))
 jest.mock('../../../../middleware/auth', () => ({

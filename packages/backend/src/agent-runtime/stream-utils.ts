@@ -38,11 +38,11 @@ export interface ExtractedUsageNumbers {
 /**
  * 从厂商 usage 载荷归一化 token 数。
  * 兼容 OpenAI（prompt_tokens/completion_tokens/total_tokens）、
- * Ollama（prompt_eval_count/eval_count）与部分网关（input_tokens/output_tokens）。
+ * 部分网关（input_tokens/output_tokens）。
  */
 export const extractUsageNumbers = (u: any): ExtractedUsageNumbers => {
-  const prompt = Number(u?.prompt_tokens ?? u?.prompt_eval_count ?? u?.input_tokens ?? 0) || 0
-  const completion = Number(u?.completion_tokens ?? u?.eval_count ?? u?.output_tokens ?? 0) || 0
+  const prompt = Number(u?.prompt_tokens ?? u?.input_tokens ?? 0) || 0
+  const completion = Number(u?.completion_tokens ?? u?.output_tokens ?? 0) || 0
   const total = Number(u?.total_tokens ?? (prompt + completion)) || prompt + completion
   return { prompt, completion, total }
 }
@@ -63,10 +63,10 @@ export const buildUsage = (
 ): UsageStats => {
   const u = json?.usage || {}
   const promptTokens =
-    Number(u?.prompt_tokens ?? u?.prompt_eval_count ?? u?.input_tokens ?? context.promptTokens) ||
+    Number(u?.prompt_tokens ?? u?.input_tokens ?? context.promptTokens) ||
     context.promptTokens
   const completionTokens =
-    Number(u?.completion_tokens ?? u?.eval_count ?? u?.output_tokens ?? 0) || 0
+    Number(u?.completion_tokens ?? u?.output_tokens ?? 0) || 0
   const totalTokens =
     Number(u?.total_tokens ?? 0) || promptTokens + (Number(u?.completion_tokens ?? 0) || 0)
   return {

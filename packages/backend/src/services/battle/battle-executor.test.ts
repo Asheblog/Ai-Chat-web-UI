@@ -13,7 +13,6 @@ const buildPreparedRequest = (messages: any[]): PreparedChatRequest => ({
     providerHost: null,
     baseUrl: 'https://example.com/v1',
     rawModelId: 'glm-5',
-    azureApiVersion: null,
     url: 'https://example.com/v1/chat/completions',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test' },
     authHeader: { Authorization: 'Bearer test' },
@@ -38,7 +37,6 @@ const buildPreparedRequest = (messages: any[]): PreparedChatRequest => ({
   reasoning: {
     enabled: true,
     effort: 'high',
-    ollamaThink: false,
   },
 })
 

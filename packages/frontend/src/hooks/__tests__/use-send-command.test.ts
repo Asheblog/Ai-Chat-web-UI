@@ -35,7 +35,6 @@ const makeBaseParams = () => ({
   deepResearchEnabled: false,
   thinkingEnabled: false,
   effort: 'unset' as const,
-  ollamaThink: false,
   noSaveThisRound: false,
   setNoSaveThisRound: mockSetNoSaveThisRound,
   traceEnabled: false,

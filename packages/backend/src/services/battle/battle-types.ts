@@ -26,7 +26,6 @@ export type BattleModelInput = {
   custom_headers?: Array<{ name: string; value: string }>
   reasoningEnabled?: boolean
   reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh'
-  ollamaThink?: boolean
 }
 
 export type BattleJudgeInput = {
@@ -118,7 +117,6 @@ export interface BattleRunConfigModel {
   customBody?: Record<string, any> | null
   reasoningEnabled?: boolean | null
   reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | null
-  ollamaThink?: boolean | null
 }
 
 export interface BattleRunQuestionConfig {

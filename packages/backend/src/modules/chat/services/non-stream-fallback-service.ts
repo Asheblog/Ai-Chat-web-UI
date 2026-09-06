@@ -1,4 +1,4 @@
-import { convertOpenAIReasoningPayload } from '../../../utils/providers'
+import { convertOpenAIReasoningPayload, isSupportedProvider } from '../../../utils/providers'
 import {
   convertChatCompletionsRequestToResponses,
   extractReasoningFromResponsesResponse,
@@ -10,17 +10,14 @@ import { redactHeadersForTrace, summarizeBodyForTrace, summarizeErrorForTrace } 
 import { truncateString } from '../../../utils/task-trace'
 import type { ProviderType } from '../../../utils/providers'
 
-type Provider = Extract<ProviderType, 'openai' | 'openai_responses' | 'azure_openai' | 'ollama' | 'google_genai'>
-
 export interface NonStreamFallbackParams {
-  provider: Provider
+  provider: ProviderType
   baseUrl: string
   modelRawId: string
   messagesPayload: any[]
   requestData: any
   authHeader: Record<string, string>
   extraHeaders: Record<string, string>
-  azureApiVersion?: string | null
   timeoutMs: number
   logger?: Pick<typeof console, 'warn'>
   fetchImpl?: typeof fetch
@@ -45,6 +42,7 @@ export class NonStreamFallbackService {
   }
 
   async execute(params: NonStreamFallbackParams): Promise<NonStreamFallbackResult | null> {
+    if (!isSupportedProvider(params.provider)) return null
     const traceRecorder = params.traceRecorder
     const traceContext = params.traceContext || {}
     const logTrace = (eventType: string, payload: Record<string, unknown>) =>
@@ -72,27 +70,6 @@ export class NonStreamFallbackService {
       } else if (params.provider === 'openai_responses') {
         body = convertChatCompletionsRequestToResponses(convertOpenAIReasoningPayload(body))
         url = `${params.baseUrl}/responses`
-      } else if (params.provider === 'azure_openai') {
-        const v = params.azureApiVersion || '2024-02-15-preview'
-        body = convertOpenAIReasoningPayload(body)
-        url = `${params.baseUrl}/openai/deployments/${encodeURIComponent(
-          params.modelRawId,
-        )}/chat/completions?api-version=${encodeURIComponent(v)}`
-      } else if (params.provider === 'ollama') {
-        url = `${params.baseUrl}/api/chat`
-        body = {
-          model: params.modelRawId,
-          messages: params.messagesPayload.map((m: any) => ({
-            role: m.role,
-            content:
-              typeof m.content === 'string'
-                ? m.content
-                : m.content?.map((p: any) => p.text).filter(Boolean).join('\n'),
-          })),
-          stream: false,
-        }
-      } else {
-        url = `${params.baseUrl}`
       }
 
       logTrace('http:provider_request', {
@@ -256,7 +233,7 @@ export class NonStreamFallbackService {
       const reasoningText =
         params.provider === 'openai_responses'
           ? extractReasoningFromResponsesResponse(json)
-          : (json?.choices?.[0]?.message?.reasoning_content || (json as any)?.message?.thinking || null)
+          : (json?.choices?.[0]?.message?.reasoning_content || null)
       return {
         text,
         reasoning: reasoningText,

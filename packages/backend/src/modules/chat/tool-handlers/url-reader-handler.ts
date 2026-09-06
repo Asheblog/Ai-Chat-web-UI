@@ -109,7 +109,7 @@ export class UrlReaderToolHandler implements IToolHandler {
   private canAttachVisionImages(context: ToolCallContext): boolean {
     const provider = (context.provider || '').toLowerCase()
     const visionEnabled = context.modelCapabilities?.vision === true
-    return visionEnabled && (provider === 'openai' || provider === 'openai_responses' || provider === 'azure_openai')
+    return visionEnabled && (provider === 'openai' || provider === 'openai_responses')
   }
 
   private shouldAttachMultipleImages(result: Awaited<ReturnType<typeof readUrlContent>>): boolean {

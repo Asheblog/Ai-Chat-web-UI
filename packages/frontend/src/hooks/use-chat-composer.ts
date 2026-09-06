@@ -175,8 +175,6 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     setThinkingEnabled,
     effort,
     setEffort,
-    ollamaThink,
-    setOllamaThink,
     webSearchEnabled,
     setWebSearchEnabled,
     webSearchScope,
@@ -215,7 +213,6 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     const sysEffortRaw = (systemSettings?.openaiReasoningEffort ?? '') as any
     const sysEffort: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset' =
       sysEffortRaw && sysEffortRaw !== '' ? sysEffortRaw : 'unset'
-    const sysOllamaThink = Boolean(systemSettings?.ollamaThink ?? false)
 
     setThinkingEnabled(
       typeof currentSession.reasoningEnabled === 'boolean'
@@ -223,11 +220,6 @@ export function useChatComposer(options?: UseChatComposerOptions) {
         : sysEnabled,
     )
     setEffort((currentSession.reasoningEffort as any) || sysEffort)
-    setOllamaThink(
-      typeof currentSession.ollamaThink === 'boolean'
-        ? Boolean(currentSession.ollamaThink)
-        : sysOllamaThink,
-    )
     const nextPrompt = (currentSession.systemPrompt ?? '') || ''
     setSessionPromptDraft(nextPrompt)
   }, [
@@ -235,14 +227,11 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     currentSession?.id,
     currentSession?.reasoningEnabled,
     currentSession?.reasoningEffort,
-    currentSession?.ollamaThink,
     currentSession?.systemPrompt,
     systemSettings?.reasoningEnabled,
     systemSettings?.openaiReasoningEffort,
-    systemSettings?.ollamaThink,
     setThinkingEnabled,
     setEffort,
-    setOllamaThink,
     setSessionPromptDraft,
   ])
 
@@ -500,7 +489,6 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     deepResearchEnabled,
     thinkingEnabled,
     effort,
-    ollamaThink,
     noSaveThisRound,
     setNoSaveThisRound,
     traceEnabled,
@@ -542,7 +530,6 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     selectedImages,
     thinkingEnabled,
     effort,
-    ollamaThink,
     noSaveThisRound,
     customBodyInput,
     customBodyError,
@@ -578,7 +565,6 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     setIsComposing,
     setThinkingEnabled,
     setEffort,
-    setOllamaThink,
     setNoSaveThisRound,
     setCustomBodyInput,
     setCustomBodyError,

@@ -10,12 +10,11 @@ import { useSystemSettings } from "@/hooks/use-system-settings"
 import { useToast } from "@/components/ui/use-toast"
 import { ReasoningConfigCard } from "./reasoning-config-card"
 import { StreamPerformanceCard } from "./stream-performance-card"
-import { OllamaCard } from "./ollama-card"
 import { NetworkCard } from "./network-card"
 
 /**
  * 推理与网络页：页壳（单一 useSystemSettings + 共享骨架/错误重试），
- * 4 张 FeatureCard 分区 + 整页单保存（payload = 12 reasoning + 8 network = 20 key）。
+ * 3 张 FeatureCard 分区 + 整页单保存（payload = 11 reasoning + 8 network = 19 key）。
  * 旧 SystemReasoning / SystemNetwork 两页合并而来。
  */
 export function ReasoningNetworkPage() {
@@ -28,7 +27,7 @@ export function ReasoningNetworkPage() {
   } = useSystemSettings()
   const { toast } = useToast()
 
-  // —— 推理链（12 key）——
+  // —— 推理链（11 key）——
   const [reasoningEnabled, setReasoningEnabled] = useState(true)
   const [reasoningSaveToDb, setReasoningSaveToDb] = useState(true)
   const [reasoningTagsMode, setReasoningTagsMode] = useState<'default' | 'custom' | 'off'>('default')
@@ -40,7 +39,6 @@ export function ReasoningNetworkPage() {
   const [streamReasoningFlushIntervalMs, setStreamReasoningFlushIntervalMs] = useState('')
   const [streamKeepaliveIntervalMs, setStreamKeepaliveIntervalMs] = useState('')
   const [openaiReasoningEffort, setOpenaiReasoningEffort] = useState<'unset' | 'low' | 'medium' | 'high' | 'max' | 'xhigh'>('unset')
-  const [ollamaThink, setOllamaThink] = useState(false)
 
   // —— 网络与超时（8 key）——
   const [hbMs, setHbMs] = useState(15000)
@@ -73,7 +71,6 @@ export function ReasoningNetworkPage() {
       settings.streamKeepaliveIntervalMs != null ? String(settings.streamKeepaliveIntervalMs) : ''
     )
     setOpenaiReasoningEffort(((settings as any).openaiReasoningEffort || 'unset') as any)
-    setOllamaThink(Boolean((settings as any).ollamaThink ?? false))
     const sysMaxTokens = settings?.reasoningMaxOutputTokensDefault
     setReasoningMaxTokens(typeof sysMaxTokens === 'number' ? String(sysMaxTokens) : '')
     const sysTemperature = settings?.temperatureDefault
@@ -119,7 +116,7 @@ export function ReasoningNetworkPage() {
   const networkValid =
     hbValid && idleValid && toutValid && initialValid && reasoningIdleValid && keepaliveValid
 
-  // —— 整页 dirty 跟踪（20 key 任一与 settings 不同即 changed）——
+  // —— 整页 dirty 跟踪（19 key 任一与 settings 不同即 changed）——
   const changed =
     reasoningEnabled !== Boolean(settings.reasoningEnabled ?? true) ||
     reasoningSaveToDb !== Boolean(settings.reasoningSaveToDb ?? true) ||
@@ -133,7 +130,6 @@ export function ReasoningNetworkPage() {
     streamKeepaliveIntervalMs !==
       (settings.streamKeepaliveIntervalMs != null ? String(settings.streamKeepaliveIntervalMs) : '') ||
     openaiReasoningEffort !== (settings.openaiReasoningEffort || 'unset') ||
-    ollamaThink !== Boolean(settings.ollamaThink ?? false) ||
     reasoningMaxTokens !==
       (typeof settings.reasoningMaxOutputTokensDefault === 'number' ? String(settings.reasoningMaxOutputTokensDefault) : '') ||
     temperatureDefault !==
@@ -237,7 +233,6 @@ export function ReasoningNetworkPage() {
       openaiReasoningEffort: openaiReasoningEffort !== 'unset' ? openaiReasoningEffort : 'unset',
       reasoningMaxOutputTokensDefault: maxTokensValue,
       temperatureDefault: temperatureValue,
-      ollamaThink,
       sseHeartbeatIntervalMs: hbMs,
       providerMaxIdleMs: idleMs,
       providerTimeoutMs: timeoutMs,
@@ -293,7 +288,6 @@ export function ReasoningNetworkPage() {
         openaiReasoningEffort={openaiReasoningEffort}
         onOpenaiReasoningEffortChange={setOpenaiReasoningEffort}
       />
-      <OllamaCard ollamaThink={ollamaThink} onOllamaThinkChange={setOllamaThink} />
       <NetworkCard
         hbMs={hbMs}
         onHbMsChange={setHbMs}

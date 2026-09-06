@@ -30,7 +30,7 @@
 ### Phase 2: 服务层
 
 6. **EmbeddingService**
-   - 双引擎支持: OpenAI + Ollama
+   - OpenAI 兼容 embedding 引擎
    - 文件: `packages/backend/src/services/document/embedding-service.ts`
 
 7. **DocumentService**
@@ -114,17 +114,13 @@ sqlite3 prisma/data/app.db < prisma/migrations/20260202090000_add_document_chunk
 ### 3. 配置环境变量
 
 ```env
-# Embedding 配置 (二选一)
+# Embedding 配置
 
 # OpenAI 方式
 RAG_EMBEDDING_ENGINE=openai
 OPENAI_API_KEY=your-api-key
 OPENAI_API_URL=https://api.openai.com/v1
 
-# Ollama 方式
-RAG_EMBEDDING_ENGINE=ollama
-OLLAMA_API_URL=http://localhost:11434
-RAG_EMBEDDING_MODEL=nomic-embed-text
 ```
 
 ### 4. 注册 API 路由
@@ -138,7 +134,7 @@ import { initDocumentServices } from './services/document-services-factory'
 // 初始化文档服务
 const documentServices = initDocumentServices(appContext.prisma, {
   embedding: {
-    engine: process.env.RAG_EMBEDDING_ENGINE as 'openai' | 'ollama' || 'openai',
+    engine: 'openai',
     model: process.env.RAG_EMBEDDING_MODEL || 'text-embedding-3-small',
     apiKey: process.env.OPENAI_API_KEY,
     apiUrl: process.env.OPENAI_API_URL,

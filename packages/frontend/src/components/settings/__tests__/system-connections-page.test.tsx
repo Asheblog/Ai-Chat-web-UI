@@ -54,7 +54,7 @@ const makeGroup = (overrides: Partial<SystemConnectionGroup>): SystemConnectionG
   ...overrides,
 })
 
-/** 样例：2 组 openai + 1 组 ollama */
+/** 样例：2 组 OpenAI + 1 组 Responses 连接。 */
 const sampleConnections = [
   makeGroup({ id: 1, displayName: "官方 OpenAI", provider: "openai" }),
   makeGroup({
@@ -65,9 +65,9 @@ const sampleConnections = [
   }),
   makeGroup({
     id: 3,
-    displayName: "本机 Ollama",
-    provider: "ollama",
-    baseUrl: "http://localhost:11434",
+    displayName: "Responses 网关",
+    provider: "openai_responses",
+    baseUrl: "https://responses.example.com/v1",
     authType: "none",
   }),
 ]
@@ -90,15 +90,13 @@ afterEach(() => {
 })
 
 describe("provider-templates 模板数据", () => {
-  test("6 项且 provider 唯一、顺序固定", () => {
-    expect(PROVIDER_TEMPLATES).toHaveLength(6)
+  test("4 项且 provider 唯一、顺序固定", () => {
+    expect(PROVIDER_TEMPLATES).toHaveLength(4)
     const providers = PROVIDER_TEMPLATES.map((item) => item.provider)
-    expect(new Set(providers).size).toBe(6)
+    expect(new Set(providers).size).toBe(4)
     expect(providers).toEqual([
       "openai",
       "openai_responses",
-      "azure_openai",
-      "ollama",
       "google_genai",
       "openai_interleave",
     ])
@@ -110,48 +108,50 @@ describe("provider-templates 模板数据", () => {
       expect(item.description).toBeTruthy()
       expect(item.icon).toBeTruthy()
       expect(item.baseUrl).toBeTruthy()
-      expect(["bearer", "none"]).toContain(item.authType)
+      expect(item.authType).toBe("bearer")
     })
   })
 
-  test("ollama authType none；azure_openai 有 azureApiVersion；getProviderTemplate 未知返回 undefined", () => {
-    expect(getProviderTemplate("ollama")?.authType).toBe("none")
-    expect(getProviderTemplate("ollama")?.baseUrl).toBe("http://localhost:11434")
-    expect(getProviderTemplate("azure_openai")?.azureApiVersion).toBe("2024-02-15-preview")
+  test("ollama/azure_openai 已下线；openai_interleave 仍保留；getProviderTemplate 未知返回 undefined", () => {
+    expect(getProviderTemplate("ollama")).toBeUndefined()
+    expect(getProviderTemplate("azure_openai")).toBeUndefined()
     expect(getProviderTemplate("openai_interleave")?.baseUrl).toBe("https://api.deepseek.com/v1")
     expect(getProviderTemplate("unknown_provider")).toBeUndefined()
   })
 })
 
 describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
-  test("渲染 6 张模板卡（OpenAI/Azure/Ollama/Google/Responses/交错思考 标签可见）", async () => {
+  test("渲染 4 张模板卡（OpenAI/Responses/Google/交错思考；Azure/Ollama 不可见）", async () => {
     render(<SystemConnectionsPage />)
 
     expect(await screen.findByText("OpenAI")).toBeInTheDocument()
     expect(screen.getByText("OpenAI Responses")).toBeInTheDocument()
-    expect(screen.getByText("Azure")).toBeInTheDocument()
-    expect(screen.getByText("Ollama")).toBeInTheDocument()
     expect(screen.getByText("Google")).toBeInTheDocument()
     expect(screen.getByText("OpenAI（交错思考）")).toBeInTheDocument()
+    expect(screen.queryByText("Azure")).not.toBeInTheDocument()
+    expect(screen.queryByText("Ollama")).not.toBeInTheDocument()
     expect(screen.getByText("供应商与连接")).toBeInTheDocument()
   })
 
-  test("连接数徽标：openai 卡「已有 2 组连接」、ollama 卡「已有 1 组连接」、google_genai 卡「未配置」", async () => {
+  test("连接数徽标：openai 卡「已有 2 组连接」、google_genai 卡「未配置」；ollama 无模板卡", async () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
     expect(within(getCard("openai")).getByText("已有 2 组连接")).toBeInTheDocument()
-    expect(within(getCard("ollama")).getByText("已有 1 组连接")).toBeInTheDocument()
     expect(within(getCard("google_genai")).getByText("未配置")).toBeInTheDocument()
+    expect(screen.queryByTestId("provider-template-ollama")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("provider-template-azure_openai")).not.toBeInTheDocument()
   })
 
   test("模板卡按钮可访问名 = 「配置{label}」（整卡可点、朗读简洁）", async () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
-    expect(screen.getByRole("button", { name: "配置Ollama" })).toBe(getCard("ollama"))
+    expect(screen.getByRole("button", { name: "配置Google" })).toBe(getCard("google_genai"))
     expect(screen.getByRole("button", { name: "配置OpenAI" })).toBe(getCard("openai"))
-    expect(screen.getByRole("button", { name: "配置Azure" })).toBe(getCard("azure_openai"))
+    expect(screen.getByRole("button", { name: "配置OpenAI（交错思考）" })).toBe(getCard("openai_interleave"))
+    expect(screen.queryByRole("button", { name: "配置Ollama" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "配置Azure" })).not.toBeInTheDocument()
   })
 
   test("高级管理默认收起（工具栏「连接管理」不可见）→ 点击展开可见", async () => {
@@ -172,28 +172,28 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
     await userEvent.click(screen.getByRole("button", { name: /高级管理/ }))
 
     expect(screen.getByText("官方 OpenAI")).toBeInTheDocument()
-    expect(screen.getByText("本机 Ollama")).toBeInTheDocument()
+    expect(screen.getByText("Responses 网关")).toBeInTheDocument()
     expect(screen.getByText("OpenAI · https://api.openai.com/v1")).toBeInTheDocument()
-    expect(screen.getByText("Ollama · http://localhost:11434")).toBeInTheDocument()
+    expect(screen.getByText("OpenAI Responses · https://responses.example.com/v1")).toBeInTheDocument()
   })
 
   test("点模板卡 → Sheet 打开到基础信息步，预填 displayName/baseUrl", async () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
-    await userEvent.click(within(getCard("ollama")).getByText("配置"))
+    await userEvent.click(within(getCard("google_genai")).getByText("配置"))
     const dialog = await screen.findByRole("dialog")
 
     expect(within(dialog).getByText("第 2 步 · 基础信息")).toBeInTheDocument()
-    expect(within(dialog).getByLabelText(/显示名称/)).toHaveValue("Ollama")
-    expect(within(dialog).getByLabelText(/API 端点|Base URL/i)).toHaveValue("http://localhost:11434")
+    expect(within(dialog).getByLabelText(/显示名称/)).toHaveValue("Google")
+    expect(within(dialog).getByLabelText(/API 端点|Base URL/i)).toHaveValue("https://generativelanguage.googleapis.com/v1beta")
   })
 
   test("创建时 displayName 必填：清空后点下一步会提示且不进入验证步", async () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
-    await userEvent.click(within(getCard("ollama")).getByText("配置"))
+    await userEvent.click(within(getCard("google_genai")).getByText("配置"))
     const dialog = await screen.findByRole("dialog")
 
     const nameInput = within(dialog).getByLabelText(/显示名称/)
@@ -215,12 +215,15 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
-    await userEvent.click(within(getCard("ollama")).getByText("配置"))
+    await userEvent.click(within(getCard("google_genai")).getByText("配置"))
     const dialog = await screen.findByRole("dialog")
 
     const nameInput = within(dialog).getByLabelText(/显示名称/)
     await userEvent.clear(nameInput)
-    await userEvent.type(nameInput, "本地推理")
+    await userEvent.type(nameInput, "Google 生产")
+
+    const keyInput = within(dialog).getByLabelText(/API Key/)
+    await userEvent.type(keyInput, "sk-google-test")
 
     await userEvent.click(within(dialog).getByRole("button", { name: /下一步|继续/ }))
 
@@ -234,10 +237,10 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
     const payload = services.createSystemConnection.mock.calls[0][0] as Record<string, unknown>
     expect(payload).toEqual(
       expect.objectContaining({
-        displayName: "本地推理",
-        provider: "ollama",
-        baseUrl: "http://localhost:11434",
-        authType: "none",
+        displayName: "Google 生产",
+        provider: "google_genai",
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+        authType: "bearer",
         connectionType: "external",
       }),
     )
@@ -250,8 +253,11 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
-    await userEvent.click(within(getCard("ollama")).getByText("配置"))
+    await userEvent.click(within(getCard("google_genai")).getByText("配置"))
     let dialog = await screen.findByRole("dialog")
+
+    const keyInput = within(dialog).getByLabelText(/API Key/)
+    await userEvent.type(keyInput, "sk-google-test")
 
     await userEvent.click(within(dialog).getByRole("button", { name: /下一步|继续/ }))
     dialog = screen.getByRole("dialog")
@@ -264,8 +270,8 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
     const payload = services.verifySystemConnection.mock.calls[0][0] as Record<string, unknown>
     expect(payload).toEqual(
       expect.objectContaining({
-        provider: "ollama",
-        displayName: "Ollama",
+        provider: "google_genai",
+        displayName: "Google",
       }),
     )
   })
@@ -278,16 +284,18 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
     const dialog = await screen.findByRole("dialog")
 
     expect(within(dialog).getByText("第 1 步 · 选择供应商")).toBeInTheDocument()
-    expect(within(dialog).getByRole("button", { name: /Ollama/ })).toBeInTheDocument()
+    expect(within(dialog).getByRole("button", { name: /Google/ })).toBeInTheDocument()
+    expect(within(dialog).queryByRole("button", { name: /Ollama/ })).not.toBeInTheDocument()
+    expect(within(dialog).queryByRole("button", { name: /Azure/ })).not.toBeInTheDocument()
   })
 
-  test("关闭 Sheet 后表单重置（再开 OpenAI 卡 → displayName/端点预填）", async () => {
+  test("关闭 Sheet 后表单重置（先开 Google 卡 → 再开 OpenAI 卡预填正确）", async () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
-    await userEvent.click(within(getCard("ollama")).getByText("配置"))
+    await userEvent.click(within(getCard("google_genai")).getByText("配置"))
     let dialog = await screen.findByRole("dialog")
-    expect(within(dialog).getByLabelText(/API 端点|Base URL/i)).toHaveValue("http://localhost:11434")
+    expect(within(dialog).getByLabelText(/API 端点|Base URL/i)).toHaveValue("https://generativelanguage.googleapis.com/v1beta")
 
     await userEvent.click(within(dialog).getByRole("button", { name: "Close" }))
     await waitFor(() => {
@@ -329,6 +337,41 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
     const dialog = await screen.findByRole("dialog")
     expect(within(dialog).getByLabelText(/显示名称/)).toHaveValue("官方 OpenAI")
     expect(within(dialog).getByLabelText(/API 端点|Base URL/i)).toHaveValue("https://api.openai.com/v1")
+    expect(within(dialog).queryByLabelText("API Version")).not.toBeInTheDocument()
+
+    await userEvent.click(within(dialog).getByRole("button", { name: /高级设置/ }))
+    await userEvent.click(within(dialog).getByRole("combobox", { name: "认证方式" }))
+    expect(screen.queryByRole("option", { name: "Entra ID" })).not.toBeInTheDocument()
+    await userEvent.keyboard("{Escape}")
+    await userEvent.click(within(dialog).getByRole("button", { name: "保存连接" }))
+    await waitFor(() => expect(services.updateSystemConnection).toHaveBeenCalledTimes(1))
+    expect(services.updateSystemConnection.mock.calls[0][1]).toEqual(
+      expect.objectContaining({ provider: "openai", authType: "bearer", displayName: "官方 OpenAI" }),
+    )
+    expect(services.updateSystemConnection.mock.calls[0][1]).not.toHaveProperty("azureApiVersion")
+  })
+
+  test.each(PROVIDER_TEMPLATES)("$label 可以完成验证和创建", async (template) => {
+    render(<SystemConnectionsPage />)
+    const card = await screen.findByRole("button", { name: `配置${template.label}` })
+    card.focus()
+    await userEvent.keyboard("{Enter}")
+    const dialog = await screen.findByRole("dialog")
+    await userEvent.type(within(dialog).getByLabelText("API Key"), "sk-fixture")
+    await userEvent.click(within(dialog).getByRole("button", { name: "下一步" }))
+    await userEvent.click(within(dialog).getByRole("button", { name: "验证连接" }))
+    await waitFor(() => expect(services.verifySystemConnection).toHaveBeenCalledTimes(1))
+    await userEvent.click(within(dialog).getByRole("button", { name: "创建连接" }))
+    await waitFor(() => expect(services.createSystemConnection).toHaveBeenCalledTimes(1))
+    const expected = {
+      provider: template.provider === "openai_interleave" ? "openai" : template.provider,
+      ...(template.provider === "openai_interleave" ? { vendor: "openai_interleave" } : {}),
+      baseUrl: template.baseUrl,
+      authType: "bearer",
+    }
+    expect(services.verifySystemConnection.mock.calls[0][0]).toEqual(expect.objectContaining(expected))
+    expect(services.createSystemConnection.mock.calls[0][0]).toEqual(expect.objectContaining(expected))
+    expect(services.createSystemConnection.mock.calls[0][0]).not.toHaveProperty("azureApiVersion")
   })
 
   test("高级管理内列表可见连接行（displayName）", async () => {
@@ -337,6 +380,6 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /高级管理/ }))
     expect(screen.getByText("官方 OpenAI")).toBeInTheDocument()
-    expect(screen.getByText("本机 Ollama")).toBeInTheDocument()
+    expect(screen.getByText("Responses 网关")).toBeInTheDocument()
   })
 })

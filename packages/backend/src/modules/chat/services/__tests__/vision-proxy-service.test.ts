@@ -31,7 +31,6 @@ const mockResolvedGroup = (fields: Record<string, unknown>) => {
     baseUrl: fields.baseUrl,
     authType: fields.authType,
     headersJson: fields.headersJson ?? '',
-    azureApiVersion: fields.azureApiVersion ?? null,
     credentials: [
       {
         id: 10,
@@ -54,7 +53,6 @@ const config = {
   modelId: 'qwen-vl-max',
   reasoningEnabled: false,
   reasoningEffort: '',
-  ollamaThink: false,
 }
 const images = [{ data: 'aGVsbG8=', mime: 'image/png' }]
 
@@ -70,7 +68,6 @@ describe('loadVisionProxyConfig', () => {
       modelId: 'gpt-4o',
       reasoningEnabled: false,
       reasoningEffort: '',
-      ollamaThink: false,
     })
   })
   it('disabled by default', () => {
@@ -80,17 +77,14 @@ describe('loadVisionProxyConfig', () => {
     const cfg = loadVisionProxyConfig({})
     expect(cfg.reasoningEnabled).toBe(false)
     expect(cfg.reasoningEffort).toBe('')
-    expect(cfg.ollamaThink).toBe(false)
   })
   it('parses reasoning sysMap keys', () => {
     const cfg = loadVisionProxyConfig({
       image_transcription_reasoning_enabled: 'true',
       image_transcription_reasoning_effort: 'high',
-      image_transcription_ollama_think: 'true',
     })
     expect(cfg.reasoningEnabled).toBe(true)
     expect(cfg.reasoningEffort).toBe('high')
-    expect(cfg.ollamaThink).toBe(true)
   })
   it('allows unset effort value', () => {
     const cfg = loadVisionProxyConfig({ image_transcription_reasoning_effort: 'unset' })
@@ -113,7 +107,6 @@ describe('isVisionProxyReady', () => {
         modelId: 'm',
         reasoningEnabled: true,
         reasoningEffort: 'high',
-        ollamaThink: true,
       }),
     ).toBe(true)
   })
@@ -175,7 +168,7 @@ describe('VisionProxyService.transcribeImages', () => {
   it('returns description from openai-format response', async () => {
     mockResolvedGroup({
       provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
-      headersJson: '', azureApiVersion: null,
+      headersJson: '',
     })
     const fetchFn = jest.fn().mockResolvedValue(okResponse({ choices: [{ message: { content: '  图片里有一只猫  ' } }] }))
     const result = await new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '这是什么？', config)
@@ -192,7 +185,7 @@ describe('VisionProxyService.transcribeImages', () => {
   it('upscales 1x1 png before sending because OpenCode Go / MiMo reject tiny images', async () => {
     mockResolvedGroup({
       provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
-      headersJson: '', azureApiVersion: null,
+      headersJson: '',
     })
     const fetchFn = jest.fn().mockResolvedValue(okResponse({ choices: [{ message: { content: 'ok' } }] }))
     const tinyPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL2iQAAAABJRU5ErkJggg=='
@@ -213,7 +206,7 @@ describe('VisionProxyService.transcribeImages', () => {
   it('parses google_genai response', async () => {
     mockResolvedGroup({
       provider: 'google_genai', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', authType: 'bearer', secretVaultId: null,
-      headersJson: '', azureApiVersion: null,
+      headersJson: '',
     })
     const fetchFn = jest.fn().mockResolvedValue(okResponse({ candidates: [{ content: { parts: [{ text: 'a' }, { text: 'b' }] } }] }))
     const result = await new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', config)
@@ -223,7 +216,7 @@ describe('VisionProxyService.transcribeImages', () => {
   it('builds google_genai generateContent body with inline_data parts', async () => {
     mockResolvedGroup({
       provider: 'google_genai', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', authType: 'bearer', secretVaultId: null,
-      headersJson: '', azureApiVersion: null,
+      headersJson: '',
     })
     const fetchFn = jest.fn().mockResolvedValue(okResponse({ candidates: [{ content: { parts: [{ text: 'a' }] } }] }))
     await new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '这是什么？', config)
@@ -238,30 +231,21 @@ describe('VisionProxyService.transcribeImages', () => {
     expect(body.messages).toBeUndefined()
   })
 
-  it('builds ollama /api/chat body with images array', async () => {
+  it.each(['azure_openai', 'ollama'])('rejects retired provider %s before fetching', async (provider) => {
     mockResolvedGroup({
-      provider: 'ollama', baseUrl: 'http://localhost:11434', authType: 'none', secretVaultId: null,
-      headersJson: '', azureApiVersion: null,
+      provider, baseUrl: 'https://provider.example', authType: 'none', secretVaultId: null,
+      headersJson: '',
     })
-    const fetchFn = jest.fn().mockResolvedValue(okResponse({ message: { content: '一只猫' } }))
-    const result = await new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', config)
-    expect(result.description).toBe('一只猫')
-    const [url, init] = fetchFn.mock.calls[0]
-    expect(String(url)).toContain('/api/chat')
-    const body = JSON.parse(init.body)
-    expect(body.model).toBe('qwen-vl-max')
-    expect(body.stream).toBe(false)
-    const userMsg = body.messages.find((m: any) => m.role === 'user')
-    expect(userMsg.content).toContain('请描述以上图片')
-    expect(userMsg.images).toEqual(['aGVsbG8='])
-    // 不应包含 OpenAI 风格的 content 数组
-    expect(Array.isArray(userMsg.content)).toBe(false)
+    const fetchFn = jest.fn()
+    await expect(new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', config))
+      .rejects.toThrow()
+    expect(fetchFn).not.toHaveBeenCalled()
   })
 
   it('maps http error to 502 VisionProxyServiceError', async () => {
     mockResolvedGroup({
       provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
-      headersJson: '', azureApiVersion: null,
+      headersJson: '',
     })
     const fetchFn = jest.fn().mockResolvedValue({ ok: false, status: 429, text: async () => 'rate limited' })
     await expect(new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', config))
@@ -271,7 +255,7 @@ describe('VisionProxyService.transcribeImages', () => {
   it('includes upstream body snippet in http error message', async () => {
     mockResolvedGroup({
       provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
-      headersJson: '', azureApiVersion: null,
+      headersJson: '',
     })
     const fetchFn = jest.fn().mockResolvedValue({
       ok: false,
@@ -287,7 +271,7 @@ describe('VisionProxyService.transcribeImages', () => {
   it('falls back to message.reasoning when content is null', async () => {
     mockResolvedGroup({
       provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
-      headersJson: '', azureApiVersion: null,
+      headersJson: '',
     })
     const fetchFn = jest.fn().mockResolvedValue(
       okResponse({ choices: [{ message: { content: null, reasoning: '  纯红色方块  ' } }] }),
@@ -299,7 +283,7 @@ describe('VisionProxyService.transcribeImages', () => {
   it('throws 502 on empty description', async () => {
     mockResolvedGroup({
       provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
-      headersJson: '', azureApiVersion: null,
+      headersJson: '',
     })
     const fetchFn = jest.fn().mockResolvedValue(okResponse({ choices: [{ message: { content: '   ' } }] }))
     await expect(new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', config))
@@ -309,7 +293,7 @@ describe('VisionProxyService.transcribeImages', () => {
   it('includes reasoning_effort on openai body when enabled + effort high', async () => {
     mockResolvedGroup({
       provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
-      headersJson: '', azureApiVersion: null,
+      headersJson: '',
     })
     const fetchFn = jest.fn().mockResolvedValue(okResponse({ choices: [{ message: { content: 'ok' } }] }))
     await new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', {
@@ -324,7 +308,7 @@ describe('VisionProxyService.transcribeImages', () => {
   it('omits reasoning_effort when reasoning disabled', async () => {
     mockResolvedGroup({
       provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
-      headersJson: '', azureApiVersion: null,
+      headersJson: '',
     })
     const fetchFn = jest.fn().mockResolvedValue(okResponse({ choices: [{ message: { content: 'ok' } }] }))
     await new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', {
@@ -339,7 +323,7 @@ describe('VisionProxyService.transcribeImages', () => {
   it('omits reasoning_effort when effort is unset', async () => {
     mockResolvedGroup({
       provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
-      headersJson: '', azureApiVersion: null,
+      headersJson: '',
     })
     const fetchFn = jest.fn().mockResolvedValue(okResponse({ choices: [{ message: { content: 'ok' } }] }))
     await new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', {
@@ -351,40 +335,10 @@ describe('VisionProxyService.transcribeImages', () => {
     expect(body.reasoning_effort).toBeUndefined()
   })
 
-  it('sets think:true on ollama body when enabled + ollamaThink', async () => {
-    mockResolvedGroup({
-      provider: 'ollama', baseUrl: 'http://localhost:11434', authType: 'none', secretVaultId: null,
-      headersJson: '', azureApiVersion: null,
-    })
-    const fetchFn = jest.fn().mockResolvedValue(okResponse({ message: { content: '一只猫' } }))
-    await new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', {
-      ...config,
-      reasoningEnabled: true,
-      ollamaThink: true,
-    })
-    const body = JSON.parse(fetchFn.mock.calls[0][1].body)
-    expect(body.think).toBe(true)
-  })
-
-  it('does not set think on ollama when reasoning disabled', async () => {
-    mockResolvedGroup({
-      provider: 'ollama', baseUrl: 'http://localhost:11434', authType: 'none', secretVaultId: null,
-      headersJson: '', azureApiVersion: null,
-    })
-    const fetchFn = jest.fn().mockResolvedValue(okResponse({ message: { content: '一只猫' } }))
-    await new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', {
-      ...config,
-      reasoningEnabled: false,
-      ollamaThink: true,
-    })
-    const body = JSON.parse(fetchFn.mock.calls[0][1].body)
-    expect(body.think).toBeUndefined()
-  })
-
   it('maps AbortError to 转写模型请求超时', async () => {
     mockResolvedGroup({
       provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
-      headersJson: '', azureApiVersion: null,
+      headersJson: '',
     })
     const abort = Object.assign(new Error('The operation was aborted'), { name: 'AbortError' })
     const fetchFn = jest.fn().mockRejectedValue(abort)
@@ -397,7 +351,7 @@ describe('VisionProxyService.transcribeImages', () => {
   it('maps TimeoutError to 转写模型请求超时', async () => {
     mockResolvedGroup({
       provider: 'openai', baseUrl: 'https://api.example.com/v1', authType: 'bearer', secretVaultId: null,
-      headersJson: '', azureApiVersion: null,
+      headersJson: '',
     })
     const timeout = Object.assign(new Error('The operation timed out'), { name: 'TimeoutError' })
     const fetchFn = jest.fn().mockRejectedValue(timeout)
@@ -415,7 +369,6 @@ describe('VisionProxyService.transcribeImages', () => {
       authType: 'bearer',
       secretVaultId: null,
       headersJson: '',
-      azureApiVersion: null,
     })
     const fetchFn = jest.fn().mockResolvedValue(okResponse({ choices: [{ message: { content: 'ok' } }] }))
     await new VisionProxyService({ prisma, fetchFn }).transcribeImages(images, '', {

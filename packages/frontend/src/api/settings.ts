@@ -112,7 +112,6 @@ export const updateSystemSettings = async (
       patch.temperatureDefault = null
     }
   }
-  if (typeof rest.ollamaThink === 'boolean') patch.ollamaThink = !!rest.ollamaThink
   if (typeof rest.chatImageRetentionDays === 'number') patch.chatImageRetentionDays = rest.chatImageRetentionDays
   if (typeof rest.assistantReplyHistoryLimit === 'number') patch.assistantReplyHistoryLimit = rest.assistantReplyHistoryLimit
   if (typeof rest.siteBaseUrl === 'string') patch.siteBaseUrl = rest.siteBaseUrl
@@ -199,9 +198,6 @@ export const updateSystemSettings = async (
   }
   if (typeof rest.imageTranscriptionReasoningEffort === 'string') {
     patch.imageTranscriptionReasoningEffort = rest.imageTranscriptionReasoningEffort
-  }
-  if (typeof rest.imageTranscriptionOllamaThink === 'boolean') {
-    patch.imageTranscriptionOllamaThink = rest.imageTranscriptionOllamaThink
   }
   // RAG 设置
   if (typeof rest.ragEnabled === 'boolean') patch.ragEnabled = rest.ragEnabled

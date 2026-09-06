@@ -66,6 +66,38 @@ const buildService = (overrides: Partial<SettingsServiceDeps> = {}) => {
 }
 
 describe('SettingsService', () => {
+  test.each([true, false])('excludes retired connections and models from setup diagnostics (enabled=%s)', async (enable) => {
+    const rows = [{ id: 1, provider: 'ollama', enable }, { id: 2, provider: 'azure_openai', enable }]
+    const prisma = {
+      systemSetting: { findUnique: jest.fn().mockResolvedValue(null) },
+      connectionGroup: { findMany: jest.fn(async ({ where }: any) => rows.filter((row) => !where.provider || where.provider.in.includes(row.provider))) },
+      modelCatalog: { count: jest.fn().mockResolvedValue(2) },
+    }
+    const { service } = buildService({ prisma: prisma as any })
+    const result = await service.getSetupStatus()
+    expect(result.canComplete).toBe(false)
+    expect(result.diagnostics).toMatchObject({ totalSystemConnections: 0, enabledSystemConnections: 0, totalModels: 0, chatModels: 0 })
+    expect(prisma.modelCatalog.count).not.toHaveBeenCalled()
+  })
+
+  test('counts supported connections and scopes setup model counts to their enabled IDs', async () => {
+    const rows = [
+      { id: 1, provider: 'ollama', enable: false },
+      { id: 2, provider: 'openai', enable: true },
+      { id: 3, provider: 'google_genai', enable: false },
+    ]
+    const prisma = {
+      systemSetting: { findUnique: jest.fn().mockResolvedValue(null) },
+      connectionGroup: { findMany: jest.fn(async ({ where }: any) => rows.filter((row) => !where.provider || where.provider.in.includes(row.provider))) },
+      modelCatalog: { count: jest.fn().mockResolvedValue(1) },
+    }
+    const { service } = buildService({ prisma: prisma as any })
+    const result = await service.getSetupStatus()
+    expect(result.canComplete).toBe(true)
+    expect(result.diagnostics).toMatchObject({ totalSystemConnections: 2, enabledSystemConnections: 1, totalModels: 1, chatModels: 1 })
+    for (const [args] of prisma.modelCatalog.count.mock.calls) expect(args.where.connectionGroupId.in).toEqual([2])
+  })
+
   it('caches public branding until invalidated', async () => {
     const { prisma, service } = buildService()
     prisma.systemSetting.findMany.mockResolvedValueOnce([{ key: 'brand_text', value: 'TestBrand' }])
@@ -225,10 +257,8 @@ describe('SettingsService', () => {
   it('defaults image transcription reasoning keys when unset', async () => {
     const previousEnabled = process.env.IMAGE_TRANSCRIPTION_REASONING_ENABLED
     const previousEffort = process.env.IMAGE_TRANSCRIPTION_REASONING_EFFORT
-    const previousThink = process.env.IMAGE_TRANSCRIPTION_OLLAMA_THINK
     delete process.env.IMAGE_TRANSCRIPTION_REASONING_ENABLED
     delete process.env.IMAGE_TRANSCRIPTION_REASONING_EFFORT
-    delete process.env.IMAGE_TRANSCRIPTION_OLLAMA_THINK
     try {
       const { service, prisma } = buildService()
       prisma.systemSetting.findMany.mockResolvedValueOnce([])
@@ -245,7 +275,7 @@ describe('SettingsService', () => {
       const settings = await service.getSystemSettings(adminActor)
       expect(settings.image_transcription_reasoning_enabled).toBe(false)
       expect(settings.image_transcription_reasoning_effort).toBe('unset')
-      expect(settings.image_transcription_ollama_think).toBe(false)
+      expect(settings).not.toHaveProperty('image_transcription_ollama_think')
     } finally {
       if (typeof previousEnabled === 'undefined') {
         delete process.env.IMAGE_TRANSCRIPTION_REASONING_ENABLED
@@ -256,11 +286,6 @@ describe('SettingsService', () => {
         delete process.env.IMAGE_TRANSCRIPTION_REASONING_EFFORT
       } else {
         process.env.IMAGE_TRANSCRIPTION_REASONING_EFFORT = previousEffort
-      }
-      if (typeof previousThink === 'undefined') {
-        delete process.env.IMAGE_TRANSCRIPTION_OLLAMA_THINK
-      } else {
-        process.env.IMAGE_TRANSCRIPTION_OLLAMA_THINK = previousThink
       }
     }
   })
@@ -285,7 +310,7 @@ describe('SettingsService', () => {
     const settings = await service.getSystemSettings(userActor)
     expect(settings.image_transcription_reasoning_enabled).toBe(true)
     expect(settings.image_transcription_reasoning_effort).toBe('medium')
-    expect(settings.image_transcription_ollama_think).toBe(true)
+    expect(settings).not.toHaveProperty('image_transcription_ollama_think')
   })
 
   it('updates image transcription reasoning keys', async () => {
@@ -293,7 +318,6 @@ describe('SettingsService', () => {
     await service.updateSystemSettings({
       image_transcription_reasoning_enabled: true,
       image_transcription_reasoning_effort: 'high',
-      image_transcription_ollama_think: true,
     })
     expect(prisma.systemSetting.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -307,7 +331,7 @@ describe('SettingsService', () => {
         update: { value: 'high' },
       }),
     )
-    expect(prisma.systemSetting.upsert).toHaveBeenCalledWith(
+    expect(prisma.systemSetting.upsert).not.toHaveBeenCalledWith(
       expect.objectContaining({
         where: { key: 'image_transcription_ollama_think' },
         update: { value: 'true' },

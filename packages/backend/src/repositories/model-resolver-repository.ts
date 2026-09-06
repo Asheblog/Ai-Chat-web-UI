@@ -1,4 +1,5 @@
 import type { Connection, ConnectionGroup, PrismaClient } from '@prisma/client'
+import { isSupportedProvider } from '../utils/providers'
 
 export type ResolvedConnection = ConnectionGroup & {
   /** Selected credential id used for vault / key selection */
@@ -18,13 +19,14 @@ export interface CachedModelWithConnection {
 
 export interface ModelResolverRepository {
   findCachedModel(modelId: string): Promise<CachedModelWithConnection | null>
-  listEnabledSystemGroups(): Promise<Array<ConnectionGroup & { credentials: Connection[] }>>
+  /** Includes disabled groups so retired model identities cannot fall through. */
+  listSystemGroupsForResolution(): Promise<Array<ConnectionGroup & { credentials: Connection[] }>>
   /**
    * Dual-read: group id, or legacy credential id → its group.
    * Returns a ResolvedConnection (group fields + selected credential vault).
    */
   findEnabledResolvedConnectionById(id: number): Promise<ResolvedConnection | null>
-  /** Dual-read without enable filter (system soft-refs). */
+  /** Supported providers only; without enable filter for system soft-refs. */
   findResolvedConnectionById(id: number): Promise<ResolvedConnection | null>
 }
 
@@ -94,10 +96,9 @@ export class PrismaModelResolverRepository implements ModelResolverRepository {
     }
   }
 
-  listEnabledSystemGroups() {
+  listSystemGroupsForResolution() {
     return this.prisma.connectionGroup.findMany({
       where: {
-        enable: true,
         ownerUserId: null,
       },
       include: { credentials: true },
@@ -108,12 +109,12 @@ export class PrismaModelResolverRepository implements ModelResolverRepository {
     const asGroup = await this.prisma.connectionGroup.findFirst({
       where: {
         id,
-        enable: true,
         ownerUserId: null,
       },
       include: { credentials: true },
     })
     if (asGroup) {
+      if (!asGroup.enable || !isSupportedProvider(asGroup.provider)) return null
       return resolveConnectionFromGroup(asGroup)
     }
 
@@ -121,7 +122,7 @@ export class PrismaModelResolverRepository implements ModelResolverRepository {
       where: { id, enable: true },
       include: { group: true },
     })
-    if (!credential?.group || credential.group.ownerUserId != null || !credential.group.enable) {
+    if (!credential?.group || credential.group.ownerUserId != null || !credential.group.enable || !isSupportedProvider(credential.group.provider)) {
       return null
     }
     return toResolvedConnection(credential.group, credential)
@@ -136,6 +137,7 @@ export class PrismaModelResolverRepository implements ModelResolverRepository {
       include: { credentials: true },
     })
     if (asGroup) {
+      if (!isSupportedProvider(asGroup.provider)) return null
       return resolveConnectionFromGroup(asGroup)
     }
 
@@ -143,7 +145,7 @@ export class PrismaModelResolverRepository implements ModelResolverRepository {
       where: { id },
       include: { group: true },
     })
-    if (!credential?.group || credential.group.ownerUserId != null) {
+    if (!credential?.group || credential.group.ownerUserId != null || !isSupportedProvider(credential.group.provider)) {
       return null
     }
     return toResolvedConnection(credential.group, credential)

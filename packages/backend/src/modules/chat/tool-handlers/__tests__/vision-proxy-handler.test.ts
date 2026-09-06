@@ -13,7 +13,6 @@ const config = {
   modelId: 'qwen-vl-max',
   reasoningEnabled: false,
   reasoningEffort: '',
-  ollamaThink: false,
 }
 const context = {
   sessionId: 1,

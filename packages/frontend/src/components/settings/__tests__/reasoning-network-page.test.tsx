@@ -27,13 +27,13 @@ vi.mock("@/components/ui/use-toast", () => ({
   toast: toastSpy,
 }))
 
-/** 推理与网络页所需 20 key 的完整设置（baseSettings 已含 11 个 reasoning key + 8 个 network key，本地补 temperatureDefault） */
+/** 推理与网络页完整设置，本地补 temperatureDefault。 */
 const reasoningNetworkSettings: SystemSettings = {
   ...baseSettings,
   temperatureDefault: 0.7,
 }
 
-/** 整页保存的 20 个 key（12 reasoning + 8 network） */
+/** 整页保存的 19 个 key（11 reasoning + 8 network）。 */
 const ALL_KEYS = [
   "reasoningEnabled",
   "reasoningSaveToDb",
@@ -44,7 +44,6 @@ const ALL_KEYS = [
   "streamReasoningFlushIntervalMs",
   "streamKeepaliveIntervalMs",
   "openaiReasoningEffort",
-  "ollamaThink",
   "reasoningMaxOutputTokensDefault",
   "temperatureDefault",
   "sseHeartbeatIntervalMs",
@@ -95,38 +94,34 @@ afterEach(() => {
 })
 
 describe("ReasoningNetworkPage", () => {
-  test("渲染四个分区标题 + 顶部警示「这里保持默认即可」", () => {
+  test("渲染三个分区标题且不再显示已移除协议的设置", () => {
     render(<ReasoningNetworkPage />)
     expect(screen.getByText("推理与网络")).toBeInTheDocument()
     expect(screen.getByText("推理链配置")).toBeInTheDocument()
     expect(screen.getByText("流式与性能")).toBeInTheDocument()
-    expect(screen.getByText("Ollama 专属")).toBeInTheDocument()
+    expect(screen.queryByText("Ollama 专属")).not.toBeInTheDocument()
     expect(screen.getByText("网络与超时")).toBeInTheDocument()
     expect(screen.getByText(/这里保持默认即可/)).toBeInTheDocument()
   })
 
-  test("三个折叠分区默认收起（流式/网络/Ollama 内容不可见），点击展开后可见", async () => {
+  test("两个折叠分区默认收起，点击展开后可见", async () => {
     render(<ReasoningNetworkPage />)
     const streamCard = getCard("流式与性能")
-    const ollamaCard = getCard("Ollama 专属")
     const networkCard = getCard("网络与超时")
 
     expect(within(streamCard).queryByText("流式增量聚合（分片大小）")).not.toBeInTheDocument()
     expect(within(streamCard).queryByText("OpenAI reasoning_effort")).not.toBeInTheDocument()
-    expect(within(ollamaCard).queryByText("Ollama think")).not.toBeInTheDocument()
     expect(within(networkCard).queryByText("SSE 心跳间隔")).not.toBeInTheDocument()
 
     await userEvent.click(within(streamCard).getByRole("button", { name: "更多参数" }))
-    await userEvent.click(within(ollamaCard).getByRole("button", { name: "更多参数" }))
     await userEvent.click(within(networkCard).getByRole("button", { name: "更多参数" }))
 
     expect(within(streamCard).getByText("流式增量聚合（分片大小）")).toBeInTheDocument()
     expect(within(streamCard).getByText("OpenAI reasoning_effort")).toBeInTheDocument()
-    expect(within(ollamaCard).getByText("Ollama think")).toBeInTheDocument()
     expect(within(networkCard).getByText("SSE 心跳间隔")).toBeInTheDocument()
   })
 
-  test("整页保存 payload 精确等于 20 个 key（12 reasoning + 8 network 全量）", async () => {
+  test("整页保存 payload 精确等于 19 个 key，不携带旧协议设置", async () => {
     render(<ReasoningNetworkPage />)
 
     // 修改任一字段使保存可用（切换「启用推理链」开关）
@@ -148,7 +143,6 @@ describe("ReasoningNetworkPage", () => {
       streamReasoningFlushIntervalMs: 1000,
       streamKeepaliveIntervalMs: 5000,
       openaiReasoningEffort: "unset",
-      ollamaThink: false,
       reasoningMaxOutputTokensDefault: 32000,
       temperatureDefault: 0.7,
       sseHeartbeatIntervalMs: 15000,
@@ -225,33 +219,4 @@ describe("ReasoningNetworkPage", () => {
     expect(screen.queryByRole("button", { name: "保存设置" })).not.toBeInTheDocument()
   })
 
-  test("ollamaThink 开/关随保存生效（payload 断言）", async () => {
-    // 初始关闭 → 打开
-    render(<ReasoningNetworkPage />)
-    let card = getCard("Ollama 专属")
-    await userEvent.click(within(card).getByRole("button", { name: "更多参数" }))
-    await userEvent.click(within(card).getByRole("switch"))
-    await userEvent.click(screen.getByRole("button", { name: "保存设置" }))
-
-    await waitFor(() => {
-      expect(updateSpy).toHaveBeenCalledTimes(1)
-    })
-    expect(updateSpy.mock.calls[0][0]).toEqual(expect.objectContaining({ ollamaThink: true }))
-
-    // 初始打开 → 关闭
-    updateSpy.mockClear()
-    toastSpy.mockClear()
-    mockSystemSettings({ ...reasoningNetworkSettings, ollamaThink: true })
-    cleanup()
-    render(<ReasoningNetworkPage />)
-    card = getCard("Ollama 专属")
-    await userEvent.click(within(card).getByRole("button", { name: "更多参数" }))
-    await userEvent.click(within(card).getByRole("switch"))
-    await userEvent.click(screen.getByRole("button", { name: "保存设置" }))
-
-    await waitFor(() => {
-      expect(updateSpy).toHaveBeenCalledTimes(1)
-    })
-    expect(updateSpy.mock.calls[0][0]).toEqual(expect.objectContaining({ ollamaThink: false }))
-  })
 })

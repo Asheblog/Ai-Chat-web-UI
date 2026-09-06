@@ -1,11 +1,12 @@
 import type { Connection, ConnectionGroup } from '@prisma/client'
 import { prisma } from '../db'
-import fetch from 'node-fetch'
 import {
   fetchModelsForConnection,
   type CatalogItem,
   type ConnectionConfig,
-  buildHeaders,
+  assertSupportedProvider,
+  isSupportedProvider,
+  SUPPORTED_PROVIDERS,
   computeCapabilities,
   detectModelType,
 } from './providers'
@@ -68,6 +69,7 @@ export const buildConfigFromGroup = async (
   credential: Connection,
   secretVault?: SecretVaultService,
 ): Promise<ConnectionConfig> => {
+  assertSupportedProvider(group.provider)
   let apiKey: string | undefined
   if (group.authType === 'bearer' && credential.secretVaultId && secretVault) {
     apiKey = await secretVault.decryptById(credential.secretVaultId).catch(() => {
@@ -81,7 +83,6 @@ export const buildConfigFromGroup = async (
     authType: group.authType as ConnectionConfig['authType'],
     apiKey,
     headers: parseJsonRecord(group.headersJson),
-    azureApiVersion: group.azureApiVersion || undefined,
     prefixId: group.prefixId || undefined,
     tags: parseJsonArray(group.tagsJson, []),
     modelIds: parseJsonArray(credential.modelIdsJson, []),
@@ -92,9 +93,6 @@ export const buildConfigFromGroup = async (
 
 const DEFAULT_TTL_S = 600
 let ttlOverrideSeconds: number | null = null
-
-const OLLAMA_CONTEXT_CACHE_TTL_MS = 5 * 60 * 1000
-const ollamaShowCache = new Map<string, { value: number | null; expiresAt: number }>()
 
 const resolveTtlSeconds = () => {
   if (Number.isFinite(ttlOverrideSeconds) && (ttlOverrideSeconds as number) > 0) {
@@ -140,6 +138,7 @@ export async function refreshModelCatalogForConnectionGroup(
   credentialForFetch: Connection,
   secretVault?: SecretVaultService,
 ): Promise<{ connectionGroupId: number; total: number }> {
+  assertSupportedProvider(group.provider)
   if (group.ownerUserId != null) {
     log.debug('跳过个人连接组的模型刷新', {
       connectionGroupId: group.id,
@@ -200,48 +199,7 @@ export async function refreshModelCatalogForConnectionGroup(
 
     let contextWindow: number | null = null
 
-    if (cfg.provider === 'ollama' && item.rawId) {
-      const ollamaKey = `${cfg.baseUrl.replace(/\/+$/, '')}:${item.rawId}`
-      const nowMs = Date.now()
-      const cached = ollamaShowCache.get(ollamaKey)
-      if (cached && cached.expiresAt > nowMs) {
-        contextWindow = cached.value
-      } else {
-        const controller = new AbortController()
-        const timer = setTimeout(() => controller.abort(), 15000)
-        try {
-          const headers = await buildHeaders(cfg.provider, cfg.authType, cfg.apiKey, cfg.headers)
-          const response = await fetch(`${cfg.baseUrl.replace(/\/+$/, '')}/api/show`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ model: item.rawId, name: item.rawId }),
-            signal: controller.signal,
-          })
-          if (response.ok) {
-            const json: any = await response.json()
-            const numCtx = json?.details?.parameters?.num_ctx
-            if (Number.isFinite(numCtx)) {
-              contextWindow = Number(numCtx)
-            }
-          }
-        } catch (error) {
-          log.debug('获取 Ollama 模型 context_window 失败', {
-            model: item.rawId,
-            error: (error as Error)?.message,
-          })
-        } finally {
-          clearTimeout(timer)
-          if (!controller.signal.aborted) {
-            controller.abort()
-          }
-        }
-
-        ollamaShowCache.set(ollamaKey, {
-          value: contextWindow ?? null,
-          expiresAt: nowMs + OLLAMA_CONTEXT_CACHE_TTL_MS,
-        })
-      }
-    } else if (item.rawId) {
+    if (item.rawId) {
       const guessed = guessKnownContextWindow(cfg.provider, item.rawId)
       if (guessed) {
         contextWindow = guessed
@@ -416,6 +374,7 @@ export async function refreshModelCatalogForConnectionGroups(
   secretVault?: SecretVaultService,
 ) {
   for (const group of groups) {
+    if (!isSupportedProvider(group.provider)) continue
     try {
       const credential = pickCredentialForCatalogFetch(group, group.credentials)
       if (!credential) continue
@@ -428,7 +387,7 @@ export async function refreshModelCatalogForConnectionGroups(
 
 export async function refreshAllModelCatalog(secretVault?: SecretVaultService) {
   const groups = await prisma.connectionGroup.findMany({
-    where: { enable: true, ownerUserId: null },
+    where: { enable: true, ownerUserId: null, provider: { in: [...SUPPORTED_PROVIDERS] } },
     include: { credentials: true },
   })
   await refreshModelCatalogForConnectionGroups(groups, secretVault)

@@ -46,7 +46,6 @@ export interface SystemSettings {
   openaiReasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | '' | 'unset'
   reasoningMaxOutputTokensDefault?: number | null
   temperatureDefault?: number | null
-  ollamaThink?: boolean
   chatImageRetentionDays?: number
   assistantReplyHistoryLimit?: number | null
   siteBaseUrl?: string
@@ -113,7 +112,6 @@ export interface SystemSettings {
   imageTranscriptionModelId?: string | null
   imageTranscriptionReasoningEnabled?: boolean
   imageTranscriptionReasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | '' | 'unset'
-  imageTranscriptionOllamaThink?: boolean
   // RAG 文档解析设置
   ragEnabled?: boolean
   ragEmbeddingConnectionId?: number | null
@@ -273,7 +271,6 @@ export const parseSystemSettingsPayload = (
     }
     return undefined
   })()
-  const ollamaThink = Boolean(raw.ollama_think ?? false)
   const chatImageRetentionDays = (() => {
     const v = raw.chat_image_retention_days
     if (typeof v === 'number') return v
@@ -522,7 +519,6 @@ export const parseSystemSettingsPayload = (
   })()
   const imageTranscriptionReasoningEnabled = Boolean(raw.image_transcription_reasoning_enabled ?? false)
   const imageTranscriptionReasoningEffort = (raw.image_transcription_reasoning_effort ?? 'unset') as any
-  const imageTranscriptionOllamaThink = Boolean(raw.image_transcription_ollama_think ?? false)
 
   return {
     allowRegistration,
@@ -555,7 +551,6 @@ export const parseSystemSettingsPayload = (
     openaiReasoningEffort,
     reasoningMaxOutputTokensDefault,
     temperatureDefault,
-    ollamaThink,
     chatImageRetentionDays,
     assistantReplyHistoryLimit: Number(raw.assistant_reply_history_limit ?? 5),
     siteBaseUrl,
@@ -617,7 +612,6 @@ export const parseSystemSettingsPayload = (
     imageTranscriptionModelId,
     imageTranscriptionReasoningEnabled,
     imageTranscriptionReasoningEffort,
-    imageTranscriptionOllamaThink,
     // RAG 设置
     ragEnabled: Boolean(raw.rag_enabled ?? false),
     ragEmbeddingConnectionId: (() => {

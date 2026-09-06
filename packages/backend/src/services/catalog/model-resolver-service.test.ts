@@ -15,7 +15,6 @@ const buildGroup = (overrides: Partial<ResolvedConnection> = {}): ResolvedConnec
   enable: true,
   authType: 'bearer',
   headersJson: '',
-  azureApiVersion: null,
   prefixId: overrides.prefixId ?? null,
   tagsJson: '[]',
   defaultCapabilitiesJson: '{}',
@@ -39,7 +38,7 @@ const createRepository = (options: {
     findCachedModel: jest.fn(async (modelId: string) =>
       catalog.find((row) => row.modelId === modelId) || null,
     ),
-    listEnabledSystemGroups: jest.fn(async () =>
+    listSystemGroupsForResolution: jest.fn(async () =>
       groups.map((group) => ({
         ...group,
         credentials: group.credentials ?? [
@@ -80,6 +79,18 @@ const buildService = (repository: ModelResolverRepository) =>
   })
 
 describe('ModelResolverService', () => {
+  test.each(['azure_openai', 'ollama'])('rejects retired %s connections across lookup paths', async (provider) => {
+    const group = buildGroup({ provider, prefixId: 'retired' })
+    const repository = createRepository({
+      groups: [group, buildGroup({ id: 2 })],
+      catalog: [{ modelId: 'cached', rawId: 'cached', connectionId: 1, connection: group }],
+    })
+    const service = buildService(repository)
+    expect(await service.resolveModelIdForUser(1, 'cached')).toBeNull()
+    expect(await service.resolveModelIdForUser(1, 'retired.model')).toBeNull()
+    expect(await service.resolveModelForRequest({ userId: 1, modelId: 'model', connectionId: 1, rawId: 'model' })).toBeNull()
+  })
+
   test('returns cached mapping when present', async () => {
     const repository = createRepository({
       catalog: [

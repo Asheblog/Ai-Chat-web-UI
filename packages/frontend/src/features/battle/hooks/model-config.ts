@@ -61,7 +61,6 @@ export const buildConfigState = (model: ModelItem, defaults?: ReasoningDefaults)
   pythonEnabled: false,
   reasoningEnabled: defaults?.reasoningEnabled ?? false,
   reasoningEffort: defaults?.reasoningEffort ?? 'medium',
-  ollamaThink: defaults?.ollamaThink ?? false,
   extraPrompt: '',
   customBody: '',
   customHeaders: [],
@@ -110,7 +109,6 @@ export const buildConfigStateFromConfig = (
   const reasoningEnabled =
     typeof config?.reasoningEnabled === 'boolean' ? config.reasoningEnabled : base.reasoningEnabled
   const reasoningEffort = normalizeReasoningEffort(config?.reasoningEffort) || base.reasoningEffort
-  const ollamaThink = typeof config?.ollamaThink === 'boolean' ? config.ollamaThink : base.ollamaThink
   const advancedOpen = customHeaders.length > 0 || customBody.trim().length > 0 || extraPrompt.trim().length > 0
   return {
     ...base,
@@ -118,7 +116,6 @@ export const buildConfigStateFromConfig = (
     pythonEnabled: Boolean(config?.skills?.builtin?.includes('python-runner')),
     reasoningEnabled,
     reasoningEffort,
-    ollamaThink,
     extraPrompt,
     customBody,
     customHeaders,

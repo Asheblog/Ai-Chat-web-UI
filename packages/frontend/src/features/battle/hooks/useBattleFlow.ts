@@ -16,13 +16,11 @@ export function useBattleFlow() {
   const reasoningDefaults = useMemo<ReasoningDefaults>(() => {
     const enabled = Boolean(systemSettings?.reasoningEnabled ?? true)
     const effort = normalizeReasoningEffort(systemSettings?.openaiReasoningEffort) || 'medium'
-    const ollamaThink = Boolean(systemSettings?.ollamaThink ?? false)
     return {
       reasoningEnabled: enabled,
       reasoningEffort: effort,
-      ollamaThink,
     }
-  }, [systemSettings?.reasoningEnabled, systemSettings?.openaiReasoningEffort, systemSettings?.ollamaThink])
+  }, [systemSettings?.reasoningEnabled, systemSettings?.openaiReasoningEffort])
 
   const actions = useBattleFlowActions(state, reasoningDefaults)
 

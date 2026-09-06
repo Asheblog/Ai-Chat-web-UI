@@ -14,7 +14,6 @@ const baseGroup = {
   enable: true,
   authType: 'bearer' as const,
   headersJson: '',
-  azureApiVersion: null,
   prefixId: null,
   tagsJson: '[]',
   defaultCapabilitiesJson: '{}',
@@ -110,6 +109,31 @@ const buildService = (opts?: { withSecretVault?: boolean }) => {
 }
 
 describe('ConnectionService', () => {
+  test.each(['azure_openai', 'ollama'])('rejects retired %s before writes, verification or import', async (provider) => {
+    const { service, repository, verifyConnection } = buildService()
+    repository.listSystemGroups.mockResolvedValue([])
+    const payload = { displayName: 'Retired', provider, baseUrl: 'https://example.com', apiKeys: [{ apiKey: 'test' }] } as any
+    await expect(service.createSystemConnection(payload)).rejects.toThrow(/Unsupported provider/)
+    await expect(service.updateSystemConnection(1, payload)).rejects.toThrow(/Unsupported provider/)
+    await expect(service.verifyConnectionConfig(payload)).rejects.toThrow(/Unsupported provider/)
+    await expect(service.importSystemConnections({ schemaVersion: 2, connections: [payload] })).rejects.toThrow(/Unsupported provider/)
+    expect(repository.createSystemGroup).not.toHaveBeenCalled()
+    expect(repository.updateSystemGroup).not.toHaveBeenCalled()
+    expect(verifyConnection).not.toHaveBeenCalled()
+  })
+
+  test('hides retired records and rejects converting them into a supported provider', async () => {
+    const { service, repository, secretVault } = buildService()
+    const retired = { ...groupWithCredentials(), provider: 'ollama' }
+    repository.listSystemGroups.mockResolvedValue([retired, groupWithCredentials({ id: 2 })] as any)
+    repository.findSystemGroupById.mockResolvedValue(retired as any)
+    expect((await service.listSystemConnections()).map((group) => group.id)).toEqual([2])
+    expect((await service.exportSystemConnections()).connections).toHaveLength(1)
+    expect(secretVault?.decryptById).toHaveBeenCalledTimes(1)
+    await expect(service.updateSystemConnection(1, { displayName: 'Converted', provider: 'openai', baseUrl: 'https://example.com', apiKeys: [{ apiKey: 'test' }] })).rejects.toThrow(/Unsupported provider/)
+    expect(repository.updateSystemGroup).not.toHaveBeenCalled()
+  })
+
   describe('createSystemConnection with Secret Vault', () => {
     it('creates group then credentials, writes Vault, and refreshes catalog once', async () => {
       const { service, repository, secretVault, refreshModelCatalog } = buildService()
@@ -225,8 +249,8 @@ describe('ConnectionService', () => {
 
       await service.createSystemConnection({
         displayName: 'Local',
-        provider: 'ollama',
-        baseUrl: 'http://localhost:11434',
+        provider: 'openai',
+        baseUrl: 'http://localhost:8080/v1',
         authType: 'none',
         apiKeys: [{ apiKeyLabel: 'local', modelIds: [] }],
       })

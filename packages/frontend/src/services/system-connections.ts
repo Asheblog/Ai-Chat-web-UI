@@ -29,7 +29,6 @@ export interface SystemConnectionGroup {
   baseUrl: string
   authType: string
   headers?: Record<string, string> | null
-  azureApiVersion?: string | null
   prefixId?: string | null
   tags: Array<{ name: string }>
   connectionType: string
@@ -46,7 +45,6 @@ export interface SystemConnectionPayload {
   baseUrl: string
   authType: string
   headers?: Record<string, string>
-  azureApiVersion?: string
   prefixId?: string
   tags: Array<{ name: string }>
   connectionType: string

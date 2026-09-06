@@ -63,7 +63,6 @@ model ChatSession {
   // 会话级推理默认：为空表示遵循系统设置
   reasoningEnabled Boolean?
   reasoningEffort  String? // 'low' | 'medium' | 'high' | 'max' | 'xhigh'
-  ollamaThink      Boolean?
   // 会话级系统提示词：为空表示继承系统级
   systemPrompt     String?
   // 会话级知识库选择（JSON 数组字符串）
@@ -502,13 +501,12 @@ model ConnectionGroup {
   id                      Int      @id @default(autoincrement())
   ownerUserId             Int?
   displayName             String
-  provider                String // 'openai' | 'openai_responses' | 'azure_openai' | 'ollama' | 'google_genai'
+  provider                String // Active: 'openai' | 'openai_responses' | 'google_genai'; retired records remain historical.
   vendor                  String?
   baseUrl                 String
   enable                  Boolean  @default(true)
   authType                String   @default("bearer") // 'bearer' | 'none' | 预留：'session' | 'system_oauth' | 'microsoft_entra_id'
   headersJson             String   @default("") // 额外HTTP头（JSON字符串）
-  azureApiVersion         String? // 仅 provider=azure_openai 时必填
   prefixId                String?
   tagsJson                String   @default("[]")
   defaultCapabilitiesJson String   @default("{}")

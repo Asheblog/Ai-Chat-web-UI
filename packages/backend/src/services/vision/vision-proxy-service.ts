@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../db'
 import type { SecretVaultService } from '../secret-vault'
-import { buildHeaders, type ProviderType, type AuthType } from '../../utils/providers'
+import { buildHeaders, assertSupportedProvider, type ProviderType, type AuthType } from '../../utils/providers'
 import { convertChatCompletionsRequestToResponses, extractTextFromResponsesResponse } from '../../utils/openai-responses'
 import { BackendLogger as log } from '../../utils/logger'
 import { PrismaModelResolverRepository } from '../../repositories/model-resolver-repository'
@@ -14,7 +14,6 @@ export interface VisionProxyConfig {
   reasoningEnabled: boolean
   /** Empty or `unset` means do not send effort */
   reasoningEffort: string
-  ollamaThink: boolean
 }
 
 export interface ImageDescription {
@@ -48,27 +47,22 @@ export function shouldSendVisionReasoningEffort(effort: string): boolean {
 
 /**
  * Apply transcription reasoning onto an openai-style chat body (before responses conversion)
- * or ollama body. google_genai: no thinking params (YAGNI).
+ * google_genai: no thinking params (YAGNI).
  * Vendor thinking mirrors chat-request-builder (deepseek / openai_interleave).
  */
 export function applyVisionReasoningOptions(
   body: Record<string, unknown>,
-  config: Pick<VisionProxyConfig, 'reasoningEnabled' | 'reasoningEffort' | 'ollamaThink'>,
+  config: Pick<VisionProxyConfig, 'reasoningEnabled' | 'reasoningEffort'>,
   provider: string,
   vendor?: string | null,
 ): void {
   if (provider === 'google_genai') return
   // Vendor thinking is set even when reasoning is off (enabled|disabled), like chat-request-builder.
-  if (provider !== 'ollama' && (vendor === 'deepseek' || vendor === 'openai_interleave')) {
+  if (vendor === 'deepseek' || vendor === 'openai_interleave') {
     body.thinking = { type: config.reasoningEnabled ? 'enabled' : 'disabled' }
   }
   if (!config.reasoningEnabled) return
-  if (provider === 'ollama') {
-    if (config.ollamaThink) {
-      body.think = true
-    }
-    return
-  }
+
   if (shouldSendVisionReasoningEffort(config.reasoningEffort)) {
     body.reasoning_effort = config.reasoningEffort.toString().trim()
   }
@@ -91,11 +85,7 @@ export function loadVisionProxyConfig(sysMap: Record<string, string>): VisionPro
   )
     .toString()
     .trim()
-  const ollamaThink = parseBoolSetting(
-    sysMap.image_transcription_ollama_think ?? process.env.IMAGE_TRANSCRIPTION_OLLAMA_THINK,
-    false,
-  )
-  return { enabled, connectionId, modelId, reasoningEnabled, reasoningEffort, ollamaThink }
+  return { enabled, connectionId, modelId, reasoningEnabled, reasoningEffort }
 }
 
 export function isVisionProxyReady(config: VisionProxyConfig): boolean {
@@ -195,6 +185,7 @@ export class VisionProxyService {
     }
     const modelId = config.modelId!
     const provider = connection.provider as ProviderType
+    assertSupportedProvider(provider)
     const endpoint = (connection.baseUrl || '').trim().replace(/\/+$/, '')
     const authType = connection.authType as AuthType
     let apiKey = ''
@@ -237,10 +228,10 @@ export class VisionProxyService {
     }
     // openai-style: apply reasoning/thinking on chatBody before responses conversion
     // (convertChatCompletionsRequestToResponses keeps reasoning_effort→reasoning; strips thinking)
-    if (provider !== 'ollama' && provider !== 'google_genai') {
+    if (provider !== 'google_genai') {
       applyVisionReasoningOptions(chatBody, config, provider, connection.vendor)
     }
-    // F6: 各 provider 请求体格式差异在此收敛，openai/azure_openai/openai_responses 保持原样
+    // 各 provider 请求体格式差异在此收敛。
     let body: Record<string, unknown>
     if (provider === 'google_genai') {
       // Gemini generateContent 多模态格式：contents[].parts 内混排 text 与 inline_data
@@ -263,37 +254,13 @@ export class VisionProxyService {
         },
       }
       // google_genai: skip thinking params (YAGNI)
-    } else if (provider === 'ollama') {
-      // Ollama /api/chat 多模态格式：messages[].images 为 base64 数组
-      body = {
-        model: modelId,
-        messages: [
-          { role: 'system', content: TRANSCRIPTION_SYSTEM_PROMPT },
-          {
-            role: 'user',
-            content: userText,
-            images: preparedImages.map((image) => image.data),
-          },
-        ],
-        stream: false,
-        options: {
-          temperature: 0.2,
-          num_predict: 2000,
-        },
-      }
-      applyVisionReasoningOptions(body, config, 'ollama')
     } else {
       body = provider === 'openai_responses' ? convertChatCompletionsRequestToResponses(chatBody) : chatBody
     }
     const headers = await buildHeaders(provider, authType, apiKey, extraHeaders)
 
     let url: string
-    if (provider === 'ollama') {
-      url = `${endpoint}/api/chat`
-    } else if (provider === 'azure_openai') {
-      const apiVersion = connection.azureApiVersion || '2024-02-15-preview'
-      url = `${endpoint}/openai/deployments/${encodeURIComponent(modelId)}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`
-    } else if (provider === 'openai_responses') {
+    if (provider === 'openai_responses') {
       url = `${endpoint}/responses`
     } else if (provider === 'google_genai') {
       url = `${endpoint}/models/${encodeURIComponent(modelId)}:generateContent`
@@ -341,7 +308,6 @@ export class VisionProxyService {
           message?.content ||
           message?.reasoning_content ||
           message?.reasoning ||
-          json?.message?.content ||
           ''
       }
       text = text.trim()

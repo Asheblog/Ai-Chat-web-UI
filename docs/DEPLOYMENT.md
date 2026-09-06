@@ -395,12 +395,11 @@ git pull
        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
        reasoningEnabled BOOLEAN,
        reasoningEffort TEXT,
-       ollamaThink BOOLEAN,
        CONSTRAINT chat_sessions_userId_fkey FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE,
        CONSTRAINT chat_sessions_connectionId_fkey FOREIGN KEY (connectionId) REFERENCES connections(id) ON DELETE SET NULL ON UPDATE CASCADE
      );
-     INSERT INTO chat_sessions (id, userId, connectionId, modelRawId, title, createdAt, reasoningEnabled, reasoningEffort, ollamaThink)
-       SELECT id, userId, connectionId, modelRawId, title, createdAt, reasoningEnabled, reasoningEffort, ollamaThink
+     INSERT INTO chat_sessions (id, userId, connectionId, modelRawId, title, createdAt, reasoningEnabled, reasoningEffort)
+       SELECT id, userId, connectionId, modelRawId, title, createdAt, reasoningEnabled, reasoningEffort
        FROM chat_sessions_backup;
      DROP TABLE chat_sessions_backup;
      SQL

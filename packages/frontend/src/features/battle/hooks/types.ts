@@ -17,7 +17,6 @@ export interface ModelConfigState {
   pythonEnabled: boolean
   reasoningEnabled: boolean
   reasoningEffort: 'low' | 'medium' | 'high' | 'max' | 'xhigh'
-  ollamaThink: boolean
   extraPrompt: string
   customBody: string
   customHeaders: Array<{ name: string; value: string }>
@@ -100,7 +99,6 @@ export type BattleNodeModel = {
 export type ReasoningDefaults = {
   reasoningEnabled: boolean
   reasoningEffort: 'low' | 'medium' | 'high' | 'max' | 'xhigh'
-  ollamaThink: boolean
 }
 
 export type BattleRunConfigModel = {
@@ -117,7 +115,6 @@ export type BattleRunConfigModel = {
   customBody?: Record<string, any> | null
   reasoningEnabled?: boolean | null
   reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | null
-  ollamaThink?: boolean | null
 }
 
 export interface BattleRunDetailInput {
@@ -148,7 +145,6 @@ export interface BattleRunDetailInput {
       extraPrompt?: string | null
       reasoningEnabled?: boolean | null
       reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | null
-      ollamaThink?: boolean | null
     }>
   }
   live?: {

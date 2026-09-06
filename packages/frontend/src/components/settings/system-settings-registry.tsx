@@ -137,7 +137,7 @@ export const systemSettingsTree: SystemSettingsEntry[] = [
         key: "connections",
         label: "供应商与连接",
         icon: PlugZap,
-        keywords: ["provider", "API Key", "openai", "ollama", "azure", "google", "密钥"],
+        keywords: ["provider", "API Key", "openai", "google", "deepseek", "密钥"],
       },
       { key: "models", label: "模型管理", icon: Boxes, keywords: ["模型权限", "能力", "访问控制"] },
       {
@@ -211,7 +211,7 @@ export const systemSettingsTree: SystemSettingsEntry[] = [
         key: "reasoning-network",
         label: "推理与网络",
         icon: BrainCircuit,
-        keywords: ["推理", "token", "流式", "网络", "超时", "ollama"],
+        keywords: ["推理", "token", "流式", "网络", "超时"],
       },
     ],
   },
@@ -259,7 +259,6 @@ export const systemSettingsCards: SystemCardMeta[] = [
   // 推理与网络
   { leafKey: "reasoning-network", key: "reasoning-network:reasoning", label: "推理链配置", keywords: ["思考过程", "温度", "标签"] },
   { leafKey: "reasoning-network", key: "reasoning-network:stream", label: "流式与性能", keywords: ["分片", "flush", "Keepalive"] },
-  { leafKey: "reasoning-network", key: "reasoning-network:ollama", label: "Ollama 专属", keywords: ["think", "上游"] },
   { leafKey: "reasoning-network", key: "reasoning-network:network", label: "网络与超时", keywords: ["SSE 心跳", "空闲", "usage"] },
 ]
 

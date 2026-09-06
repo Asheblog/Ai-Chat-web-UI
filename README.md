@@ -8,7 +8,7 @@
 
 ## ✨ 功能亮点
 
-- **多模型统一接入**：OpenAI 兼容、OpenAI Responses、Azure OpenAI、Ollama、Google Gemini 五大协议，DeepSeek / GLM / Qwen / GPT 等模型一次配置、随时切换，上下文窗口与能力自动识别
+- **多模型统一接入**：OpenAI 兼容、OpenAI Responses、Google Gemini 三种协议，DeepSeek / GLM / Qwen / GPT 等模型一次配置、随时切换，上下文窗口与能力自动识别
 - **原生工具链**：联网搜索（Tavily / Brave / Exa / Metaso，并行多引擎）、网页读取（本地多引擎 + 浏览器渲染 fallback）、Python 沙箱执行、深度研究（计划确认 → 举证 → `export_pdf`）、RAG 知识库与文档解析
 - **图片转写代理（Vision Transcription Proxy）**：DeepSeek、GLM 等纯文本模型也能「看图」——发送图片时自动转交管理员指定的识图模型转写为文字描述并注入主模型；工具流 / 自动转写两种模式自动判定，转写结果持久化复用
 - **Skill 插件系统**：内置 Skill + GitHub 第三方 Skill 的安装、审批、激活、会话绑定与审计；可执行型第三方 Skill 强制沙箱隔离、能力按声明授权

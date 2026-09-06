@@ -154,7 +154,7 @@ export class NonStreamChatService {
     const fallbackReasoning =
       providerLabel === 'openai_responses'
         ? (extractReasoningFromResponsesResponse(json) ?? undefined)
-        : (json?.choices?.[0]?.message?.reasoning_content || json?.message?.thinking || undefined)
+        : (json?.choices?.[0]?.message?.reasoning_content || undefined)
 
     const usage = this.buildUsage(json, {
       promptTokens: prepared.promptTokens,
@@ -229,10 +229,10 @@ export class NonStreamChatService {
   ) {
     const u = json?.usage || {}
     const promptTokens =
-      Number(u?.prompt_tokens ?? u?.prompt_eval_count ?? u?.input_tokens ?? context.promptTokens) ||
+      Number(u?.prompt_tokens ?? u?.input_tokens ?? context.promptTokens) ||
       context.promptTokens
     const completionTokens =
-      Number(u?.completion_tokens ?? u?.eval_count ?? u?.output_tokens ?? 0) || 0
+      Number(u?.completion_tokens ?? u?.output_tokens ?? 0) || 0
     const totalTokens =
       Number(u?.total_tokens ?? 0) || promptTokens + (Number(u?.completion_tokens ?? 0) || 0)
 

@@ -38,7 +38,6 @@ const sessionSelect = {
   pinnedAt: true,
   reasoningEnabled: true,
   reasoningEffort: true,
-  ollamaThink: true,
   systemPrompt: true,
   knowledgeBaseIdsJson: true,
   connection: {
@@ -195,7 +194,6 @@ export class SessionService {
       rawId?: string
       reasoningEnabled?: boolean
       reasoningEffort?: string
-      ollamaThink?: boolean
       systemPrompt?: string | null
       knowledgeBaseIds?: number[]
     },
@@ -219,7 +217,6 @@ export class SessionService {
         title: payload.title || 'New Chat',
         reasoningEnabled: payload.reasoningEnabled,
         reasoningEffort: payload.reasoningEffort,
-        ollamaThink: payload.ollamaThink,
         systemPrompt: payload.systemPrompt,
         knowledgeBaseIdsJson: stringifyKnowledgeBaseIds(payload.knowledgeBaseIds),
       },
@@ -270,7 +267,6 @@ export class SessionService {
       pinned?: boolean
       reasoningEnabled?: boolean
       reasoningEffort?: string
-      ollamaThink?: boolean
       systemPrompt?: string | null
       knowledgeBaseIds?: number[]
     },
@@ -296,7 +292,6 @@ export class SessionService {
         ...(typeof updates.reasoningEffort === 'string'
           ? { reasoningEffort: updates.reasoningEffort }
           : {}),
-        ...(typeof updates.ollamaThink === 'boolean' ? { ollamaThink: updates.ollamaThink } : {}),
         ...(Object.prototype.hasOwnProperty.call(updates, 'systemPrompt')
           ? { systemPrompt: updates.systemPrompt ?? null }
           : {}),

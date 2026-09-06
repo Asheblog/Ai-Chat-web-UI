@@ -63,7 +63,7 @@ export function resolveToolSchema(params: {
   if (modelId && (modelId.includes('claude') || modelId.includes('anthropic'))) {
     return 'text'
   }
-  if (provider && provider !== 'openai' && provider !== 'azure_openai' && provider !== 'openai_responses') {
+  if (provider && provider !== 'openai' && provider !== 'openai_responses') {
     return 'text'
   }
   return 'tools'

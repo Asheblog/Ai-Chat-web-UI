@@ -5,10 +5,8 @@ import { computeStreamMetrics as computeStreamMetricsShared } from '@aichat/shar
 
 export type ProviderUsageSnapshot = {
   prompt_tokens?: number
-  prompt_eval_count?: number
   input_tokens?: number
   completion_tokens?: number
-  eval_count?: number
   output_tokens?: number
   total_tokens?: number
   prompt_cache_hit_tokens?: number
@@ -57,8 +55,8 @@ export const extractUsageNumbers = (
   u: ProviderUsageSnapshot | null,
 ): { prompt: number; completion: number; total: number } => {
   try {
-    const prompt = Number(u?.prompt_tokens ?? u?.prompt_eval_count ?? u?.input_tokens ?? 0) || 0
-    const completion = Number(u?.completion_tokens ?? u?.eval_count ?? u?.output_tokens ?? 0) || 0
+    const prompt = Number(u?.prompt_tokens ?? u?.input_tokens ?? 0) || 0
+    const completion = Number(u?.completion_tokens ?? u?.output_tokens ?? 0) || 0
     const total = Number(u?.total_tokens ?? prompt + completion) || prompt + completion
     return { prompt, completion, total }
   } catch {

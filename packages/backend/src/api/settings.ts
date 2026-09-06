@@ -160,7 +160,6 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
     openai_reasoning_effort: z.enum(['low', 'medium', 'high', 'max', 'xhigh', 'unset']).optional(),
     reasoning_max_output_tokens_default: z.number().int().min(1).max(256000).nullable().optional(),
     temperature_default: z.number().min(0).max(2).nullable().optional(),
-    ollama_think: z.boolean().optional(),
     chat_image_retention_days: z.number().int().min(0).max(3650).optional(),
     assistant_reply_history_limit: z.number().int().min(1).max(20).optional(),
     site_base_url: z.string().max(200).optional(),
@@ -221,7 +220,6 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
     image_transcription_model_id: z.string().min(1).nullable().optional(),
     image_transcription_reasoning_enabled: z.boolean().optional(),
     image_transcription_reasoning_effort: z.enum(['low', 'medium', 'high', 'max', 'xhigh', 'unset']).optional(),
-    image_transcription_ollama_think: z.boolean().optional(),
     // RAG 文档解析设置
     rag_enabled: z.boolean().optional(),
     rag_embedding_connection_id: z.number().int().positive().nullable().optional(),

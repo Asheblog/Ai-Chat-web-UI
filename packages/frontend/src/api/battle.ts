@@ -29,7 +29,6 @@ interface BattleModelPayload {
   custom_headers?: Array<{ name: string; value: string }>
   reasoningEnabled?: boolean
   reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh'
-  ollamaThink?: boolean
 }
 
 export interface MultiModelBattleStreamPayload {

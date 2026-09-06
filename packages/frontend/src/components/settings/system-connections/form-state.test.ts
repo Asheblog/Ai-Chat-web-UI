@@ -47,10 +47,10 @@ describe("form-state displayName", () => {
   })
 
   test("createFormFromTemplate 预填 displayName 为模板 label", () => {
-    const template = getProviderTemplate("ollama")!
+    const template = getProviderTemplate("google_genai")!
     const form = createFormFromTemplate(template)
-    expect(form.displayName).toBe("Ollama")
-    expect(form.baseUrl).toBe("http://localhost:11434")
+    expect(form.displayName).toBe("Google")
+    expect(form.baseUrl).toBe("https://generativelanguage.googleapis.com/v1beta")
   })
 
   test("buildPayload 发送 trim 后的 displayName", () => {

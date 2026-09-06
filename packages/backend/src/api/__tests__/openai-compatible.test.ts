@@ -41,6 +41,34 @@ const buildMockResolver = (): jest.Mocked<ModelResolverService> => ({
 })
 
 describe('openai-compatible api', () => {
+  it.each(['azure_openai', 'ollama'])('rejects retired %s for each generation API before fetching', async (provider) => {
+    const resolver = buildMockResolver()
+    resolver.resolveModelForRequest.mockResolvedValue({
+      rawModelId: 'retired-model',
+      connection: {
+        provider,
+        baseUrl: 'https://provider.example',
+        authType: 'none',
+        headersJson: '',
+      },
+    } as any)
+    const fetchImpl = jest.fn()
+    const app = createOpenAICompatApi({ modelResolverService: resolver, fetchImpl })
+    for (const [route, body] of [
+      ['/chat/completions', { messages: [{ role: 'user', content: 'hello' }] }],
+      ['/responses', { input: 'hello' }],
+      ['/embeddings', { input: 'hello' }],
+    ] as const) {
+      const response = await app.request(`http://localhost${route}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model: 'retired-model', ...body }),
+      })
+      expect(response.status).toBeGreaterThanOrEqual(400)
+    }
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
   it('uses injected resolver and fetch for chat completions', async () => {
     const resolver = buildMockResolver()
     const fetchImpl = jest.fn(async (url: string, init?: RequestInit) => {

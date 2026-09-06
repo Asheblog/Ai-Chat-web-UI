@@ -135,7 +135,7 @@ export function PythonToolsCard({ settings, update }: PythonToolsCardProps) {
     >
       <div className="space-y-3">
         <p className="text-xs text-muted-foreground">
-          仅 OpenAI / Azure OpenAI 等支持工具调用的连接可用。
+          仅支持工具调用的连接可用。
         </p>
         <p className="text-xs text-muted-foreground">
           Python 解释器由受管运行环境统一提供（`/app/data/python-runtime/venv`），不再支持在此处自定义命令参数。

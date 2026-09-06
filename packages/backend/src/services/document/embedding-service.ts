@@ -1,6 +1,6 @@
 /**
  * Embedding 服务
- * 支持 OpenAI 和 Ollama 双引擎
+ * 使用 OpenAI 兼容协议
  */
 
 import { createLogger } from '../../utils/logger'
@@ -29,7 +29,7 @@ async function runWithConcurrency<T>(
 }
 
 export interface EmbeddingConfig {
-  engine: 'openai' | 'ollama'
+  engine: 'openai'
   model: string
   apiKey?: string
   apiUrl?: string
@@ -172,82 +172,12 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
 }
 
 /**
- * Ollama Embedding 提供者
- */
-export class OllamaEmbeddingProvider implements EmbeddingProvider {
-  private apiUrl: string
-  private model: string
-  private dimension: number
-  private concurrency: number
-
-  constructor(config: EmbeddingConfig) {
-    this.apiUrl = config.apiUrl || 'http://localhost:11434'
-    this.model = config.model || 'nomic-embed-text'
-    this.concurrency = Math.max(1, Math.floor(config.concurrency || 1))
-
-    // 常见 Ollama embedding 模型的维度
-    const dimensionMap: Record<string, number> = {
-      'nomic-embed-text': 768,
-      'mxbai-embed-large': 1024,
-      'all-minilm': 384,
-      'snowflake-arctic-embed': 1024,
-    }
-
-    this.dimension = dimensionMap[this.model] || 768
-  }
-
-  async embed(text: string): Promise<number[]> {
-    const response = await fetch(`${this.apiUrl}/api/embeddings`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: this.model,
-        prompt: text,
-      }),
-    })
-
-    if (!response.ok) {
-      const error = await response.text()
-      throw new Error(`Ollama API error: ${response.status} ${error}`)
-    }
-
-    const data = (await response.json()) as { embedding: number[] }
-
-    // 更新实际维度
-    if (data.embedding && data.embedding.length !== this.dimension) {
-      this.dimension = data.embedding.length
-    }
-
-    return data.embedding
-  }
-
-  async embedBatch(texts: string[]): Promise<number[][]> {
-    if (texts.length === 0) return []
-
-    // Ollama 不支持批量 embedding，但可以并发调用
-    const results: number[][] = new Array(texts.length)
-    await runWithConcurrency(texts, this.concurrency, async (text, index) => {
-      results[index] = await this.embed(text)
-    })
-    return results
-  }
-
-  getDimension(): number {
-    return this.dimension
-  }
-}
-
-/**
  * 创建 Embedding 提供者
  */
 export function createEmbeddingProvider(config: EmbeddingConfig): EmbeddingProvider {
   switch (config.engine) {
     case 'openai':
       return new OpenAIEmbeddingProvider(config)
-    case 'ollama':
-      return new OllamaEmbeddingProvider(config)
     default:
       throw new Error(`Unknown embedding engine: ${config.engine}`)
   }

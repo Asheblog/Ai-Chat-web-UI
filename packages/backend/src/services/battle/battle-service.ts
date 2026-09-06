@@ -1452,7 +1452,6 @@ export class BattleService {
       customBody: normalizeCustomBodyForConfig(input.model.custom_body),
       reasoningEnabled: typeof input.model.reasoningEnabled === 'boolean' ? input.model.reasoningEnabled : null,
       reasoningEffort: normalizeReasoningEffort(input.model.reasoningEffort),
-      ollamaThink: typeof input.model.ollamaThink === 'boolean' ? input.model.ollamaThink : null,
     }
     const configPayload = {
       mode: 'single_model_multi_question' as const,
@@ -1784,7 +1783,6 @@ export class BattleService {
           customBody: normalizeCustomBodyForConfig(model.custom_body),
           reasoningEnabled: typeof model.reasoningEnabled === 'boolean' ? model.reasoningEnabled : null,
           reasoningEffort: normalizeReasoningEffort(model.reasoningEffort),
-          ollamaThink: typeof model.ollamaThink === 'boolean' ? model.ollamaThink : null,
         }
       }),
     }
@@ -1909,7 +1907,6 @@ export class BattleService {
             } : undefined,
             reasoningEnabled: typeof model.reasoningEnabled === 'boolean' ? model.reasoningEnabled : undefined,
             reasoningEffort: model.reasoningEffort || undefined,
-            ollamaThink: typeof model.ollamaThink === 'boolean' ? model.ollamaThink : undefined,
           })),
         },
         maxEvents: traceDecision.config.maxEvents,
@@ -2336,7 +2333,6 @@ export class BattleService {
       skills: model.config.skills ?? undefined,
       reasoningEnabled: typeof model.config.reasoningEnabled === 'boolean' ? model.config.reasoningEnabled : undefined,
       reasoningEffort: model.config.reasoningEffort || undefined,
-      ollamaThink: typeof model.config.ollamaThink === 'boolean' ? model.config.ollamaThink : undefined,
     })
 
     emitEvent?.({

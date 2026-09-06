@@ -46,14 +46,14 @@ describe('NonStreamFallbackService', () => {
     expect(result?.usage).toEqual({ prompt_tokens: 1, completion_tokens: 2 })
   })
 
-  it('builds ollama body and strips parts arrays', async () => {
+  it.each(['azure_openai', 'ollama', 'unknown'])('never fetches a retired or unknown provider: %s', async (provider) => {
     const fetchImpl = jest
       .fn()
       .mockResolvedValue(new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 }))
     const service = new NonStreamFallbackService({ fetchImpl })
-    await service.execute({
-      provider: 'ollama',
-      baseUrl: 'http://ollama',
+    const result = await service.execute({
+      provider: provider as any,
+      baseUrl: 'https://provider.example',
       modelRawId: 'llm',
       messagesPayload: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
       requestData: {},
@@ -61,12 +61,11 @@ describe('NonStreamFallbackService', () => {
       extraHeaders: {},
       timeoutMs: 1000,
     })
-    const [, options] = fetchImpl.mock.calls[0]
-    const parsed = JSON.parse(options?.body as string)
-    expect(parsed.model).toBe('llm')
-    expect(parsed.messages[0].content).toContain('hi')
+    expect(result).toBeNull()
+    expect(fetchImpl).not.toHaveBeenCalled()
   })
 })
 jest.mock('../../../../utils/providers', () => ({
+  ...jest.requireActual('../../../../utils/providers'),
   convertOpenAIReasoningPayload: jest.fn((body: any) => ({ ...body, converted: true })),
 }))

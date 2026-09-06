@@ -21,7 +21,6 @@ export const sendMessageSchema = z.object({
   images: z.array(z.object({ data: z.string().min(1), mime: z.string().min(1) })).max(4).optional(),
   reasoningEnabled: z.boolean().optional(),
   reasoningEffort: z.enum(['low', 'medium', 'high', 'max', 'xhigh']).optional(),
-  ollamaThink: z.boolean().optional(),
   saveReasoning: z.boolean().optional(),
   clientMessageId: z.string().min(1).max(128).optional(),
   contextEnabled: z.boolean().optional(),
@@ -138,10 +137,8 @@ export type ProviderChatCompletionResponse = {
   message?: { thinking?: string };
   usage?: {
     prompt_tokens?: number;
-    prompt_eval_count?: number;
     input_tokens?: number;
     completion_tokens?: number;
-    eval_count?: number;
     output_tokens?: number;
     total_tokens?: number;
   };

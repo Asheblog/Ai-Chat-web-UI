@@ -17,19 +17,11 @@ export function flattenMessageContent(content: unknown): string {
     .join('\n')
 }
 
-export function convertMessagesToPlainText(messages: any[]): Array<{ role: string; content: string }> {
-  return messages.map((msg: any) => ({
-    role: msg?.role,
-    content: flattenMessageContent(msg?.content),
-  }))
-}
-
 export function buildChatProviderRequest(params: {
   provider: ProviderType
   baseUrl: string
   rawModelId: string
   body: any
-  azureApiVersion?: string | null
   stream?: boolean
 }): { url: string; body: any; streamMode: ProviderStreamMode } {
   const baseUrl = (params.baseUrl || '').replace(/\/+$/, '')
@@ -37,8 +29,7 @@ export function buildChatProviderRequest(params: {
     typeof params.stream === 'boolean' ? params.stream : Boolean(params.body?.stream)
   const streamMode: ProviderStreamMode =
     params.provider === 'openai' ||
-    params.provider === 'openai_responses' ||
-    params.provider === 'azure_openai'
+    params.provider === 'openai_responses'
       ? stream
         ? 'sse'
         : 'json'
@@ -62,29 +53,6 @@ export function buildChatProviderRequest(params: {
     return {
       url: `${baseUrl}/responses`,
       body: convertChatCompletionsRequestToResponses(basePayload),
-      streamMode,
-    }
-  }
-
-  if (params.provider === 'azure_openai') {
-    const apiVersion = params.azureApiVersion || '2024-02-15-preview'
-    return {
-      url: `${baseUrl}/openai/deployments/${encodeURIComponent(
-        params.rawModelId,
-      )}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`,
-      body: basePayload,
-      streamMode,
-    }
-  }
-
-  if (params.provider === 'ollama') {
-    return {
-      url: `${baseUrl}/api/chat`,
-      body: {
-        model: params.rawModelId,
-        stream,
-        messages: convertMessagesToPlainText(params.body?.messages || []),
-      },
       streamMode,
     }
   }

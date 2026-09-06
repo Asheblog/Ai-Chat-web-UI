@@ -24,7 +24,7 @@ export function ProviderTemplateCard({
       data-testid={`provider-template-${template.provider}`}
       aria-label={`配置${template.label}`}
       onClick={() => onConfigure(template)}
-      className="v2-panel group flex w-full cursor-pointer flex-col items-start gap-3 p-4 text-left transition-colors hover:border-primary/40 hover:bg-accent/50"
+      className="v2-panel group flex w-full cursor-pointer flex-col items-start gap-3 p-4 text-left transition-colors hover:border-primary/40 hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
       <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
         <Icon className="h-5 w-5" />

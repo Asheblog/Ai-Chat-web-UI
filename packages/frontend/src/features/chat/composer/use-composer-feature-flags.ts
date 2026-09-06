@@ -33,7 +33,6 @@ export const useComposerFeatureFlags = ({
 }: UseComposerFeatureFlagsOptions) => {
   const [thinkingEnabled, setThinkingEnabled] = useState(false)
   const [effort, setEffort] = useState<'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset'>('unset')
-  const [ollamaThink, setOllamaThink] = useState(false)
   const [webSearchEnabled, setWebSearchEnabledState] = useState(false)
   const [webSearchScope, setWebSearchScope] = useState('webpage')
   const [pythonToolEnabled, setPythonToolEnabled] = useState(false)
@@ -74,7 +73,6 @@ export const useComposerFeatureFlags = ({
     const sysEnabled = Boolean(systemSettings?.reasoningEnabled ?? true)
     const sysEffortRaw = (systemSettings?.openaiReasoningEffort ?? '') as any
     const sysEffort: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset' = sysEffortRaw && sysEffortRaw !== '' ? sysEffortRaw : 'unset'
-    const sysOllamaThink = Boolean(systemSettings?.ollamaThink ?? false)
 
     setThinkingEnabled(
       typeof currentSession.reasoningEnabled === 'boolean'
@@ -82,20 +80,13 @@ export const useComposerFeatureFlags = ({
         : sysEnabled,
     )
     setEffort((currentSession.reasoningEffort as any) || sysEffort)
-    setOllamaThink(
-      typeof currentSession.ollamaThink === 'boolean'
-        ? Boolean(currentSession.ollamaThink)
-        : sysOllamaThink,
-    )
   }, [
     currentSession,
     currentSession?.id,
     currentSession?.reasoningEnabled,
     currentSession?.reasoningEffort,
-    currentSession?.ollamaThink,
     systemSettings?.reasoningEnabled,
     systemSettings?.openaiReasoningEffort,
-    systemSettings?.ollamaThink,
   ])
 
   useEffect(() => {
@@ -206,8 +197,6 @@ export const useComposerFeatureFlags = ({
     setThinkingEnabled,
     effort,
     setEffort,
-    ollamaThink,
-    setOllamaThink,
     webSearchEnabled,
     setWebSearchEnabled,
     webSearchScope,

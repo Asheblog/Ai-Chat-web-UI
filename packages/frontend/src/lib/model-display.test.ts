@@ -9,7 +9,7 @@ import {
 describe('model-display', () => {
   it('maps provider codes to readable labels', () => {
     expect(modelProviderLabel('openai')).toBe('OpenAI')
-    expect(modelProviderLabel('azure_openai')).toBe('Azure')
+    expect(modelProviderLabel('google_genai')).toBe('Google')
     expect(modelProviderLabel('Custom')).toBe('Custom')
   })
 
@@ -42,9 +42,9 @@ describe('model-display', () => {
     expect(
       formatModelSecondaryLabel({
         displayName: '',
-        provider: 'ollama',
+        provider: 'openai_responses',
       })
-    ).toBe('Ollama')
+    ).toBe('OpenAI Responses')
   })
 
   it('collects duplicate model names', () => {

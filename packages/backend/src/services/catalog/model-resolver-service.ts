@@ -6,6 +6,7 @@ import {
   type ResolvedConnection,
 } from '../../repositories/model-resolver-repository'
 import type { Actor } from '../../types'
+import { isSupportedProvider } from '../../utils/providers'
 import {
   decideModelAccessForActor,
   getModelAccessDefaults as defaultGetModelAccessDefaults,
@@ -57,6 +58,7 @@ export class ModelResolverService {
     const cached = await this.repository.findCachedModel(cleanModelId)
 
     if (cached?.connection && cached.rawId) {
+      if (!isSupportedProvider(cached.connection.provider)) return null
       return {
         connection: cached.connection,
         rawModelId: cached.rawId,
@@ -64,12 +66,20 @@ export class ModelResolverService {
       }
     }
 
-    const groups = await this.repository.listEnabledSystemGroups()
+    const groups = await this.repository.listSystemGroupsForResolution()
+
+    // Retired prefixed identities must never fall through to another connection.
+    const retiredPrefixMatch = groups.some((group) => {
+      const prefix = (group.prefixId || '').trim()
+      return !isSupportedProvider(group.provider) && prefix && cleanModelId.startsWith(`${prefix}.`)
+    })
+    if (retiredPrefixMatch) return null
 
     let fallbackExact: { connection: ResolvedConnection; rawId: string } | null = null
     let fallbackFirst: { connection: ResolvedConnection; rawId: string } | null = null
 
     for (const group of groups) {
+      if (!group.enable || !isSupportedProvider(group.provider)) continue
       const enabledCredentials = group.credentials.filter((item) => item.enable)
       const credentials = enabledCredentials.length > 0 ? enabledCredentials : group.credentials
       if (credentials.length === 0) continue
@@ -157,7 +167,7 @@ export class ModelResolverService {
 
     if (params.connectionId && params.rawId) {
       const connection = await this.repository.findEnabledResolvedConnectionById(params.connectionId)
-      if (!connection) {
+      if (!connection || !isSupportedProvider(connection.provider)) {
         return null
       }
       const modelIdWithPrefix = (connection.prefixId ? `${connection.prefixId}.` : '') + params.rawId

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
 import type { ApiResponse } from '../types'
+import { SUPPORTED_PROVIDERS } from '../utils/providers'
 import {
   ConnectionServiceError,
   type ConnectionService,
@@ -25,12 +26,11 @@ const apiKeySchema = z.object({
 
 const connectionSchema = z.object({
   displayName: z.string().trim().min(1),
-  provider: z.enum(['openai', 'openai_responses', 'azure_openai', 'ollama', 'google_genai']),
+  provider: z.enum(SUPPORTED_PROVIDERS),
   vendor: vendorEnum.optional(),
   baseUrl: z.string().url(),
-  authType: z.enum(['bearer', 'none', 'session', 'system_oauth', 'microsoft_entra_id']).optional().default('bearer'),
+  authType: z.enum(['bearer', 'none', 'session', 'system_oauth']).optional().default('bearer'),
   headers: z.record(z.string()).optional(),
-  azureApiVersion: z.string().optional(),
   prefixId: z.string().optional(),
   tags: z.array(z.object({ name: z.string() })).optional(),
   connectionType: z.enum(['external', 'local']).optional(),

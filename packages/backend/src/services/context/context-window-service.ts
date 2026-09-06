@@ -5,7 +5,7 @@ import {
   getSystemContextTokenLimit as defaultGetSystemContextTokenLimit,
 } from '../settings/legacy-utils'
 
-type Provider = 'openai' | 'azure_openai' | 'ollama' | 'google_genai' | string | null | undefined
+type Provider = string | null | undefined
 
 type CacheKey = `${number | 'none'}:${string | 'none'}`
 

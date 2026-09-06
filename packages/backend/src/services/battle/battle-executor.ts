@@ -192,7 +192,6 @@ export class BattleExecutor {
     const payload: RequestGenerationOptions = {
       reasoningEnabled: modelConfig.reasoningEnabled,
       reasoningEffort: modelConfig.reasoningEffort,
-      ollamaThink: modelConfig.ollamaThink,
       contextEnabled: false,
       skills: effectiveSkills,
       custom_body: modelConfig.custom_body,
@@ -446,8 +445,6 @@ export class BattleExecutor {
         payload?.choices?.[0]?.delta?.text ??
         payload?.delta?.content ??
         payload?.delta?.text ??
-        payload?.message?.content ??
-        payload?.response ??
         payload?.choices?.[0]?.message?.content ??
         payload?.text ??
         ''
@@ -478,7 +475,7 @@ export class BattleExecutor {
       if (payload?.done === true) {
         doneSeen = true
       }
-      if (payload?.usage || payload?.prompt_eval_count != null || payload?.eval_count != null) {
+      if (payload?.usage) {
         recordUsage(payload)
       }
     }
@@ -569,7 +566,7 @@ export class BattleExecutor {
     emitDelta?: (delta: { content?: string; reasoning?: string }) => void,
   ) {
     const provider = prepared.providerRequest.providerLabel
-    const streamEnabled = provider === 'openai' || provider === 'openai_responses' || provider === 'azure_openai'
+    const streamEnabled = provider === 'openai' || provider === 'openai_responses'
     const shouldStream = Boolean(emitDelta) && streamEnabled
 
     const sysMap = prepared.systemSettings
@@ -648,7 +645,6 @@ export class BattleExecutor {
           baseUrl: prepared.providerRequest.baseUrl,
           rawModelId: prepared.providerRequest.rawModelId,
           body: chatBody,
-          azureApiVersion: prepared.providerRequest.azureApiVersion,
           stream,
         })
         return this.requester.requestWithBackoff({
@@ -766,7 +762,6 @@ export class BattleExecutor {
       pinnedAt: null,
       reasoningEnabled: null,
       reasoningEffort: null,
-      ollamaThink: null,
       systemPrompt: null,
       connection,
     } as any

@@ -453,7 +453,6 @@ export class ConversationCompressionService {
       provider,
       baseUrl,
       rawModelId,
-      azureApiVersion: params.session.connection?.azureApiVersion,
       body,
       stream: false,
     })
@@ -499,7 +498,7 @@ export class ConversationCompressionService {
 
       const summary = provider === 'openai_responses'
         ? extractTextFromResponsesResponse(json)
-        : json?.choices?.[0]?.message?.content || json?.message?.content || ''
+        : json?.choices?.[0]?.message?.content || ''
 
       if (typeof summary === 'string' && summary.trim().length > 0) {
         return summary.trim()

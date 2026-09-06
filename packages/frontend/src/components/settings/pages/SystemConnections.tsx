@@ -478,6 +478,7 @@ export function SystemConnectionsPage() {
         <SheetContent
           side="right"
           dialogTitle={sheet.open ? sheet.title : "连接向导"}
+          dialogDescription={sheet.open ? sheet.description : undefined}
           className="w-full max-w-xl"
         >
           {sheet.open ? (
@@ -524,9 +525,9 @@ function SheetWizardShell({
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center gap-3 border-b border-border/70 px-5 py-4">
+      <div className="flex shrink-0 items-center gap-3 border-b border-border/70 py-4 pl-5 pr-16">
         <div className="min-w-0">
-          <h2 className="v2-section-title">{title}</h2>
+          <h2 className="v2-section-title break-words">{title}</h2>
           {description ? <p className="v2-muted-line mt-0.5 text-xs">{description}</p> : null}
         </div>
       </div>

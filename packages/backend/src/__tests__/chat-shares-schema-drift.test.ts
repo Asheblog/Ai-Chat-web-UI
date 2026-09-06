@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { closeSync, mkdtempSync, openSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
@@ -23,6 +23,8 @@ describe('schema 与 migrations 一致性（chat_shares）', () => {
       try {
         tmpDir = mkdtempSync(path.join(tmpdir(), 'aichat-schema-drift-'))
         const dbPath = path.join(tmpDir, 'test.db')
+        // Prisma's Windows schema engine requires the SQLite file to exist.
+        closeSync(openSync(dbPath, 'wx'))
         // SQLite URL 统一为正斜杠绝对路径，兼容 Windows 宿主与 Linux 容器
         const dbUrl = `file:${dbPath.split(path.sep).join('/')}`
         const require = createRequire(path.join(process.cwd(), 'package.json'))

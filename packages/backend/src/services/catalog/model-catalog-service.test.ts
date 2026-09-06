@@ -69,6 +69,19 @@ const buildService = () => {
 }
 
 describe('ModelCatalogService', () => {
+  test.each(['azure_openai', 'ollama'])('hides %s and rejects model overrides without writes', async (provider) => {
+    const { prisma, service, refreshForGroups } = buildService()
+    prisma.connectionGroup.findMany.mockResolvedValue([{ id: 1, provider }])
+    prisma.connectionGroup.findUnique.mockResolvedValue({ id: 1, provider })
+    expect(await service.listModels()).toEqual([])
+    await expect(service.saveOverride({ connectionId: 1, rawId: 'model' })).rejects.toThrow('Unsupported provider')
+    await expect(service.deleteOverrides({ all: false, items: [{ connectionId: 1, rawId: 'model' }] })).rejects.toThrow('Unsupported provider')
+    expect(prisma.modelCatalog.findMany).not.toHaveBeenCalled()
+    expect(prisma.modelCatalog.create).not.toHaveBeenCalled()
+    expect(prisma.modelCatalog.deleteMany).not.toHaveBeenCalled()
+    expect(refreshForGroups).not.toHaveBeenCalled()
+  })
+
   it('returns empty list when no connection groups exist', async () => {
     const { prisma, service } = buildService()
     prisma.connectionGroup.findMany.mockResolvedValueOnce([])
@@ -161,7 +174,7 @@ describe('ModelCatalogService', () => {
 
   it('deletes overrides in bulk and refreshes per connection group', async () => {
     const { service, prisma, refreshByGroupId } = buildService()
-    prisma.connectionGroup.findMany.mockResolvedValue([{ id: 1, prefixId: 'px' }])
+    prisma.connectionGroup.findMany.mockResolvedValue([{ id: 1, prefixId: 'px', provider: 'openai' }])
     prisma.modelCatalog.deleteMany.mockResolvedValue({ count: 2 })
     const count = await service.deleteOverrides({
       all: false,

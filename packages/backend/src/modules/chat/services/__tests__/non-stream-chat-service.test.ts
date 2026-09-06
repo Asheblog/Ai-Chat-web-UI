@@ -1,4 +1,5 @@
 jest.mock('../../../../utils/providers', () => ({
+  ...jest.requireActual('../../../../utils/providers'),
   buildHeaders: jest.fn(async () => ({
     'Content-Type': 'application/json',
     Authorization: 'Bearer mocked',
@@ -31,7 +32,6 @@ const buildPrepared = (): PreparedChatRequest => ({
   reasoning: {
     enabled: true,
     effort: 'medium',
-    ollamaThink: false,
   },
 })
 
@@ -41,14 +41,12 @@ const baseSession = {
   modelRawId: 'gpt-4o-mini',
   reasoningEnabled: null,
   reasoningEffort: null,
-  ollamaThink: null,
   connection: {
     provider: 'openai',
     baseUrl: 'https://api.example.com/v1',
     headersJson: null,
     authType: 'bearer',
     apiKey: 'secret',
-    azureApiVersion: null,
   },
 }
 

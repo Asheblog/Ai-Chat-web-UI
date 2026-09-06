@@ -706,7 +706,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       const maxIterations =
         agentMaxToolIterations > 0 ? agentMaxToolIterations : Number.POSITIVE_INFINITY;
       let currentProviderController: AbortController | null = null;
-      const streamEnabled = provider === 'openai' || provider === 'openai_responses' || provider === 'azure_openai';
+      const streamEnabled = provider === 'openai' || provider === 'openai_responses';
 
       const callProvider = async (messages: any[], schema: ToolSchema, iteration: number) => {
         const { body: chatBody, messages: preparedMessages, textPromptAdded } = buildToolRequest({
@@ -725,7 +725,6 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           baseUrl,
           rawModelId: session.modelRawId!,
           body: chatBody,
-          azureApiVersion: session.connection?.azureApiVersion,
           stream: streamEnabled,
         });
 
@@ -1112,10 +1111,10 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         const toUsageNumbers = (usage: any) => {
           const prompt =
             Number(
-              usage?.prompt_tokens ?? usage?.prompt_eval_count ?? usage?.input_tokens ?? 0
+              usage?.prompt_tokens ?? usage?.input_tokens ?? 0
             ) || 0;
           const completion =
-            Number(usage?.completion_tokens ?? usage?.eval_count ?? usage?.output_tokens ?? 0) ||
+            Number(usage?.completion_tokens ?? usage?.output_tokens ?? 0) ||
             0;
           const total =
             Number(usage?.total_tokens ?? (prompt + completion)) || prompt + completion;

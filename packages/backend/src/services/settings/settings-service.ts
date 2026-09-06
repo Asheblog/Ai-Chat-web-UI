@@ -1,4 +1,5 @@
 import type { PrismaClient, Prisma } from '@prisma/client'
+import { SUPPORTED_PROVIDERS } from '../../utils/providers'
 import { prisma as defaultPrisma } from '../../db'
 import {
   getQuotaPolicy as defaultGetQuotaPolicy,
@@ -150,7 +151,7 @@ export class SettingsService {
 
   private async computeSetupDiagnostics(): Promise<SetupStatusDiagnostics> {
     const connections = await this.prisma.connectionGroup.findMany({
-      where: { ownerUserId: null },
+      where: { ownerUserId: null, provider: { in: [...SUPPORTED_PROVIDERS] } },
       select: { id: true, enable: true },
     })
     const enabledConnectionIds = connections.filter((c) => c.enable).map((c) => c.id)
@@ -345,7 +346,6 @@ export class SettingsService {
       reasoning_max_output_tokens_default: Number(
         read('reasoning_max_output_tokens_default', process.env.REASONING_MAX_OUTPUT_TOKENS_DEFAULT || '32000'),
       ),
-      ollama_think: this.parseBoolean(settingsObj.ollama_think, process.env.OLLAMA_THINK || 'false'),
       chat_image_retention_days: Number(read('chat_image_retention_days', String(CHAT_IMAGE_DEFAULT_RETENTION_DAYS))),
       assistant_reply_history_limit: Number(read('assistant_reply_history_limit', process.env.ASSISTANT_REPLY_HISTORY_LIMIT || '5')),
       site_base_url: read('site_base_url', process.env.SITE_BASE_URL || ''),
@@ -477,10 +477,6 @@ export class SettingsService {
         settingsObj.image_transcription_reasoning_effort ||
         process.env.IMAGE_TRANSCRIPTION_REASONING_EFFORT ||
         'unset',
-      image_transcription_ollama_think: this.parseBoolean(
-        settingsObj.image_transcription_ollama_think,
-        process.env.IMAGE_TRANSCRIPTION_OLLAMA_THINK || 'false',
-      ),
       temperature_default: this.parseFloat(settingsObj.temperature_default, 0.7),
       // RAG 文档解析设置
       rag_enabled: this.parseBoolean(settingsObj.rag_enabled, 'false'),
@@ -568,7 +564,6 @@ export class SettingsService {
         image_transcription_model_id: formatted.image_transcription_model_id,
         image_transcription_reasoning_enabled: formatted.image_transcription_reasoning_enabled,
         image_transcription_reasoning_effort: formatted.image_transcription_reasoning_effort,
-        image_transcription_ollama_think: formatted.image_transcription_ollama_think,
       }
     }
     return formatted
@@ -669,7 +664,6 @@ export class SettingsService {
       SYSTEM_SETTINGS_FIELD_MAP.contextCompressionEnabled,
       SYSTEM_SETTINGS_FIELD_MAP.reasoningEnabled,
       SYSTEM_SETTINGS_FIELD_MAP.reasoningSaveToDb,
-      SYSTEM_SETTINGS_FIELD_MAP.ollamaThink,
       SYSTEM_SETTINGS_FIELD_MAP.battleAllowAnonymous,
       SYSTEM_SETTINGS_FIELD_MAP.battleAllowUsers,
       SYSTEM_SETTINGS_FIELD_MAP.webSearchAgentEnable,
@@ -685,7 +679,6 @@ export class SettingsService {
       SYSTEM_SETTINGS_FIELD_MAP.titleSummaryEnabled,
       'image_transcription_enabled',
       'image_transcription_reasoning_enabled',
-      'image_transcription_ollama_think',
       SYSTEM_SETTINGS_FIELD_MAP.ragEnabled,
       SYSTEM_SETTINGS_FIELD_MAP.knowledgeBaseEnabled,
       SYSTEM_SETTINGS_FIELD_MAP.knowledgeBaseAllowAnonymous,

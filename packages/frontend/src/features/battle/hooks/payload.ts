@@ -116,7 +116,6 @@ export const buildBattlePayload = (params: {
       custom_headers: headerResult.headers,
       reasoningEnabled: item.reasoningEnabled,
       reasoningEffort: item.reasoningEffort,
-      ollamaThink: item.ollamaThink,
     })
   }
 

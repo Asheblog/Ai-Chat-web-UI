@@ -1,4 +1,5 @@
 jest.mock('../../../../utils/providers', () => ({
+  ...jest.requireActual('../../../../utils/providers'),
   buildHeaders: jest.fn(async () => ({
     'Content-Type': 'application/json',
     Authorization: 'Bearer mocked',
@@ -19,14 +20,12 @@ const baseSession = {
   modelRawId: 'gpt-4o-mini',
   reasoningEnabled: null,
   reasoningEffort: null,
-  ollamaThink: null,
   connection: {
     provider: 'openai',
     baseUrl: 'https://api.example.com/v1',
     headersJson: null,
     authType: 'bearer',
     secretVaultId: 1,
-    azureApiVersion: null,
   },
 }
 
@@ -72,6 +71,18 @@ const buildBuilder = () => {
 }
 
 describe('ChatRequestBuilder', () => {
+  it.each(['azure_openai', 'ollama'])('rejects retired %s before loading history or credentials', async (provider) => {
+    const { builder, prisma, secretVault } = buildBuilder()
+    await expect(builder.prepare({
+      session: { ...baseSession, connection: { ...baseSession.connection, provider } } as any,
+      payload: { content: 'hello' },
+      content: 'hello',
+      mode: 'stream',
+    })).rejects.toThrow('Unsupported provider')
+    expect(prisma.message.findMany).not.toHaveBeenCalled()
+    expect(secretVault.decryptById).not.toHaveBeenCalled()
+  })
+
   it('builds stream request with web-search skill prompt', async () => {
     const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
     prisma.message.findMany.mockResolvedValue([
@@ -168,7 +179,7 @@ describe('ChatRequestBuilder', () => {
     expect(serialized).toContain('未经联网验证')
   })
 
-  it('applies history upper bound and completion mode for azure provider', async () => {
+  it('applies history upper bound and completion mode for OpenAI provider', async () => {
     const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
     prisma.message.findMany.mockResolvedValue([
       { role: 'assistant', content: 'old', createdAt: new Date('2024-01-01T00:00:00Z') },
@@ -176,7 +187,6 @@ describe('ChatRequestBuilder', () => {
     prisma.systemSetting.findMany.mockResolvedValue([
       { key: 'provider_timeout_ms', value: '600000' },
       { key: 'reasoning_enabled', value: 'false' },
-      { key: 'ollama_think', value: 'true' },
     ])
     prisma.modelCatalog.findMany.mockResolvedValue([])
     tokenizer.truncateMessages.mockResolvedValue([
@@ -187,18 +197,17 @@ describe('ChatRequestBuilder', () => {
     resolveContextLimit.mockResolvedValue(2000)
     resolveCompletionLimit.mockResolvedValue(500)
 
-    const azureSession = {
+    const completionSession = {
       ...baseSession,
       connection: {
         ...baseSession.connection,
-        provider: 'azure_openai',
-        azureApiVersion: '2023-12-01',
+        provider: 'openai',
       },
     }
 
     const upperBound = new Date('2024-01-01T00:00:00Z')
     const prepared = await builder.prepare({
-      session: azureSession as any,
+      session: completionSession as any,
       payload: { sessionId: 1, content: 'replay', reasoningEnabled: false } as any,
       content: 'replay',
       images: [],
@@ -214,7 +223,7 @@ describe('ChatRequestBuilder', () => {
       }),
     )
     expect(prepared.reasoning.enabled).toBe(false)
-    expect(prepared.providerRequest.url).toContain('/openai/deployments/')
+    expect(prepared.providerRequest.url).toContain('/chat/completions')
     expect(prepared.providerRequest.body.stream).toBe(false)
   })
 

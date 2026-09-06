@@ -50,7 +50,6 @@ export const resolveLoadedBattleState = (
       customBody: item.customBody ?? null,
       reasoningEnabled: item.reasoningEnabled ?? null,
       reasoningEffort: item.reasoningEffort ?? null,
-      ollamaThink: item.ollamaThink ?? null,
     }))
     : []
   const configMap = new Map<string, BattleRunConfigModel>()

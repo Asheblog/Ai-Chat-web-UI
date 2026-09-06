@@ -1061,8 +1061,6 @@ function extractDeltaPayload(payload: any): {
     payload?.choices?.[0]?.delta?.text ??
     payload?.delta?.content ??
     payload?.delta?.text ??
-    payload?.message?.content ??
-    payload?.response ??
     payload?.choices?.[0]?.message?.content ??
     payload?.text ??
     ''

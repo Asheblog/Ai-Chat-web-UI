@@ -38,7 +38,6 @@ const baseSession = {
     baseUrl: "https://api.example.com/v1",
     authType: "bearer",
     headersJson: "",
-    azureApiVersion: null,
   },
 }
 

@@ -17,7 +17,7 @@ const EXPECTED_CARDS: Record<string, string[]> = {
   "skills-governance": ["approvals", "versions", "bindings"],
   branding: ["avatar", "branding"],
   "data-maintenance": ["retention", "compression", "concurrency", "task-trace", "system-log"],
-  "reasoning-network": ["reasoning", "stream", "ollama", "network"],
+  "reasoning-network": ["reasoning", "stream", "network"],
 }
 
 describe("system-settings-card-registry", () => {

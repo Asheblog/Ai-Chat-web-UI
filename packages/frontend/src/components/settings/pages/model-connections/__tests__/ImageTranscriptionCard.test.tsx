@@ -46,7 +46,6 @@ const configuredSettings = {
   imageTranscriptionModelId: "vision-model",
   imageTranscriptionReasoningEnabled: false,
   imageTranscriptionReasoningEffort: "unset" as const,
-  imageTranscriptionOllamaThink: false,
 }
 
 describe("ImageTranscriptionCard", () => {
@@ -110,16 +109,13 @@ describe("ImageTranscriptionCard", () => {
     )
   })
 
-  it("toggling Ollama Think calls update with imageTranscriptionOllamaThink true", async () => {
+  it("does not offer retired protocol settings", async () => {
     const update = vi.fn()
     render(<ImageTranscriptionCard settings={configuredSettings as any} update={update} />)
 
     await userEvent.click(screen.getByRole("button", { name: /更多参数/ }))
-    await userEvent.click(screen.getByRole("switch", { name: "Ollama Think" }))
-
-    expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({ imageTranscriptionOllamaThink: true }),
-    )
+    expect(screen.queryByRole("switch", { name: "Ollama Think" })).not.toBeInTheDocument()
+    expect(update).not.toHaveBeenCalled()
   })
 
   it("probe button disabled when not configured", () => {

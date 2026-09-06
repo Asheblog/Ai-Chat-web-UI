@@ -51,7 +51,7 @@ export class ImageGenerationService {
     }
 
     // 其他所有情况使用 OpenAI 兼容 API
-    // 包括：OpenAI、Azure OpenAI、第三方代理（如 CLIProxyAPI）、Nano-GPT 等
+    // 包括：OpenAI、第三方代理（如 CLIProxyAPI）、Nano-GPT 等
     return 'openai-compat'
   }
 

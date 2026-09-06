@@ -21,7 +21,6 @@ export const streamChat = async function* streamChat(
   options?: {
     reasoningEnabled?: boolean
     reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh'
-    ollamaThink?: boolean
     saveReasoning?: boolean
     contextEnabled?: boolean
     clientMessageId?: string
@@ -214,7 +213,6 @@ export const chatCompletion = async (
   options?: {
     reasoningEnabled?: boolean
     reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh'
-    ollamaThink?: boolean
     saveReasoning?: boolean
     contextEnabled?: boolean
     clientMessageId?: string

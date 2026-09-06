@@ -14,6 +14,7 @@ import {
 } from '../../utils/capabilities'
 import {
   fetchModelsForConnection as defaultFetchModelsForConnection,
+  isSupportedProvider,
   type CatalogItem,
   type ConnectionConfig,
   type AuthType,
@@ -59,7 +60,6 @@ export interface ConnectionServiceDeps {
     authType: AuthType
     apiKey?: string
     headers?: Record<string, string>
-    azureApiVersion?: string
     prefixId?: string
     tags?: Array<{ name: string }>
     modelIds?: string[]
@@ -85,7 +85,6 @@ export interface ConnectionPayload {
   baseUrl: string
   authType?: AuthType
   headers?: Record<string, string>
-  azureApiVersion?: string
   prefixId?: string
   tags?: Array<{ name: string }>
   connectionType?: 'external' | 'local'
@@ -117,7 +116,6 @@ export interface ConnectionGroupView {
   vendor?: VendorType | null
   baseUrl: string
   authType: AuthType
-  azureApiVersion?: string | null
   prefixId?: string | null
   tags: TagItem[]
   connectionType: 'external' | 'local'
@@ -160,7 +158,6 @@ export interface ExportConnection {
   baseUrl: string
   authType: AuthType
   headers?: Record<string, string>
-  azureApiVersion?: string
   prefixId?: string
   tags: TagItem[]
   connectionType: 'external' | 'local'
@@ -316,7 +313,6 @@ const stringifySignature = (row: {
   baseUrl: string
   authType: string
   headers: Record<string, string>
-  azureApiVersion?: string | null
   prefixId?: string | null
   tags: TagItem[]
   connectionType?: string | null
@@ -328,7 +324,6 @@ const stringifySignature = (row: {
     baseUrl: sanitizeBaseUrl(row.baseUrl),
     authType: row.authType || 'bearer',
     headers: row.headers,
-    azureApiVersion: row.azureApiVersion || null,
     prefixId: row.prefixId || null,
     tags: row.tags,
     connectionType: (row.connectionType || 'external') as 'external' | 'local',
@@ -374,11 +369,15 @@ export class ConnectionService {
   /** Dual-read: group id → itself; legacy credential id → its connectionGroupId */
   async resolveGroupId(id: number): Promise<number> {
     const asGroup = await this.repository.findSystemGroupById(id)
-    if (asGroup) return asGroup.id
+    if (asGroup) {
+      this.requireSupportedProvider(asGroup.provider)
+      return asGroup.id
+    }
 
     const groups = await this.repository.listSystemGroups()
     for (const group of groups) {
       if (group.credentials.some((credential) => credential.id === id)) {
+        this.requireSupportedProvider(group.provider)
         return group.id
       }
     }
@@ -388,11 +387,13 @@ export class ConnectionService {
   async listSystemConnections(): Promise<ConnectionGroupView[]> {
     const groups = await this.repository.listSystemGroups()
     return groups
+      .filter((group) => isSupportedProvider(group.provider))
       .map((group) => this.toGroupView(group))
       .sort((a, b) => compareDatesDesc(a.updatedAt, b.updatedAt))
   }
 
   async createSystemConnection(payload: ConnectionPayload): Promise<ConnectionGroupView> {
+    this.requireSupportedProvider(payload.provider)
     const displayName = this.requireDisplayName(payload.displayName)
     await this.assertSystemDisplayNameAvailable(displayName)
 
@@ -426,6 +427,7 @@ export class ConnectionService {
   }
 
   async updateSystemConnection(id: number, payload: ConnectionPayload): Promise<ConnectionGroupView> {
+    this.requireSupportedProvider(payload.provider)
     const groupId = await this.resolveGroupId(id)
     const existing = await this.requireGroupById(groupId)
     const displayName = this.requireDisplayName(payload.displayName)
@@ -491,7 +493,6 @@ export class ConnectionService {
       baseUrl: sanitizeBaseUrl(payload.baseUrl),
       authType,
       headersJson: serializeRecord(payload.headers ?? parseRecord(existing.headersJson)),
-      azureApiVersion: normalizeOptionalString(payload.azureApiVersion),
       prefixId: normalizeOptionalString(payload.prefixId),
       tagsJson: serializeTags(payload.tags),
       defaultCapabilitiesJson: serializeDefaultCapabilities(payload.defaultCapabilities),
@@ -520,6 +521,7 @@ export class ConnectionService {
     const skippedReasons: string[] = []
 
     for (const group of groups) {
+      if (!isSupportedProvider(group.provider)) continue
       const authType = (group.authType as AuthType) || 'bearer'
       const headers = parseRecord(group.headersJson)
       const exportKeys: ExportConnectionApiKey[] = []
@@ -558,7 +560,6 @@ export class ConnectionService {
         baseUrl: sanitizeBaseUrl(group.baseUrl),
         authType,
         ...(Object.keys(headers).length > 0 ? { headers } : {}),
-        azureApiVersion: group.azureApiVersion ?? undefined,
         prefixId: group.prefixId ?? undefined,
         tags: parseTags(group.tagsJson),
         connectionType: (group.connectionType || 'external') as 'external' | 'local',
@@ -588,6 +589,10 @@ export class ConnectionService {
   ): Promise<ImportSystemConnectionsResult> {
     if (payload.schemaVersion !== 1 && payload.schemaVersion !== 2) {
       throw new ConnectionServiceError('不支持的 schemaVersion', 400)
+    }
+
+    for (const connection of payload.connections) {
+      this.requireSupportedProvider(connection.provider)
     }
 
     let signatureToGroup = this.buildSignatureGroupMap(await this.repository.listSystemGroups())
@@ -663,7 +668,6 @@ export class ConnectionService {
         baseUrl: sanitizeBaseUrl(existing.baseUrl),
         authType,
         headers: parseRecord(existing.headersJson),
-        azureApiVersion: existing.azureApiVersion ?? undefined,
         prefixId: existing.prefixId ?? undefined,
         tags: parseTags(existing.tagsJson),
         connectionType: (existing.connectionType || 'external') as 'external' | 'local',
@@ -703,6 +707,7 @@ export class ConnectionService {
   }
 
   async verifyConnectionConfig(payload: ConnectionPayload | ImportConnectionPayload): Promise<VerifyConnectionResult> {
+    this.requireSupportedProvider(payload.provider)
     const verifyConnection = this.verifyConnection
     if (!verifyConnection) {
       throw new ConnectionServiceError('verifyConnection dependency not provided', 500)
@@ -748,7 +753,6 @@ export class ConnectionService {
             authType,
             apiKey: plainApiKey || undefined,
             headers: payload.headers,
-            azureApiVersion: payload.azureApiVersion,
             prefixId: payload.prefixId,
             tags: payload.tags,
             modelIds: key.modelIds,
@@ -767,7 +771,6 @@ export class ConnectionService {
               authType,
               apiKey: plainApiKey || undefined,
               headers: payload.headers,
-              azureApiVersion: payload.azureApiVersion,
               prefixId: payload.prefixId,
               tags: payload.tags,
               modelIds: key.modelIds,
@@ -902,7 +905,6 @@ export class ConnectionService {
       enable: true,
       authType: payload.authType ?? 'bearer',
       headersJson: serializeRecord(payload.headers),
-      azureApiVersion: normalizeOptionalString(payload.azureApiVersion),
       prefixId: normalizeOptionalString(payload.prefixId),
       tagsJson: serializeTags(payload.tags),
       defaultCapabilitiesJson: serializeDefaultCapabilities(payload.defaultCapabilities),
@@ -919,7 +921,6 @@ export class ConnectionService {
       baseUrl: sanitizeBaseUrl(payload.baseUrl),
       authType: payload.authType ?? 'bearer',
       headersJson: serializeRecord(payload.headers),
-      azureApiVersion: normalizeOptionalString(payload.azureApiVersion),
       prefixId: normalizeOptionalString(payload.prefixId),
       tagsJson: serializeTags(payload.tags),
       defaultCapabilitiesJson: serializeDefaultCapabilities(payload.defaultCapabilities),
@@ -1035,6 +1036,7 @@ export class ConnectionService {
     for (const group of groups) {
       for (const credential of group.credentials) {
         if (ids.includes(credential.id)) {
+          this.requireSupportedProvider(group.provider)
           map.set(credential.id, credential)
         }
       }
@@ -1047,7 +1049,14 @@ export class ConnectionService {
     if (!found) {
       throw new ConnectionServiceError('Connection not found', 404)
     }
+    this.requireSupportedProvider(found.provider)
     return found
+  }
+
+  private requireSupportedProvider(provider: unknown): void {
+    if (!isSupportedProvider(provider)) {
+      throw new ConnectionServiceError('Unsupported provider', 400)
+    }
   }
 
   private toGroupView(group: ConnectionGroupWithCredentials): ConnectionGroupView {
@@ -1065,7 +1074,6 @@ export class ConnectionService {
       vendor: (group.vendor as VendorType | null) ?? null,
       baseUrl: sanitizeBaseUrl(group.baseUrl),
       authType: (group.authType as AuthType) || 'bearer',
-      azureApiVersion: group.azureApiVersion ?? null,
       prefixId: group.prefixId ?? null,
       tags: parseTags(group.tagsJson),
       connectionType: (group.connectionType || 'external') as 'external' | 'local',
@@ -1114,7 +1122,6 @@ export class ConnectionService {
           baseUrl: group.baseUrl,
           authType: group.authType,
           headers: parseRecord(group.headersJson),
-          azureApiVersion: group.azureApiVersion,
           prefixId: group.prefixId,
           tags: parseTags(group.tagsJson),
           connectionType: group.connectionType,
@@ -1132,7 +1139,6 @@ export class ConnectionService {
       baseUrl: payload.baseUrl,
       authType: payload.authType ?? 'bearer',
       headers: payload.headers ?? {},
-      azureApiVersion: payload.azureApiVersion ?? null,
       prefixId: payload.prefixId ?? null,
       tags: normalizeTags(payload.tags),
       connectionType: payload.connectionType ?? 'external',

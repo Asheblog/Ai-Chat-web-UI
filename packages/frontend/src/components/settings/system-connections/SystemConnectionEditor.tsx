@@ -136,17 +136,6 @@ export function SystemConnectionEditor({
               <HelperText provider={form.provider} specialProviderOpenaiInterleave={SPECIAL_PROVIDER_OPENAI_INTERLEAVE} />
             </Field>
 
-            {form.provider === "azure_openai" ? (
-              <Field label="API Version" htmlFor="connection-azure-version">
-                <Input
-                  id="connection-azure-version"
-                  value={form.azureApiVersion}
-                  onChange={(event) => setForm((prev) => ({ ...prev, azureApiVersion: event.target.value }))}
-                  placeholder="2024-02-15-preview"
-                />
-              </Field>
-            ) : null}
-
             <Field label="API Key" htmlFor="connection-api-key">
               <Input
                 id="connection-api-key"
@@ -335,7 +324,7 @@ function ProviderStep({ onSelect }: { onSelect: (template: ProviderTemplate) => 
               key={template.provider}
               type="button"
               onClick={() => onSelect(template)}
-              className="flex w-full cursor-pointer items-start gap-3 rounded-md border border-border bg-card px-3 py-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/50"
+              className="flex w-full cursor-pointer items-start gap-3 rounded-md border border-border bg-card px-3 py-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
                 <Icon className="h-4 w-4" />

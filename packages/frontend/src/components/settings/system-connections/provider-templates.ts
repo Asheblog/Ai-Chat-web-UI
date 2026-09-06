@@ -1,39 +1,34 @@
 import {
   Bot,
   BrainCircuit,
-  Cloud,
   Layers,
   MessagesSquare,
-  Server,
   type LucideIcon,
 } from "lucide-react"
 
 export type ProviderTemplateKey =
   | "openai"
   | "openai_responses"
-  | "azure_openai"
-  | "ollama"
   | "google_genai"
   | "openai_interleave"
 
 export type ProviderTemplate = {
   provider: ProviderTemplateKey
-  /** 显示名（对齐 providerLabel：Azure / Google / Ollama / OpenAI Responses / OpenAI（交错思考）） */
+  /** 显示名（对齐 providerLabel：Google / OpenAI Responses / OpenAI（交错思考）） */
   label: string
   /** 白话描述（一句话说清用途） */
   description: string
   icon: LucideIcon
   /** 默认端点 */
   baseUrl: string
-  authType: "bearer" | "none"
-  /** 仅 azure_openai */
-  azureApiVersion?: string
+  /** 快速接入模板默认使用 bearer 认证。 */
+  authType: "bearer"
   /** 端点提示（复用 HelperText 语义） */
   helperText?: string
 }
 
 /**
- * 6 个供应商快速接入模板。默认值沿用 baseUrlPlaceholder / HelperText / EditorParts 语义，
+ * 4 个供应商快速接入模板。默认值沿用 baseUrlPlaceholder / HelperText / EditorParts 语义，
  * 配置 Sheet 打开时用 createFormFromTemplate 预填表单。
  */
 export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
@@ -53,23 +48,6 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
     icon: MessagesSquare,
     baseUrl: "https://api.openai.com/v1",
     authType: "bearer",
-  },
-  {
-    provider: "azure_openai",
-    label: "Azure",
-    description: "Azure OpenAI 服务，需配置资源名与 API 版本",
-    icon: Cloud,
-    baseUrl: "https://<资源名>.openai.azure.com/",
-    authType: "bearer",
-    azureApiVersion: "2024-02-15-preview",
-  },
-  {
-    provider: "ollama",
-    label: "Ollama",
-    description: "本地 Ollama 服务，免 API Key 直连",
-    icon: Server,
-    baseUrl: "http://localhost:11434",
-    authType: "none",
   },
   {
     provider: "google_genai",

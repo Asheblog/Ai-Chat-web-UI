@@ -591,7 +591,6 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
       })()
       const effectiveReasoningEnabled = preparedRequest.reasoning.enabled
       const effectiveReasoningEffort = preparedRequest.reasoning.effort
-      const effectiveOllamaThink = preparedRequest.reasoning.ollamaThink
       if (effectiveReasoningEnabled) {
         const protocolDecision = await reasoningCompatibilityService.decideProtocol({
           provider,
@@ -712,7 +711,6 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
           workspaceToolsActive: agentToolFlags.workspaceToolsActive,
           reasoningEnabled: effectiveReasoningEnabled,
           reasoningEffort: effectiveReasoningEffort,
-          ollamaThink: effectiveOllamaThink,
           reasoningProtocol: activeReasoningProtocol,
           reasoningProtocolDecision: reasoningProtocolDecisionReason,
           contextLimit,
@@ -1125,7 +1123,6 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
           requestData,
           authHeader,
           extraHeaders,
-          azureApiVersion: session.connection?.azureApiVersion,
           timeoutMs: providerTimeoutMs,
           logger: log,
           traceRecorder,
@@ -1800,8 +1797,8 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
 	                    if (USAGE_EMIT && responsesEvent.usage) {
 	                      const usagePayload = responsesEvent.usage
 	                      const n = (u: any) => ({
-	                        prompt: Number(u?.prompt_tokens ?? u?.prompt_eval_count ?? u?.input_tokens ?? 0) || 0,
-	                        completion: Number(u?.completion_tokens ?? u?.eval_count ?? u?.output_tokens ?? 0) || 0,
+	                        prompt: Number(u?.prompt_tokens ?? u?.input_tokens ?? 0) || 0,
+	                        completion: Number(u?.completion_tokens ?? u?.output_tokens ?? 0) || 0,
 	                        total: Number(u?.total_tokens ?? 0) || 0,
 	                      })
 	                      const nn = n(usagePayload)
@@ -1902,8 +1899,8 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
                 if (USAGE_EMIT && parsed.usage) {
                   // 仅当厂商 usage 含有效数值时，才标记为已接收，避免空对象/全0 覆盖本地估算
                   const n = (u: any) => ({
-                    prompt: Number(u?.prompt_tokens ?? u?.prompt_eval_count ?? u?.input_tokens ?? 0) || 0,
-                    completion: Number(u?.completion_tokens ?? u?.eval_count ?? u?.output_tokens ?? 0) || 0,
+                    prompt: Number(u?.prompt_tokens ?? u?.input_tokens ?? 0) || 0,
+                    completion: Number(u?.completion_tokens ?? u?.output_tokens ?? 0) || 0,
                     total: Number(u?.total_tokens ?? 0) || 0,
                   });
                   const nn = n(parsed.usage);

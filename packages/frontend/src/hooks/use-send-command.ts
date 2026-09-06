@@ -34,7 +34,6 @@ interface UseSendCommandParams {
   deepResearchEnabled?: boolean
   thinkingEnabled: boolean
   effort: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset'
-  ollamaThink: boolean
   noSaveThisRound: boolean
   setNoSaveThisRound: (value: boolean) => void
   traceEnabled: boolean
@@ -77,7 +76,6 @@ export const useSendCommand = (params: UseSendCommandParams) => {
     deepResearchEnabled = false,
     thinkingEnabled,
     effort,
-    ollamaThink,
     noSaveThisRound,
     setNoSaveThisRound,
     traceEnabled,
@@ -164,7 +162,6 @@ export const useSendCommand = (params: UseSendCommandParams) => {
       const options = {
         reasoningEnabled: thinkingEnabled,
         reasoningEffort: effort !== 'unset' ? (effort as any) : undefined,
-        ollamaThink: thinkingEnabled ? ollamaThink : undefined,
         saveReasoning: !noSaveThisRound,
         skills: skillsPayload,
         traceEnabled: canUseTrace ? traceEnabled : undefined,
@@ -211,7 +208,6 @@ export const useSendCommand = (params: UseSendCommandParams) => {
     deepResearchEnabled,
     thinkingEnabled,
     effort,
-    ollamaThink,
     noSaveThisRound,
     setNoSaveThisRound,
     traceEnabled,

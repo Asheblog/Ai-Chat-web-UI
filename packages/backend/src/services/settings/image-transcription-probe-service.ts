@@ -97,7 +97,6 @@ export class ImageTranscriptionProbeService {
     const probeConfig = {
       ...config,
       reasoningEnabled: false,
-      ollamaThink: false,
     }
 
     // Connectivity check only: admin reasoning/high effort can take >60s and get cut by OpenResty.

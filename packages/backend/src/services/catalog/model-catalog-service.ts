@@ -3,7 +3,7 @@ import { prisma as defaultPrisma } from '../../db'
 import { hasDefinedCapability, parseCapabilityEnvelope as defaultParseCapabilityEnvelope } from '../../utils/capabilities'
 import type { CapabilityEnvelope, CapabilityFlags } from '../../utils/capabilities'
 import type { Actor } from '../../types'
-import type { ProviderType } from '../../utils/providers'
+import { isSupportedProvider, SUPPORTED_PROVIDERS, type ProviderType } from '../../utils/providers'
 import {
   decideModelAccessForActor,
   getModelAccessDefaults as defaultGetModelAccessDefaults,
@@ -206,10 +206,11 @@ export class ModelCatalogService {
   }
 
   async listModels(actor?: Actor) {
-    const groups = await this.prisma.connectionGroup.findMany({
-      where: { ownerUserId: null, enable: true },
+    const candidates = await this.prisma.connectionGroup.findMany({
+      where: { ownerUserId: null, enable: true, provider: { in: [...SUPPORTED_PROVIDERS] } },
       include: { credentials: true },
     })
+    const groups = candidates.filter((group) => isSupportedProvider(group.provider))
     if (groups.length === 0) {
       return []
     }
@@ -322,6 +323,7 @@ export class ModelCatalogService {
     if (!group) {
       throw new ModelCatalogServiceError('Connection not found', 404)
     }
+    if (!isSupportedProvider(group.provider)) throw new ModelCatalogServiceError('Unsupported provider')
 
     const hasTagsPayload = Array.isArray(payload.tagsInput)
     const tags = hasTagsPayload ? this.normalizeTags(payload.tagsInput as any[]) : undefined
@@ -428,7 +430,7 @@ export class ModelCatalogService {
 
   async deleteOverrides(payload: DeleteOverridesPayload) {
     if (payload.all) {
-      const result = await this.prisma.modelCatalog.deleteMany({ where: { manualOverride: true } })
+      const result = await this.prisma.modelCatalog.deleteMany({ where: { manualOverride: true, connectionGroup: { provider: { in: [...SUPPORTED_PROVIDERS] } } } })
       await this.refreshAll()
       return result.count
     }
@@ -449,8 +451,10 @@ export class ModelCatalogService {
     const connectionGroupIds = Array.from(new Set(normalized.map((item) => item.connectionId)))
     const groups = await this.prisma.connectionGroup.findMany({
       where: { id: { in: connectionGroupIds } },
-      select: { id: true, prefixId: true },
+      select: { id: true, prefixId: true, provider: true },
     })
+    if (groups.length !== connectionGroupIds.length) throw new ModelCatalogServiceError('Connection not found', 404)
+    if (groups.some((group) => !isSupportedProvider(group.provider))) throw new ModelCatalogServiceError('Unsupported provider')
     const prefixMap = new Map(groups.map((c) => [c.id, c.prefixId]))
     const filters = normalized.map((item) => {
       const prefix = prefixMap.get(item.connectionId) || ''
@@ -468,7 +472,7 @@ export class ModelCatalogService {
 
   async exportOverrides() {
     const rows = await this.prisma.modelCatalog.findMany({
-      where: { manualOverride: true },
+      where: { manualOverride: true, connectionGroup: { provider: { in: [...SUPPORTED_PROVIDERS] } } },
       select: {
         connectionGroupId: true,
         rawId: true,

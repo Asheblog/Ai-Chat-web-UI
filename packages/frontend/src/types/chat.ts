@@ -13,7 +13,6 @@ export interface ChatSession {
   pinnedAt?: string | null;
   reasoningEnabled?: boolean | null;
   reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | null;
-  ollamaThink?: boolean | null;
   systemPrompt?: string | null;
   knowledgeBaseIds?: number[];
   lastMessagePreview?: string | null;

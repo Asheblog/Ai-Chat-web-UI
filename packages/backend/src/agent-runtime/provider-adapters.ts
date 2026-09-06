@@ -149,11 +149,14 @@ const googleGenaiAdapter: ToolProviderAdapter = (toolDefinitions) => {
 const PROVIDER_ADAPTERS: Record<string, ToolProviderAdapter> = {
   openai: openaiAdapter,
   openai_responses: openaiAdapter,
-  azure_openai: openaiAdapter,
   google_genai: googleGenaiAdapter,
 }
 
 export function resolveToolProviderAdapter(provider?: string): ToolProviderAdapter {
   if (!provider) return openaiAdapter
-  return PROVIDER_ADAPTERS[provider] ?? openaiAdapter
+  const adapter = Object.prototype.hasOwnProperty.call(PROVIDER_ADAPTERS, provider)
+    ? PROVIDER_ADAPTERS[provider]
+    : undefined
+  if (!adapter) throw new Error(`Unsupported provider: ${provider}`)
+  return adapter
 }

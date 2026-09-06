@@ -187,7 +187,6 @@ const createMinimalDeps = (overrides: Record<string, unknown> = {}) => {
       headersJson: null,
       authType: 'bearer',
       secretVaultId: 1,
-      azureApiVersion: null,
     },
   }
 
@@ -295,7 +294,6 @@ describe('createChatStreamHandler error handling', () => {
       modelId: 'gemini-2.5-flash',
       reasoningEnabled: false,
       reasoningEffort: '',
-      ollamaThink: false,
     })
     ;(visionProxyService.transcribeImages as jest.Mock).mockResolvedValue({ description: '图里有一只猫', modelRawId: 'm' })
     const mockPrepare = jest.fn().mockResolvedValue({
@@ -313,7 +311,7 @@ describe('createChatStreamHandler error handling', () => {
         providerHost: 'api.example.com',
         timeoutMs: 60000,
       },
-      reasoning: { enabled: false, effort: 'medium', ollamaThink: false },
+      reasoning: { enabled: false, effort: 'medium' },
     })
     const deps = createMinimalDeps({
       mockPrepare,
@@ -376,7 +374,6 @@ describe('createChatStreamHandler error handling', () => {
       modelId: 'gemini-2.5-flash',
       reasoningEnabled: false,
       reasoningEffort: '',
-      ollamaThink: false,
     })
     ;(computeAgentToolFlags as jest.Mock).mockReturnValue({
       agentToolsActive: true,
@@ -403,7 +400,7 @@ describe('createChatStreamHandler error handling', () => {
         providerHost: 'api.example.com',
         timeoutMs: 60000,
       },
-      reasoning: { enabled: false, effort: 'medium', ollamaThink: false },
+      reasoning: { enabled: false, effort: 'medium' },
     })
     const deps = createMinimalDeps({
       mockPrepare,
@@ -455,7 +452,6 @@ describe('createChatStreamHandler error handling', () => {
       modelId: 'gemini-2.5-flash',
       reasoningEnabled: false,
       reasoningEffort: '',
-      ollamaThink: false,
     })
     const mockPrepare = jest.fn().mockResolvedValue({
       promptTokens: 10,
@@ -472,7 +468,7 @@ describe('createChatStreamHandler error handling', () => {
         providerHost: 'api.example.com',
         timeoutMs: 60000,
       },
-      reasoning: { enabled: false, effort: 'medium', ollamaThink: false },
+      reasoning: { enabled: false, effort: 'medium' },
     })
     const deps = createMinimalDeps({
       mockPrepare,

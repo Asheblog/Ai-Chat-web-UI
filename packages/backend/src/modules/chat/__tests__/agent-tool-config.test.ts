@@ -25,7 +25,6 @@ describe('buildAgentVisionProxyConfig', () => {
       modelId: 'gemini-2.5-flash',
       reasoningEnabled: false,
       reasoningEffort: '',
-      ollamaThink: false,
     })
   })
   it('disabled when absent', () => {

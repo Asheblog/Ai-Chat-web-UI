@@ -210,7 +210,6 @@ export interface BattleRunDetail extends BattleRunSummary {
       customBody?: Record<string, any> | null
       reasoningEnabled?: boolean | null
       reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | null
-      ollamaThink?: boolean | null
     }>
     model?: {
       modelId: string
@@ -222,7 +221,6 @@ export interface BattleRunDetail extends BattleRunSummary {
       customBody?: Record<string, any> | null
       reasoningEnabled?: boolean | null
       reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | null
-      ollamaThink?: boolean | null
     }
     questions?: Array<{
       questionIndex: number

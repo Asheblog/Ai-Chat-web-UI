@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../../db'
 import type { SecretVaultService } from '../../../services/secret-vault'
-import { buildHeaders, type ProviderType, type AuthType } from '../../../utils/providers'
+import { buildHeaders, assertSupportedProvider, type ProviderType, type AuthType } from '../../../utils/providers'
 import { convertChatCompletionsRequestToResponses, extractTextFromResponsesResponse } from '../../../utils/openai-responses'
 import { BackendLogger as log } from '../../../utils/logger'
 import {
@@ -127,6 +127,7 @@ export class TitleSummaryService {
     }
 
     const provider = connection.provider as ProviderType
+    assertSupportedProvider(provider)
     const endpoint = (connection.baseUrl || '').trim().replace(/\/+$/, '')
     const authType = connection.authType as AuthType
     let apiKey = ''
@@ -154,14 +155,7 @@ export class TitleSummaryService {
 
     // 构建URL
     let url: string
-    if (provider === 'ollama') {
-      url = `${endpoint}/api/chat`
-    } else if (provider === 'azure_openai') {
-      const apiVersion = connection.azureApiVersion || '2024-02-15-preview'
-      url = `${endpoint}/openai/deployments/${encodeURIComponent(
-        modelId,
-      )}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`
-    } else if (provider === 'openai_responses') {
+    if (provider === 'openai_responses') {
       url = `${endpoint}/responses`
     } else if (provider === 'google_genai') {
       url = `${endpoint}/models/${encodeURIComponent(modelId)}:generateContent`
@@ -220,8 +214,6 @@ export class TitleSummaryService {
         title =
           json?.choices?.[0]?.message?.content ||
           json?.choices?.[0]?.message?.reasoning_content ||
-          json?.message?.content ||
-          json?.message?.reasoning_content ||
           ''
       }
       title = title.trim()

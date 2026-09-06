@@ -49,7 +49,6 @@ export function AdvancedFields({
             <SelectItem value="bearer">Bearer</SelectItem>
             <SelectItem value="session">Session</SelectItem>
             <SelectItem value="system_oauth">System OAuth</SelectItem>
-            <SelectItem value="microsoft_entra_id">Entra ID</SelectItem>
           </SelectContent>
         </Select>
       </Field>
@@ -140,7 +139,7 @@ export function CollapsibleEditorSection({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full cursor-pointer items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-accent/55"
+        className="flex w-full cursor-pointer items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-accent/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
         <span className="flex min-w-0 items-center gap-3">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">{icon}</span>

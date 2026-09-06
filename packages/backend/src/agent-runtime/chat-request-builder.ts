@@ -11,6 +11,7 @@ import { ConnectionServiceError } from '../services/connections/connection-servi
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../config/storage'
 import {
   buildHeaders,
+  assertSupportedProvider,
   type AuthType,
   type ProviderType,
 } from '../utils/providers'
@@ -41,7 +42,6 @@ export interface PreparedChatRequest {
     providerHost: string | null
     baseUrl: string
     rawModelId: string
-    azureApiVersion?: string | null
     url: string
     headers: Record<string, string>
     authHeader: Record<string, string>
@@ -54,7 +54,6 @@ export interface PreparedChatRequest {
   reasoning: {
     enabled: boolean
     effort: string
-    ollamaThink: boolean
   }
   requestedSkills: RequestedSkillsPayload
 }
@@ -133,6 +132,7 @@ export class ChatRequestBuilder {
     if (!params.session.connectionId || !params.session.connection || !params.session.modelRawId) {
       throw new Error('Chat session connection is not ready')
     }
+    assertSupportedProvider(params.session.connection.provider)
     const contextEnabled = params.payload?.contextEnabled !== false
     const mainModelVision = params.mainModelVision !== false
     const visionTranscriptionPrefix = params.visionTranscriptionPrefix || ''
@@ -663,32 +663,17 @@ export class ChatRequestBuilder {
       ''
     ).toString()
 
-    const fallbackOllamaThink =
-      (params.settings.ollama_think ?? (process.env.OLLAMA_THINK ?? 'false'))
-        .toString()
-        .toLowerCase() === 'true'
-
-    const ollamaThink =
-      typeof params.payload?.ollamaThink === 'boolean'
-        ? params.payload.ollamaThink
-        : (params.session.ollamaThink ?? fallbackOllamaThink)
-
     return {
       enabled: Boolean(enabled),
       effort,
-      ollamaThink: Boolean(ollamaThink),
     }
   }
 
-  private applyReasoningOptions(body: any, reasoning: { enabled: boolean; effort: string; ollamaThink: boolean }, vendor?: string | null) {
+  private applyReasoningOptions(body: any, reasoning: { enabled: boolean; effort: string }, vendor?: string | null) {
     delete body.reasoning_effort
-    delete body.think
     delete body.thinking
     if (reasoning.enabled && reasoning.effort) {
       body.reasoning_effort = reasoning.effort
-    }
-    if (reasoning.enabled && reasoning.ollamaThink) {
-      body.think = true
     }
     if (vendor === 'deepseek' || vendor === 'openai_interleave') {
       body.thinking = { type: reasoning.enabled ? 'enabled' : 'disabled' }
@@ -745,7 +730,6 @@ export class ChatRequestBuilder {
       baseUrl,
       rawModelId: params.session.modelRawId!,
       body: params.baseRequestBody,
-      azureApiVersion: params.session.connection.azureApiVersion,
       stream: params.mode === 'stream',
     })
 
@@ -756,7 +740,6 @@ export class ChatRequestBuilder {
       providerHost: this.safeResolveHost(baseUrl),
       baseUrl,
       rawModelId: params.session.modelRawId!,
-      azureApiVersion: params.session.connection.azureApiVersion ?? null,
       url,
       headers: mergedHeaders,
       authHeader,

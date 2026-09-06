@@ -1,10 +1,18 @@
-import { BackendLogger as log } from './logger'
 import type { CapabilityFlags, CapabilitySource } from './capabilities'
 import { hasDefinedCapability } from './capabilities'
 import { deriveChannelName as deriveChannelNameShared } from '@aichat/shared/model-display'
 
-export type ProviderType = 'openai' | 'openai_responses' | 'azure_openai' | 'ollama' | 'google_genai'
-export type AuthType = 'bearer' | 'none' | 'session' | 'system_oauth' | 'microsoft_entra_id'
+export const SUPPORTED_PROVIDERS = ['openai', 'openai_responses', 'google_genai'] as const
+export type ProviderType = (typeof SUPPORTED_PROVIDERS)[number]
+export type AuthType = 'bearer' | 'none' | 'session' | 'system_oauth'
+
+export function isSupportedProvider(provider: unknown): provider is ProviderType {
+  return typeof provider === 'string' && SUPPORTED_PROVIDERS.some((value) => value === provider)
+}
+
+export function assertSupportedProvider(provider: unknown): asserts provider is ProviderType {
+  if (!isSupportedProvider(provider)) throw new Error('Unsupported provider')
+}
 
 type FetchResponse = {
   ok: boolean
@@ -43,7 +51,6 @@ export interface ConnectionConfig {
   authType: AuthType
   apiKey?: string
   headers?: Record<string, string>
-  azureApiVersion?: string
   prefixId?: string
   tags?: Array<{ name: string }>
   modelIds?: string[]
@@ -101,23 +108,8 @@ export function computeCapabilities(rawId: string, tags?: Array<{ name: string }
 export const deriveChannelName = (provider: ProviderType, baseUrl?: string): string =>
   deriveChannelNameShared(provider, baseUrl)
 
-async function getAzureAccessToken(): Promise<string | null> {
-  try {
-    if (process.env.AZURE_ACCESS_TOKEN) return process.env.AZURE_ACCESS_TOKEN
-    // 尝试使用 @azure/identity（若未安装或配置失败则回退 null）
-    // 动态引入以避免硬依赖
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { DefaultAzureCredential } = require('@azure/identity')
-    const cred = new DefaultAzureCredential()
-    const token = await cred.getToken('https://cognitiveservices.azure.com/.default')
-    return token?.token ?? null
-  } catch (e) {
-    log.debug('Azure access token fetch failed, fallback to env or none')
-    return null
-  }
-}
-
 export async function buildHeaders(provider: ProviderType, authType: AuthType, apiKey?: string, extra?: Record<string, string>) {
+  assertSupportedProvider(provider)
   const h: Record<string, string> = { 'Content-Type': 'application/json' }
   if (provider === 'google_genai') {
     if (authType === 'bearer' && apiKey) {
@@ -127,9 +119,6 @@ export async function buildHeaders(provider: ProviderType, authType: AuthType, a
     h['Authorization'] = `Bearer ${apiKey}`
   } else if (authType === 'system_oauth') {
     const token = process.env.SYSTEM_OAUTH_TOKEN
-    if (token) h['Authorization'] = `Bearer ${token}`
-  } else if (authType === 'microsoft_entra_id' && provider === 'azure_openai') {
-    const token = await getAzureAccessToken()
     if (token) h['Authorization'] = `Bearer ${token}`
   }
   if (extra) {
@@ -219,16 +208,6 @@ export async function verifyConnection(cfg: ConnectionConfig): Promise<void> {
         throw new Error(`OpenAI verify failed: ${res.status}${hint}`)
       }
       await ensureJsonContentType(res, 'OpenAI verify')
-    } else if (cfg.provider === 'azure_openai') {
-      const v = cfg.azureApiVersion || '2024-02-15-preview'
-      const base = trimTrailingSlashes(cfg.baseUrl)
-      const res = await fetchImpl(`${base}/openai/models?api-version=${encodeURIComponent(v)}`, { headers, signal: ctrl.signal })
-      if (!res.ok) throw new Error(`Azure OpenAI verify failed: ${res.status}`)
-      await ensureJsonContentType(res, 'Azure OpenAI verify')
-    } else if (cfg.provider === 'ollama') {
-      const base = trimTrailingSlashes(cfg.baseUrl)
-      const res = await fetchImpl(`${base}/api/version`, { headers, signal: ctrl.signal })
-      if (!res.ok) throw new Error(`Ollama verify failed: ${res.status}`)
     } else if (cfg.provider === 'google_genai') {
       const base = trimTrailingSlashes(cfg.baseUrl)
       const res = await fetchImpl(`${base}/models`, { headers, signal: ctrl.signal })
@@ -247,6 +226,7 @@ export async function verifyConnection(cfg: ConnectionConfig): Promise<void> {
  * 若配置了 modelIds，则直接以这些 ID 合成列表，不发请求。
  */
 export async function fetchModelsForConnection(cfg: ConnectionConfig): Promise<CatalogItem[]> {
+  assertSupportedProvider(cfg.provider)
   if (!cfg.enable) return []
   const connectionType = (cfg.connectionType || 'external') as 'external' | 'local'
   const tags = cfg.tags || []
@@ -292,21 +272,6 @@ export async function fetchModelsForConnection(cfg: ConnectionConfig): Promise<C
       const json: any = await res.json()
       const list: any[] = Array.isArray(json?.data) ? json.data : []
       return list.map((m) => apply(m.id, m.name || m.id))
-    }
-    if (cfg.provider === 'azure_openai') {
-      const v = cfg.azureApiVersion || '2024-02-15-preview'
-      const res = await fetchImpl(`${trimTrailingSlashes(cfg.baseUrl)}/openai/models?api-version=${encodeURIComponent(v)}`, { headers, signal: ctrl.signal })
-      if (!res.ok) throw new Error(`Azure models failed: ${res.status}`)
-      const json: any = await res.json()
-      const list: any[] = Array.isArray(json?.data) ? json.data : []
-      return list.map((m) => apply(m.id, m.name || m.id))
-    }
-    if (cfg.provider === 'ollama') {
-      const res = await fetchImpl(`${trimTrailingSlashes(cfg.baseUrl)}/api/tags`, { headers, signal: ctrl.signal })
-      if (!res.ok) throw new Error(`Ollama tags failed: ${res.status}`)
-      const json: any = await res.json()
-      const list: any[] = Array.isArray(json?.models) ? json.models : []
-      return list.map((m) => apply(m.model, m.name || m.model))
     }
     if (cfg.provider === 'google_genai') {
       const res = await fetchImpl(`${trimTrailingSlashes(cfg.baseUrl)}/models`, { headers, signal: ctrl.signal })

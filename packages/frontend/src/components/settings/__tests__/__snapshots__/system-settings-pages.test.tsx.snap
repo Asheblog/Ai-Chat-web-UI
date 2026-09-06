@@ -718,7 +718,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                     <div
                       class="mt-0.5 text-xs text-muted-foreground whitespace-normal break-words"
                     >
-                      Azure 生产 · Azure
+                      Google 生产 · Google
                     </div>
                     <div
                       class="mt-1 flex items-center gap-2 flex-wrap text-xs"

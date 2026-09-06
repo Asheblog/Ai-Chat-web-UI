@@ -72,7 +72,6 @@ describe('ImageTranscriptionProbeService', () => {
         ...readySettings,
         image_transcription_reasoning_enabled: 'true',
         image_transcription_reasoning_effort: 'high',
-        image_transcription_ollama_think: 'true',
       }),
       visionProxy: visionProxy as unknown as VisionProxyService,
     })
@@ -84,7 +83,6 @@ describe('ImageTranscriptionProbeService', () => {
       expect(call[2]).toEqual(
         expect.objectContaining({
           reasoningEnabled: false,
-          ollamaThink: false,
         }),
       )
     }
