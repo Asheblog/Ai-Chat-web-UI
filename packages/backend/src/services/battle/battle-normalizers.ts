@@ -17,7 +17,7 @@ import type {
   BattleRunQuestionConfig,
 } from './battle-types'
 import { safeParseJson } from './battle-serialization'
-import { normalizeToolCallEventPayload } from '../../modules/chat/tool-call-event'
+import { normalizeToolCallEventPayload } from '../../agent-runtime/tool-call-event'
 
 export const toISOStringSafe = (value: Date | string | null | undefined) => {
   if (!value) return null

@@ -1,21 +1,21 @@
 import type { ResolvedConnection } from '../../repositories/model-resolver-repository'
-import { ChatRequestBuilder, type PreparedChatRequest } from '../../modules/chat/services/chat-request-builder'
-import { ProviderRequester, type ProviderRequester as ProviderRequesterType } from '../../modules/chat/services/provider-requester'
+import { ChatRequestBuilder, type PreparedChatRequest } from '../../agent-runtime/chat-request-builder'
+import { ProviderRequester, type ProviderRequester as ProviderRequesterType } from '../../agent-runtime/provider-requester'
 import { buildChatProviderRequest } from '../../utils/chat-provider'
 import {
   buildAgentPythonToolConfig,
   buildAgentUrlReaderConfig,
   buildAgentWebSearchConfig,
-} from '../../modules/chat/agent-tool-config'
+} from '../../agent-runtime/agent-tool-config'
 import {
   buildToolRequest,
-} from '../../modules/chat/tool-protocol'
-import { runToolOrchestration } from '../../modules/chat/tool-orchestrator'
+} from '../../agent-runtime/tool-protocol'
+import { runToolOrchestration } from '../../agent-runtime/tool-orchestrator'
 import type { TaskTraceRecorder } from '../../utils/task-trace'
 import type { BattleUploadImage } from '@aichat/shared/battle-contract'
 import type { BattleModelInput, BattleModelSkills } from './battle-types'
 import { safeParseJson } from './battle-serialization'
-import { resolveMaxToolIterations, buildUsage } from '../../modules/chat/services/stream-utils'
+import { resolveMaxToolIterations, buildUsage } from '../../agent-runtime/stream-utils'
 import { createSkillRegistry } from '../../modules/skills/skill-registry'
 import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills, type RequestedSkillsPayload } from '../../modules/skills/types'
 import { createLogger } from '../../utils/logger'

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { McpService } from './mcp-service'
-import type { IToolHandler, ToolCall, ToolCallContext, ToolDefinition, ToolHandlerResult } from '../../modules/chat/tool-handlers/types'
+import type { IToolHandler, ToolCall, ToolCallContext, ToolDefinition, ToolHandlerResult } from '../../agent-runtime/tool-handler-types'
 
 export interface McpToolDefinition extends ToolDefinition {
   source: 'mcp' | 'mcp_meta'

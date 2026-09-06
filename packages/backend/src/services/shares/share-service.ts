@@ -10,7 +10,7 @@ import { CHAT_IMAGE_PUBLIC_PATH } from '../../config/storage'
 import {
   buildRichMessagePayload,
   type GeneratedImageRecord,
-} from '../../modules/chat/rich-payload'
+} from '../chat/rich-payload-builder'
 
 export class ShareServiceError extends Error {
   statusCode: number

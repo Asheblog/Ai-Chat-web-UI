@@ -5,7 +5,7 @@ import { ensureAnonymousSession as defaultEnsureAnonymousSession } from '../../u
 import type { ModelResolverService } from '../catalog/model-resolver-service'
 import type { ArtifactService } from '../workspace/artifact-service'
 import type { WorkspaceService } from '../workspace/workspace-service'
-import { cancelAllStreamsForSession } from '../../modules/chat/stream-state'
+import { cancelAllStreamsForSession } from '../stream/stream-state'
 
 export class SessionServiceError extends Error {
   statusCode: number

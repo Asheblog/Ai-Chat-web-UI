@@ -101,8 +101,8 @@ jest.mock('../../../chat/image-generation-response', () => ({
   checkImageGenerationCapability: jest.fn().mockResolvedValue(false),
 }))
 
-// Mock vision-proxy-service
-jest.mock('../../services/vision-proxy-service', () => ({
+// Mock vision-proxy-service（canonical path：agent-tool-config 已迁移至 agent-runtime）
+jest.mock('../../../../services/vision/vision-proxy-service', () => ({
   __esModule: true,
   VisionProxyServiceError: class VisionProxyServiceError extends Error {
     statusCode = 500
@@ -135,7 +135,7 @@ import {
   loadHistoryImageDescriptions,
   loadVisionProxyConfig,
   parseStoredImageDescriptions,
-} from '../../services/vision-proxy-service'
+} from '../../../../services/vision/vision-proxy-service'
 import { resolveModelCapabilitiesForSession } from '../../../../utils/model-capabilities'
 import { computeAgentToolFlags } from '../../agent-tool-config'
 

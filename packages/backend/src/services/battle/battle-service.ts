@@ -45,7 +45,7 @@ import type {
   BattleResultRecord,
 } from './battle-types'
 import { BUILTIN_SKILL_SLUGS } from '../../modules/skills/types'
-import { normalizeToolCallEventPayload } from '../../modules/chat/tool-call-event'
+import { normalizeToolCallEventPayload } from '../../agent-runtime/tool-call-event'
 
 type BattleRunControl = {
   runId: number

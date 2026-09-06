@@ -10,7 +10,7 @@ import {
   projectToolEventsForHistoryList,
   type ToolLogEntry,
 } from '../tool-logs'
-import { buildRichMessagePayload, type GeneratedImageRecord } from '../rich-payload'
+import { buildRichMessagePayload, type GeneratedImageRecord } from '../../../services/chat/rich-payload-builder'
 import { sessionOwnershipClause } from '../chat-common'
 
 const generatedImageSelectFields = {

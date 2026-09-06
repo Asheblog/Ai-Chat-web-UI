@@ -1,0 +1,262 @@
+/**
+ * 工具处理器策略模式 - 类型定义
+ */
+
+import type { WebSearchHit } from '../utils/web-search'
+import type { VisionProxyConfig } from '../services/vision/vision-proxy-service'
+
+/**
+ * 工具调用参数
+ */
+export interface ToolCall {
+  id?: string
+  type?: string
+  function?: { name?: string; arguments?: string }
+}
+
+/**
+ * 工具日志条目详情
+ */
+export interface ToolLogDetails {
+  code?: string
+  input?: string
+  stdout?: string
+  stderr?: string
+  exitCode?: number | null
+  durationMs?: number
+  truncated?: boolean
+  [key: string]: unknown
+}
+
+/**
+ * 工具调用上下文 - 处理器需要的环境信息
+ */
+export interface ToolCallContext {
+  sessionId: number
+  actorIdentifier?: string
+  actorUserId?: number | null
+  messageId?: number | null
+  battleRunId?: number | null
+  provider?: string
+  connectionId?: number | null
+  modelRawId?: string | null
+  modelCapabilities?: {
+    vision?: boolean
+  }
+  requestSignal?: AbortSignal
+  emitReasoning: (content: string, meta?: Record<string, unknown>) => void
+  sendToolEvent: (payload: Record<string, unknown>) => void
+  sendStreamEvent?: (payload: Record<string, unknown>) => void
+}
+
+/**
+ * 工具处理结果
+ */
+export interface ToolHandlerTermination {
+  code: 'research_plan_cancelled' | 'research_plan_expired' | 'research_plan_required'
+  message: string
+}
+
+export interface ToolHandlerResult {
+  toolCallId: string
+  toolName: string
+  message: {
+    role: 'tool'
+    tool_call_id: string | undefined
+    name: string
+    content: string
+  }
+  followupMessages?: any[]
+  /**
+   * 非空时工具编排器立即结束当前回复，不再请求下一轮。
+   * 用于深度研究计划审批的取消/过期/计划缺失终态。
+   */
+  termination?: ToolHandlerTermination
+}
+
+/**
+ * 工具处理器接口 - 策略模式核心抽象
+ */
+export interface IToolHandler {
+  readonly toolName: string
+  readonly toolDefinition: ToolDefinition
+  canHandle(toolName: string): boolean
+  handle(
+    toolCall: ToolCall,
+    args: Record<string, unknown>,
+    context: ToolCallContext
+  ): Promise<ToolHandlerResult>
+}
+
+/**
+ * OpenAI function calling 格式的工具定义
+ */
+export interface ToolDefinition {
+  type: 'function'
+  function: {
+    name: string
+    description: string
+    parameters: {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
+    }
+  }
+}
+
+/**
+ * 工具处理器工厂参数
+ */
+export interface ResearchPlanApprovalGateInput {
+  plan: unknown
+  toolCallId: string
+  revision: number
+  context: ToolCallContext
+}
+
+export interface ResearchPlanApprovalGateResult {
+  decision: 'approve' | 'adjust' | 'cancel' | 'expired'
+  feedback?: string
+  revision: number
+}
+
+export interface ResearchPlanApprovalGate {
+  waitForDecision(input: ResearchPlanApprovalGateInput): Promise<ResearchPlanApprovalGateResult>
+}
+
+export interface DeepResearchPlanHandlerConfig {
+  enabled: boolean
+  approvalGate: ResearchPlanApprovalGate
+  approvalTimeoutMs: number
+  /** 当前修订轮数（0 为初版；调整一次后为 1） */
+  resolveRevision?: () => number
+}
+
+export interface ToolHandlerFactoryParams {
+  webSearch?: WebSearchHandlerConfig | null
+  python?: PythonHandlerConfig | null
+  document?: DocumentHandlerConfig | null
+  knowledgeBase?: KnowledgeBaseHandlerConfig | null
+  urlReader?: UrlReaderHandlerConfig | null
+  workspace?: WorkspaceHandlerConfig | null
+  visionProxy?: VisionProxyConfig | null
+  pdfExport?: PdfExportHandlerConfig | null
+  deepResearchPlan?: DeepResearchPlanHandlerConfig | null
+}
+
+/**
+ * PDF 导出处理器配置
+ */
+export interface PdfExportHandlerConfig {
+  enabled: boolean
+  maxMarkdownChars?: number
+  browserExecutablePath?: string
+  /** 测试/自定义渲染注入点；不传则使用真实 Chromium 渲染。 */
+  renderPdf?: (
+    markdown: string,
+    outputPath: string,
+    options?: {
+      title?: string
+      executablePath?: string
+      imageSources?: Record<string, string>
+    },
+  ) => Promise<{ sizeBytes: number }>
+  renderMarkdown?: (markdown: string, imageSources?: Record<string, string>) => string
+  buildHtml?: (input: {
+    title: string
+    markdownHtml: string
+    generatedAt?: string
+  }) => string
+}
+
+/**
+ * Web 搜索处理器配置
+ */
+export interface WebSearchHandlerConfig {
+  enabled: boolean
+  engines: string[]
+  engineOrder: string[]
+  apiKeys: Partial<Record<string, string>>
+  resultLimit: number
+  domains: string[]
+  endpoint?: string
+  scope?: string
+  includeSummary?: boolean
+  includeRawContent?: boolean
+  parallelMaxEngines?: number
+  parallelMaxQueriesPerCall?: number
+  parallelTimeoutMs?: number
+  mergeStrategy?: string
+  autoBilingual?: boolean
+  autoBilingualMode?: 'off' | 'conditional' | 'always'
+  autoReadAfterSearch?: boolean
+  autoReadTopK?: number
+  autoReadParallelism?: number
+  autoReadTimeoutMs?: number
+  autoReadMaxContentLength?: number
+  minSources?: number
+  conflictEscalation?: 'off' | 'auto'
+  localeRouting?: {
+    zh?: string[]
+    en?: string[]
+    unknown?: string[]
+  }
+}
+
+/**
+ * Python 处理器配置
+ */
+export interface PythonHandlerConfig {
+  enabled: boolean
+  timeoutMs: number
+  maxOutputChars: number
+  maxSourceChars: number
+}
+
+/**
+ * Workspace 工具配置
+ */
+export interface WorkspaceHandlerConfig {
+  enabled: boolean
+  listMaxEntries: number
+  readMaxChars: number
+  gitCloneTimeoutMs: number
+}
+
+/**
+ * URL Reader 处理器配置
+ */
+export interface UrlReaderHandlerConfig {
+  enabled: boolean
+  timeout?: number
+  maxContentLength?: number
+  maxBodyBytes?: number
+  enableBrowser?: boolean
+  browserExecutablePath?: string
+  renderWaitMs?: number
+}
+
+/**
+ * 文档处理器配置
+ */
+export interface DocumentHandlerConfig {
+  enabled: boolean
+  sessionId: number
+  ragService: unknown // 避免循环依赖，使用时再 cast
+}
+
+/**
+ * 知识库处理器配置
+ */
+export interface KnowledgeBaseHandlerConfig {
+  enabled: boolean
+  knowledgeBaseIds: number[]
+  ragService: unknown // 避免循环依赖，使用时再 cast
+  enhancedRagService?: unknown // 避免循环依赖，使用时再 cast
+  sectionService?: unknown // 避免循环依赖，使用时再 cast
+}
+
+/**
+ * 搜索结果格式化函数
+ */
+export type FormatHitsForModel = (query: string, hits: WebSearchHit[]) => string
