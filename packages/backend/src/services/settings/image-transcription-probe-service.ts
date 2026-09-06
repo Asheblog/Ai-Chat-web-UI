@@ -4,7 +4,7 @@ import {
   isVisionProxyReady,
   loadVisionProxyConfig,
   type VisionProxyService,
-} from '../../modules/chat/services/vision-proxy-service'
+} from '../vision/vision-proxy-service'
 import { parseImageRelevance, RELEVANCE_PROMPT } from '../../utils/web-image-evidence'
 import { BUILT_IN_PROBE_IMAGE_BASE64, BUILT_IN_PROBE_IMAGE_MIME } from './vision-probe-image'
 

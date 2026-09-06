@@ -1,6 +1,6 @@
 import type { RichMessageEvidenceConfidence } from '../types'
-import type { VisionProxyConfig, VisionProxyService } from '../modules/chat/services/vision-proxy-service'
-import { isVisionProxyReady } from '../modules/chat/services/vision-proxy-service'
+import type { VisionProxyConfig, VisionProxyService } from '../services/vision/vision-proxy-service'
+import { isVisionProxyReady } from '../services/vision/vision-proxy-service'
 import { BackendLogger as log } from './logger'
 import { readRemoteImages, type RemoteImageCandidate } from './remote-image-reader'
 

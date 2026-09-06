@@ -13,7 +13,7 @@ import {
   type PythonRuntimeService,
 } from '../services/python-runtime'
 import { RAG_SYSTEM_SETTINGS_KEYS } from '@aichat/shared'
-import type { VisionProxyService } from '../modules/chat/services/vision-proxy-service'
+import type { VisionProxyService } from '../services/vision/vision-proxy-service'
 import {
   ImageTranscriptionProbeService,
   type ProbeResult,

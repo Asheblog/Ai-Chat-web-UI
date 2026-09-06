@@ -61,7 +61,7 @@ import { ConversationCompressionService } from '../modules/chat/services/convers
 import { ChatMessageQueryService } from '../modules/chat/services/message-query-service'
 import { NonStreamChatService } from '../modules/chat/services/non-stream-chat-service'
 import { TitleSummaryService } from '../modules/chat/services/title-summary-service'
-import { VisionProxyService } from '../modules/chat/services/vision-proxy-service'
+import { VisionProxyService } from '../services/vision/vision-proxy-service'
 
 import { AuthUtils } from '../utils/auth'
 import {

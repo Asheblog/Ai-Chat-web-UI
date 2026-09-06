@@ -8,7 +8,7 @@ import { executeSkillRuntime } from './runtime-adapters'
 import { normalizeRequestedSkills, type RequestedSkillsPayload, type SkillManifest, type SkillRiskLevel } from './types'
 import { McpToolAdapter } from '../../services/mcp/mcp-tool-adapter'
 import type { McpService } from '../../services/mcp/mcp-service'
-import type { VisionProxyService } from '../chat/services/vision-proxy-service'
+import type { VisionProxyService } from '../../services/vision/vision-proxy-service'
 
 interface InstalledSkillHandlerOptions {
   prisma: typeof defaultPrisma
