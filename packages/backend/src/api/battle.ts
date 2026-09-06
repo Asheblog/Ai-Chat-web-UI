@@ -7,6 +7,8 @@ import { BattleService } from '../services/battle/battle-service'
 import type { BattleRunCreateInput } from '../services/battle/battle-types'
 import { StreamSettingsService } from '../services/stream'
 import { createBattleExecutionEventBridge } from '../modules/execution/battle-execution-event-bridge'
+import { createSseResponse } from '../http/sse'
+import { parsePagination } from '../http/route-utils'
 
 export interface BattleApiDeps {
   battleService: BattleService
@@ -150,14 +152,6 @@ const rejudgeSchema = z.object({
   judgeThreshold: z.number().min(0).max(1).optional(),
 })
 
-const parsePagination = (value: string | null | undefined, fallback: number) => {
-  const parsed = parseInt(value || '', 10)
-  if (Number.isFinite(parsed) && parsed > 0) {
-    return parsed
-  }
-  return fallback
-}
-
 export const createBattleApi = (deps: BattleApiDeps) => {
   const svc = deps.battleService
   const streamSettings =
@@ -181,21 +175,11 @@ export const createBattleApi = (deps: BattleApiDeps) => {
       }, 400)
     }
     const requestSignal = c.req.raw.signal
+    let lastSentAt = Date.now()
+    let runId: number | null = null
 
-    const sseHeaders: Record<string, string> = {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache, no-transform',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Cache-Control',
-    }
-
-    const stream = new ReadableStream({
-      async start(controller) {
-        const encoder = new TextEncoder()
-        let lastSentAt = Date.now()
-        let runId: number | null = null
+    return createSseResponse(
+      async (ctx) => {
         const runKey = `battle-run-${Date.now().toString(36)}-${Math.random()
           .toString(36)
           .slice(2, 8)}`
@@ -216,46 +200,15 @@ export const createBattleApi = (deps: BattleApiDeps) => {
             }
             const unifiedEvents = bridge.consume(legacyEvent)
             for (const unifiedEvent of unifiedEvents) {
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify(unifiedEvent)}\n\n`),
-              )
+              ctx.send(unifiedEvent)
             }
           } catch {}
         }
 
         const keepaliveIntervalMs = await resolveStreamKeepaliveIntervalMs()
-        let keepaliveTimer: ReturnType<typeof setInterval> | null = null
-        const startHeartbeat = () => {
-          if (keepaliveIntervalMs <= 0 || keepaliveTimer) return
-          keepaliveTimer = setInterval(() => {
-            try {
-              controller.enqueue(encoder.encode(': ping\n\n'))
-            } catch {}
-          }, keepaliveIntervalMs)
-        }
-        const stopHeartbeat = () => {
-          if (keepaliveTimer) {
-            clearInterval(keepaliveTimer)
-            keepaliveTimer = null
-          }
-        }
-        const handleAbort = () => {
-          if (!runId) return
-          const idleMs = Math.max(0, Date.now() - lastSentAt)
-          svc.logRunTrace(runId, 'battle:stream_aborted', {
-            endpoint: '/battle/stream',
-            idleMs,
-            reason: String((requestSignal as any)?.reason ?? 'abort'),
-          })
-        }
-        if (requestSignal && requestSignal.aborted) {
-          handleAbort()
-        } else if (requestSignal) {
-          requestSignal.addEventListener('abort', handleAbort, { once: true })
-        }
+        ctx.startHeartbeat(keepaliveIntervalMs)
 
         try {
-          startHeartbeat()
           await svc.executeRun(actor, payload, {
             emitEvent: (event) => send(event),
           })
@@ -263,22 +216,21 @@ export const createBattleApi = (deps: BattleApiDeps) => {
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Battle failed'
           send({ type: 'error', error: message })
-        } finally {
-          if (requestSignal) {
-            try {
-              requestSignal.removeEventListener('abort', handleAbort)
-            } catch {}
-          }
-          stopHeartbeat()
-          try {
-            controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-          } catch {}
-          controller.close()
         }
       },
-    })
-
-    return new Response(stream, { headers: sseHeaders })
+      {
+        signal: requestSignal,
+        onAbort: () => {
+          if (!runId) return
+          const idleMs = Math.max(0, Date.now() - lastSentAt)
+          svc.logRunTrace(runId, 'battle:stream_aborted', {
+            endpoint: '/battle/stream',
+            idleMs,
+            reason: String((requestSignal as any)?.reason ?? 'abort'),
+          })
+        },
+      },
+    )
   })
 
   router.get('/runs', actorMiddleware, async (c) => {
@@ -421,57 +373,24 @@ export const createBattleApi = (deps: BattleApiDeps) => {
     }
     const payload = c.req.valid('json')
     const requestSignal = c.req.raw.signal
+    let lastSentAt = Date.now()
 
-    const sseHeaders: Record<string, string> = {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache, no-transform',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Cache-Control',
-    }
-
-    const stream = new ReadableStream({
-      async start(controller) {
-        const encoder = new TextEncoder()
-        let lastSentAt = Date.now()
+    return createSseResponse(
+      async (ctx) => {
         const send = (event: unknown) => {
           try {
             lastSentAt = Date.now()
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+            ctx.send(event)
           } catch {}
         }
 
         const keepaliveIntervalMs = await resolveStreamKeepaliveIntervalMs()
-        let keepaliveTimer: ReturnType<typeof setInterval> | null = null
-        const startHeartbeat = () => {
-          if (keepaliveIntervalMs <= 0 || keepaliveTimer) return
-          keepaliveTimer = setInterval(() => {
-            send({ type: 'keepalive', ts: Date.now() })
-          }, keepaliveIntervalMs)
-        }
-        const stopHeartbeat = () => {
-          if (keepaliveTimer) {
-            clearInterval(keepaliveTimer)
-            keepaliveTimer = null
-          }
-        }
-        const handleAbort = () => {
-          const idleMs = Math.max(0, Date.now() - lastSentAt)
-          svc.logRunTrace(runId, 'battle:stream_aborted', {
-            endpoint: '/battle/runs/:id/rejudge',
-            idleMs,
-            reason: String((requestSignal as any)?.reason ?? 'abort'),
-          })
-        }
-        if (requestSignal && requestSignal.aborted) {
-          handleAbort()
-        } else if (requestSignal) {
-          requestSignal.addEventListener('abort', handleAbort, { once: true })
-        }
+        ctx.startHeartbeat(
+          keepaliveIntervalMs,
+          () => `data: ${JSON.stringify({ type: 'keepalive', ts: Date.now() })}\n\n`,
+        )
 
         try {
-          startHeartbeat()
           await svc.rejudgeWithNewAnswer(
             actor,
             {
@@ -489,22 +408,20 @@ export const createBattleApi = (deps: BattleApiDeps) => {
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Rejudge failed'
           send({ type: 'error', error: message })
-        } finally {
-          if (requestSignal) {
-            try {
-              requestSignal.removeEventListener('abort', handleAbort)
-            } catch {}
-          }
-          stopHeartbeat()
-          try {
-            controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-          } catch {}
-          controller.close()
         }
       },
-    })
-
-    return new Response(stream, { headers: sseHeaders })
+      {
+        signal: requestSignal,
+        onAbort: () => {
+          const idleMs = Math.max(0, Date.now() - lastSentAt)
+          svc.logRunTrace(runId, 'battle:stream_aborted', {
+            endpoint: '/battle/runs/:id/rejudge',
+            idleMs,
+            reason: String((requestSignal as any)?.reason ?? 'abort'),
+          })
+        },
+      },
+    )
   })
 
   router.post('/runs/:id/share', actorMiddleware, zValidator('json', shareSchema), async (c) => {
@@ -539,78 +456,30 @@ export const createBattleApi = (deps: BattleApiDeps) => {
 
     const requestSignal = c.req.raw.signal
     const keepaliveIntervalMs = await resolveStreamKeepaliveIntervalMs()
-    const sseHeaders: Record<string, string> = {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache, no-transform',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Cache-Control',
-    }
+    let unsubscribe: (() => void) | null = null
 
-    const stream = new ReadableStream({
-      async start(controller) {
-        const encoder = new TextEncoder()
-        let closed = false
-        let keepaliveTimer: ReturnType<typeof setInterval> | null = null
-        let unsubscribe: (() => void) | null = null
-
+    return createSseResponse(
+      async (ctx) => {
         const send = (event: Record<string, unknown>) => {
-          if (closed) return
-          try {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
-          } catch {}
+          if (ctx.isClosed()) return
+          ctx.send(event)
         }
 
-        const stop = () => {
-          if (closed) return
-          closed = true
-          if (keepaliveTimer) {
-            clearInterval(keepaliveTimer)
-            keepaliveTimer = null
-          }
-          if (unsubscribe) {
-            try {
-              unsubscribe()
-            } catch {}
-            unsubscribe = null
-          }
-          try {
-            controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-          } catch {}
-          controller.close()
-        }
+        ctx.startHeartbeat(
+          keepaliveIntervalMs,
+          () => `data: ${JSON.stringify({ type: 'keepalive', ts: Date.now() })}\n\n`,
+        )
 
-        const startHeartbeat = () => {
-          if (keepaliveIntervalMs <= 0) return
-          keepaliveTimer = setInterval(() => {
-            send({ type: 'keepalive', ts: Date.now() })
-          }, keepaliveIntervalMs)
-        }
-
-        const handleAbort = () => {
-          stop()
-        }
-
-        if (requestSignal && requestSignal.aborted) {
-          handleAbort()
-          return
-        }
-        if (requestSignal) {
-          requestSignal.addEventListener('abort', handleAbort, { once: true })
-        }
-
-        startHeartbeat()
         send({ type: 'share_ready', runId: share.battleRunId, status: share.payload.status })
 
         if (share.payload.status === 'completed' || share.payload.status === 'cancelled' || share.payload.status === 'error') {
           send({ type: 'share_complete', status: share.payload.status })
-          stop()
+          ctx.close()
           return
         }
 
         unsubscribe = svc.subscribeRunEvents(share.battleRunId, (event) => {
-          if (closed) return
+          if (ctx.isClosed()) return
           switch (event.type) {
             case 'attempt_start':
             case 'attempt_complete':
@@ -636,18 +505,27 @@ export const createBattleApi = (deps: BattleApiDeps) => {
           }
           if (event.type === 'run_complete' || event.type === 'run_cancelled') {
             send({ type: 'share_complete', status: event.type })
-            stop()
+            ctx.close()
           }
         })
 
         if (!unsubscribe) {
           send({ type: 'share_complete', status: 'inactive' })
-          stop()
+          ctx.close()
         }
       },
-    })
-
-    return new Response(stream, { headers: sseHeaders })
+      {
+        signal: requestSignal,
+        onAbort: () => {
+          try {
+            unsubscribe?.()
+          } catch {
+            // ignore
+          }
+          unsubscribe = null
+        },
+      },
+    )
   })
 
   router.get('/shares/:token', async (c) => {

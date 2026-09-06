@@ -3,11 +3,13 @@ import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
 import { actorMiddleware } from '../middleware/auth'
 import type { Actor, ApiResponse } from '../types'
-import { ShareService, ShareServiceError } from '../services/shares'
+import { ShareService } from '../services/shares'
 import { extendAnonymousSession } from '../modules/chat/chat-common'
 import { chatSessionEventBus } from '../modules/chat/services/chat-session-event-bus'
 import type { ChatStreamEvent } from '../modules/chat/services/chat-session-event-bus'
 import { StreamSettingsService } from '../services/stream'
+import { createSseResponse } from '../http/sse'
+import { handleRouteError, parsePagination } from '../http/route-utils'
 
 const createShareSchema = z.object({
   sessionId: z.number().int().positive(),
@@ -26,15 +28,13 @@ export interface SharesApiDeps {
   streamSettingsService?: StreamSettingsService
 }
 
-const handleError = (c: any, error: unknown, fallback: string) => {
-  if (error instanceof ShareServiceError) {
-    return c.json({ success: false, error: error.message }, error.statusCode)
-  }
-  console.error(fallback, error)
-  return c.json({ success: false, error: fallback }, 500)
-}
-
 const refreshLocks = new Map<string, Promise<unknown>>()
+
+const parsePositiveInt = (value: string | null | undefined): number | undefined => {
+  if (!value) return undefined
+  const parsed = Number.parseInt(value, 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+}
 
 const serializedRefresh = (svc: ShareService, token: string) => {
   const prev = refreshLocks.get(token) ?? Promise.resolve()
@@ -46,18 +46,6 @@ const serializedRefresh = (svc: ShareService, token: string) => {
     }
   })
   return next
-}
-
-const parsePositiveInt = (value: string | null | undefined): number | undefined => {
-  if (!value) return undefined
-  const parsed = Number.parseInt(value, 10)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
-}
-
-const parsePagination = (value: string | null | undefined, fallback: number) => {
-  const parsed = Number.parseInt(value ?? '', 10)
-  if (Number.isFinite(parsed) && parsed > 0) return parsed
-  return fallback
 }
 
 export const createSharesApi = (deps: SharesApiDeps) => {
@@ -79,7 +67,7 @@ export const createSharesApi = (deps: SharesApiDeps) => {
       const data = await svc.listShares(actor, { sessionId: sessionIdValue, status, page, limit })
       return c.json<ApiResponse<typeof data>>({ success: true, data })
     } catch (error) {
-      return handleError(c, error, 'Failed to fetch share links')
+      return handleRouteError(c, error, 'Failed to fetch share links')
     }
   })
 
@@ -91,7 +79,7 @@ export const createSharesApi = (deps: SharesApiDeps) => {
       await extendAnonymousSession(actor, payload.sessionId)
       return c.json<ApiResponse<typeof result>>({ success: true, data: result })
     } catch (error) {
-      return handleError(c, error, 'Failed to create share link')
+      return handleRouteError(c, error, 'Failed to create share link')
     }
   })
 
@@ -108,7 +96,7 @@ export const createSharesApi = (deps: SharesApiDeps) => {
       }
       return c.json<ApiResponse<typeof record>>({ success: true, data: record })
     } catch (error) {
-      return handleError(c, error, 'Failed to fetch share link')
+      return handleRouteError(c, error, 'Failed to fetch share link')
     }
   })
 
@@ -126,7 +114,7 @@ export const createSharesApi = (deps: SharesApiDeps) => {
       }
       return c.json<ApiResponse<typeof result>>({ success: true, data: result })
     } catch (error) {
-      return handleError(c, error, 'Failed to fetch share messages')
+      return handleRouteError(c, error, 'Failed to fetch share messages')
     }
   })
 
@@ -141,7 +129,7 @@ export const createSharesApi = (deps: SharesApiDeps) => {
       const result = await svc.updateShare(actor, shareId, payload)
       return c.json<ApiResponse<typeof result>>({ success: true, data: result })
     } catch (error) {
-      return handleError(c, error, 'Failed to update share link')
+      return handleRouteError(c, error, 'Failed to update share link')
     }
   })
 
@@ -155,7 +143,7 @@ export const createSharesApi = (deps: SharesApiDeps) => {
       const result = await svc.revokeShare(actor, shareId)
       return c.json<ApiResponse<typeof result>>({ success: true, data: result })
     } catch (error) {
-      return handleError(c, error, 'Failed to revoke share link')
+      return handleRouteError(c, error, 'Failed to revoke share link')
     }
   })
 
@@ -180,68 +168,19 @@ export const createSharesApi = (deps: SharesApiDeps) => {
 
     const requestSignal = c.req.raw.signal
     const keepaliveIntervalMs = await resolveStreamKeepaliveIntervalMs()
+    let unsubscribe: (() => void) | null = null
 
-    const sseHeaders: Record<string, string> = {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache, no-transform',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Cache-Control',
-    }
-
-    const stream = new ReadableStream({
-      async start(controller) {
-        const encoder = new TextEncoder()
-        let closed = false
-        let keepaliveTimer: ReturnType<typeof setInterval> | null = null
-        let unsubscribe: (() => void) | null = null
-        let abortListener: (() => void) | null = null
-
+    return createSseResponse(
+      async (ctx) => {
         const send = (event: Record<string, unknown>) => {
-          if (closed) return
-          try {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
-          } catch {}
+          if (ctx.isClosed()) return
+          ctx.send(event)
         }
 
-        const stop = () => {
-          if (closed) return
-          closed = true
-          if (keepaliveTimer) {
-            clearInterval(keepaliveTimer)
-            keepaliveTimer = null
-          }
-          if (unsubscribe) {
-            try { unsubscribe() } catch {}
-            unsubscribe = null
-          }
-          if (abortListener && requestSignal) {
-            try { requestSignal.removeEventListener('abort', abortListener) } catch {}
-            abortListener = null
-          }
-          try {
-            controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-          } catch {}
-          controller.close()
-        }
-
-        const handleAbort = () => { stop() }
-        abortListener = handleAbort
-
-        if (requestSignal?.aborted) {
-          handleAbort()
-          return
-        }
-        if (requestSignal) {
-          requestSignal.addEventListener('abort', handleAbort, { once: true })
-        }
-
-        if (keepaliveIntervalMs > 0) {
-          keepaliveTimer = setInterval(() => {
-            send({ type: 'keepalive', ts: Date.now() })
-          }, keepaliveIntervalMs)
-        }
+        ctx.startHeartbeat(
+          keepaliveIntervalMs,
+          () => `data: ${JSON.stringify({ type: 'keepalive', ts: Date.now() })}\n\n`,
+        )
 
         const streamingMessageSet = new Set(streamingMessageIds)
 
@@ -286,9 +225,9 @@ export const createSharesApi = (deps: SharesApiDeps) => {
               if (!draining && completedMessageIds.size >= streamingMessageSet.size) {
                 draining = true
                 try { await serializedRefresh(svc, token) } catch {}
-                if (closed) return
+                if (ctx.isClosed()) return
                 send({ type: 'share_complete', sessionId: share.sessionId, ts: Date.now() })
-                stop()
+                ctx.close()
               }
               break
             }
@@ -296,20 +235,20 @@ export const createSharesApi = (deps: SharesApiDeps) => {
               if (!belongsToShare) return
               draining = true
               try { await serializedRefresh(svc, token) } catch {}
-              if (closed) return
+              if (ctx.isClosed()) return
               send({
                 type: 'stream_error',
                 error: event.error ?? 'Stream error',
                 ts: event.ts,
               })
-              stop()
+              ctx.close()
               break
           }
         }
 
         // Subscribe first to avoid TOCTOU window
         unsubscribe = chatSessionEventBus.subscribe(share.sessionId, async (event) => {
-          if (closed) return
+          if (ctx.isClosed()) return
           if (!initialized) {
             pendingEvents.push(event)
             return
@@ -331,24 +270,33 @@ export const createSharesApi = (deps: SharesApiDeps) => {
 
         // Flush any events that arrived during initialization
         for (const evt of pendingEvents) {
-          if (closed) break
+          if (ctx.isClosed()) break
           await processEvent(evt)
         }
         pendingEvents.length = 0
 
         // If all messages were already complete when we started, close immediately
-        if (!closed && completedMessageIds.size >= streamingMessageSet.size) {
+        if (!ctx.isClosed() && completedMessageIds.size >= streamingMessageSet.size) {
           draining = true
           try { await serializedRefresh(svc, token) } catch {}
-          if (!closed) {
+          if (!ctx.isClosed()) {
             send({ type: 'share_complete', sessionId: share.sessionId, ts: Date.now(), reason: 'all-complete-at-init' })
-            stop()
+            ctx.close()
           }
         }
       },
-    })
-
-    return new Response(stream, { headers: sseHeaders })
+      {
+        signal: requestSignal,
+        onAbort: () => {
+          try {
+            unsubscribe?.()
+          } catch {
+            // ignore
+          }
+          unsubscribe = null
+        },
+      },
+    )
   })
 
   return router

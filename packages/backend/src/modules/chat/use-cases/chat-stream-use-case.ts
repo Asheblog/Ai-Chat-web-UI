@@ -106,6 +106,7 @@ import {
 } from './stream/request-validation';
 import { ProviderStreamEngine } from './stream/provider-stream-engine';
 import { StreamPersistenceSink } from './stream/persistence-sink';
+import { SSE_HEADERS } from '../../../http/sse';
 
 type SendMessagePayload = z.infer<typeof sendMessageSchema>
 type ValidatedJsonRequest<T> = Context['req'] & {
@@ -632,16 +633,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
       // 设置 SSE 响应头（直接随返回的 Response 带回，避免丢失）
       // 说明：此前通过 c.header() 设置，但最终 `new Response(stream)` 未继承这些头，
       // 在某些代理/运行环境下会导致缓冲，无法逐块渲染。
-      const sseHeaders: Record<string, string> = {
-        'Content-Type': 'text/event-stream; charset=utf-8',
-        'Cache-Control': 'no-cache, no-transform',
-        'Connection': 'keep-alive',
-        // 禁用 Nginx 缓冲，提升流式实时性
-        'X-Accel-Buffering': 'no',
-        // 兼容旧行为；实际 CORS 由全局中间件控制
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Cache-Control',
-      };
+      const sseHeaders: Record<string, string> = { ...SSE_HEADERS };
 
       const agentToolFlags = computeAgentToolFlags({
         sysMap,

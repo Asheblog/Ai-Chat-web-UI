@@ -3,9 +3,9 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { actorMiddleware } from '../middleware/auth'
 import type { Actor, ApiResponse } from '../types'
-import { SessionServiceError } from '../services/sessions'
 import type { SessionService } from '../services/sessions/session-service'
 import { MAX_SYSTEM_PROMPT_LENGTH } from '../constants/prompt'
+import { handleRouteError, parsePagination } from '../http/route-utils'
 
 const createSessionSchema = z.object({
   modelId: z.string().min(1),
@@ -35,27 +35,6 @@ const switchModelSchema = z.object({
   rawId: z.string().min(1).optional(),
 })
 
-const parsePagination = (value: string | null | undefined, fallback: number) => {
-  const parsed = parseInt(value || '', 10)
-  if (Number.isFinite(parsed) && parsed > 0) {
-    return parsed
-  }
-  return fallback
-}
-
-const handleServiceError = (
-  c: any,
-  error: unknown,
-  fallbackMessage: string,
-  logLabel: string,
-) => {
-  if (error instanceof SessionServiceError) {
-    return c.json({ success: false, error: error.message }, error.statusCode)
-  }
-  console.error(logLabel, error)
-  return c.json({ success: false, error: fallbackMessage }, 500)
-}
-
 export interface SessionsApiDeps {
   sessionService: SessionService
 }
@@ -72,7 +51,7 @@ export const createSessionsApi = (deps: SessionsApiDeps) => {
       const result = await svc.listSessions(actor, { page, limit })
       return c.json<ApiResponse<typeof result>>({ success: true, data: result })
     } catch (error) {
-      return handleServiceError(c, error, 'Failed to fetch chat sessions', 'Get sessions error:')
+      return handleRouteError(c, error, 'Failed to fetch chat sessions', 'Get sessions error:')
     }
   })
 
@@ -87,7 +66,7 @@ export const createSessionsApi = (deps: SessionsApiDeps) => {
         message: 'Chat session created successfully',
       })
     } catch (error) {
-      return handleServiceError(c, error, 'Failed to create chat session', 'Create session error:')
+      return handleRouteError(c, error, 'Failed to create chat session', 'Create session error:')
     }
   })
 
@@ -101,7 +80,7 @@ export const createSessionsApi = (deps: SessionsApiDeps) => {
       const session = await svc.getSession(actor, sessionId)
       return c.json<ApiResponse<typeof session>>({ success: true, data: session })
     } catch (error) {
-      return handleServiceError(c, error, 'Failed to fetch chat session', 'Get session error:')
+      return handleRouteError(c, error, 'Failed to fetch chat session', 'Get session error:')
     }
   })
 
@@ -120,7 +99,7 @@ export const createSessionsApi = (deps: SessionsApiDeps) => {
         message: 'Session updated successfully',
       })
     } catch (error) {
-      return handleServiceError(c, error, 'Failed to update session title', 'Update session error:')
+      return handleRouteError(c, error, 'Failed to update session title', 'Update session error:')
     }
   })
 
@@ -135,7 +114,7 @@ export const createSessionsApi = (deps: SessionsApiDeps) => {
       const session = await svc.switchSessionModel(actor, sessionId, payload)
       return c.json<ApiResponse<typeof session>>({ success: true, data: session })
     } catch (error) {
-      return handleServiceError(c, error, 'Failed to switch session model', 'Switch session model error:')
+      return handleRouteError(c, error, 'Failed to switch session model', 'Switch session model error:')
     }
   })
 
@@ -152,7 +131,7 @@ export const createSessionsApi = (deps: SessionsApiDeps) => {
         message: `Deleted ${result.deletedCount} sessions${result.failedCount > 0 ? `, ${result.failedCount} failed` : ''}`,
       })
     } catch (error) {
-      return handleServiceError(c, error, 'Failed to delete sessions', 'Batch delete sessions error:')
+      return handleRouteError(c, error, 'Failed to delete sessions', 'Batch delete sessions error:')
     }
   })
 
@@ -166,7 +145,7 @@ export const createSessionsApi = (deps: SessionsApiDeps) => {
       await svc.deleteSession(actor, sessionId)
       return c.json<ApiResponse>({ success: true, message: 'Chat session deleted successfully' })
     } catch (error) {
-      return handleServiceError(c, error, 'Failed to delete chat session', 'Delete session error:')
+      return handleRouteError(c, error, 'Failed to delete chat session', 'Delete session error:')
     }
   })
 
@@ -180,7 +159,7 @@ export const createSessionsApi = (deps: SessionsApiDeps) => {
       await svc.clearSessionMessages(actor, sessionId)
       return c.json<ApiResponse>({ success: true, message: 'Session messages cleared successfully' })
     } catch (error) {
-      return handleServiceError(
+      return handleRouteError(
         c,
         error,
         'Failed to clear session messages',
