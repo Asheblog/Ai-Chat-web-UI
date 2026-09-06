@@ -3,7 +3,7 @@ import {
   deleteModelOverrides as deleteModelOverridesApi,
   refreshModelCatalog as refreshModelCatalogApi,
   updateModelTags,
-} from '@/features/system/api'
+} from '@/api/system'
 
 export async function updateModelCapabilities(
   connectionId: number,
@@ -31,3 +31,4 @@ export async function deleteModelOverrides(items: Array<{ connectionId: number; 
 export async function deleteAllModelOverrides() {
   return deleteAllModelOverridesApi()
 }
+

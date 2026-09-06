@@ -7,7 +7,7 @@ import {
   updateUserQuota as updateUserQuotaApi,
   updateUserRole as updateUserRoleApi,
   updateUserStatus as updateUserStatusApi,
-} from '@/features/system/api'
+} from '@/api/system'
 import type { ActorQuota } from '@/types'
 
 export type SystemUserRow = {
@@ -70,3 +70,4 @@ export async function deleteUser(userId: number) {
 export async function updateUserRole(userId: number, role: 'ADMIN' | 'USER') {
   await updateUserRoleApi(userId, role)
 }
+

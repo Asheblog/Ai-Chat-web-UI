@@ -6,7 +6,7 @@ import {
   importSystemConnections as importSystemConnectionsApi,
   updateSystemConnection as updateSystemConnectionApi,
   verifySystemConnection as verifySystemConnectionApi,
-} from '@/features/system/api'
+} from '@/api/system'
 
 export interface SystemConnectionApiKey {
   id?: number
@@ -171,3 +171,4 @@ export async function importSystemConnections(
   const response = await importSystemConnectionsApi(payload)
   return response?.data as SystemConnectionsImportResult
 }
+
