@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useToast } from '@/components/ui/use-toast'
 import { copyToClipboard, formatDate } from '@/lib/utils'
+import { formatFileSize } from '@/lib/format'
 import { requestMarkdownRender } from '@/lib/markdown-worker-client'
 import { useChatStore } from '@/store/chat-store'
 import type { MessageBody, MessageMeta, MessageRenderCacheEntry, MessageStreamMetrics } from '@/types'
@@ -250,9 +251,7 @@ function MessageBubbleComponent({
   const canEdit = Boolean(isUser && canEditUserMessage && !shareModeActive && !isStreaming)
   const formatBytes = (bytes: number) => {
     if (!Number.isFinite(bytes) || bytes < 0) return '--'
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+    return formatFileSize(bytes)
   }
 
   return (

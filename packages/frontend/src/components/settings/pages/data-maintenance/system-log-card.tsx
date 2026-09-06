@@ -19,15 +19,10 @@ import {
 } from "@/features/system/api"
 import { FeatureCard } from "@/components/settings/components/feature-card"
 import { SettingRow } from "@/components/settings/components/setting-row"
+import { formatFileSize } from "@/lib/format"
 
 export interface SystemLogCardProps {
   isLoading: boolean
-}
-
-const formatBytes = (bytes: number) => {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
 /**
@@ -89,7 +84,7 @@ export function SystemLogCard({ isLoading }: SystemLogCardProps) {
       const res = await cleanupSystemLogs(Number.isNaN(days) ? undefined : days)
       toast({
         title: "已清理系统日志",
-        description: `删除 ${res.data?.deleted ?? 0} 个文件，释放 ${formatBytes(res.data?.freedBytes ?? 0)}`,
+        description: `删除 ${res.data?.deleted ?? 0} 个文件，释放 ${formatFileSize(res.data?.freedBytes ?? 0)}`,
       })
       fetchLogStats()
     } catch (error: any) {
@@ -178,7 +173,7 @@ export function SystemLogCard({ isLoading }: SystemLogCardProps) {
               日志统计
               {logStats && (
                 <Badge variant="outline">
-                  {logStats.totalFiles} 个文件 / {formatBytes(logStats.totalSizeBytes)}
+                  {logStats.totalFiles} 个文件 / {formatFileSize(logStats.totalSizeBytes)}
                 </Badge>
               )}
             </div>

@@ -2,6 +2,7 @@
 
 import { AlertCircle, File, FileText, Loader2, Table, X } from 'lucide-react'
 import type { WorkspaceFile } from '@/features/chat/composer'
+import { formatFileSize } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 interface ComposerImage {
@@ -18,12 +19,6 @@ interface ComposerAttachmentListProps {
   className?: string
   /** 图片转写代理模型 ID（非 vision 模型 + 转写开启时展示提示条） */
   visionProxyHint?: string | null
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
 function getFileIcon(mimeType: string) {
