@@ -75,6 +75,26 @@ for (const rootRel of ROOTS) {
     if (rootRel === 'packages/backend/src' && file.includes('/api/') && /from\s+['"]\.\.?\/.*\bdb['"]/.test(text)) {
       failures.push(`${file}: api layer must not import the db singleton; use an injected service/repository`)
     }
+
+    // Service layer must not reach into the chat module; shared kernels live in agent-runtime / services.
+    if (
+      rootRel === 'packages/backend/src' &&
+      file.includes('/services/') &&
+      !file.endsWith('.test.ts') &&
+      /from\s+['"]\.\.?\/.*modules\/chat\//.test(text)
+    ) {
+      failures.push(`${file}: services layer must not import modules/chat; use agent-runtime or services/*`)
+    }
+
+    // Utils layer must not reach into feature modules.
+    if (
+      rootRel === 'packages/backend/src' &&
+      file.includes('/utils/') &&
+      !file.endsWith('.test.ts') &&
+      /from\s+['"]\.\.?\/.*modules\//.test(text)
+    ) {
+      failures.push(`${file}: utils layer must not import modules/*; keep utils pure or move the dependency to services`)
+    }
   }
 
   const index = new Map()
