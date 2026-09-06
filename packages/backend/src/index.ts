@@ -18,6 +18,8 @@ import { createOpenAICompatApi } from './api/openai-compatible';
 import { scheduleModelCatalogAutoRefresh, setModelCatalogTtlSeconds } from './utils/model-catalog';
 import { createTaskTraceApi } from './api/task-trace';
 import { setChatConfig } from './modules/chat/chat-common';
+import { setAuthContextService } from './services/auth/auth-context-service';
+import { setModelResolverService } from './utils/model-resolver';
 import { createSharesApi } from './api/shares';
 import { createBattleApi } from './api/battle';
 import { createDocumentsApi } from './api/documents';
@@ -37,6 +39,9 @@ import { errorHandler, notFoundHandler } from './middleware/error';
 const container = createAppContainer();
 const appContext = container.context;
 setChatConfig(appContext.config);
+// 将容器装配的实例接入兼容 setter，避免 middleware/openai-compat 走 fallback 单例
+setAuthContextService(container.authContextService);
+setModelResolverService(container.modelResolverService);
 
 // SecretVault 与 ChatRequestBuilder 均由容器统一装配（全进程唯一实例）
 const secretVault = container.secretVault;
