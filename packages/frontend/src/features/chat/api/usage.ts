@@ -1,4 +1,4 @@
-import { apiHttpClient } from '@/lib/api'
+import { apiHttpClient } from '@/api/http'
 import type { ApiResponse, SessionUsageTotalsItem } from '@/types'
 
 const client = apiHttpClient
@@ -16,3 +16,4 @@ export const getSessionsUsage = async () => {
   )
   return response.data
 }
+

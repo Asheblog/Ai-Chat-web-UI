@@ -1,4 +1,4 @@
-import { apiHttpClient } from '@/lib/api'
+import { apiHttpClient } from '@/api/http'
 import type { ApiResponse, ChatShare, ChatShareSummary, ShareListResponse } from '@/types'
 
 const client = apiHttpClient
@@ -38,3 +38,4 @@ export const revokeChatShare = async (shareId: number) => {
   )
   return response.data
 }
+

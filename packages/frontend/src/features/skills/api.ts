@@ -1,4 +1,4 @@
-import { apiHttpClient } from '@/lib/api'
+import { apiHttpClient } from '@/api/http'
 import type {
   ApiResponse,
   SkillApprovalRequestItem,
@@ -156,3 +156,4 @@ export const listSkillAudits = async (params?: {
   }>>('/skills/audits', { params })
   return response.data
 }
+

@@ -1,4 +1,4 @@
-import { apiHttpClient } from '@/lib/api'
+import { apiHttpClient } from '@/api/http'
 import type {
   ApiResponse,
   SecretView,
@@ -29,3 +29,4 @@ export const deleteSecret = async (id: number) => {
   const response = await client.delete<ApiResponse>(`/secrets/${id}`)
   return response.data
 }
+

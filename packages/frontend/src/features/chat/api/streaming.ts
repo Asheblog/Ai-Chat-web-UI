@@ -1,7 +1,7 @@
 import {
   apiHttpClient,
   handleUnauthorizedRedirect,
-} from '@/lib/api'
+} from '@/api/http'
 import { DEFAULT_API_BASE_URL } from '@/lib/http/client'
 import { parseEventStream } from './stream-reader'
 import type { ActorQuota, ApiResponse, ChatStreamChunk, SkillRuntimeReference } from '@/types'
@@ -255,3 +255,4 @@ export const chatCompletion = async (
   }
   return res.data
 }
+

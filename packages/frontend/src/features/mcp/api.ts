@@ -1,4 +1,4 @@
-import { apiHttpClient } from '@/lib/api'
+import { apiHttpClient } from '@/api/http'
 import type {
   ApiResponse,
   McpInstallation,
@@ -170,3 +170,4 @@ export const listSessionTools = async (sessionId: number) => {
   const response = await client.get<ApiResponse<McpToolView[]>>(`/mcp/sessions/${sessionId}/tools`)
   return response.data
 }
+

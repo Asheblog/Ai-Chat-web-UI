@@ -1,4 +1,4 @@
-import { apiHttpClient } from '@/lib/api'
+import { apiHttpClient } from '@/api/http'
 import type { ApiResponse } from '@/types'
 
 const client = apiHttpClient
@@ -94,3 +94,4 @@ export const summarizeSessionTitle = async (
   }
   return response.data.data
 }
+

@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { apiHttpClient } from '@/lib/api'
+import { apiHttpClient } from '@/api/http'
 import type { ApiResponse } from '@/types'
 import { useAuthStore } from '@/store/auth-store'
 import { useSettingsStore } from '@/store/settings-store'
@@ -221,3 +221,4 @@ export function useKnowledgeBase(options: UseKnowledgeBaseOptions = {}): UseKnow
     refresh,
   }
 }
+

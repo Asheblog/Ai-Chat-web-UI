@@ -1,4 +1,4 @@
-import { apiHttpClient, handleUnauthorizedRedirect } from '@/lib/api'
+import { apiHttpClient, handleUnauthorizedRedirect } from '@/api/http'
 import { DEFAULT_API_BASE_URL } from '@/lib/http/client'
 import { readSseStream } from '@aichat/shared/sse-reader'
 import type {
@@ -323,3 +323,4 @@ export async function* rejudgeWithNewAnswer(
     throw error
   }
 }
+

@@ -1,4 +1,4 @@
-import { apiHttpClient } from '@/lib/api'
+import { apiHttpClient } from '@/api/http'
 import type {
   ActorContextDTO,
   ApiResponse,
@@ -61,3 +61,4 @@ export const changePassword = async (currentPassword: string, newPassword: strin
   })
   return response.data
 }
+

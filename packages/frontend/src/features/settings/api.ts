@@ -1,4 +1,4 @@
-import { apiHttpClient } from '@/lib/api'
+import { apiHttpClient } from '@/api/http'
 import { serializeSystemSettingsPatch } from '@aichat/shared'
 import { parseSystemSettingsPayload } from '@aichat/shared/settings-codec'
 import type {
@@ -351,3 +351,4 @@ export const probeImageTranscription = async (payload?: {
   )
   return response.data
 }
+

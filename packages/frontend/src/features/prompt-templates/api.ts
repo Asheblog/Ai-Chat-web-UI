@@ -1,4 +1,4 @@
-import { apiHttpClient } from '@/lib/api'
+import { apiHttpClient } from '@/api/http'
 import type { ApiResponse, PromptTemplate } from '@/types'
 
 const client = apiHttpClient
@@ -46,3 +46,4 @@ export const deletePromptTemplate = async (templateId: number): Promise<void> =>
     throw new Error(response.data.error || '删除提示词模板失败')
   }
 }
+

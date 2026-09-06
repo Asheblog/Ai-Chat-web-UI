@@ -1,4 +1,4 @@
-import { apiHttpClient } from '@/lib/api'
+import { apiHttpClient } from '@/api/http'
 import type { ApiResponse, WorkspaceArtifact } from '@/types'
 
 const client = apiHttpClient
@@ -22,3 +22,4 @@ export const deleteSessionWorkspace = async (sessionId: number) => {
   const response = await client.delete<ApiResponse>(`/chat/sessions/${sessionId}/workspace`)
   return response.data
 }
+

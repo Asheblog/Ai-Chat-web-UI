@@ -1,6 +1,6 @@
 'use client'
 
-import { apiHttpClient } from '@/lib/api'
+import { apiHttpClient } from '@/api/http'
 import type { ApiResponse } from '@/types'
 
 export type SetupState = 'required' | 'skipped' | 'completed'
@@ -47,4 +47,5 @@ export const setSetupState = async (state: 'skipped' | 'completed') => {
   )
   return response.data
 }
+
 

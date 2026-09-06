@@ -1,4 +1,4 @@
-import { apiHttpClient } from '@/lib/api'
+import { apiHttpClient } from '@/api/http'
 import type {
   ActorQuota,
   ApiResponse,
@@ -369,3 +369,4 @@ export const cleanupSystemLogs = async (retentionDays?: number) => {
   >('/system-logs/cleanup', payload)
   return response.data
 }
+
