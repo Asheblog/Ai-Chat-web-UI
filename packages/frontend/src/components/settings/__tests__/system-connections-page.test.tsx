@@ -90,15 +90,14 @@ afterEach(() => {
 })
 
 describe("provider-templates 模板数据", () => {
-  test("4 项且 provider 唯一、顺序固定", () => {
-    expect(PROVIDER_TEMPLATES).toHaveLength(4)
+  test("3 项且 provider 唯一、顺序固定", () => {
+    expect(PROVIDER_TEMPLATES).toHaveLength(3)
     const providers = PROVIDER_TEMPLATES.map((item) => item.provider)
-    expect(new Set(providers).size).toBe(4)
+    expect(new Set(providers).size).toBe(3)
     expect(providers).toEqual([
       "openai",
       "openai_responses",
       "google_genai",
-      "openai_interleave",
     ])
   })
 
@@ -112,22 +111,22 @@ describe("provider-templates 模板数据", () => {
     })
   })
 
-  test("ollama/azure_openai 已下线；openai_interleave 仍保留；getProviderTemplate 未知返回 undefined", () => {
+  test("ollama/azure_openai/openai_interleave 已下线；getProviderTemplate 未知返回 undefined", () => {
     expect(getProviderTemplate("ollama")).toBeUndefined()
     expect(getProviderTemplate("azure_openai")).toBeUndefined()
-    expect(getProviderTemplate("openai_interleave")?.baseUrl).toBe("https://api.deepseek.com/v1")
+    expect(getProviderTemplate("openai_interleave")).toBeUndefined()
     expect(getProviderTemplate("unknown_provider")).toBeUndefined()
   })
 })
 
 describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
-  test("渲染 4 张模板卡（OpenAI/Responses/Google/交错思考；Azure/Ollama 不可见）", async () => {
+  test("渲染 3 张模板卡（OpenAI/Responses/Google；交错思考/Azure/Ollama 不可见）", async () => {
     render(<SystemConnectionsPage />)
 
     expect(await screen.findByText("OpenAI")).toBeInTheDocument()
     expect(screen.getByText("OpenAI Responses")).toBeInTheDocument()
     expect(screen.getByText("Google")).toBeInTheDocument()
-    expect(screen.getByText("OpenAI（交错思考）")).toBeInTheDocument()
+    expect(screen.queryByText("OpenAI（交错思考）")).not.toBeInTheDocument()
     expect(screen.queryByText("Azure")).not.toBeInTheDocument()
     expect(screen.queryByText("Ollama")).not.toBeInTheDocument()
     expect(screen.getByText("供应商与连接")).toBeInTheDocument()
@@ -141,6 +140,7 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
     expect(within(getCard("google_genai")).getByText("未配置")).toBeInTheDocument()
     expect(screen.queryByTestId("provider-template-ollama")).not.toBeInTheDocument()
     expect(screen.queryByTestId("provider-template-azure_openai")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("provider-template-openai_interleave")).not.toBeInTheDocument()
   })
 
   test("模板卡按钮可访问名 = 「配置{label}」（整卡可点、朗读简洁）", async () => {
@@ -149,7 +149,7 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
 
     expect(screen.getByRole("button", { name: "配置Google" })).toBe(getCard("google_genai"))
     expect(screen.getByRole("button", { name: "配置OpenAI" })).toBe(getCard("openai"))
-    expect(screen.getByRole("button", { name: "配置OpenAI（交错思考）" })).toBe(getCard("openai_interleave"))
+    expect(screen.queryByRole("button", { name: "配置OpenAI（交错思考）" })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "配置Ollama" })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "配置Azure" })).not.toBeInTheDocument()
   })
@@ -364,14 +364,15 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "创建连接" }))
     await waitFor(() => expect(services.createSystemConnection).toHaveBeenCalledTimes(1))
     const expected = {
-      provider: template.provider === "openai_interleave" ? "openai" : template.provider,
-      ...(template.provider === "openai_interleave" ? { vendor: "openai_interleave" } : {}),
+      provider: template.provider,
+      thinkingDialect: "off",
       baseUrl: template.baseUrl,
       authType: "bearer",
     }
     expect(services.verifySystemConnection.mock.calls[0][0]).toEqual(expect.objectContaining(expected))
     expect(services.createSystemConnection.mock.calls[0][0]).toEqual(expect.objectContaining(expected))
     expect(services.createSystemConnection.mock.calls[0][0]).not.toHaveProperty("azureApiVersion")
+    expect(services.createSystemConnection.mock.calls[0][0]).not.toHaveProperty("vendor")
   })
 
   test("高级管理内列表可见连接行（displayName）", async () => {

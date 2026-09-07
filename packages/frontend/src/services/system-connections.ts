@@ -25,7 +25,7 @@ export interface SystemConnectionGroup {
   displayName: string
   connectionIds: number[]
   provider: string
-  vendor?: string | null
+  thinkingDialect?: 'off' | 'deepseek_compat'
   baseUrl: string
   authType: string
   headers?: Record<string, string> | null
@@ -41,7 +41,7 @@ export interface SystemConnectionGroup {
 export interface SystemConnectionPayload {
   displayName: string
   provider: string
-  vendor?: string
+  thinkingDialect?: 'off' | 'deepseek_compat'
   baseUrl: string
   authType: string
   headers?: Record<string, string>

@@ -1,7 +1,6 @@
 import {
   Bot,
   BrainCircuit,
-  Layers,
   MessagesSquare,
   type LucideIcon,
 } from "lucide-react"
@@ -10,11 +9,10 @@ export type ProviderTemplateKey =
   | "openai"
   | "openai_responses"
   | "google_genai"
-  | "openai_interleave"
 
 export type ProviderTemplate = {
   provider: ProviderTemplateKey
-  /** 显示名（对齐 providerLabel：Google / OpenAI Responses / OpenAI（交错思考）） */
+  /** 显示名（对齐 providerLabel：Google / OpenAI Responses / OpenAI） */
   label: string
   /** 白话描述（一句话说清用途） */
   description: string
@@ -28,7 +26,7 @@ export type ProviderTemplate = {
 }
 
 /**
- * 4 个供应商快速接入模板。默认值沿用 baseUrlPlaceholder / HelperText / EditorParts 语义，
+ * 3 个供应商快速接入模板。默认值沿用 baseUrlPlaceholder / HelperText / EditorParts 语义，
  * 配置 Sheet 打开时用 createFormFromTemplate 预填表单。
  */
 export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
@@ -56,15 +54,6 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
     icon: BrainCircuit,
     baseUrl: "https://generativelanguage.googleapis.com/v1beta",
     authType: "bearer",
-  },
-  {
-    provider: "openai_interleave",
-    label: "OpenAI（交错思考）",
-    description: "支持 Thinking Mode 的第三方 OpenAI 兼容端点（如 DeepSeek）",
-    icon: Layers,
-    baseUrl: "https://api.deepseek.com/v1",
-    authType: "bearer",
-    helperText: "适用于 DeepSeek、SiliconFlow 等支持 Thinking Mode 的 OpenAI 兼容 API。",
   },
 ]
 

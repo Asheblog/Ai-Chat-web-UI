@@ -1,13 +1,13 @@
+import {
+  inferThinkingDialectFromBaseUrl,
+  normalizeThinkingDialect,
+  type ThinkingDialect,
+} from "@aichat/shared"
 import type {
   SystemConnectionGroup,
   SystemConnectionPayload,
 } from "@/services/system-connections"
-import {
-  SPECIAL_PROVIDER_OPENAI_INTERLEAVE,
-  SPECIAL_VENDOR_OPENAI_INTERLEAVE,
-  SPECIAL_VENDOR_DEEPSEEK,
-  type ConnectionCapKey,
-} from "./constants"
+import { type ConnectionCapKey } from "./constants"
 import type { ProviderTemplate } from "./provider-templates"
 
 export interface ConnectionKeyFormState {
@@ -24,6 +24,7 @@ export interface ConnectionKeyFormState {
 export interface ConnectionFormState {
   displayName: string
   provider: string
+  thinkingDialect: ThinkingDialect
   baseUrl: string
   authType: string
   headers: string
@@ -53,6 +54,7 @@ export const createEmptyKey = (index = 0): ConnectionKeyFormState => ({
 export const DEFAULT_FORM: ConnectionFormState = {
   displayName: "",
   provider: "openai",
+  thinkingDialect: "off",
   baseUrl: "",
   authType: "bearer",
   headers: "",
@@ -108,31 +110,15 @@ const parseHeaders = (raw: string): Record<string, string> | undefined => {
   }
 }
 
-const mapProviderSelection = (
-  value: string,
-  editingVendor?: string | null,
-): Pick<SystemConnectionPayload, "provider" | "vendor"> => {
-  if (value === SPECIAL_PROVIDER_OPENAI_INTERLEAVE) {
-    return { provider: "openai", vendor: SPECIAL_VENDOR_OPENAI_INTERLEAVE }
-  }
-  // 旧 deepseek vendor 连接在表单中显示为普通 OpenAI，保存时保留 vendor 避免静默清除
-  if (value === "openai" && editingVendor === SPECIAL_VENDOR_DEEPSEEK) {
-    return { provider: "openai", vendor: SPECIAL_VENDOR_DEEPSEEK }
-  }
-  return { provider: value, vendor: undefined }
-}
-
 export const buildPayload = (
   form: ConnectionFormState,
   capabilities: Record<ConnectionCapKey, boolean>,
-  editingVendor?: string | null,
 ): SystemConnectionPayload => {
-  const { provider, vendor } = mapProviderSelection(form.provider, editingVendor)
   const headers = parseHeaders(form.headers)
   return {
     displayName: form.displayName.trim(),
-    provider,
-    ...(vendor ? { vendor } : {}),
+    provider: form.provider,
+    thinkingDialect: normalizeThinkingDialect(form.thinkingDialect),
     baseUrl: form.baseUrl.trim(),
     authType: form.authType,
     ...(headers ? { headers } : {}),
@@ -150,41 +136,38 @@ export const buildPayload = (
   }
 }
 
-export const createFormFromGroup = (group: SystemConnectionGroup): ConnectionFormState => {
-  const providerSelection =
-    group.vendor === SPECIAL_VENDOR_OPENAI_INTERLEAVE
-      ? SPECIAL_PROVIDER_OPENAI_INTERLEAVE
-      : group.provider || "openai"
-
-  return {
-    displayName: group.displayName || "",
-    provider: providerSelection,
-    baseUrl: group.baseUrl || "",
-    authType: group.authType || "bearer",
-    headers: serializeHeaders(group.headers),
-    prefixId: group.prefixId || "",
-    tags: (group.tags || []).map((item) => item?.name).filter(Boolean).join(","),
-    connectionType: group.connectionType || "external",
-    keys:
-      group.apiKeys?.length > 0
-        ? group.apiKeys.map((item, index) => ({
-            clientId: String(item.id || createDraftId()),
-            id: item.id,
-            apiKeyLabel: item.apiKeyLabel || `Key ${index + 1}`,
-            apiKey: "",
-            apiKeyMasked: item.apiKeyMasked || "",
-            hasStoredApiKey: Boolean(item.hasStoredApiKey),
-            modelIds: (item.modelIds || []).join(",\n"),
-            enable: item.enable ?? true,
-          }))
-        : [createEmptyKey(0)],
-  }
-}
+export const createFormFromGroup = (group: SystemConnectionGroup): ConnectionFormState => ({
+  displayName: group.displayName || "",
+  provider: group.provider || "openai",
+  thinkingDialect: normalizeThinkingDialect(group.thinkingDialect),
+  baseUrl: group.baseUrl || "",
+  authType: group.authType || "bearer",
+  headers: serializeHeaders(group.headers),
+  prefixId: group.prefixId || "",
+  tags: (group.tags || []).map((item) => item?.name).filter(Boolean).join(","),
+  connectionType: group.connectionType || "external",
+  keys:
+    group.apiKeys?.length > 0
+      ? group.apiKeys.map((item, index) => ({
+          clientId: String(item.id || createDraftId()),
+          id: item.id,
+          apiKeyLabel: item.apiKeyLabel || `Key ${index + 1}`,
+          apiKey: "",
+          apiKeyMasked: item.apiKeyMasked || "",
+          hasStoredApiKey: Boolean(item.hasStoredApiKey),
+          modelIds: (item.modelIds || []).join(",\n"),
+          enable: item.enable ?? true,
+        }))
+      : [createEmptyKey(0)],
+})
 
 export const createFormFromTemplate = (template: ProviderTemplate): ConnectionFormState => ({
-  // openai_interleave 直接作 provider 值，沿用 mapProviderSelection 语义（其即 provider 选项值）
   displayName: template.label,
   provider: template.provider,
+  thinkingDialect:
+    template.provider === "openai"
+      ? inferThinkingDialectFromBaseUrl(template.baseUrl)
+      : "off",
   baseUrl: template.baseUrl,
   authType: template.authType,
   headers: "",

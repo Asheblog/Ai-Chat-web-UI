@@ -51,6 +51,23 @@ describe("form-state displayName", () => {
     const form = createFormFromTemplate(template)
     expect(form.displayName).toBe("Google")
     expect(form.baseUrl).toBe("https://generativelanguage.googleapis.com/v1beta")
+    expect(form.thinkingDialect).toBe("off")
+  })
+
+  test("openai 模板按 baseUrl 启发 thinkingDialect", () => {
+    const template = getProviderTemplate("openai")!
+    expect(createFormFromTemplate(template).thinkingDialect).toBe("off")
+    expect(
+      createFormFromTemplate({
+        ...template,
+        baseUrl: "https://api.deepseek.com/v1",
+      }).thinkingDialect,
+    ).toBe("deepseek_compat")
+  })
+
+  test("createFormFromGroup 读入 thinkingDialect", () => {
+    const form = createFormFromGroup(makeGroup({ thinkingDialect: "deepseek_compat" }))
+    expect(form.thinkingDialect).toBe("deepseek_compat")
   })
 
   test("buildPayload 发送 trim 后的 displayName", () => {
@@ -58,6 +75,7 @@ describe("form-state displayName", () => {
       ...DEFAULT_FORM,
       displayName: "  生产 OpenAI  ",
       baseUrl: "https://api.openai.com/v1",
+      thinkingDialect: "deepseek_compat" as const,
       keys: [
         {
           clientId: "k1",
@@ -72,6 +90,8 @@ describe("form-state displayName", () => {
     }
     const payload = buildPayload(form, createEmptyConnectionCaps())
     expect(payload.displayName).toBe("生产 OpenAI")
+    expect(payload.thinkingDialect).toBe("deepseek_compat")
+    expect(payload).not.toHaveProperty("vendor")
   })
 
   test("validateForm 要求 displayName", () => {

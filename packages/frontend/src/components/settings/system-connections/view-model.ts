@@ -1,5 +1,4 @@
 import type { SystemConnectionGroup } from "@/services/system-connections"
-import { SPECIAL_VENDOR_DEEPSEEK, SPECIAL_VENDOR_OPENAI_INTERLEAVE } from "./constants"
 
 export type HealthState = "healthy" | "warning" | "error"
 export type WizardMode = "create" | "edit"
@@ -25,9 +24,7 @@ export const healthLabel: Record<HealthState, string> = {
   error: "异常",
 }
 
-export function providerLabel(group: Pick<SystemConnectionGroup, "provider" | "vendor">) {
-  if (group.vendor === SPECIAL_VENDOR_OPENAI_INTERLEAVE) return "OpenAI（交错思考）"
-  if (group.vendor === SPECIAL_VENDOR_DEEPSEEK) return "DeepSeek"
+export function providerLabel(group: Pick<SystemConnectionGroup, "provider">) {
   if (group.provider === "google_genai") return "Google"
   if (group.provider === "openai_responses") return "OpenAI Responses"
   if (group.provider === "openai") return "OpenAI"
@@ -73,8 +70,7 @@ export function filterConnections({
   const normalizedQuery = query.trim().toLowerCase()
 
   return connections.filter((group) => {
-    const providerKey = `${group.provider}:${group.vendor || ""}`
-    if (providerFilter !== "all" && providerKey !== providerFilter) return false
+    if (providerFilter !== "all" && group.provider !== providerFilter) return false
 
     const enabledCount = getEnabledKeyCount(group)
     if (statusFilter === "enabled" && enabledCount === 0) return false
@@ -100,4 +96,3 @@ export function filterConnections({
 export function connectionSecondaryLine(group: SystemConnectionGroup) {
   return `${providerLabel(group)} · ${group.baseUrl}`
 }
-

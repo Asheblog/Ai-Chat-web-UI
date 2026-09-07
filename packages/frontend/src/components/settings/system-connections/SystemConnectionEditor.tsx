@@ -4,10 +4,11 @@ import { useEffect, useState, type Dispatch, type SetStateAction } from "react"
 import { ArrowLeft, ArrowRight, KeyRound, Loader2, Settings2, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
 import { useToast } from "@/components/ui/use-toast"
 import type { SystemConnectionGroup, VerifyConnectionResult } from "@/services/system-connections"
+import { inferThinkingDialectFromBaseUrl } from "@aichat/shared"
 import {
-  SPECIAL_PROVIDER_OPENAI_INTERLEAVE,
   type ConnectionCapKey,
 } from "./constants"
 import { validateBasicFields, type ConnectionFormState, type ConnectionKeyFormState } from "./form-state"
@@ -130,11 +131,41 @@ export function SystemConnectionEditor({
                 id="connection-base-url"
                 type="url"
                 value={form.baseUrl}
-                onChange={(event) => setForm((prev) => ({ ...prev, baseUrl: event.target.value }))}
+                onChange={(event) => {
+                  const baseUrl = event.target.value
+                  setForm((prev) => ({
+                    ...prev,
+                    baseUrl,
+                    ...(mode === "create" && prev.provider === "openai"
+                      ? { thinkingDialect: inferThinkingDialectFromBaseUrl(baseUrl) }
+                      : {}),
+                  }))
+                }}
                 placeholder={baseUrlPlaceholder(form.provider)}
               />
-              <HelperText provider={form.provider} specialProviderOpenaiInterleave={SPECIAL_PROVIDER_OPENAI_INTERLEAVE} />
+              <HelperText provider={form.provider} />
             </Field>
+
+            {form.provider === "openai" ? (
+              <div className="flex items-start justify-between gap-4 rounded-md border border-border px-3 py-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-foreground">DeepSeek 兼容 Thinking（注入 thinking 参数）</p>
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    开启后请求体会注入 thinking.enabled/disabled，适用于 DeepSeek、SiliconFlow 等兼容端点。
+                  </p>
+                </div>
+                <Switch
+                  checked={form.thinkingDialect === "deepseek_compat"}
+                  onCheckedChange={(checked) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      thinkingDialect: checked ? "deepseek_compat" : "off",
+                    }))
+                  }
+                  aria-label="DeepSeek 兼容 Thinking（注入 thinking 参数）"
+                />
+              </div>
+            ) : null}
 
             <Field label="API Key" htmlFor="connection-api-key">
               <Input

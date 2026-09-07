@@ -17,7 +17,6 @@ import {
   importSystemConnections,
 } from "@/services/system-connections"
 import {
-  SPECIAL_PROVIDER_OPENAI_INTERLEAVE,
   useSystemConnections,
 } from "@/components/settings/system-connections/use-system-connections"
 import { SystemConnectionEditor } from "@/components/settings/system-connections/SystemConnectionEditor"
@@ -104,7 +103,7 @@ export function SystemConnectionsPage() {
   const providerOptions = useMemo(() => {
     const map = new Map<string, { key: string; label: string; count: number; keyCount: number }>()
     connections.forEach((group) => {
-      const key = `${group.provider}:${group.vendor || ""}`
+      const key = group.provider
       const current = map.get(key)
       map.set(key, {
         key,
@@ -116,20 +115,16 @@ export function SystemConnectionsPage() {
     return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label))
   }, [connections])
 
-  /** 模板卡数据：连接数按 `${provider}:${vendor||""}` 口径统计（与 providerOptions 同口径） */
+  /** 模板卡数据：连接数按 provider 口径统计（openai 含原交错思考连接） */
   const templateCards = useMemo(() => {
     const countMap = new Map<string, number>()
     connections.forEach((group) => {
-      const key = `${group.provider}:${group.vendor || ""}`
-      countMap.set(key, (countMap.get(key) ?? 0) + 1)
+      countMap.set(group.provider, (countMap.get(group.provider) ?? 0) + 1)
     })
-    return PROVIDER_TEMPLATES.map((template) => {
-      const matchKey =
-        template.provider === SPECIAL_PROVIDER_OPENAI_INTERLEAVE
-          ? `openai:${SPECIAL_PROVIDER_OPENAI_INTERLEAVE}`
-          : `${template.provider}:`
-      return { template, count: countMap.get(matchKey) ?? 0 }
-    })
+    return PROVIDER_TEMPLATES.map((template) => ({
+      template,
+      count: countMap.get(template.provider) ?? 0,
+    }))
   }, [connections])
 
   const filteredConnections = useMemo(
