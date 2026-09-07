@@ -1,4 +1,10 @@
 import type { Connection, ConnectionGroup, PrismaClient } from '@prisma/client'
+import {
+  inferThinkingDialectFromBaseUrl,
+  legacyVendorToThinkingDialect,
+  normalizeThinkingDialect,
+  type ThinkingDialect,
+} from '@aichat/shared'
 import { prisma as defaultPrisma } from '../../db'
 import {
   PrismaConnectionRepository,
@@ -33,8 +39,6 @@ export class ConnectionServiceError extends Error {
   }
 }
 
-type VendorType = 'deepseek' | 'openai_interleave'
-
 type TagItem = { name: string }
 
 /** 内部规范化后的 API Key 条目 —— apiKey 仅作为写入输入，不保存到数据库 */
@@ -54,7 +58,7 @@ export interface ConnectionServiceDeps {
   fetchModelsForConnection?: (config: ConnectionConfig) => Promise<CatalogItem[]>
   verifyConnection?: (config: {
     provider: ProviderType
-    vendor?: VendorType
+    thinkingDialect?: ThinkingDialect
     baseUrl: string
     enable: boolean
     authType: AuthType
@@ -81,7 +85,7 @@ export interface ConnectionApiKeyPayload {
 export interface ConnectionPayload {
   displayName: string
   provider: ProviderType
-  vendor?: VendorType
+  thinkingDialect?: ThinkingDialect
   baseUrl: string
   authType?: AuthType
   headers?: Record<string, string>
@@ -92,9 +96,10 @@ export interface ConnectionPayload {
   apiKeys: ConnectionApiKeyPayload[]
 }
 
-/** 导入允许缺省 displayName（v1 由 seed 补齐） */
+/** 导入允许缺省 displayName（v1 由 seed 补齐）；legacy vendor 仅用于推断 thinkingDialect */
 export type ImportConnectionPayload = Omit<ConnectionPayload, 'displayName'> & {
   displayName?: string
+  vendor?: string | null
 }
 
 export interface ConnectionApiKeyView {
@@ -113,7 +118,7 @@ export interface ConnectionGroupView {
   displayName: string
   connectionIds: number[]
   provider: ProviderType
-  vendor?: VendorType | null
+  thinkingDialect: ThinkingDialect
   baseUrl: string
   authType: AuthType
   prefixId?: string | null
@@ -154,7 +159,7 @@ export interface ExportConnectionApiKey {
 export interface ExportConnection {
   displayName: string
   provider: ProviderType
-  vendor?: VendorType
+  thinkingDialect: ThinkingDialect
   baseUrl: string
   authType: AuthType
   headers?: Record<string, string>
@@ -309,7 +314,7 @@ const maskApiKey = (value?: string | null) => {
 
 const stringifySignature = (row: {
   provider: string
-  vendor?: string | null
+  thinkingDialect?: string | null
   baseUrl: string
   authType: string
   headers: Record<string, string>
@@ -320,7 +325,7 @@ const stringifySignature = (row: {
 }) =>
   JSON.stringify({
     provider: row.provider,
-    vendor: row.vendor || null,
+    thinkingDialect: normalizeThinkingDialect(row.thinkingDialect),
     baseUrl: sanitizeBaseUrl(row.baseUrl),
     authType: row.authType || 'bearer',
     headers: row.headers,
@@ -329,6 +334,23 @@ const stringifySignature = (row: {
     connectionType: (row.connectionType || 'external') as 'external' | 'local',
     defaultCapabilities: row.defaultCapabilities,
   })
+
+const resolveThinkingDialectForCreate = (payload: {
+  thinkingDialect?: ThinkingDialect | string
+  baseUrl: string
+}): ThinkingDialect => {
+  if (payload.thinkingDialect !== undefined) {
+    return normalizeThinkingDialect(payload.thinkingDialect)
+  }
+  return inferThinkingDialectFromBaseUrl(payload.baseUrl)
+}
+
+const resolveThinkingDialectForImport = (payload: ImportConnectionPayload): ThinkingDialect => {
+  if (payload.thinkingDialect !== undefined) {
+    return normalizeThinkingDialect(payload.thinkingDialect)
+  }
+  return legacyVendorToThinkingDialect(payload.vendor)
+}
 
 const compareDatesDesc = (a: string, b: string) => {
   if (a === b) return 0
@@ -397,9 +419,10 @@ export class ConnectionService {
     const displayName = this.requireDisplayName(payload.displayName)
     await this.assertSystemDisplayNameAvailable(displayName)
 
+    const thinkingDialect = resolveThinkingDialectForCreate(payload)
     const authType = payload.authType ?? 'bearer'
     const normalizedKeys = this.normalizeApiKeys(payload.apiKeys, authType)
-    const groupData = this.buildGroupCreateData({ ...payload, displayName })
+    const groupData = this.buildGroupCreateData({ ...payload, displayName, thinkingDialect })
     const group = await this.repository.createSystemGroup(groupData)
 
     const createdCredentials: Connection[] = []
@@ -433,13 +456,20 @@ export class ConnectionService {
     const displayName = this.requireDisplayName(payload.displayName)
     await this.assertSystemDisplayNameAvailable(displayName, groupId)
 
+    const thinkingDialect =
+      payload.thinkingDialect !== undefined
+        ? normalizeThinkingDialect(payload.thinkingDialect)
+        : normalizeThinkingDialect(existing.thinkingDialect)
     const authType = payload.authType ?? 'bearer'
     const normalizedKeys = this.normalizeApiKeys(payload.apiKeys, authType)
     const existingById = new Map(existing.credentials.map((row) => [row.id, row]))
     const seenIds = new Set<number>()
     const touched: Connection[] = []
 
-    await this.repository.updateSystemGroup(groupId, this.buildGroupUpdateData({ ...payload, displayName }))
+    await this.repository.updateSystemGroup(
+      groupId,
+      this.buildGroupUpdateData({ ...payload, displayName, thinkingDialect }),
+    )
 
     for (const key of normalizedKeys) {
       if (key.id != null) {
@@ -489,7 +519,8 @@ export class ConnectionService {
       ...existing,
       displayName,
       provider: payload.provider,
-      vendor: payload.vendor ?? null,
+      vendor: null,
+      thinkingDialect,
       baseUrl: sanitizeBaseUrl(payload.baseUrl),
       authType,
       headersJson: serializeRecord(payload.headers ?? parseRecord(existing.headersJson)),
@@ -556,7 +587,7 @@ export class ConnectionService {
       connections.push({
         displayName: group.displayName,
         provider: group.provider as ProviderType,
-        vendor: (group.vendor as VendorType | null) ?? undefined,
+        thinkingDialect: normalizeThinkingDialect(group.thinkingDialect),
         baseUrl: sanitizeBaseUrl(group.baseUrl),
         authType,
         ...(Object.keys(headers).length > 0 ? { headers } : {}),
@@ -604,12 +635,18 @@ export class ConnectionService {
     const skippedReasons: string[] = []
 
     for (const connection of payload.connections) {
-      const withDisplayName = await this.ensureImportDisplayName(connection, signatureToGroup)
+      const thinkingDialect = resolveThinkingDialectForImport(connection)
+      const withDialect: ImportConnectionPayload = {
+        ...connection,
+        thinkingDialect,
+        vendor: undefined,
+      }
+      const withDisplayName = await this.ensureImportDisplayName(withDialect, signatureToGroup)
       const signature = this.signatureFromPayload(withDisplayName)
       const existing = signatureToGroup.get(signature)
 
       if (!existing) {
-        await this.createSystemConnection(withDisplayName)
+        await this.createSystemConnection(withDisplayName as ConnectionPayload)
         createdGroups += 1
         addedKeys += connection.apiKeys.length
         signatureToGroup = this.buildSignatureGroupMap(await this.repository.listSystemGroups())
@@ -664,7 +701,7 @@ export class ConnectionService {
       const mergePayload: ConnectionPayload = {
         displayName: existing.displayName,
         provider: existing.provider as ProviderType,
-        vendor: (existing.vendor as VendorType | null) ?? undefined,
+        thinkingDialect: normalizeThinkingDialect(existing.thinkingDialect),
         baseUrl: sanitizeBaseUrl(existing.baseUrl),
         authType,
         headers: parseRecord(existing.headersJson),
@@ -747,7 +784,9 @@ export class ConnectionService {
         try {
           await verifyConnection({
             provider: payload.provider,
-            vendor: payload.vendor,
+            thinkingDialect: normalizeThinkingDialect(
+              payload.thinkingDialect ?? inferThinkingDialectFromBaseUrl(payload.baseUrl),
+            ),
             baseUrl: payload.baseUrl,
             enable: true,
             authType,
@@ -900,7 +939,10 @@ export class ConnectionService {
       ownerUserId: null,
       displayName: payload.displayName.trim(),
       provider: payload.provider,
-      vendor: payload.vendor ?? null,
+      vendor: null,
+      thinkingDialect: normalizeThinkingDialect(
+        payload.thinkingDialect ?? inferThinkingDialectFromBaseUrl(payload.baseUrl),
+      ),
       baseUrl: sanitizeBaseUrl(payload.baseUrl),
       enable: true,
       authType: payload.authType ?? 'bearer',
@@ -917,7 +959,8 @@ export class ConnectionService {
       ownerUserId: null,
       displayName: payload.displayName.trim(),
       provider: payload.provider,
-      vendor: payload.vendor ?? null,
+      vendor: null,
+      thinkingDialect: normalizeThinkingDialect(payload.thinkingDialect),
       baseUrl: sanitizeBaseUrl(payload.baseUrl),
       authType: payload.authType ?? 'bearer',
       headersJson: serializeRecord(payload.headers),
@@ -1071,7 +1114,7 @@ export class ConnectionService {
       displayName: group.displayName,
       connectionIds: credentials.map((row) => row.id),
       provider: group.provider as ProviderType,
-      vendor: (group.vendor as VendorType | null) ?? null,
+      thinkingDialect: normalizeThinkingDialect(group.thinkingDialect),
       baseUrl: sanitizeBaseUrl(group.baseUrl),
       authType: (group.authType as AuthType) || 'bearer',
       prefixId: group.prefixId ?? null,
@@ -1118,7 +1161,7 @@ export class ConnectionService {
       groups.map((group) => [
         stringifySignature({
           provider: group.provider,
-          vendor: group.vendor,
+          thinkingDialect: group.thinkingDialect,
           baseUrl: group.baseUrl,
           authType: group.authType,
           headers: parseRecord(group.headersJson),
@@ -1135,7 +1178,10 @@ export class ConnectionService {
   private signatureFromPayload(payload: ImportConnectionPayload | ConnectionPayload) {
     return stringifySignature({
       provider: payload.provider,
-      vendor: payload.vendor ?? null,
+      thinkingDialect:
+        payload.thinkingDialect !== undefined
+          ? normalizeThinkingDialect(payload.thinkingDialect)
+          : resolveThinkingDialectForImport(payload as ImportConnectionPayload),
       baseUrl: payload.baseUrl,
       authType: payload.authType ?? 'bearer',
       headers: payload.headers ?? {},

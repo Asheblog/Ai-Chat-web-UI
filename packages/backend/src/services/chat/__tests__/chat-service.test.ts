@@ -30,6 +30,7 @@ const baseSession = {
     ownerUserId: null,
     displayName: 'openai',
     vendor: null,
+    thinkingDialect: 'off',
     azureApiVersion: null,
     tagsJson: '[]',
     defaultCapabilitiesJson: '{}',

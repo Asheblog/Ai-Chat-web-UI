@@ -280,7 +280,7 @@ export class ChatRequestBuilder {
       settings: systemSettings,
     })
 
-    this.applyReasoningOptions(baseRequestBody, reasoning, params.session.connection.vendor)
+    this.applyReasoningOptions(baseRequestBody, reasoning, params.session.connection.thinkingDialect)
     const customBodyResult = this.applyCustomBody(baseRequestBody, params.payload?.custom_body)
     baseRequestBody = customBodyResult.mergedBody
 
@@ -669,13 +669,17 @@ export class ChatRequestBuilder {
     }
   }
 
-  private applyReasoningOptions(body: any, reasoning: { enabled: boolean; effort: string }, vendor?: string | null) {
+  private applyReasoningOptions(
+    body: any,
+    reasoning: { enabled: boolean; effort: string },
+    thinkingDialect?: string | null,
+  ) {
     delete body.reasoning_effort
     delete body.thinking
     if (reasoning.enabled && reasoning.effort) {
       body.reasoning_effort = reasoning.effort
     }
-    if (vendor === 'deepseek' || vendor === 'openai_interleave') {
+    if (thinkingDialect === 'deepseek_compat') {
       body.thinking = { type: reasoning.enabled ? 'enabled' : 'disabled' }
     }
   }

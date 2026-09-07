@@ -11,6 +11,7 @@ const buildGroup = (overrides: Partial<ResolvedConnection> = {}): ResolvedConnec
   displayName: overrides.displayName ?? 'OpenAI',
   provider: 'openai',
   vendor: null,
+  thinkingDialect: 'off',
   baseUrl: 'https://api.example.com',
   enable: true,
   authType: 'bearer',

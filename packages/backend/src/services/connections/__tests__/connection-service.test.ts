@@ -10,6 +10,7 @@ const baseGroup = {
   displayName: 'OpenAI',
   provider: 'openai' as const,
   vendor: null,
+  thinkingDialect: 'off',
   baseUrl: 'https://api.openai.com/v1',
   enable: true,
   authType: 'bearer' as const,

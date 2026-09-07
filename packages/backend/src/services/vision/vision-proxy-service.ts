@@ -48,17 +48,17 @@ export function shouldSendVisionReasoningEffort(effort: string): boolean {
 /**
  * Apply transcription reasoning onto an openai-style chat body (before responses conversion)
  * google_genai: no thinking params (YAGNI).
- * Vendor thinking mirrors chat-request-builder (deepseek / openai_interleave).
+ * Thinking dialect mirrors chat-request-builder (deepseek_compat).
  */
 export function applyVisionReasoningOptions(
   body: Record<string, unknown>,
   config: Pick<VisionProxyConfig, 'reasoningEnabled' | 'reasoningEffort'>,
   provider: string,
-  vendor?: string | null,
+  thinkingDialect?: string | null,
 ): void {
   if (provider === 'google_genai') return
-  // Vendor thinking is set even when reasoning is off (enabled|disabled), like chat-request-builder.
-  if (vendor === 'deepseek' || vendor === 'openai_interleave') {
+  // Dialect thinking is set even when reasoning is off (enabled|disabled), like chat-request-builder.
+  if (thinkingDialect === 'deepseek_compat') {
     body.thinking = { type: config.reasoningEnabled ? 'enabled' : 'disabled' }
   }
   if (!config.reasoningEnabled) return
@@ -229,7 +229,7 @@ export class VisionProxyService {
     // openai-style: apply reasoning/thinking on chatBody before responses conversion
     // (convertChatCompletionsRequestToResponses keeps reasoning_effort→reasoning; strips thinking)
     if (provider !== 'google_genai') {
-      applyVisionReasoningOptions(chatBody, config, provider, connection.vendor)
+      applyVisionReasoningOptions(chatBody, config, provider, connection.thinkingDialect)
     }
     // 各 provider 请求体格式差异在此收敛。
     let body: Record<string, unknown>

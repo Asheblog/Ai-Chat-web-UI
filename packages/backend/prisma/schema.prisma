@@ -502,7 +502,8 @@ model ConnectionGroup {
   ownerUserId             Int?
   displayName             String
   provider                String // Active: 'openai' | 'openai_responses' | 'google_genai'; retired records remain historical.
-  vendor                  String?
+  vendor                  String? // retired; kept null after thinkingDialect migration
+  thinkingDialect         String  @default("off") @map("thinking_dialect") // 'off' | 'deepseek_compat'
   baseUrl                 String
   enable                  Boolean  @default(true)
   authType                String   @default("bearer") // 'bearer' | 'none' | 预留：'session' | 'system_oauth' | 'microsoft_entra_id'

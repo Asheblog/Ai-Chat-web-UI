@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
 import type { ApiResponse } from '../types'
+import { THINKING_DIALECTS } from '@aichat/shared'
 import { SUPPORTED_PROVIDERS } from '../utils/providers'
 import {
   ConnectionServiceError,
@@ -14,7 +15,7 @@ const capabilitySchema = z.object({
   image_generation: z.boolean().optional(),
 })
 
-const vendorEnum = z.enum(['deepseek', 'openai_interleave'])
+const thinkingDialectEnum = z.enum(THINKING_DIALECTS)
 
 const apiKeySchema = z.object({
   id: z.number().int().positive().optional(),
@@ -27,7 +28,7 @@ const apiKeySchema = z.object({
 const connectionSchema = z.object({
   displayName: z.string().trim().min(1),
   provider: z.enum(SUPPORTED_PROVIDERS),
-  vendor: vendorEnum.optional(),
+  thinkingDialect: thinkingDialectEnum.optional(),
   baseUrl: z.string().url(),
   authType: z.enum(['bearer', 'none', 'session', 'system_oauth']).optional().default('bearer'),
   headers: z.record(z.string()).optional(),
@@ -50,6 +51,8 @@ const importConnectionSchema = connectionSchema
   .extend({
     displayName: z.string().trim().min(1).optional(),
     apiKeys: z.array(importApiKeySchema).min(1),
+    /** Legacy export packages only; mapped to thinkingDialect then discarded. */
+    vendor: z.string().nullish(),
   })
 
 const importPayloadSchema = z.object({

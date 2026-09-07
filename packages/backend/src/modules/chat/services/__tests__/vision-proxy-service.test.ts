@@ -21,6 +21,7 @@ const mockResolvedGroup = (fields: Record<string, unknown>) => {
     displayName: 'test',
     enable: true,
     vendor: fields.vendor ?? null,
+    thinkingDialect: fields.thinkingDialect ?? 'off',
     tagsJson: '[]',
     defaultCapabilitiesJson: '{}',
     connectionType: 'external',
@@ -361,10 +362,10 @@ describe('VisionProxyService.transcribeImages', () => {
     })
   })
 
-  it('includes thinking enabled for deepseek vendor when reasoningEnabled', async () => {
+  it('includes thinking enabled for deepseek_compat dialect when reasoningEnabled', async () => {
     mockResolvedGroup({
       provider: 'openai',
-      vendor: 'deepseek',
+      thinkingDialect: 'deepseek_compat',
       baseUrl: 'https://api.example.com/v1',
       authType: 'bearer',
       secretVaultId: null,

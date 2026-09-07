@@ -316,7 +316,7 @@ describe('ChatRequestBuilder', () => {
     expect(prepared.baseRequestBody.temperature).toBe(1)
   })
 
-  it('adds thinking enabled for deepseek vendor when reasoning is on', async () => {
+  it('adds thinking enabled for deepseek_compat dialect when reasoning is on', async () => {
     const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
     prisma.message.findMany.mockResolvedValue([])
     prisma.systemSetting.findMany.mockResolvedValue([
@@ -332,7 +332,7 @@ describe('ChatRequestBuilder', () => {
       ...baseSession,
       connection: {
         ...baseSession.connection,
-        vendor: 'deepseek',
+        thinkingDialect: 'deepseek_compat',
       },
     }
 
@@ -348,7 +348,7 @@ describe('ChatRequestBuilder', () => {
     expect(prepared.reasoning.enabled).toBe(true)
   })
 
-  it('adds thinking disabled for openai_interleave vendor when reasoning is off', async () => {
+  it('adds thinking disabled for deepseek_compat dialect when reasoning is off', async () => {
     const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
     prisma.message.findMany.mockResolvedValue([])
     prisma.systemSetting.findMany.mockResolvedValue([
@@ -360,16 +360,16 @@ describe('ChatRequestBuilder', () => {
     resolveContextLimit.mockResolvedValue(4000)
     resolveCompletionLimit.mockResolvedValue(2048)
 
-    const interleaveSession = {
+    const dialectSession = {
       ...baseSession,
       connection: {
         ...baseSession.connection,
-        vendor: 'openai_interleave',
+        thinkingDialect: 'deepseek_compat',
       },
     }
 
     const prepared = await builder.prepare({
-      session: interleaveSession as any,
+      session: dialectSession as any,
       payload: { sessionId: 1, content: 'hello', reasoningEnabled: false } as any,
       content: 'hello',
       mode: 'stream',
@@ -380,7 +380,7 @@ describe('ChatRequestBuilder', () => {
     expect(prepared.reasoning.enabled).toBe(false)
   })
 
-  it('does not add thinking parameter for non-DeepSeek vendor', async () => {
+  it('does not add thinking parameter when thinkingDialect is off', async () => {
     const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
     prisma.message.findMany.mockResolvedValue([])
     prisma.systemSetting.findMany.mockResolvedValue([
