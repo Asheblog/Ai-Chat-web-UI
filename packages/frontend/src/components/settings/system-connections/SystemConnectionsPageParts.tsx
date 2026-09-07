@@ -23,11 +23,19 @@ export function Field({
 }
 
 export function HelperText({ provider }: { provider: string }) {
-  if (provider === "openai" || provider === "openai_responses") {
+  if (provider === "openai") {
     return (
       <p className="text-xs leading-5 text-muted-foreground">
         允许完整 Base URL。示例：OpenAI 使用 <span className="font-mono">https://api.openai.com/v1</span>，
         NewAPI 之类的兼容网关也建议填写到版本层。DeepSeek / SiliconFlow 等支持 Thinking 的端点可在下方开启兼容模式。
+      </p>
+    )
+  }
+  if (provider === "openai_responses") {
+    return (
+      <p className="text-xs leading-5 text-muted-foreground">
+        允许完整 Base URL。示例：OpenAI 使用 <span className="font-mono">https://api.openai.com/v1</span>，
+        NewAPI 之类的兼容网关也建议填写到版本层。
       </p>
     )
   }
