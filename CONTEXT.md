@@ -64,7 +64,8 @@
 
 ## 模型连接身份
 
-- **Supported Provider Protocol（受支持供应商协议）**：当前可配置和调用的模型协议，包括 OpenAI Chat Completions、OpenAI Responses 与 Google Generative AI；DeepSeek 与交错思考属于 OpenAI 协议下的供应商配置
+- **Supported Provider Protocol（受支持供应商协议）**：当前可配置和调用的模型协议，包括 OpenAI Chat Completions、OpenAI Responses 与 Google Generative AI
+- **Thinking Dialect（思考方言）**：OpenAI Chat Completions 连接组上是否向请求体注入厂商 `thinking` 控制参数；取值 `off` 或 `deepseek_compat`；与协议模板分离，不再用独立供应商配置面表达交错思考
 - **Retired Provider Connection（已停用协议连接）**：使用 Azure OpenAI 或 Ollama 专属协议的历史连接；保留连接身份、凭据与对话关联，但不参与连接管理、模型选择、导入或上游调用
 
 - **Connection Group（连接组）**：供应商端点的稳定配置单位，持有协议类型、Base URL、显示名、prefix 与默认能力；其主键不因 Key 增删而变化
