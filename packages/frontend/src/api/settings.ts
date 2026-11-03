@@ -134,6 +134,9 @@ export const updateSystemSettings = async (
   if (typeof rest.webSearchScope === 'string') patch.webSearchScope = rest.webSearchScope
   if (typeof rest.webSearchIncludeSummary === 'boolean') patch.webSearchIncludeSummary = rest.webSearchIncludeSummary
   if (typeof rest.webSearchIncludeRaw === 'boolean') patch.webSearchIncludeRaw = rest.webSearchIncludeRaw
+  if (typeof rest.webSearchDeepseekFetchEnable === 'boolean') {
+    patch.webSearchDeepseekFetchEnable = rest.webSearchDeepseekFetchEnable
+  }
   if (typeof rest.webSearchParallelMaxEngines === 'number') patch.webSearchParallelMaxEngines = rest.webSearchParallelMaxEngines
   if (typeof rest.webSearchParallelMaxQueriesPerCall === 'number') {
     patch.webSearchParallelMaxQueriesPerCall = rest.webSearchParallelMaxQueriesPerCall
@@ -163,6 +166,9 @@ export const updateSystemSettings = async (
   if (typeof rest.webSearchApiKeyBrave === 'string') patch.webSearchApiKeyBrave = rest.webSearchApiKeyBrave
   if (typeof rest.webSearchApiKeyMetaso === 'string') patch.webSearchApiKeyMetaso = rest.webSearchApiKeyMetaso
   if (typeof rest.webSearchApiKeyExa === 'string') patch.webSearchApiKeyExa = rest.webSearchApiKeyExa
+  if (typeof rest.webSearchApiKeyDeepseek === 'string') {
+    patch.webSearchApiKeyDeepseek = rest.webSearchApiKeyDeepseek
+  }
   if (typeof rest.taskTraceEnabled === 'boolean') patch.taskTraceEnabled = rest.taskTraceEnabled
   if (typeof rest.taskTraceDefaultOn === 'boolean') patch.taskTraceDefaultOn = rest.taskTraceDefaultOn
   if (typeof rest.taskTraceAdminOnly === 'boolean') patch.taskTraceAdminOnly = rest.taskTraceAdminOnly

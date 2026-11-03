@@ -116,6 +116,7 @@ app.route('/api/chat', createChatApi({
   },
   streamRoutes: {
     prisma: appContext.prisma,
+    secretVault: container.secretVault,
     chatService: container.chatService,
     chatRequestBuilder,
     reasoningCompatibilityService: container.reasoningCompatibilityService,

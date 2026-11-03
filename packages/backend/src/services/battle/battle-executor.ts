@@ -22,6 +22,8 @@ import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills, type RequestedSkillsPayl
 import { createLogger } from '../../utils/logger'
 import { computeCapabilities } from '../../utils/providers'
 import type { McpService } from '../../services/mcp/mcp-service'
+import type { SecretVaultService } from '../secret-vault'
+import { resolveDeepseekSearchSettings } from '../settings/deepseek-search-credentials'
 
 export interface BattleExecutionContext {
   checkRunCancelled: () => void
@@ -43,6 +45,7 @@ export interface BattleExecutionContext {
 }
 
 export interface BattleExecutorDeps {
+  secretVault?: SecretVaultService
   requestBuilder?: ChatRequestBuilder
   requester?: ProviderRequesterType
   mcpService?: McpService
@@ -105,12 +108,14 @@ export class BattleExecutor {
   private requestBuilder: ChatRequestBuilder
   private requester: ProviderRequesterType
   private mcpService?: McpService
+  private secretVault?: SecretVaultService
   private logger = createLogger('BattleExecutor')
 
   constructor(deps: BattleExecutorDeps = {}) {
     this.requestBuilder = deps.requestBuilder ?? new ChatRequestBuilder()
     this.requester = deps.requester ?? new ProviderRequester()
     this.mcpService = deps.mcpService
+    this.secretVault = deps.secretVault
   }
 
   async executeModel(params: {
@@ -129,9 +134,10 @@ export class BattleExecutor {
     const session = this.buildVirtualSession(resolved.connection, resolved.rawModelId)
     const requestedSkills = normalizeRequestedSkills(modelConfig.skills)
     const requestedSkillSet = new Set(requestedSkills.builtin)
-    const webSearchConfig = buildAgentWebSearchConfig(systemSettings)
+    const searchSettings = await resolveDeepseekSearchSettings(systemSettings, this.secretVault)
+    const webSearchConfig = buildAgentWebSearchConfig(searchSettings)
     const pythonConfig = buildAgentPythonToolConfig(systemSettings)
-    const urlReaderConfig = buildAgentUrlReaderConfig(systemSettings)
+    const urlReaderConfig = buildAgentUrlReaderConfig(searchSettings)
 
     const webSearchOverride = requestedSkills.overrides?.[BUILTIN_SKILL_SLUGS.WEB_SEARCH] || {}
     if (typeof webSearchOverride.scope === 'string') {
@@ -588,6 +594,8 @@ export class BattleExecutor {
               enableBrowser: toolFlags.urlReaderConfig.enableBrowser,
               browserExecutablePath: toolFlags.urlReaderConfig.browserExecutablePath,
               renderWaitMs: toolFlags.urlReaderConfig.renderWaitMs,
+              enableDeepseekFallback: toolFlags.urlReaderConfig.enableDeepseekFallback,
+              deepseekApiKey: toolFlags.urlReaderConfig.deepseekApiKey,
             }
           : null,
       },

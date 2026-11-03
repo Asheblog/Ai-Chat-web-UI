@@ -47,7 +47,14 @@ interface AutoReadEvidenceItem {
   error?: string
   errorCode?: UrlReadErrorCode
   httpStatus?: number
-  fallbackUsed: 'none' | 'search_snippet' | 'crawler' | 'browser' | 'document'
+  fallbackUsed:
+    | 'none'
+    | 'search_content'
+    | 'search_snippet'
+    | 'crawler'
+    | 'browser'
+    | 'deepseek_fetch'
+    | 'document'
   rank: number
 }
 
@@ -62,7 +69,7 @@ const DEFAULT_MODEL_SNIPPET_CHARS = 360
 const DEFAULT_MODEL_SUMMARY_CHARS = 3200
 const DEFAULT_MODEL_EVIDENCE_ITEMS = 2
 const DEFAULT_MODEL_EVIDENCE_ITEM_CHARS = 900
-const DEFAULT_PARALLEL_MAX_ENGINES = 4
+const DEFAULT_PARALLEL_MAX_ENGINES = 5
 const DEFAULT_PARALLEL_MAX_QUERIES = 2
 const DEFAULT_PARALLEL_TIMEOUT_MS = 12000
 
@@ -241,12 +248,15 @@ const buildBilingualQueries = (
   return Array.from(deduped.values()).slice(0, maxQueries)
 }
 
-const pickActiveEngines = (config: WebSearchHandlerConfig): string[] => {
+const pickActiveEngines = (config: WebSearchHandlerConfig, scope?: string): string[] => {
+  const normalizedScope = (scope || 'webpage').trim().toLowerCase()
+  const webOnly = normalizedScope !== 'webpage' && normalizedScope !== 'web'
   const order = Array.from(
     new Set(
       [...(config.engineOrder || []), ...(config.engines || [])]
         .map((item) => item.trim().toLowerCase())
-        .filter(Boolean),
+        .filter(Boolean)
+        .filter((engine) => !webOnly || engine !== 'deepseek'),
     ),
   )
   const withKeys = order.filter((engine) => Boolean(config.apiKeys?.[engine]))
@@ -254,7 +264,7 @@ const pickActiveEngines = (config: WebSearchHandlerConfig): string[] => {
     config.parallelMaxEngines,
     DEFAULT_PARALLEL_MAX_ENGINES,
     1,
-    4,
+    DEFAULT_PARALLEL_MAX_ENGINES,
   )
   return withKeys.slice(0, maxEngines)
 }
@@ -301,9 +311,9 @@ const HIGH_RISK_QUERY_RE = new RegExp(
 )
 
 const LANGUAGE_ENGINE_PRIORITY: Record<'zh' | 'en' | 'unknown', string[]> = {
-  zh: ['metaso', 'tavily', 'brave', 'exa'],
-  en: ['tavily', 'brave', 'exa', 'metaso'],
-  unknown: ['tavily', 'metaso', 'brave', 'exa'],
+  zh: ['metaso', 'deepseek', 'tavily', 'brave', 'exa'],
+  en: ['tavily', 'brave', 'exa', 'deepseek', 'metaso'],
+  unknown: ['tavily', 'metaso', 'deepseek', 'brave', 'exa'],
 }
 
 const MIN_OVERLAP_RATIO_FOR_STABLE = 0.25
@@ -571,7 +581,8 @@ const buildSummaryForModel = (
     }
     const title = item.title || item.url
     const extractionSuffix = item.fallbackUsed === 'crawler' ? '（爬虫回退）' : ''
-    lines.push(`${item.rank}. ${title}${extractionSuffix}`)
+    const reuseSuffix = item.fallbackUsed === 'search_content' ? '（搜索正文复用）' : ''
+    lines.push(`${item.rank}. ${title}${extractionSuffix}${reuseSuffix}`)
     lines.push(`   URL: ${item.url}`)
     if (item.excerpt) {
       lines.push(`   摘要: ${truncateText(item.excerpt, 360)}`)
@@ -732,8 +743,10 @@ export class WebSearchToolHandler implements IToolHandler {
     const requestedScope = typeof args.scope === 'string' ? args.scope.trim().toLowerCase() : ''
     const validScopes = ['webpage', 'image', 'document', 'paper', 'scholar', 'video', 'podcast']
     const effectiveScope = validScopes.includes(requestedScope) ? requestedScope : this.config.scope
+    const autoReadEnabledForSearch =
+      effectiveScope !== 'image' && this.config.autoReadAfterSearch !== false
     const expandedQueries = buildBilingualQueries(query, this.config)
-    const activeEngines = pickActiveEngines(this.config)
+    const activeEngines = pickActiveEngines(this.config, effectiveScope)
     const routingPlan = buildLanguageAwareSearchPlan({
       originalQuery: query,
       expandedQueries,
@@ -886,9 +899,11 @@ export class WebSearchToolHandler implements IToolHandler {
         scope: effectiveScope,
         includeSummary: this.config.includeSummary,
         includeRawContent: this.config.includeRawContent,
+        deepseekNeedContent: autoReadEnabledForSearch,
         timeoutMs: parallelTimeoutMs,
         parallelMaxEngines: this.config.parallelMaxEngines,
         mergeStrategy: this.config.mergeStrategy,
+        signal: context.requestSignal,
       })
       emitSearchTaskResultEvents(searchResult.tasks, 'initial')
 
@@ -932,9 +947,11 @@ export class WebSearchToolHandler implements IToolHandler {
             scope: effectiveScope,
             includeSummary: this.config.includeSummary,
             includeRawContent: this.config.includeRawContent,
+            deepseekNeedContent: autoReadEnabledForSearch,
             timeoutMs: parallelTimeoutMs,
             parallelMaxEngines: this.config.parallelMaxEngines,
             mergeStrategy: this.config.mergeStrategy,
+            signal: context.requestSignal,
           })
           emitSearchTaskResultEvents(escalationResult.tasks, 'escalation')
           searchResult = mergeWebSearchParallelResults(
@@ -953,7 +970,7 @@ export class WebSearchToolHandler implements IToolHandler {
       }
 
       const hits = searchResult.hits
-      const autoReadEnabled = effectiveScope !== 'image' && this.config.autoReadAfterSearch !== false
+      const autoReadEnabled = autoReadEnabledForSearch
       const autoReadTopK = effectiveScope === 'image' ? 0 : clampAutoReadTopK(this.config.autoReadTopK)
       const autoReadParallelism = clampPositiveInt(
         this.config.autoReadParallelism,
@@ -975,12 +992,62 @@ export class WebSearchToolHandler implements IToolHandler {
       )
 
       const autoReadTargets = autoReadEnabled ? dedupeSearchUrls(hits, autoReadTopK) : []
+      const deepseekFetchEnabled =
+        Boolean(this.config.deepseekFetchEnabled) && Boolean(this.config.apiKeys?.deepseek)
+      const effectiveScopeForRead = (effectiveScope || '').trim().toLowerCase()
+      const searchContentByUrl = new Map(
+        hits
+          .filter(
+            (hit) =>
+              typeof hit.content === 'string' &&
+              hit.content.trim().length > 0 &&
+              Array.isArray(hit.sourceEngines) &&
+              hit.sourceEngines.includes('deepseek'),
+          )
+          .map((hit) => [hit.url, hit.content as string]),
+      )
       const autoReadEvidence = await mapWithConcurrency(
         autoReadTargets,
         autoReadParallelism,
         async (targetUrl, index): Promise<AutoReadEvidenceItem> => {
           const rank = index + 1
           const readCallId = `${callId}:read:${rank}`
+          const reusableSearchContent = searchContentByUrl.get(targetUrl)
+          const usesSearchContent =
+            Boolean(reusableSearchContent) && (effectiveScopeForRead === 'webpage' || !effectiveScopeForRead)
+          if (usesSearchContent) {
+            const content = truncateText(reusableSearchContent as string, DEFAULT_MODEL_EVIDENCE_CHARS)
+            const hit = hits.find((item) => item.url === targetUrl)
+            context.sendToolEvent({
+              id: readCallId,
+              tool: 'read_url',
+              stage: 'result',
+              query: targetUrl,
+              summary: '已复用搜索结果正文（未重复抓取）',
+              url: targetUrl,
+              title: hit?.title,
+              excerpt: truncateText(hit?.snippet || '', DEFAULT_MODEL_SNIPPET_CHARS),
+              details: {
+                groupId: callId,
+                url: targetUrl,
+                rank,
+                autoTriggered: true,
+                parentTool: 'web_search',
+                parentCallId: callId,
+                taskType: 'read_url',
+                fallbackUsed: 'search_content',
+                engine: 'search_result_content',
+              },
+            })
+            return {
+              url: targetUrl,
+              title: hit?.title,
+              excerpt: truncateText(hit?.snippet || '', DEFAULT_MODEL_SNIPPET_CHARS),
+              content,
+              fallbackUsed: 'search_content',
+              rank,
+            }
+          }
           context.sendToolEvent({
             id: readCallId,
             tool: 'read_url',
@@ -1002,6 +1069,9 @@ export class WebSearchToolHandler implements IToolHandler {
           const readResult = await readUrlContent(targetUrl, {
             timeout: autoReadTimeoutMs,
             maxContentLength: autoReadMaxContentLength,
+            enableDeepseekFallback: deepseekFetchEnabled,
+            deepseekApiKey: this.config.apiKeys?.deepseek,
+            signal: context.requestSignal,
           })
           if (readResult.error) {
             const fallbackSnippet =
@@ -1137,6 +1207,7 @@ export class WebSearchToolHandler implements IToolHandler {
             fallbackUsed:
               readResult.fallbackUsed === 'crawler' ||
               readResult.fallbackUsed === 'browser' ||
+              readResult.fallbackUsed === 'deepseek_fetch' ||
               readResult.fallbackUsed === 'document'
                 ? readResult.fallbackUsed
                 : 'none',

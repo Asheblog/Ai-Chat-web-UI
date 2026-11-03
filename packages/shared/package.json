@@ -26,7 +26,8 @@
     "./settings-codec": "./dist/settings-codec.js",
     "./sse-reader": "./dist/sse-reader.js",
     "./stream-metrics": "./dist/stream-metrics.js",
-    "./thinking-dialect": "./dist/thinking-dialect.js"
+    "./thinking-dialect": "./dist/thinking-dialect.js",
+    "./web-search-contract": "./dist/web-search-contract.js"
   },
   "files": [
     "dist"

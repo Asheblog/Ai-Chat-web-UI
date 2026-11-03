@@ -27,6 +27,7 @@ describe('container provider requester wiring', () => {
     expect(BattleExecutor).toHaveBeenLastCalledWith(expect.objectContaining({
       requestBuilder: container.chatRequestBuilder,
       requester: container.providerRequester,
+      secretVault: container.secretVault,
     }))
   })
 

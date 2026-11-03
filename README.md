@@ -9,7 +9,7 @@
 ## ✨ 功能亮点
 
 - **多模型统一接入**：OpenAI 兼容、OpenAI Responses、Google Gemini 三种协议，DeepSeek / GLM / Qwen / GPT 等模型一次配置、随时切换，上下文窗口与能力自动识别
-- **原生工具链**：联网搜索（Tavily / Brave / Exa / Metaso，并行多引擎）、网页读取（本地多引擎 + 浏览器渲染 fallback）、Python 沙箱执行、深度研究（计划确认 → 举证 → `export_pdf`）、RAG 知识库与文档解析
+- **原生工具链**：联网搜索（Tavily / Brave / Exa / Metaso / DeepSeek，并行多引擎）、网页读取（本地多引擎 + 浏览器渲染 + 可选 DeepSeek Fetch 回退）、Python 沙箱执行、深度研究（计划确认 → 举证 → `export_pdf`）、RAG 知识库与文档解析
 - **图片转写代理（Vision Transcription Proxy）**：DeepSeek、GLM 等纯文本模型也能「看图」——发送图片时自动转交管理员指定的识图模型转写为文字描述并注入主模型；工具流 / 自动转写两种模式自动判定，转写结果持久化复用
 - **Skill 插件系统**：内置 Skill + GitHub 第三方 Skill 的安装、审批、激活、会话绑定与审计；可执行型第三方 Skill 强制沙箱隔离、能力按声明授权
 - **Workspace Agent**：会话级 Docker 隔离沙箱，内置受管 Python 运行时（缺库自动安装）、文件读写、Git 克隆；并发槽位排队、超时自动杀容器回收
@@ -88,6 +88,16 @@ Windows PowerShell 用 `Copy-Item .env.example .env` 代替 `cp`。
 ---
 
 ## 📖 更多文档
+
+### DeepSeek 联网搜索
+
+管理员进入「系统设置 → 搜索与知识库 → 联网搜索」，勾选 DeepSeek 并保存独立的搜索 API Key。密钥使用 Secret Vault 加密保存；留空保持原值，「清除已保存 Key」显式删除。聊天、深度研究与 Battle 复用同一搜索工具配置。
+
+DeepSeek 支持网页检索；图片检索会跳过该引擎。开启「返回原文」后，可直接复用搜索返回的有效正文，减少重复读页。Search 与 Fetch 调用均可能产生供应商费用。Fetch 回退默认关闭，仅显式开启且本地网页读取失败时调用，亦可用于独立网页读取。
+
+也可在服务端环境中设置 `WEB_SEARCH_AGENT_ENABLE=true`、`WEB_SEARCH_ENABLED_ENGINES=deepseek`、`WEB_SEARCH_API_KEY_DEEPSEEK`；可选 `WEB_SEARCH_DEEPSEEK_FETCH_ENABLE=true`、`WEB_SEARCH_INCLUDE_RAW=true`。管理页设置优先；清除已保存 Key 后仍可使用环境变量 Key。默认并行引擎数为 3，`WEB_SEARCH_PARALLEL_MAX_ENGINES` 最大为 5。无需数据库迁移，直接更新代码或镜像；新增能力默认关闭。
+
+协议依据：[DeepSeek 搜索指南](https://api-docs.deepseek.com/zh-cn/guides/search/)。
 
 - 完整部署指南（环境变量、资源配置、安全清单、升级与迁移）：[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 - 架构说明：[docs/Architecture.md](docs/Architecture.md)

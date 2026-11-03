@@ -158,13 +158,13 @@ describe("SearchKnowledgePage", () => {
     render(<SearchKnowledgePage />)
     const card = getCard("联网搜索")
 
-    expect(within(card).queryByText("并行引擎上限（1-3）")).not.toBeInTheDocument()
+    expect(within(card).queryByText("并行引擎上限（1-5）")).not.toBeInTheDocument()
     expect(within(card).queryByText("自动双语检索")).not.toBeInTheDocument()
     expect(within(card).queryByText("Metaso 默认搜索范围")).not.toBeInTheDocument()
 
     await userEvent.click(within(card).getByRole("button", { name: "更多参数" }))
 
-    expect(within(card).getByText("并行引擎上限（1-3）")).toBeInTheDocument()
+    expect(within(card).getByText("并行引擎上限（1-5）")).toBeInTheDocument()
     expect(within(card).getByText("自动双语检索")).toBeInTheDocument()
     expect(within(card).getByText("Metaso 默认搜索范围")).toBeInTheDocument()
   })
@@ -282,6 +282,156 @@ describe("SearchKnowledgePage", () => {
     })
     expect(updateSpy.mock.calls[0][0]).toEqual(
       expect.objectContaining({ webSearchAgentEnable: false }),
+    )
+  })
+
+  test("DeepSeek 默认不启用；启用后可排序，默认关闭 Fetch 且空 Key 不提交", async () => {
+    mockSystemSettings({
+      ...searchKnowledgeSettings,
+      webSearchHasApiKeyDeepseek: true,
+    })
+    render(<SearchKnowledgePage />)
+    const card = getCard("联网搜索")
+    const deepseek = within(card).getByRole("checkbox", { name: /DeepSeek/ })
+
+    expect(deepseek).not.toBeChecked()
+    expect(within(card).getByRole("switch", { name: "启用 DeepSeek Fetch 付费回退" })).toBeInTheDocument()
+    expect(within(card).getByRole("switch", { name: "启用 DeepSeek Fetch 付费回退" })).not.toBeChecked()
+    expect(within(card).getByText(/不依赖上方联网搜索勾选/)).toBeInTheDocument()
+    await userEvent.click(deepseek)
+    expect(deepseek).toBeChecked()
+
+    const keyInput = within(card).getByLabelText("DeepSeek API Key")
+    expect(keyInput).toHaveValue("")
+    expect(within(card).getByRole("switch", { name: "启用 DeepSeek Fetch 付费回退" })).not.toBeChecked()
+    expect(within(card).getByText(/调用会产生 DeepSeek API 费用/)).toBeInTheDocument()
+    expect(within(card).getByText(/支持网页搜索，不支持图片检索/)).toBeInTheDocument()
+    expect(within(card).queryByText(/site_icon/)).not.toBeInTheDocument()
+    expect(within(card).getByText(/将继续使用服务器密钥/)).toBeInTheDocument()
+
+    await userEvent.click(within(card).getByRole("button", { name: "上移 DeepSeek" }))
+    expect(within(card).getByText("#1 DeepSeek")).toBeInTheDocument()
+    expect(within(card).getByText("#2 Tavily")).toBeInTheDocument()
+
+    await userEvent.click(within(card).getByRole("button", { name: "保存联网搜索设置" }))
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledTimes(1)
+    })
+    const payload = updateSpy.mock.calls[0][0]
+    expect(payload).toEqual(
+      expect.objectContaining({
+        webSearchEnabledEngines: ["tavily", "deepseek"],
+        webSearchEngineOrder: ["deepseek", "tavily"],
+        webSearchDeepseekFetchEnable: false,
+      }),
+    )
+    expect(payload).not.toHaveProperty("webSearchApiKeyDeepseek")
+  })
+
+  test("DeepSeek Key 留空保留原值，显式清除提交空字符串并重置草稿", async () => {
+    mockSystemSettings({
+      ...searchKnowledgeSettings,
+      webSearchHasApiKeyDeepseek: true,
+    })
+    render(<SearchKnowledgePage />)
+    const card = getCard("联网搜索")
+    const keyInput = within(card).getByLabelText("DeepSeek API Key")
+
+    await userEvent.type(keyInput, "  sk-deepseek-test  ")
+    await userEvent.click(within(card).getByRole("button", { name: "保存联网搜索设置" }))
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledTimes(1)
+    })
+    expect(updateSpy.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ webSearchApiKeyDeepseek: "sk-deepseek-test" }),
+    )
+    await waitFor(() => expect(keyInput).toHaveValue(""))
+
+    await userEvent.click(within(card).getByRole("button", { name: "清除 DeepSeek Key" }))
+    expect(within(card).getByText("保存后将删除 DeepSeek Key。")).toBeInTheDocument()
+    await userEvent.click(within(card).getByRole("button", { name: "保存联网搜索设置" }))
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledTimes(2)
+    })
+    expect(updateSpy.mock.calls[1][0]).toEqual(
+      expect.objectContaining({ webSearchApiKeyDeepseek: "" }),
+    )
+  })
+
+  test("DeepSeek Fetch 开启保存 true；并行引擎上限允许 5，读页并发仍限 4", async () => {
+    mockSystemSettings({
+      ...searchKnowledgeSettings,
+      webSearchEnabledEngines: ["tavily", "brave", "metaso", "exa", "deepseek"],
+      webSearchEngineOrder: ["tavily", "brave", "metaso", "exa", "deepseek"],
+      webSearchHasApiKeyDeepseek: true,
+      webSearchParallelMaxEngines: 3,
+    })
+    render(<SearchKnowledgePage />)
+    const card = getCard("联网搜索")
+
+    await userEvent.click(within(card).getByRole("switch", { name: "启用 DeepSeek Fetch 付费回退" }))
+    await userEvent.click(within(card).getByRole("button", { name: "更多参数" }))
+
+    const parallelInput = within(card).getByLabelText("并行引擎上限（1-5）")
+    fireEvent.change(parallelInput, { target: { value: "5" } })
+    expect(within(card).getByLabelText("自动网页读取并发（1-4）")).toBeInTheDocument()
+
+    await userEvent.click(within(card).getByRole("button", { name: "保存联网搜索设置" }))
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledTimes(1)
+    })
+    expect(updateSpy.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        webSearchDeepseekFetchEnable: true,
+        webSearchParallelMaxEngines: 5,
+        webSearchAutoReadParallelism: 2,
+      }),
+    )
+  })
+
+  test("仅启用 DeepSeek 时可获取网页原文并保存", async () => {
+    mockSystemSettings({
+      ...searchKnowledgeSettings,
+      webSearchEnabledEngines: ["deepseek"],
+      webSearchEngineOrder: ["deepseek"],
+    })
+    render(<SearchKnowledgePage />)
+    const card = getCard("联网搜索")
+
+    await userEvent.click(within(card).getByRole("button", { name: "更多参数" }))
+    expect(within(card).queryByText("Metaso 默认搜索范围")).not.toBeInTheDocument()
+    const rawContentSwitch = within(card).getByRole("switch", { name: "获取网页原文" })
+    expect(rawContentSwitch).not.toBeChecked()
+    await userEvent.click(rawContentSwitch)
+    await userEvent.click(within(card).getByRole("button", { name: "保存联网搜索设置" }))
+
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledTimes(1)
+    })
+    expect(updateSpy.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        webSearchEnabledEngines: ["deepseek"],
+        webSearchIncludeRaw: true,
+      }),
+    )
+  })
+
+  test("DeepSeek 未勾选时 Fetch 仍可独立开启并保存", async () => {
+    render(<SearchKnowledgePage />)
+    const card = getCard("联网搜索")
+
+    expect(within(card).getByRole("checkbox", { name: /DeepSeek/ })).not.toBeChecked()
+    await userEvent.click(within(card).getByRole("switch", { name: "启用 DeepSeek Fetch 付费回退" }))
+    await userEvent.click(within(card).getByRole("button", { name: "保存联网搜索设置" }))
+
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledTimes(1)
+    })
+    expect(updateSpy.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        webSearchEnabledEngines: ["tavily"],
+        webSearchDeepseekFetchEnable: true,
+      }),
     )
   })
 

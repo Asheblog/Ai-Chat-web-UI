@@ -6,13 +6,18 @@
 
 import { JSDOM } from 'jsdom'
 import { Readability } from '@mozilla/readability'
-import { isIP } from 'node:net'
+import { isDisallowedHostname } from './host-safety'
 import path from 'node:path'
 import { BackendLogger as log } from './logger'
 import {
   readPlaywrightChromiumExecutablePath,
   resolveBrowserExecutablePath as resolveSharedBrowserExecutablePath,
 } from './browser-executable'
+import {
+  DeepSeekToolError,
+  runDeepSeekFetch,
+} from './deepseek-tools'
+import { combineAbortSignals } from './abort-signal'
 
 export type UrlReadErrorCode =
   | 'INVALID_URL'
@@ -28,6 +33,7 @@ export type UrlReadErrorCode =
   | 'EMPTY_CONTENT'
   | 'PARSE_EMPTY'
   | 'TIMEOUT'
+  | 'CANCELLED'
   | 'FETCH_FAILED'
   | 'BODY_TOO_LARGE'
   | 'BROWSER_UNAVAILABLE'
@@ -37,6 +43,7 @@ export type UrlReadEngineName =
   | 'native'
   | 'crawler'
   | 'browser'
+  | 'deepseek_fetch'
   | 'image'
   | 'text'
   | 'feed'
@@ -75,7 +82,7 @@ export interface UrlReadResult {
   error?: string
   errorCode?: UrlReadErrorCode
   httpStatus?: number
-  fallbackUsed?: 'none' | 'crawler' | 'browser' | 'document' | 'google_cache' | 'wayback'
+  fallbackUsed?: 'none' | 'crawler' | 'browser' | 'deepseek_fetch' | 'document' | 'google_cache' | 'wayback'
   engine?: UrlReadEngineName
   attempts?: UrlReadAttempt[]
   finalUrl?: string
@@ -94,6 +101,9 @@ export interface UrlReaderOptions {
   enableBrowser?: boolean
   browserExecutablePath?: string
   renderWaitMs?: number
+  enableDeepseekFallback?: boolean
+  deepseekApiKey?: string
+  signal?: AbortSignal
 }
 
 export interface UrlReadImage {
@@ -130,6 +140,39 @@ const JS_CHALLENGE_PATTERNS: RegExp[] = [
   /verify you are human/i,
 ]
 
+interface UrlReadBudget {
+  signal: AbortSignal
+  remainingMs: () => number
+  stopError: () => { message: string; errorCode: 'CANCELLED' | 'TIMEOUT' } | undefined
+}
+
+const withAbortSignal = <T>(operation: () => Promise<T>, signal?: AbortSignal | null): Promise<T> => {
+  if (signal?.aborted) return Promise.reject(signal.reason)
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal?.reason)
+    signal?.addEventListener('abort', onAbort, { once: true })
+    const cleanup = () => signal?.removeEventListener('abort', onAbort)
+    try {
+      operation().then(
+        (value) => { cleanup(); resolve(value) },
+        (error) => { cleanup(); reject(error) },
+      )
+    } catch (error) {
+      cleanup()
+      reject(error)
+    }
+  })
+}
+
+const waitWithSignal = async (ms: number, signal?: AbortSignal): Promise<void> => {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await withAbortSignal(() => new Promise<void>((resolve) => { timer = setTimeout(resolve, ms) }), signal)
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 interface UrlTransformRule {
   id: 'medium_to_scribe' | 'github_blob_to_raw'
   pattern: RegExp
@@ -160,53 +203,6 @@ const URL_TRANSFORM_RULES: UrlTransformRule[] = [
   },
 ]
 
-const isPrivateIPv4 = (ip: string): boolean => {
-  const parts = ip.split('.').map((item) => Number.parseInt(item, 10))
-  if (parts.length !== 4 || parts.some((item) => !Number.isFinite(item) || item < 0 || item > 255)) {
-    return false
-  }
-
-  const [a, b] = parts
-
-  return (
-    a === 0 ||
-    a === 10 ||
-    a === 127 ||
-    (a === 100 && b >= 64 && b <= 127) ||
-    (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) ||
-    (a === 198 && (b === 18 || b === 19))
-  )
-}
-
-const isPrivateIPv6 = (ip: string): boolean => {
-  const normalized = ip.toLowerCase()
-  if (normalized === '::' || normalized === '::1') return true
-  if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true
-  if (/^fe[89ab]/.test(normalized)) return true
-  if (normalized.startsWith('::ffff:')) {
-    const mapped = normalized.slice('::ffff:'.length)
-    if (isIP(mapped) === 4 && isPrivateIPv4(mapped)) return true
-  }
-  return false
-}
-
-const isDisallowedHost = (hostname: string): boolean => {
-  const normalized = hostname.toLowerCase()
-  if (
-    normalized === 'localhost' ||
-    normalized.endsWith('.local') ||
-    normalized.endsWith('.internal')
-  ) {
-    return true
-  }
-
-  const ipVersion = isIP(normalized)
-  if (ipVersion === 4) return isPrivateIPv4(normalized)
-  if (ipVersion === 6) return isPrivateIPv6(normalized)
-  return false
-}
 
 const applyUrlTransformRules = (
   url: string,
@@ -242,7 +238,7 @@ export function validatePublicHttpUrl(url: string): string {
     const parsed = new URL(normalized)
     const hostname = parsed.hostname
 
-    if (isDisallowedHost(hostname)) {
+    if (isDisallowedHostname(hostname)) {
       throw new Error('Access to local/internal URLs is not allowed for security reasons')
     }
 
@@ -277,10 +273,11 @@ function classifyHttpErrorCode(status: number, bodySnippet: string): UrlReadErro
 }
 
 function classifyThrownError(error: unknown): { message: string; errorCode: UrlReadErrorCode } {
+  if (error && typeof error === 'object' && 'name' in error &&
+    (error.name === 'AbortError' || error.name === 'TimeoutError')) {
+    return { message: 'Request timed out', errorCode: 'TIMEOUT' }
+  }
   if (error instanceof Error) {
-    if (error.name === 'AbortError') {
-      return { message: error.message, errorCode: 'TIMEOUT' }
-    }
     const message = error.message || 'Unknown error occurred'
     if (message.includes('Invalid URL format')) return { message, errorCode: 'INVALID_URL' }
     if (message.includes('not allowed')) return { message, errorCode: 'DISALLOWED_URL' }
@@ -518,6 +515,7 @@ const parseContentLength = (response: Response): number | undefined =>
 async function readResponseBufferWithLimit(
   response: Response,
   maxBodyBytes: number,
+  signal?: AbortSignal,
 ): Promise<Buffer> {
   const declaredLength = parseContentLength(response)
   if (typeof declaredLength === 'number' && declaredLength > maxBodyBytes) {
@@ -525,7 +523,7 @@ async function readResponseBufferWithLimit(
   }
 
   if (!response.body || typeof response.body.getReader !== 'function') {
-    const buffer = Buffer.from(await response.arrayBuffer())
+    const buffer = Buffer.from(await withAbortSignal(() => response.arrayBuffer(), signal))
     if (buffer.length > maxBodyBytes) {
       throw new Error(`Response body is too large: ${buffer.length} bytes exceeds ${maxBodyBytes}`)
     }
@@ -535,25 +533,27 @@ async function readResponseBufferWithLimit(
   const reader = response.body.getReader()
   const chunks: Buffer[] = []
   let total = 0
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    if (!value) continue
-    const chunk = Buffer.from(value)
-    total += chunk.length
-    if (total > maxBodyBytes) {
-      try {
-        await reader.cancel()
-      } catch {
-        // ignore cancel failures
+  const cancel = () => { void reader.cancel(signal?.reason).catch(() => undefined) }
+  signal?.addEventListener('abort', cancel, { once: true })
+  try {
+    while (true) {
+      const { done, value } = await withAbortSignal(() => reader.read(), signal)
+      signal?.throwIfAborted()
+      if (done) break
+      if (!value) continue
+      const chunk = Buffer.from(value)
+      total += chunk.length
+      if (total > maxBodyBytes) {
+        await reader.cancel().catch(() => undefined)
+        throw new Error(`Response body is too large: ${total} bytes exceeds ${maxBodyBytes}`)
       }
-      throw new Error(`Response body is too large: ${total} bytes exceeds ${maxBodyBytes}`)
+      chunks.push(chunk)
     }
-    chunks.push(chunk)
+    return Buffer.concat(chunks, total)
+  } finally {
+    signal?.removeEventListener('abort', cancel)
+    reader.releaseLock()
   }
-
-  return Buffer.concat(chunks, total)
 }
 
 const extractCharsetFromContentType = (contentType: string): string | undefined => {
@@ -659,14 +659,16 @@ async function fetchPageBody(
   timeout: number,
   headers: Record<string, string>,
   maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
+  externalSignal?: AbortSignal,
 ): Promise<{ response: Response; body: string; buffer?: Buffer; finalUrl: string }> {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeout)
+  const combined = combineAbortSignals(controller.signal, externalSignal)
 
   try {
     const { response, finalUrl } = await fetchWithValidatedRedirectsDetailed(url, {
       headers,
-      signal: controller.signal,
+      signal: combined.signal,
       redirect: 'manual',
     })
     const contentType = response.headers.get('content-type') || ''
@@ -684,7 +686,7 @@ async function fetchPageBody(
     if (!shouldReadBody) {
       return { response, body: '', finalUrl }
     }
-    const buffer = await readResponseBufferWithLimit(response, maxBodyBytes)
+    const buffer = await readResponseBufferWithLimit(response, maxBodyBytes, combined.signal)
     const shouldDecodeText =
       !response.ok ||
       isHtmlContentType(contentType) ||
@@ -695,6 +697,7 @@ async function fetchPageBody(
     return { response, body, buffer, finalUrl }
   } finally {
     clearTimeout(timeoutId)
+    combined.cleanup()
   }
 }
 
@@ -707,10 +710,10 @@ export async function fetchWithValidatedRedirectsDetailed(
   let redirects = 0
 
   while (true) {
-    const response = await fetchImpl(currentUrl, {
+    const response = await withAbortSignal(() => fetchImpl(currentUrl, {
       ...init,
       redirect: 'manual',
-    })
+    }), init.signal)
     if (!REDIRECT_STATUS_CODES.has(response.status)) {
       return { response, finalUrl: currentUrl }
     }
@@ -1333,9 +1336,10 @@ const resolveBrowserExecutablePath = (explicitPath?: string): string | undefined
 async function renderHtmlWithLocalBrowser(
   url: string,
   opts: {
-    timeout: number
     waitMs?: number
     executablePath?: string
+    signal: AbortSignal
+    remainingMs: () => number
   },
 ): Promise<{ html: string; finalUrl: string; title: string }> {
   const executablePath = resolveBrowserExecutablePath(opts.executablePath)
@@ -1350,9 +1354,10 @@ async function renderHtmlWithLocalBrowser(
     throw new Error('Local browser renderer is unavailable: playwright-core is not installed')
   }
 
-  const browser = await imported.chromium.launch({
+  const launchOptions = {
     executablePath,
     headless: true,
+    timeout: opts.remainingMs(),
     args: [
       '--disable-dev-shm-usage',
       '--disable-gpu',
@@ -1363,37 +1368,51 @@ async function renderHtmlWithLocalBrowser(
       '--no-first-run',
       '--no-sandbox',
     ],
+  }
+  const launch = () => imported.chromium.launch(launchOptions).then(async (browser) => {
+    if (opts.signal.aborted) {
+      await browser.close().catch(() => undefined)
+      opts.signal.throwIfAborted()
+    }
+    return browser
   })
+  const browser = await withAbortSignal(launch, opts.signal)
 
   try {
-    const context = await browser.newContext({
+    const context = await withAbortSignal(() => browser.newContext({
       userAgent: CRAWLER_USER_AGENT,
       locale: 'zh-CN',
       viewport: { width: 1366, height: 900 },
       ignoreHTTPSErrors: true,
-    })
+    }).then(async (context) => {
+      if (opts.signal.aborted) {
+        await context.close().catch(() => undefined)
+        opts.signal.throwIfAborted()
+      }
+      return context
+    }), opts.signal)
     try {
-      const page = await context.newPage()
-      await page.route('**/*', async (route) => {
+      const page = await withAbortSignal(() => context.newPage(), opts.signal)
+      await withAbortSignal(() => page.route('**/*', async (route) => {
         const type = route.request().resourceType()
         if (type === 'font' || type === 'media') {
           await route.abort().catch(() => undefined)
           return
         }
         await route.continue().catch(() => undefined)
-      })
-      await page.goto(url, {
+      }), opts.signal)
+      await withAbortSignal(() => page.goto(url, {
         waitUntil: 'domcontentloaded',
-        timeout: opts.timeout,
-      })
-      await page.waitForLoadState('networkidle', {
-        timeout: Math.min(8000, Math.max(1000, Math.floor(opts.timeout / 3))),
-      }).catch(() => undefined)
+        timeout: opts.remainingMs(),
+      }), opts.signal)
+      await withAbortSignal(() => page.waitForLoadState('networkidle', {
+        timeout: Math.min(8000, opts.remainingMs()),
+      }), opts.signal).catch(() => undefined)
       const waitMs = clampBrowserWaitMs(opts.waitMs)
       if (waitMs > 0) {
-        await page.waitForTimeout(waitMs)
+        await waitWithSignal(waitMs, opts.signal)
       }
-      await page.evaluate(`
+      await withAbortSignal(() => page.evaluate(`
         (async () => {
           const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
           const height = Math.max(document.body?.scrollHeight || 0, document.documentElement?.scrollHeight || 0);
@@ -1404,12 +1423,12 @@ async function renderHtmlWithLocalBrowser(
           }
           window.scrollTo(0, 0);
         })()
-      `).catch(() => undefined)
+      `), opts.signal).catch(() => undefined)
 
       return {
-        html: await page.content(),
+        html: await withAbortSignal(() => page.content(), opts.signal),
         finalUrl: page.url(),
-        title: await page.title().catch(() => ''),
+        title: await withAbortSignal(() => page.title(), opts.signal).catch(() => ''),
       }
     } finally {
       await context.close().catch(() => undefined)
@@ -1421,15 +1440,16 @@ async function renderHtmlWithLocalBrowser(
 
 async function tryBrowserRenderedRead(
   url: string,
-  timeout: number,
+  budget: UrlReadBudget,
   maxContentLength: number,
   opts: UrlReaderOptions,
 ): Promise<UrlReadResult | null> {
   try {
     const rendered = await renderHtmlWithLocalBrowser(url, {
-      timeout,
       waitMs: opts.renderWaitMs,
       executablePath: opts.browserExecutablePath,
+      signal: budget.signal,
+      remainingMs: budget.remainingMs,
     })
     const htmlForParse = trimHtmlForParsing(rendered.html)
     const readabilityResult = extractReadabilityResultFromHtml(htmlForParse, rendered.finalUrl, maxContentLength)
@@ -1466,6 +1486,7 @@ async function fetchGoogleCache(
       timeout,
       buildCrawlerHeaders(),
       DEFAULT_MAX_BODY_BYTES,
+      options.signal,
     )
 
     if (!response.ok || !body || body.length < CRAWLER_MIN_TEXT_LENGTH) return null
@@ -1503,49 +1524,48 @@ async function fetchWaybackMachine(
   options: UrlReaderOptions,
 ): Promise<UrlReadResult | null> {
   const { timeout = WAYBACK_TIMEOUT, maxContentLength = DEFAULT_MAX_CONTENT_LENGTH } = options
+  const deadline = Date.now() + timeout
 
   try {
     const checkUrl = `https://archive.org/wayback/available?url=${encodeURIComponent(url)}`
 
     const checkController = new AbortController()
-    const checkTimeoutId = setTimeout(() => checkController.abort(), WAYBACK_CHECK_TIMEOUT)
+    const checkTimeoutId = setTimeout(() => checkController.abort(), Math.min(timeout, WAYBACK_CHECK_TIMEOUT))
+    const checkSignal = combineAbortSignals(checkController.signal, options.signal)
 
-    let checkResponse: Response
+    let availability: {
+      archived_snapshots?: { closest?: { available?: boolean; url?: string; status?: string } }
+    }
     try {
-      checkResponse = await fetch(checkUrl, {
+      const checkResponse = await withAbortSignal(() => fetch(checkUrl, {
         headers: {
           'User-Agent': CRAWLER_USER_AGENT,
           Accept: 'application/json',
         },
-        signal: checkController.signal,
-      })
+        signal: checkSignal.signal,
+      }), checkSignal.signal)
+      if (!checkResponse.ok) return null
+      availability = await withAbortSignal(() => checkResponse.json(), checkSignal.signal) as typeof availability
     } finally {
       clearTimeout(checkTimeoutId)
-    }
-
-    if (!checkResponse.ok) return null
-
-    const availability = (await checkResponse.json()) as {
-      archived_snapshots?: {
-        closest?: {
-          available?: boolean
-          url?: string
-          status?: string
-        }
-      }
+      checkSignal.cleanup()
     }
 
     const snapshot = availability?.archived_snapshots?.closest
     if (!snapshot?.available || !snapshot.url) return null
 
     // Wayback Machine has rate limits; brief pause before fetching snapshot
-    await new Promise((resolve) => setTimeout(resolve, WAYBACK_RATE_LIMIT_DELAY_MS))
+    await waitWithSignal(WAYBACK_RATE_LIMIT_DELAY_MS, options.signal)
+    options.signal?.throwIfAborted()
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) return null
 
     const { response, body, finalUrl } = await fetchPageBody(
       snapshot.url,
-      timeout,
+      remaining,
       buildCrawlerHeaders(),
       DEFAULT_MAX_BODY_BYTES,
+      options.signal,
     )
 
     if (!response.ok || !body || body.length < CRAWLER_MIN_TEXT_LENGTH) return null
@@ -1597,18 +1617,20 @@ const buildSameOriginFeedCandidates = (url: string): string[] => {
 
 async function trySameOriginFeedFallback(
   url: string,
-  timeout: number,
+  budget: UrlReadBudget,
   maxContentLength: number,
   maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
 ): Promise<UrlReadResult | null> {
   const candidates = buildSameOriginFeedCandidates(url)
   for (const feedUrl of candidates) {
+    if (budget.stopError()) return null
     try {
       const { response, body, finalUrl } = await fetchPageBody(
         feedUrl,
-        timeout,
+        budget.remainingMs(),
         buildCrawlerHeaders(),
         maxBodyBytes,
+        budget.signal,
       )
       if (!response.ok || !body) continue
       const contentType = response.headers.get('content-type') || ''
@@ -1624,12 +1646,19 @@ async function trySameOriginFeedFallback(
 
 async function tryCrawlerRefetch(
   url: string,
-  timeout: number,
+  budget: UrlReadBudget,
   maxContentLength: number,
   maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
 ): Promise<UrlReadResult | null> {
+  if (budget.stopError()) return null
   try {
-    const { response, body, finalUrl } = await fetchPageBody(url, timeout, buildCrawlerHeaders(), maxBodyBytes)
+    const { response, body, finalUrl } = await fetchPageBody(
+      url,
+      budget.remainingMs(),
+      buildCrawlerHeaders(),
+      maxBodyBytes,
+      budget.signal,
+    )
     if (!response.ok || !body || detectJsChallenge(body)) {
       return null
     }
@@ -1649,9 +1678,10 @@ async function tryCrawlerRefetch(
 /**
  * 使用 @mozilla/readability 提取网页正文内容
  */
-export async function readUrlContent(
+async function readUrlContentLocal(
   url: string,
-  opts: UrlReaderOptions = {}
+  opts: UrlReaderOptions,
+  budget: UrlReadBudget,
 ): Promise<UrlReadResult> {
   let validatedUrl = url.trim()
   let fetchUrl = validatedUrl
@@ -1671,11 +1701,13 @@ export async function readUrlContent(
     status: UrlReadAttempt['status'],
     extra: Omit<UrlReadAttempt, 'engine' | 'status' | 'durationMs'> = {},
   ) => {
+    const stopped = budget.stopError()
     attempts.push({
       engine,
       status,
       durationMs: Date.now() - startedAt,
       ...extra,
+      ...(stopped ? { status: 'error', error: stopped.message, errorCode: stopped.errorCode } : {}),
     })
   }
 
@@ -1688,13 +1720,15 @@ export async function readUrlContent(
     url: validatedUrl,
     content: '',
     textContent: '',
-    error: message,
-    errorCode,
+    error: budget.stopError()?.message || message,
+    errorCode: budget.stopError()?.errorCode || errorCode,
     ...(typeof httpStatus === 'number' ? { httpStatus } : {}),
     attempts: [...attempts],
   })
 
   const toPublicResult = (result: UrlReadResult): UrlReadResult => {
+    const stopped = budget.stopError()
+    if (stopped) return buildErrorResult(stopped.message, stopped.errorCode)
     const resultFinalUrl = result.finalUrl || result.url
     return {
       ...result,
@@ -1705,9 +1739,9 @@ export async function readUrlContent(
   }
 
   const tryBrowserFallback = async (reason: string): Promise<UrlReadResult | null> => {
-    if (!enableBrowser) return null
+    if (!enableBrowser || budget.stopError()) return null
     const browserStartedAt = Date.now()
-    const browserResult = await tryBrowserRenderedRead(fetchUrl, timeout, maxContentLength, opts)
+    const browserResult = await tryBrowserRenderedRead(fetchUrl, budget, maxContentLength, opts)
     if (browserResult) {
       recordAttempt(browserStartedAt, 'browser', 'success', {
         finalUrl: browserResult.finalUrl || browserResult.url,
@@ -1725,8 +1759,9 @@ export async function readUrlContent(
   }
 
   const tryFeedFallback = async (reason: string): Promise<UrlReadResult | null> => {
+    if (budget.stopError()) return null
     const feedStartedAt = Date.now()
-    const feedResult = await trySameOriginFeedFallback(validatedUrl, timeout, maxContentLength, maxBodyBytes)
+    const feedResult = await trySameOriginFeedFallback(validatedUrl, budget, maxContentLength, maxBodyBytes)
     if (feedResult) {
       recordAttempt(feedStartedAt, 'feed', 'success', {
         finalUrl: feedResult.finalUrl || feedResult.url,
@@ -1742,11 +1777,13 @@ export async function readUrlContent(
   }
 
   const tryCachedFallbacks = async (reason: string): Promise<UrlReadResult | null> => {
+    if (budget.stopError()) return null
     const googleCacheStartedAt = Date.now()
     const googleCacheResult = await fetchGoogleCache(validatedUrl, {
-      timeout: GOOGLE_CACHE_TIMEOUT,
+      timeout: Math.min(GOOGLE_CACHE_TIMEOUT, budget.remainingMs()),
       maxContentLength,
       userAgent: CRAWLER_USER_AGENT,
+      signal: budget.signal,
     })
     if (googleCacheResult) {
       recordAttempt(googleCacheStartedAt, 'google_cache', 'success', {
@@ -1760,10 +1797,12 @@ export async function readUrlContent(
       error: `Google Cache did not return readable content after ${reason}`,
     })
 
+    if (budget.stopError()) return null
     const waybackStartedAt = Date.now()
     const waybackResult = await fetchWaybackMachine(validatedUrl, {
-      timeout: WAYBACK_TIMEOUT,
+      timeout: Math.min(WAYBACK_TIMEOUT, budget.remainingMs()),
       maxContentLength,
+      signal: budget.signal,
     })
     if (waybackResult) {
       recordAttempt(waybackStartedAt, 'wayback', 'success', {
@@ -1781,6 +1820,8 @@ export async function readUrlContent(
   }
 
   try {
+    const stopped = budget.stopError()
+    if (stopped) return buildErrorResult(stopped.message, stopped.errorCode)
     validatedUrl = validatePublicHttpUrl(url)
     const transformed = applyUrlTransformRules(validatedUrl)
     fetchUrl = transformed.fetchUrl
@@ -1798,13 +1839,18 @@ export async function readUrlContent(
     const nativeStartedAt = Date.now()
     const { response, body: responseBody, buffer: responseBuffer, finalUrl } = await fetchPageBody(
       fetchUrl,
-      timeout,
+      budget.remainingMs(),
       buildPrimaryHeaders(userAgent),
       maxBodyBytes,
+      opts.signal,
     )
+    const stoppedAfterFetch = budget.stopError()
+    if (stoppedAfterFetch) return buildErrorResult(stoppedAfterFetch.message, stoppedAfterFetch.errorCode)
     const status = response.status
     const statusText = response.statusText || 'Request failed'
     const bodySnippet = responseBody.slice(0, 2000)
+    const contentType = response.headers.get('content-type') || ''
+    const normalizedContentType = sanitizeContentType(contentType)
 
     if (!response.ok) {
       const errorCode = classifyHttpErrorCode(status, bodySnippet)
@@ -1814,11 +1860,12 @@ export async function readUrlContent(
         error: `HTTP ${status}: ${statusText}`,
         errorCode: finalCode,
         httpStatus: status,
+        contentType: normalizedContentType,
         finalUrl,
       })
       if (!blockedByChallenge && status !== 404) {
         const crawlerStartedAt = Date.now()
-        const crawlerResult = await tryCrawlerRefetch(fetchUrl, timeout, maxContentLength, maxBodyBytes)
+        const crawlerResult = await tryCrawlerRefetch(fetchUrl, budget, maxContentLength, maxBodyBytes)
         if (crawlerResult) {
           recordAttempt(crawlerStartedAt, 'crawler', 'success', {
             finalUrl: crawlerResult.finalUrl || crawlerResult.url,
@@ -1851,8 +1898,6 @@ export async function readUrlContent(
       return buildErrorResult(message, finalCode, status)
     }
 
-    const contentType = response.headers.get('content-type') || ''
-    const normalizedContentType = sanitizeContentType(contentType)
     if (isImageContentType(contentType)) {
       recordAttempt(nativeStartedAt, 'image', 'success', {
         contentType: normalizedContentType,
@@ -1908,6 +1953,9 @@ export async function readUrlContent(
     }
 
     if (!isHtmlContentType(contentType)) {
+      if (opts.signal?.aborted) {
+        return buildErrorResult('Request was cancelled', 'CANCELLED')
+      }
       if (isFeedContentType(contentType) || /^\s*<(rss|feed)\b/i.test(responseBody)) {
         const feedResult =
           contentType.toLowerCase().includes('json')
@@ -1993,7 +2041,7 @@ export async function readUrlContent(
         finalUrl,
       })
       const crawlerStartedAt = Date.now()
-      const crawlerResult = await tryCrawlerRefetch(fetchUrl, timeout, maxContentLength, maxBodyBytes)
+      const crawlerResult = await tryCrawlerRefetch(fetchUrl, budget, maxContentLength, maxBodyBytes)
       if (crawlerResult) {
         recordAttempt(crawlerStartedAt, 'crawler', 'success', {
           finalUrl: crawlerResult.finalUrl || crawlerResult.url,
@@ -2026,7 +2074,7 @@ export async function readUrlContent(
         finalUrl,
       })
       const crawlerStartedAt = Date.now()
-      const crawlerResult = await tryCrawlerRefetch(fetchUrl, timeout, maxContentLength, maxBodyBytes)
+      const crawlerResult = await tryCrawlerRefetch(fetchUrl, budget, maxContentLength, maxBodyBytes)
       if (crawlerResult) {
         recordAttempt(crawlerStartedAt, 'crawler', 'success', {
           finalUrl: crawlerResult.finalUrl || crawlerResult.url,
@@ -2094,7 +2142,7 @@ export async function readUrlContent(
     }
 
     const crawlerStartedAt = Date.now()
-    const crawlerRefetchResult = await tryCrawlerRefetch(fetchUrl, timeout, maxContentLength, maxBodyBytes)
+    const crawlerRefetchResult = await tryCrawlerRefetch(fetchUrl, budget, maxContentLength, maxBodyBytes)
     if (crawlerRefetchResult) {
       recordAttempt(crawlerStartedAt, 'crawler', 'success', {
         finalUrl: crawlerRefetchResult.finalUrl || crawlerRefetchResult.url,
@@ -2132,11 +2180,12 @@ export async function readUrlContent(
   } catch (error) {
     const classified = classifyThrownError(error)
     const shouldTryCrawlerFallback =
+      !budget.stopError() && classified.errorCode !== 'TIMEOUT' && classified.errorCode !== 'CANCELLED' &&
       classified.errorCode !== 'DISALLOWED_URL' && classified.errorCode !== 'INVALID_URL'
 
     if (shouldTryCrawlerFallback) {
       const crawlerStartedAt = Date.now()
-      const crawlerResult = await tryCrawlerRefetch(fetchUrl, timeout, maxContentLength, maxBodyBytes)
+      const crawlerResult = await tryCrawlerRefetch(fetchUrl, budget, maxContentLength, maxBodyBytes)
       if (crawlerResult) {
         recordAttempt(crawlerStartedAt, 'crawler', 'success', {
           finalUrl: crawlerResult.finalUrl || crawlerResult.url,
@@ -2166,6 +2215,146 @@ export async function readUrlContent(
     log.error('url reader: failed', { url: validatedUrl, error: message, errorCode: classified.errorCode })
 
     return buildErrorResult(message, classified.errorCode)
+  }
+}
+
+const isUnsupportedFallbackContentType = (contentType: string): boolean => {
+  const normalized = (contentType || '').toLowerCase()
+  if (!normalized) return false
+  return (
+    isPdfContentType(normalized) ||
+    isImageContentType(normalized) ||
+    (!isHtmlContentType(normalized) &&
+      !isTextLikeContentType(normalized) &&
+      !isFeedContentType(normalized) &&
+      !isCsvContentType(normalized))
+  )
+}
+
+const isNonPageResource = (result: UrlReadResult, url: string): boolean => {
+  if (result.resourceType === 'image' || result.resourceType === 'pdf') return true
+  if (
+    (result.attempts || []).some(
+      (attempt) =>
+        attempt.engine === 'pdf' ||
+        attempt.engine === 'image' ||
+        attempt.engine === 'docx' ||
+        attempt.engine === 'csv' ||
+        (attempt.contentType && isUnsupportedFallbackContentType(attempt.contentType)),
+    )
+  ) {
+    return true
+  }
+  const contentType = (result.contentType || '').toLowerCase()
+  if (contentType && isUnsupportedFallbackContentType(contentType)) {
+    return true
+  }
+  return (
+    /\.(?:png|jpe?g|gif|webp|svg|bmp|avif|pdf)(?:[?#]|$)/i.test(url) ||
+    result.contentFormat === 'pdf' ||
+    result.contentFormat === 'image'
+  )
+}
+
+const isEligibleForDeepSeekFallback = (result: UrlReadResult, url: string): boolean => {
+  if (!result.error) return false
+  if (result.errorCode === 'DISALLOWED_URL' || result.errorCode === 'INVALID_URL') return false
+  return !isNonPageResource(result, url)
+}
+
+export async function readUrlContent(
+  url: string,
+  opts: UrlReaderOptions = {}
+): Promise<UrlReadResult> {
+  const timeout = Number.isFinite(opts.timeout) && (opts.timeout as number) > 0
+    ? Math.max(1, Math.floor(opts.timeout as number)) : DEFAULT_TIMEOUT
+  const deadline = Date.now() + timeout
+  const deadlineController = new AbortController()
+  const expire = () => deadlineController.abort(new DOMException('URL read deadline exceeded', 'TimeoutError'))
+  const timeoutId = setTimeout(expire, timeout)
+  const combined = combineAbortSignals(opts.signal, deadlineController.signal)
+  const remainingMs = () => {
+    const remaining = Math.max(0, deadline - Date.now())
+    if (remaining === 0 && !deadlineController.signal.aborted) expire()
+    return remaining
+  }
+  const budget: UrlReadBudget = {
+    signal: combined.signal,
+    remainingMs,
+    stopError: () => {
+      if (opts.signal?.aborted) return { message: 'Request was cancelled', errorCode: 'CANCELLED' }
+      if (remainingMs() === 0 || deadlineController.signal.aborted) {
+        return { message: `Request timeout after ${timeout / 1000} seconds`, errorCode: 'TIMEOUT' }
+      }
+      return undefined
+    },
+  }
+  const stoppedResult = (result: UrlReadResult): UrlReadResult => {
+    const stopped = budget.stopError()
+    return stopped ? { ...result, content: '', textContent: '', error: stopped.message, errorCode: stopped.errorCode } : result
+  }
+  try {
+    if (budget.stopError()) {
+      return stoppedResult({ title: '', url: url.trim(), content: '', textContent: '', attempts: [] })
+    }
+    const localResult = await readUrlContentLocal(url, { ...opts, timeout, signal: budget.signal }, budget)
+    const apiKey = (opts.deepseekApiKey || '').trim()
+    if (budget.stopError() || !opts.enableDeepseekFallback || !apiKey ||
+      localResult.errorCode === 'TIMEOUT' || localResult.errorCode === 'CANCELLED' ||
+      !isEligibleForDeepSeekFallback(localResult, url)) {
+      return stoppedResult(localResult)
+    }
+
+    const startedAt = Date.now()
+    try {
+      const fetched = await withAbortSignal(() => runDeepSeekFetch(localResult.url || url, {
+        apiKey,
+        signal: budget.signal,
+        timeoutMs: budget.remainingMs(),
+      }), budget.signal)
+      const content = normalizeTextContent(fetched.content, opts.maxContentLength || DEFAULT_MAX_CONTENT_LENGTH)
+      return stoppedResult({
+        title: fetched.title,
+        url: localResult.url || url,
+        finalUrl: localResult.url || url,
+        content: '',
+        textContent: content,
+        resourceType: 'page',
+        excerpt: buildExcerpt(content),
+        wordCount: countWords(content),
+        fallbackUsed: 'deepseek_fetch',
+        engine: 'deepseek_fetch',
+        contentFormat: 'markdown',
+        confidence: 0.7,
+        attempts: [
+          ...(localResult.attempts || []),
+          { engine: 'deepseek_fetch', status: 'success', durationMs: Date.now() - startedAt },
+        ],
+      })
+    } catch (error) {
+      const stopped = budget.stopError()
+      const toolCode = error instanceof DeepSeekToolError ? error.code : undefined
+      const terminalCode = stopped?.errorCode || (toolCode === 'TIMEOUT' || toolCode === 'CANCELLED' ? toolCode : undefined)
+      const message = stopped?.message || (error instanceof DeepSeekToolError
+        ? error.message : 'DeepSeek fetch failed before receiving a readable page')
+      return {
+        ...localResult,
+        ...(terminalCode ? { error: message, errorCode: terminalCode } : {}),
+        attempts: [
+          ...(localResult.attempts || []),
+          {
+            engine: 'deepseek_fetch',
+            status: 'error',
+            durationMs: Date.now() - startedAt,
+            error: message,
+            errorCode: terminalCode || (error instanceof DeepSeekToolError ? 'FETCH_FAILED' : 'UNKNOWN'),
+          },
+        ],
+      }
+    }
+  } finally {
+    clearTimeout(timeoutId)
+    combined.cleanup()
   }
 }
 
@@ -2235,6 +2424,8 @@ export function formatUrlContentForModel(
     parts.push(`- **提取方式**: 爬虫回退`)
   } else if (result.fallbackUsed === 'browser') {
     parts.push(`- **提取方式**: 本地浏览器渲染`)
+  } else if (result.fallbackUsed === 'deepseek_fetch') {
+    parts.push(`- **提取方式**: DeepSeek 网页抓取`)
   } else if (result.fallbackUsed === 'document') {
     parts.push(`- **提取方式**: ${result.engine || '文档/结构化内容'} 引擎`)
   } else if (result.fallbackUsed === 'google_cache') {

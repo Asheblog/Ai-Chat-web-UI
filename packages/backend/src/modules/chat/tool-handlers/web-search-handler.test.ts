@@ -1,4 +1,6 @@
 import type { WebSearchParallelResult } from '../../../utils/web-search'
+import { DEEPSEEK_SEARCH_ENDPOINT } from '../../../utils/deepseek-tools'
+import { WebSearchToolHandler } from './web-search-handler'
 import {
   buildLanguageAwareSearchPlan,
   evaluateSearchEscalation,
@@ -26,7 +28,179 @@ describe('formatAssessedImagesForModel', () => {
   })
 })
 
+describe('WebSearchToolHandler DeepSeek integration', () => {
+  const originalFetch = global.fetch
+
+  afterEach(() => {
+    global.fetch = originalFetch
+    jest.restoreAllMocks()
+  })
+
+  const createContext = (signal?: AbortSignal) => ({
+    sessionId: 1,
+    actorIdentifier: 'user:test',
+    actorUserId: 1,
+    messageId: 10,
+    emitReasoning: jest.fn(),
+    sendToolEvent: jest.fn(),
+    requestSignal: signal,
+  })
+
+  const createConfig = (overrides: Record<string, unknown> = {}) => ({
+    enabled: true,
+    engines: ['deepseek'],
+    engineOrder: ['deepseek'],
+    apiKeys: { deepseek: 'ds-key' },
+    resultLimit: 5,
+    domains: [],
+    scope: 'webpage',
+    autoBilingual: false,
+    autoReadAfterSearch: true,
+    autoReadTopK: 1,
+    parallelMaxEngines: 1,
+    ...overrides,
+  })
+
+  it('reuses valid search content for auto-read evidence without fetching the page again', async () => {
+    const body = '搜索返回的正文内容。'.repeat(40)
+    const fetchMock = jest.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe(DEEPSEEK_SEARCH_ENDPOINT)
+      return new Response(
+        JSON.stringify({
+          results: [
+            {
+              title: 'Reusable',
+              url: 'https://example.com/reusable',
+              snippet: 'short',
+              summary: 'summary',
+              content: body,
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    }) as jest.MockedFunction<typeof fetch>
+    global.fetch = fetchMock
+
+    const handler = new WebSearchToolHandler(createConfig() as any)
+    const result = await handler.handle(
+      { id: 'call_ds', function: { name: 'web_search', arguments: '{}' } },
+      { query: 'DeepSeek 测试' },
+      createContext() as any,
+    )
+
+    const payload = JSON.parse(String(result.message.content))
+    expect(payload.autoReadEvidence[0].content).toContain('搜索返回的正文内容')
+    expect(payload.autoReadEvidence[0].fallbackUsed).toBe('search_content')
+    expect(payload.autoReadEvidence[0].error).toBeUndefined()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads the page when search content is empty and forwards the DeepSeek Fetch config', async () => {
+    const urlReaderModule = require('../../../utils/url-reader')
+    const readSpy = jest.spyOn(urlReaderModule, 'readUrlContent').mockResolvedValue({
+      title: 'Read',
+      url: 'https://example.com/empty',
+      content: '',
+      textContent: '本地读取正文',
+      resourceType: 'page',
+      fallbackUsed: 'none',
+      attempts: [],
+    })
+    global.fetch = jest.fn(async () =>
+      new Response(
+        JSON.stringify({
+          results: [
+            { title: 'Empty', url: 'https://example.com/empty', snippet: 's', summary: '', content: '' },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    ) as typeof fetch
+
+    const handler = new WebSearchToolHandler(
+      createConfig({ deepseekFetchEnabled: true, apiKeys: { deepseek: 'ds-key' } }) as any,
+    )
+    await handler.handle(
+      { id: 'call_empty', function: { name: 'web_search', arguments: '{}' } },
+      { query: 'DeepSeek 空正文' },
+      createContext() as any,
+    )
+
+    expect(readSpy).toHaveBeenCalledWith(
+      'https://example.com/empty',
+      expect.objectContaining({
+        enableDeepseekFallback: true,
+        deepseekApiKey: 'ds-key',
+      }),
+    )
+  })
+
+  it('does not call upstream when the request signal is already aborted', async () => {
+    const fetchMock = jest.fn() as jest.MockedFunction<typeof fetch>
+    global.fetch = fetchMock
+    const controller = new AbortController()
+    controller.abort()
+
+    const handler = new WebSearchToolHandler(createConfig() as any)
+    await handler.handle(
+      { id: 'call_abort', function: { name: 'web_search', arguments: '{}' } },
+      { query: 'DeepSeek 取消' },
+      createContext(controller.signal) as any,
+    )
+
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('skips DeepSeek for non-webpage scopes instead of treating it as a generic page engine', async () => {
+    const fetchMock = jest.fn() as jest.MockedFunction<typeof fetch>
+    global.fetch = fetchMock
+
+    const handler = new WebSearchToolHandler(
+      createConfig({
+        engines: ['deepseek', 'tavily'],
+        engineOrder: ['deepseek', 'tavily'],
+        apiKeys: { deepseek: 'ds-key', tavily: 'tv-key' },
+        parallelMaxEngines: 5,
+      }) as any,
+    )
+    const result = await handler.handle(
+      { id: 'call_scope', function: { name: 'web_search', arguments: '{}' } },
+      { query: '图片搜索', scope: 'image' },
+      createContext() as any,
+    )
+
+    const payload = JSON.parse(String(result.message.content))
+    expect(payload.engines).toEqual(['tavily'])
+    expect(payload.error).toBeUndefined()
+  })
+})
+
 describe('buildLanguageAwareSearchPlan', () => {
+  it('includes DeepSeek in the primary Chinese plan when all five engines are active', () => {
+    const plan = buildLanguageAwareSearchPlan({
+      originalQuery: '国产模型 架构 对比',
+      expandedQueries: [{ query: '国产模型 架构 对比', queryLanguage: 'zh' }],
+      activeEngines: ['deepseek', 'tavily', 'brave', 'metaso', 'exa'],
+      engineOrder: ['deepseek', 'tavily', 'brave', 'metaso', 'exa'],
+    })
+
+    expect(plan.queryPlans[0].engines).toEqual(['metaso', 'deepseek'])
+    expect(plan.fallbackEngines).toEqual(['tavily', 'brave', 'exa'])
+  })
+
+  it('honors an explicit DeepSeek locale preference over the default language ranking', () => {
+    const plan = buildLanguageAwareSearchPlan({
+      originalQuery: 'model architecture comparison',
+      expandedQueries: [{ query: 'model architecture comparison', queryLanguage: 'en' }],
+      activeEngines: ['deepseek', 'tavily', 'brave', 'metaso', 'exa'],
+      engineOrder: ['tavily', 'brave', 'metaso', 'exa', 'deepseek'],
+      localeRouting: { en: ['deepseek', 'tavily'] },
+    })
+
+    expect(plan.queryPlans[0].engines).toEqual(['deepseek', 'tavily'])
+  })
+
   it('prioritizes metaso for Chinese query and keeps fallback engines', () => {
     const plan = buildLanguageAwareSearchPlan({
       originalQuery: 'AI 芯片 架构 对比',

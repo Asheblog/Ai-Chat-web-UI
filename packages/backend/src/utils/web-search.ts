@@ -1,4 +1,7 @@
 import { BackendLogger as log } from './logger'
+import { WEB_SEARCH_ENGINE_IDS, type WebSearchEngine } from '@aichat/shared/web-search-contract'
+import { runDeepSeekSearch } from './deepseek-tools'
+import { combineAbortSignals } from './abort-signal'
 
 export type WebSearchQueryLanguage = 'zh' | 'en' | 'unknown'
 
@@ -26,6 +29,7 @@ export interface WebSearchOptions {
   scope?: string
   includeSummary?: boolean
   includeRawContent?: boolean
+  deepseekNeedContent?: boolean
   signal?: AbortSignal
 }
 
@@ -65,9 +69,11 @@ export interface WebSearchParallelOptions {
   scope?: string
   includeSummary?: boolean
   includeRawContent?: boolean
+  deepseekNeedContent?: boolean
   timeoutMs?: number
   parallelMaxEngines?: number
   mergeStrategy?: 'hybrid_score_v1' | string
+  signal?: AbortSignal
 }
 
 export interface WebSearchParallelResult {
@@ -77,8 +83,8 @@ export interface WebSearchParallelResult {
 
 const DEFAULT_LIMIT = 4
 const DEFAULT_PARALLEL_TIMEOUT_MS = 12_000
-const SUPPORTED_ENGINES = ['tavily', 'brave', 'metaso', 'exa'] as const
-type SupportedSearchEngine = (typeof SUPPORTED_ENGINES)[number]
+const SUPPORTED_ENGINES = WEB_SEARCH_ENGINE_IDS
+type SupportedSearchEngine = WebSearchEngine
 export const METASO_SCOPE_WHITELIST = new Set(['webpage', 'document', 'paper', 'scholar', 'image', 'video', 'podcast'])
 
 const clampLimit = (value?: number) => {
@@ -92,7 +98,7 @@ const normalizeDomains = (domains?: string[]) =>
 const normalizeEngine = (value: string) => value.trim().toLowerCase()
 
 const isSupportedEngine = (engine: string): engine is SupportedSearchEngine =>
-  SUPPORTED_ENGINES.includes(engine as SupportedSearchEngine)
+  (SUPPORTED_ENGINES as readonly string[]).includes(engine)
 
 const looksLikeImageUrl = (value: string): boolean =>
   /^https?:\/\/.+\.(?:png|jpe?g|gif|webp|svg|bmp|avif)(?:[?#].*)?$/i.test(value)
@@ -563,6 +569,18 @@ export const runWebSearch = async (query: string, opts: WebSearchOptions): Promi
       return runMetasoSearch(query, opts)
     case 'exa':
       return runExaSearch(query, opts)
+    case 'deepseek':
+      if (isImageScopeOption(opts.scope)) {
+        throw new Error('DeepSeek web search does not support image scope')
+      }
+      return runDeepSeekSearch(query, {
+        apiKey: opts.apiKey,
+        limit: opts.limit,
+        domains: opts.domains,
+        scope: opts.scope,
+        includeRawContent: Boolean(opts.includeRawContent || opts.deepseekNeedContent),
+        signal: opts.signal,
+      })
     default:
       throw new Error(`Unsupported web search engine: ${engine || 'unknown'}`)
   }
@@ -647,7 +665,13 @@ export const runWebSearchParallel = async (
   const engineCandidates = Array.from(
     new Set((opts.engines || []).map((engine) => normalizeEngine(engine)).filter(Boolean))
   ).filter(isSupportedEngine)
-  const maxEngines = Math.max(1, Math.min(4, Math.floor(opts.parallelMaxEngines || engineCandidates.length || 1)))
+  const maxEngines = Math.max(
+    1,
+    Math.min(
+      SUPPORTED_ENGINES.length,
+      Math.floor(opts.parallelMaxEngines || engineCandidates.length || 1),
+    ),
+  )
   const engineOrderRaw = Array.from(
     new Set((opts.engineOrder || []).map((engine) => normalizeEngine(engine)).filter(Boolean))
   ).filter(isSupportedEngine)
@@ -742,6 +766,7 @@ export const runWebSearchParallel = async (
 
       const abortController = new AbortController()
       const timeoutId = setTimeout(() => abortController.abort(), timeoutMs)
+      const combinedSignal = combineAbortSignals(abortController.signal, opts.signal)
       try {
         const hits = await runWebSearch(task.query, {
           engine: task.engine,
@@ -752,7 +777,8 @@ export const runWebSearchParallel = async (
           scope: opts.scope,
           includeSummary: opts.includeSummary,
           includeRawContent: opts.includeRawContent,
-          signal: abortController.signal,
+          deepseekNeedContent: opts.deepseekNeedContent,
+          signal: combinedSignal.signal,
         })
 
         const normalizedHits = hits
@@ -780,6 +806,7 @@ export const runWebSearchParallel = async (
         }
       } finally {
         clearTimeout(timeoutId)
+        combinedSignal.cleanup()
       }
     }),
   )

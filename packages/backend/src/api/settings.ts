@@ -13,6 +13,7 @@ import {
   type PythonRuntimeService,
 } from '../services/python-runtime'
 import { RAG_SYSTEM_SETTINGS_KEYS } from '@aichat/shared'
+import { WEB_SEARCH_ENGINE_IDS } from '@aichat/shared/web-search-contract'
 import type { VisionProxyService } from '../services/vision/vision-proxy-service'
 import {
   ImageTranscriptionProbeService,
@@ -174,18 +175,20 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
     model_access_default_anonymous: z.enum(['allow', 'deny']).optional(),
     model_access_default_user: z.enum(['allow', 'deny']).optional(),
     web_search_agent_enable: z.boolean().optional(),
-    web_search_enabled_engines: z.array(z.enum(['tavily', 'brave', 'metaso', 'exa'])).min(1).max(4).optional(),
-    web_search_engine_order: z.array(z.enum(['tavily', 'brave', 'metaso', 'exa'])).min(1).max(4).optional(),
+    web_search_enabled_engines: z.array(z.enum(WEB_SEARCH_ENGINE_IDS)).min(1).max(WEB_SEARCH_ENGINE_IDS.length).optional(),
+    web_search_engine_order: z.array(z.enum(WEB_SEARCH_ENGINE_IDS)).min(1).max(WEB_SEARCH_ENGINE_IDS.length).optional(),
     web_search_api_key_tavily: z.string().optional(),
     web_search_api_key_brave: z.string().optional(),
     web_search_api_key_metaso: z.string().optional(),
     web_search_api_key_exa: z.string().optional(),
+    web_search_api_key_deepseek: z.string().optional(),
+    web_search_deepseek_fetch_enable: z.boolean().optional(),
     web_search_result_limit: z.number().int().min(1).max(10).optional(),
     web_search_domain_filter: z.array(z.string().min(1)).optional(),
     web_search_scope: z.enum(['webpage', 'document', 'paper', 'image', 'video', 'podcast']).optional(),
     web_search_include_summary: z.boolean().optional(),
     web_search_include_raw: z.boolean().optional(),
-    web_search_parallel_max_engines: z.number().int().min(1).max(4).optional(),
+    web_search_parallel_max_engines: z.number().int().min(1).max(WEB_SEARCH_ENGINE_IDS.length).optional(),
     web_search_parallel_max_queries_per_call: z.number().int().min(1).max(3).optional(),
     web_search_parallel_timeout_ms: z.number().int().min(1000).max(120000).optional(),
     web_search_parallel_merge_strategy: z.enum(['hybrid_score_v1']).optional(),

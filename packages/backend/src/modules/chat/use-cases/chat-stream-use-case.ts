@@ -107,6 +107,8 @@ import {
 import { ProviderStreamEngine } from './stream/provider-stream-engine';
 import { StreamPersistenceSink } from './stream/persistence-sink';
 import { SSE_HEADERS } from '../../../http/sse';
+import type { SecretVaultService } from '../../../services/secret-vault';
+import { resolveDeepseekSearchSettings } from '../../../services/settings/deepseek-search-credentials';
 
 type SendMessagePayload = z.infer<typeof sendMessageSchema>
 type ValidatedJsonRequest<T> = Context['req'] & {
@@ -115,6 +117,7 @@ type ValidatedJsonRequest<T> = Context['req'] & {
 
 export interface ChatStreamRoutesDeps {
   prisma: PrismaClient
+  secretVault?: SecretVaultService
   chatService: ChatService
   chatRequestBuilder: ChatRequestBuilder
   reasoningCompatibilityService: ReasoningCompatibilityService
@@ -436,9 +439,10 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         });
       }
 
-      const agentWebSearchConfig = buildAgentWebSearchConfig(turnContext.systemSettings)
+      const searchSettings = await resolveDeepseekSearchSettings(turnContext.systemSettings, deps.secretVault)
+      const agentWebSearchConfig = buildAgentWebSearchConfig(searchSettings)
       const pythonToolConfig = buildAgentPythonToolConfig(turnContext.systemSettings)
-      const urlReaderConfig = buildAgentUrlReaderConfig(turnContext.systemSettings)
+      const urlReaderConfig = buildAgentUrlReaderConfig(searchSettings)
       const workspaceToolConfig = buildAgentWorkspaceToolConfig(turnContext.systemSettings)
       const agentMaxToolIterations = resolveMaxToolIterations(turnContext.systemSettings)
       const webSearchSkillOverride = requestedSkills.overrides?.[BUILTIN_SKILL_SLUGS.WEB_SEARCH] || {}

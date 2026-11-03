@@ -46,15 +46,20 @@
 
 ## 搜索
 
-- **Web Search（联网搜索）**：通过外部搜索引擎（tavily、brave、exa、metaso）检索网页；在各引擎能力范围内默认请求/解析结果配图（Tavily `include_images`、Exa `contents.extras.imageLinks`、Brave `thumbnail`、Metaso `imageUrl`/`thumbnail`），再经识图筛选；支持可选 `scope`（含 `image`）：Metaso 走图片域、Brave 调用独立图片搜索 API；Tavily 在 `scope=image` 时开启 `include_image_descriptions` 并把响应顶层 `images`（query 相关图）合成为图片 hit；Exa 在 `scope=image` 时加大 `imageLinks` 并把页面代表图/页内图展平成图片 hit；`scope=image` 时跳过自动读正文，但仍对 hit 配图做识图相关性筛选并把相关/弱相关图回传模型；CoT/工具卡对 `scope=image` 展示为「图片检索」并标注「范围: 图片」
+- **DeepSeek Search（DeepSeek 联网搜索）**：使用独立搜索凭据的网页搜索引擎，可提供摘要与可选正文；不提供图片检索。搜索正文属于受证据预算约束的网页证据，已有有效正文时可复用。
+- **DeepSeek Fetch Fallback（付费读页回退）**：默认关闭的第三方网页读取能力，仅在管理员显式开启、有搜索凭据且本地网页读取失败时使用。图片和文档资源仍使用各自的读取路径。一次读页的本地尝试与 Fetch 共用总超时预算；调用方取消或预算耗尽后停止后续尝试。
+- **Search Credential（搜索凭据）**：由管理员配置、专用于联网搜索与可选读页回退的系统凭据，与聊天模型连接凭据相互独立；以加密方式保存，仅返回是否已配置。
+
+- **Web Search（联网搜索）**：通过外部搜索引擎（tavily、brave、exa、metaso、deepseek）检索网页；在各引擎能力范围内默认请求/解析结果配图（Tavily `include_images`、Exa `contents.extras.imageLinks`、Brave `thumbnail`、Metaso `imageUrl`/`thumbnail`），再经识图筛选；支持可选 `scope`（含 `image`）：Metaso 走图片域、Brave 调用独立图片搜索 API；Tavily 在 `scope=image` 时开启 `include_image_descriptions` 并把响应顶层 `images`（query 相关图）合成为图片 hit；Exa 在 `scope=image` 时加大 `imageLinks` 并把页面代表图/页内图展平成图片 hit；`scope=image` 时跳过自动读正文，但仍对 hit 配图做识图相关性筛选并把相关/弱相关图回传模型；CoT/工具卡对 `scope=image` 展示为「图片检索」并标注「范围: 图片」
 - **Read URL（网页读取）**：抓取并解析指定 URL 的正文内容；会抽取页面候选图，并在图片转写代理就绪时做识图相关性判定
-- **Auto Read（自动读取）**：搜索完成后自动触发网页读取，读取搜索结果中的网页。在 UI 中归入其所属的搜索合并组内部；同样走网页图识图筛选
+- **Auto Read（自动读取）**：搜索完成后自动收集结果网页正文，可复用搜索引擎返回的有效正文或读取网页。在 UI 中归入所属搜索合并组；实际读页时同样走网页图识图筛选
 - **Web Evidence Image（联网证据图）**：经识图判定为「相关 / 弱相关」的网页配图；来源包括搜索 hit 配图、图片域搜索结果与读页抽取图。已从助手正文移除：不再进入 Rich Payload / 答案区，仅保留在工具卡展示与深度研究报告的 Markdown 配图选择中
 - **Evidence Stack Layout（上文下图）**：已下线。助手正文不再展示联网证据图；AI 生图与附件图仍可用侧栏并排
 - **Illustrated Research Report（图文研究报告）**：深度研究最终 Markdown 可在正文嵌入经筛选的证据图；`export_pdf` 可选 `images` 参数仅下载模型声明的公网图片 URL，内嵌为 `data:` URL 写入 HTML/PDF（figure/figcaption），禁止 PDF 渲染时任意外联远程图
 - **Playwright-managed Chromium（托管 Chromium）**：`export_pdf` 与可选的 URL Reader 浏览器回退使用与 `playwright-core` 版本匹配的 Chromium（镜像内 `PLAYWRIGHT_BROWSERS_PATH`）；不默认依赖发行版 apt `/usr/bin/chromium`（容器中常因 CDP 不兼容而启动失败）；仅在显式配置非系统路径或 Playwright 浏览器缺失时回退系统 Chrome/Chromium
 - **搜索批次**：同一轮搜索任务下发起的搜索调用集合，在工具区块内合并展示
 - **并行搜索**：多个搜索引擎同时查询，属于同一批次
+- **语言路由**：并行数量上限先按管理员引擎顺序筛选，再按查询语言选择首批来源。默认中文路由为 Metaso、DeepSeek、Tavily、Brave、Exa；英文优先 Tavily、Brave、Exa，随后 DeepSeek、Metaso。Skill 的显式语言路由覆盖默认排序，剩余引擎按需参与补充搜索。
 
 ## 密钥
 

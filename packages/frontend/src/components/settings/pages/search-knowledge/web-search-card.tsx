@@ -17,14 +17,21 @@ import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/use-toast"
 import { FeatureCard } from "@/components/settings/components/feature-card"
 import type { SystemSettings, WebSearchBilingualMode, WebSearchEngine } from "@/types"
+import { isWebSearchEngine, WEB_SEARCH_ENGINE_IDS } from "@aichat/shared"
 import { parseNumericInput } from "@/features/settings/shared"
 
-const ENGINE_OPTIONS: Array<{ value: WebSearchEngine; label: string }> = [
-  { value: "tavily", label: "Tavily" },
-  { value: "brave", label: "Brave" },
-  { value: "metaso", label: "Metaso（秘塔）" },
-  { value: "exa", label: "Exa" },
-]
+const ENGINE_LABELS: Record<WebSearchEngine, string> = {
+  tavily: "Tavily",
+  brave: "Brave",
+  metaso: "Metaso（秘塔）",
+  exa: "Exa",
+  deepseek: "DeepSeek",
+}
+
+const ENGINE_OPTIONS = WEB_SEARCH_ENGINE_IDS.map((value) => ({
+  value,
+  label: ENGINE_LABELS[value],
+}))
 
 const mergeStrategy = "hybrid_score_v1" as const
 
@@ -37,10 +44,7 @@ const normalizeEngineList = (
     new Set(
       source
         .map((item) => (typeof item === "string" ? item.trim().toLowerCase() : ""))
-        .filter(
-          (item): item is WebSearchEngine =>
-            item === "tavily" || item === "brave" || item === "metaso" || item === "exa",
-        ),
+        .filter(isWebSearchEngine),
     ),
   )
   if (normalized.length === 0) return [...fallback]
@@ -86,10 +90,13 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
   const [apiKeyBraveDraft, setApiKeyBraveDraft] = useState("")
   const [apiKeyMetasoDraft, setApiKeyMetasoDraft] = useState("")
   const [apiKeyExaDraft, setApiKeyExaDraft] = useState("")
+  const [apiKeyDeepseekDraft, setApiKeyDeepseekDraft] = useState("")
   const [clearTavily, setClearTavily] = useState(false)
   const [clearBrave, setClearBrave] = useState(false)
   const [clearMetaso, setClearMetaso] = useState(false)
   const [clearExa, setClearExa] = useState(false)
+  const [clearDeepseek, setClearDeepseek] = useState(false)
+  const [deepseekFetchEnable, setDeepseekFetchEnable] = useState(false)
   const [scope, setScope] = useState("webpage")
   const [includeSummary, setIncludeSummary] = useState(false)
   const [includeRaw, setIncludeRaw] = useState(false)
@@ -113,10 +120,13 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
     setApiKeyBraveDraft("")
     setApiKeyMetasoDraft("")
     setApiKeyExaDraft("")
+    setApiKeyDeepseekDraft("")
     setClearTavily(false)
     setClearBrave(false)
     setClearMetaso(false)
     setClearExa(false)
+    setClearDeepseek(false)
+    setDeepseekFetchEnable(Boolean(settings.webSearchDeepseekFetchEnable ?? false))
     setScope(settings.webSearchScope || "webpage")
     setIncludeSummary(Boolean(settings.webSearchIncludeSummary ?? false))
     setIncludeRaw(Boolean(settings.webSearchIncludeRaw ?? false))
@@ -143,9 +153,10 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
   )
 
   const hasMetasoEnabled = enabledEngines.includes("metaso")
+  const hasRawContentEngineEnabled = hasMetasoEnabled || enabledEngines.includes("deepseek")
 
   const limitRange = { min: 1, max: 10 }
-  const parallelEngineRange = { min: 1, max: 4 }
+  const parallelEngineRange = { min: 1, max: 5 }
   const parallelQueryRange = { min: 1, max: 3 }
   const parallelTimeoutRange = { min: 1000, max: 120000 }
   const autoReadParallelismRange = { min: 1, max: 4 }
@@ -180,10 +191,13 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
     apiKeyBraveDraft.trim() !== "" ||
     apiKeyMetasoDraft.trim() !== "" ||
     apiKeyExaDraft.trim() !== "" ||
+    apiKeyDeepseekDraft.trim() !== "" ||
     clearTavily ||
     clearBrave ||
     clearMetaso ||
-    clearExa
+    clearExa ||
+    clearDeepseek ||
+    deepseekFetchEnable !== Boolean(settings.webSearchDeepseekFetchEnable ?? false)
 
   const valid =
     enabledEngines.length > 0 &&
@@ -229,6 +243,7 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
       webSearchScope: scope,
       webSearchIncludeSummary: includeSummary,
       webSearchIncludeRaw: includeRaw,
+      webSearchDeepseekFetchEnable: deepseekFetchEnable,
       webSearchParallelMaxEngines: Math.max(
         parallelEngineRange.min,
         Math.min(Math.min(parallelEngineRange.max, enabledEngines.length), Math.round(parallelMaxEngines)),
@@ -270,16 +285,23 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
     } else if (clearExa) {
       payload.webSearchApiKeyExa = ""
     }
+    if (apiKeyDeepseekDraft.trim()) {
+      payload.webSearchApiKeyDeepseek = apiKeyDeepseekDraft.trim()
+    } else if (clearDeepseek) {
+      payload.webSearchApiKeyDeepseek = ""
+    }
 
     await update(payload)
     setApiKeyTavilyDraft("")
     setApiKeyBraveDraft("")
     setApiKeyMetasoDraft("")
     setApiKeyExaDraft("")
+    setApiKeyDeepseekDraft("")
     setClearTavily(false)
     setClearBrave(false)
     setClearMetaso(false)
     setClearExa(false)
+    setClearDeepseek(false)
     toast({ title: "联网搜索设置已保存" })
   }
 
@@ -296,7 +318,7 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
           <div className="grid gap-4 md:grid-cols-3">
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium" htmlFor="web-search-parallel-engines">
-                并行引擎上限（1-3）
+                并行引擎上限（1-5）
               </label>
               <Input
                 id="web-search-parallel-engines"
@@ -393,19 +415,31 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-medium">召回增强（includeSummary）</p>
+                    <p className="text-sm font-medium">召回增强</p>
                     <p className="text-xs text-muted-foreground">适度提升召回，可能略增延迟。</p>
                   </div>
                   <Switch checked={includeSummary} onCheckedChange={(v) => setIncludeSummary(!!v)} />
                 </div>
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium">抓取原文（includeRawContent）</p>
-                    <p className="text-xs text-muted-foreground">可能增加流量与时延，默认关闭。</p>
-                  </div>
-                  <Switch checked={includeRaw} onCheckedChange={(v) => setIncludeRaw(!!v)} />
-                </div>
               </div>
+            </div>
+          )}
+
+          {hasRawContentEngineEnabled && (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-border/70 px-3 py-2">
+              <div>
+                <label className="text-sm font-medium" htmlFor="web-search-include-raw">
+                  获取网页原文
+                </label>
+                <p id="web-search-include-raw-description" className="text-xs text-muted-foreground">
+                  搜索时获取可用的网页正文，可能增加流量与等待时间，默认关闭。
+                </p>
+              </div>
+              <Switch
+                id="web-search-include-raw"
+                checked={includeRaw}
+                onCheckedChange={(v) => setIncludeRaw(Boolean(v))}
+                aria-describedby="web-search-include-raw-description"
+              />
             </div>
           )}
         </div>
@@ -433,20 +467,34 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
                   ? settings.webSearchHasApiKeyBrave
                   : engine.value === "metaso"
                     ? settings.webSearchHasApiKeyMetaso
-                    : settings.webSearchHasApiKeyExa
+                    : engine.value === "exa"
+                      ? settings.webSearchHasApiKeyExa
+                      : settings.webSearchHasApiKeyDeepseek
+            const keyCleared =
+              engine.value === "tavily"
+                ? clearTavily
+                : engine.value === "brave"
+                  ? clearBrave
+                  : engine.value === "metaso"
+                    ? clearMetaso
+                    : engine.value === "exa"
+                      ? clearExa
+                      : clearDeepseek
             return (
               <label
                 key={engine.value}
-                className="flex items-start gap-2 rounded-md border border-border/60 px-3 py-2"
+                className="flex min-h-11 cursor-pointer items-start gap-2 rounded-md border border-border/60 px-3 py-2 transition-colors hover:bg-accent/40"
               >
                 <Checkbox
                   checked={checked}
+                  aria-label={engine.label}
                   onCheckedChange={(value) => toggleEngine(engine.value, value === true)}
+                  className="mt-0.5"
                 />
                 <span className="flex-1 text-sm">
                   {engine.label}
                   <span className="ml-2 text-xs text-muted-foreground">
-                    {hasKey ? "已配置 Key" : "未配置 Key"}
+                    {hasKey && !keyCleared ? "已配置 Key" : "未配置 Key"}
                   </span>
                 </span>
               </label>
@@ -481,6 +529,7 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
                     size="icon-xs"
                     onClick={() => moveEngine(engine, "up")}
                     disabled={index === 0}
+                    aria-label={`上移 ${label}`}
                   >
                     <ArrowUp className="h-3.5 w-3.5" />
                   </Button>
@@ -490,6 +539,7 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
                     size="icon-xs"
                     onClick={() => moveEngine(engine, "down")}
                     disabled={index === normalizedEngineOrder.length - 1}
+                    aria-label={`下移 ${label}`}
                   >
                     <ArrowDown className="h-3.5 w-3.5" />
                   </Button>
@@ -669,6 +719,69 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
             </Button>
           </div>
           {clearExa && <p className="text-xs text-destructive">保存后将删除 Exa Key。</p>}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-sm font-medium" htmlFor="web-search-key-deepseek">
+              DeepSeek API Key
+            </label>
+            <span className="text-xs text-muted-foreground">
+              {settings.webSearchHasApiKeyDeepseek && !clearDeepseek ? "已配置" : "未配置"}
+            </span>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input
+              id="web-search-key-deepseek"
+              type="password"
+              autoComplete="off"
+              value={apiKeyDeepseekDraft}
+              placeholder="留空表示不修改"
+              onChange={(e) => {
+                setApiKeyDeepseekDraft(e.target.value)
+                if (clearDeepseek) setClearDeepseek(false)
+              }}
+              className="flex-1"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              aria-label="清除 DeepSeek Key"
+              onClick={() => {
+                setApiKeyDeepseekDraft("")
+                setClearDeepseek(true)
+              }}
+              disabled={!settings.webSearchHasApiKeyDeepseek && !clearDeepseek}
+            >
+              清除
+            </Button>
+          </div>
+          {clearDeepseek && <p className="text-xs text-destructive">保存后将删除 DeepSeek Key。</p>}
+          <p className="text-xs leading-5 text-muted-foreground">
+            清除后，如服务器仍配置了 DeepSeek 搜索密钥，将继续使用服务器密钥。
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-3 rounded-lg border border-border/70 p-3">
+        <div>
+          <p className="text-sm font-medium">DeepSeek 能力与费用</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            DeepSeek 支持网页搜索，不支持图片检索。搜索与 Fetch 调用均会产生 API 费用。
+          </p>
+        </div>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">启用 DeepSeek Fetch 付费回退</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              不依赖上方联网搜索勾选，读取网页时也会生效；仅在本地读页失败时回退，调用会产生 DeepSeek API 费用，默认关闭。
+            </p>
+          </div>
+          <Switch
+            checked={deepseekFetchEnable}
+            onCheckedChange={(v) => setDeepseekFetchEnable(Boolean(v))}
+            aria-label="启用 DeepSeek Fetch 付费回退"
+          />
         </div>
       </div>
     </FeatureCard>

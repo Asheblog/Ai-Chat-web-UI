@@ -177,6 +177,7 @@ export interface WebSearchHandlerConfig {
   engines: string[]
   engineOrder: string[]
   apiKeys: Partial<Record<string, string>>
+  deepseekFetchEnabled?: boolean
   resultLimit: number
   domains: string[]
   endpoint?: string
@@ -228,6 +229,8 @@ export interface WorkspaceHandlerConfig {
  */
 export interface UrlReaderHandlerConfig {
   enabled: boolean
+  enableDeepseekFallback?: boolean
+  deepseekApiKey?: string
   timeout?: number
   maxContentLength?: number
   maxBodyBytes?: number

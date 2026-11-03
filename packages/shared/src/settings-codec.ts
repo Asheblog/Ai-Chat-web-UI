@@ -6,7 +6,8 @@
  *   frontend types/index.ts 与 backend settings-service 之间的字段漂移。
  */
 
-export type WebSearchEngine = 'tavily' | 'brave' | 'metaso' | 'exa'
+import { isWebSearchEngine, WEB_SEARCH_ENGINE_IDS, type WebSearchEngine } from './web-search-contract.js'
+export type { WebSearchEngine } from './web-search-contract.js'
 export type WebSearchBilingualMode = 'off' | 'conditional' | 'always'
 export type WebSearchMergeStrategy = 'hybrid_score_v1'
 
@@ -69,6 +70,9 @@ export interface SystemSettings {
   webSearchHasApiKeyBrave?: boolean
   webSearchHasApiKeyMetaso?: boolean
   webSearchHasApiKeyExa?: boolean
+  webSearchHasApiKeyDeepseek?: boolean
+  webSearchApiKeyDeepseek?: string
+  webSearchDeepseekFetchEnable?: boolean
   webSearchApiKeyExa?: string
   webSearchScope?: string
   webSearchIncludeSummary?: boolean
@@ -151,7 +155,7 @@ const parseWebSearchEngineList = (
   const normalize = (item: unknown): WebSearchEngine | null => {
     if (typeof item !== 'string') return null
     const lowered = item.trim().toLowerCase()
-    if (lowered === 'tavily' || lowered === 'brave' || lowered === 'metaso' || lowered === 'exa') {
+    if (isWebSearchEngine(lowered)) {
       return lowered
     }
     return null
@@ -365,8 +369,10 @@ export const parseSystemSettingsPayload = (
   const webSearchHasApiKeyBrave = Boolean(raw.web_search_has_api_key_brave ?? webSearchHasApiKey)
   const webSearchHasApiKeyMetaso = Boolean(raw.web_search_has_api_key_metaso ?? webSearchHasApiKey)
   const webSearchHasApiKeyExa = Boolean(raw.web_search_has_api_key_exa ?? webSearchHasApiKey)
+  const webSearchHasApiKeyDeepseek = Boolean(raw.web_search_has_api_key_deepseek ?? false)
+  const webSearchDeepseekFetchEnable = Boolean(raw.web_search_deepseek_fetch_enable ?? false)
   const aggregatedHasKey =
-    webSearchHasApiKeyTavily || webSearchHasApiKeyBrave || webSearchHasApiKeyMetaso || webSearchHasApiKeyExa || webSearchHasApiKey
+    webSearchHasApiKeyTavily || webSearchHasApiKeyBrave || webSearchHasApiKeyMetaso || webSearchHasApiKeyExa || webSearchHasApiKeyDeepseek || webSearchHasApiKey
   const webSearchScope =
     typeof raw.web_search_scope === 'string'
       ? raw.web_search_scope
@@ -375,7 +381,7 @@ export const parseSystemSettingsPayload = (
   const webSearchIncludeRaw = Boolean(raw.web_search_include_raw ?? false)
   const webSearchParallelMaxEngines = (() => {
     const parsed = parseOptionalInt(raw.web_search_parallel_max_engines)
-    return typeof parsed === 'number' ? Math.max(1, Math.min(4, parsed)) : 3
+    return typeof parsed === 'number' ? Math.max(1, Math.min(WEB_SEARCH_ENGINE_IDS.length, parsed)) : 3
   })()
   const webSearchParallelMaxQueriesPerCall = (() => {
     const parsed = parseOptionalInt(raw.web_search_parallel_max_queries_per_call)
@@ -574,6 +580,8 @@ export const parseSystemSettingsPayload = (
     webSearchHasApiKeyBrave,
     webSearchHasApiKeyMetaso,
     webSearchHasApiKeyExa,
+    webSearchHasApiKeyDeepseek,
+    webSearchDeepseekFetchEnable,
     webSearchScope,
     webSearchIncludeSummary,
     webSearchIncludeRaw,

@@ -231,7 +231,7 @@ export const systemSettingsCards: SystemCardMeta[] = [
   // 图片转写
   { leafKey: "image-transcription", key: "image-transcription:image-transcription", label: "图片转写代理", keywords: ["识图", "vision", "转写", "图片描述", "连接"] },
   // 搜索与知识库
-  { leafKey: "search-knowledge", key: "search-knowledge:web-search", label: "联网搜索", keywords: ["web search", "引擎", "API Key", "并行", "白名单"] },
+  { leafKey: "search-knowledge", key: "search-knowledge:web-search", label: "联网搜索", keywords: ["web search", "引擎", "API Key", "并行", "白名单", "DeepSeek", "Fetch", "付费回退"] },
   { leafKey: "search-knowledge", key: "search-knowledge:rag", label: "RAG 文档解析", keywords: ["Embedding", "分块", "检索", "TopK", "文档管理"] },
   { leafKey: "search-knowledge", key: "search-knowledge:knowledge-base", label: "知识库", keywords: ["持久化", "新建", "文档"] },
   // 工具与扩展

@@ -18,6 +18,9 @@ import {
 import type { Actor } from '../../types'
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../../config/storage'
 import { invalidateModelAccessDefaultsCache as defaultInvalidateModelAccessDefaultsCache } from '../../utils/model-access-policy'
+import type { SecretVaultService } from '../secret-vault'
+import { hasDeepseekSearchKey, saveDeepseekSearchKey } from './deepseek-search-credentials'
+import { WEB_SEARCH_ENGINE_IDS } from '@aichat/shared/web-search-contract'
 import {
   BRAND_THEME_STORAGE_KEYS,
   normalizeBrandHex,
@@ -56,6 +59,7 @@ export class SettingsServiceError extends Error {
 
 export interface SettingsServiceDeps {
   prisma?: PrismaClient
+  secretVault?: SecretVaultService
   getQuotaPolicy?: typeof defaultGetQuotaPolicy
   getBattlePolicy?: typeof defaultGetBattlePolicy
   invalidateQuotaPolicyCache?: typeof defaultInvalidateQuotaPolicyCache
@@ -69,7 +73,7 @@ export interface SettingsServiceDeps {
 }
 
 const BRANDING_CACHE_TTL_MS = 30_000
-const WEB_SEARCH_ENGINES = ['tavily', 'brave', 'metaso', 'exa'] as const
+const WEB_SEARCH_ENGINES = WEB_SEARCH_ENGINE_IDS
 type WebSearchEngine = (typeof WEB_SEARCH_ENGINES)[number]
 
 const emptyBrandTheme = (): Record<BrandThemeStorageKey, string> =>
@@ -80,6 +84,7 @@ const emptyBrandTheme = (): Record<BrandThemeStorageKey, string> =>
 
 export class SettingsService {
   private prisma: PrismaClient
+  private secretVault?: SecretVaultService
   private getQuotaPolicy: typeof defaultGetQuotaPolicy
   private getBattlePolicy: typeof defaultGetBattlePolicy
   private invalidateQuotaPolicyCache: typeof defaultInvalidateQuotaPolicyCache
@@ -94,6 +99,7 @@ export class SettingsService {
 
   constructor(deps: SettingsServiceDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
+    this.secretVault = deps.secretVault
     this.getQuotaPolicy = deps.getQuotaPolicy ?? defaultGetQuotaPolicy
     this.getBattlePolicy = deps.getBattlePolicy ?? defaultGetBattlePolicy
     this.invalidateQuotaPolicyCache = deps.invalidateQuotaPolicyCache ?? defaultInvalidateQuotaPolicyCache
@@ -289,8 +295,9 @@ export class SettingsService {
     const webSearchHasApiKeyExa = Boolean(
       settingsObj.web_search_api_key_exa || process.env.WEB_SEARCH_API_KEY_EXA || '',
     )
+    const webSearchHasApiKeyDeepseek = await hasDeepseekSearchKey(settingsObj, this.secretVault)
     const webSearchHasApiKey =
-      webSearchHasApiKeyTavily || webSearchHasApiKeyBrave || webSearchHasApiKeyMetaso || webSearchHasApiKeyExa
+      webSearchHasApiKeyTavily || webSearchHasApiKeyBrave || webSearchHasApiKeyMetaso || webSearchHasApiKeyExa || webSearchHasApiKeyDeepseek
     const webSearchParallelMergeStrategy = this.parseWebSearchMergeStrategy(
       settingsObj.web_search_parallel_merge_strategy ?? process.env.WEB_SEARCH_PARALLEL_MERGE_STRATEGY,
     )
@@ -366,6 +373,8 @@ export class SettingsService {
       web_search_has_api_key_brave: webSearchHasApiKeyBrave,
       web_search_has_api_key_metaso: webSearchHasApiKeyMetaso,
       web_search_has_api_key_exa: webSearchHasApiKeyExa,
+      web_search_has_api_key_deepseek: webSearchHasApiKeyDeepseek,
+      web_search_deepseek_fetch_enable: this.parseBoolean(settingsObj.web_search_deepseek_fetch_enable, process.env.WEB_SEARCH_DEEPSEEK_FETCH_ENABLE || 'false'),
       web_search_has_api_key: webSearchHasApiKey,
       web_search_scope: settingsObj.web_search_scope || process.env.WEB_SEARCH_SCOPE || 'webpage',
       web_search_include_summary: this.parseBoolean(settingsObj.web_search_include_summary, process.env.WEB_SEARCH_INCLUDE_SUMMARY || 'false'),
@@ -374,7 +383,7 @@ export class SettingsService {
         settingsObj.web_search_parallel_max_engines,
         process.env.WEB_SEARCH_PARALLEL_MAX_ENGINES,
         1,
-        4,
+        WEB_SEARCH_ENGINES.length,
         3,
       ),
       web_search_parallel_max_queries_per_call: this.parseIntInRange(
@@ -533,6 +542,8 @@ export class SettingsService {
         web_search_has_api_key_brave: formatted.web_search_has_api_key_brave,
         web_search_has_api_key_metaso: formatted.web_search_has_api_key_metaso,
         web_search_has_api_key_exa: formatted.web_search_has_api_key_exa,
+        web_search_has_api_key_deepseek: formatted.web_search_has_api_key_deepseek,
+        web_search_deepseek_fetch_enable: formatted.web_search_deepseek_fetch_enable,
         web_search_scope: formatted.web_search_scope,
         web_search_include_summary: formatted.web_search_include_summary,
         web_search_include_raw: formatted.web_search_include_raw,
@@ -570,6 +581,10 @@ export class SettingsService {
   }
 
   async updateSystemSettings(payload: Record<string, any>) {
+    if (typeof payload.web_search_api_key_deepseek === 'string') {
+      if (!this.secretVault) throw new SettingsServiceError('DeepSeek 搜索密钥库不可用', 500)
+      await saveDeepseekSearchKey(this.prisma, this.secretVault, payload.web_search_api_key_deepseek)
+    }
     const upsert = async (key: string, value: string) => {
       await this.prisma.systemSetting.upsert({
         where: { key },
@@ -659,6 +674,7 @@ export class SettingsService {
     assignIfNumber('rag_embedding_concurrency', payload.rag_embedding_concurrency)
 
     const boolFields = [
+      SYSTEM_SETTINGS_FIELD_MAP.webSearchDeepseekFetchEnable,
       SYSTEM_SETTINGS_FIELD_MAP.usageEmit,
       SYSTEM_SETTINGS_FIELD_MAP.usageProviderOnly,
       SYSTEM_SETTINGS_FIELD_MAP.contextCompressionEnabled,

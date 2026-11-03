@@ -126,3 +126,73 @@ describe('mergeWebSearchParallelResults', () => {
     expect(merged.hits[0].snippet).toContain('more details')
   })
 })
+
+describe('runWebSearchParallel deepseek', () => {
+  const originalFetch = global.fetch
+
+  afterEach(() => {
+    global.fetch = originalFetch
+    jest.restoreAllMocks()
+  })
+
+  it('includes deepseek as the fifth engine and allows a max of five', async () => {
+    global.fetch = jest.fn(async (input) => {
+      const url = String(input)
+      if (url.includes('deepseek')) {
+        return new Response(
+          JSON.stringify({ results: [{ title: 'DS', url: 'https://ds.test/a', snippet: 'ds' }] }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        )
+      }
+      return new Response(JSON.stringify({ results: [], web: { results: [] } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    const result = await runWebSearchParallel({
+      engines: ['tavily', 'brave', 'metaso', 'exa', 'deepseek'],
+      engineOrder: ['tavily', 'brave', 'metaso', 'exa', 'deepseek'],
+      apiKeys: { tavily: 'k', brave: 'k', metaso: 'k', exa: 'k', deepseek: 'k' },
+      queries: [{ query: 'q', queryLanguage: 'en' }],
+      limit: 5,
+      parallelMaxEngines: 5,
+      timeoutMs: 5000,
+    })
+
+    expect(result.tasks).toHaveLength(5)
+    expect(result.tasks.map((task) => task.task.engine)).toContain('deepseek')
+  })
+
+  it('isolates a deepseek failure while other engines succeed', async () => {
+    global.fetch = jest.fn(async (input) => {
+      if (String(input).includes('deepseek')) {
+        return new Response(JSON.stringify({ error: { message: 'secret upstream' } }), {
+          status: 500,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+      return new Response(
+        JSON.stringify({ results: [{ title: 'T', url: 'https://tavily.test/a', content: 't' }] }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    }) as typeof fetch
+
+    const result = await runWebSearchParallel({
+      engines: ['tavily', 'deepseek'],
+      engineOrder: ['tavily', 'deepseek'],
+      apiKeys: { tavily: 'k', deepseek: 'k' },
+      queries: [{ query: 'q', queryLanguage: 'en' }],
+      limit: 5,
+      parallelMaxEngines: 5,
+      timeoutMs: 5000,
+    })
+
+    const deepseekTask = result.tasks.find((task) => task.task.engine === 'deepseek')
+    const tavilyTask = result.tasks.find((task) => task.task.engine === 'tavily')
+    expect(deepseekTask?.status).toBe('error')
+    expect(deepseekTask?.error).not.toContain('secret upstream')
+    expect(tavilyTask?.status).toBe('success')
+    expect(result.hits).toHaveLength(1)
+  })
+})

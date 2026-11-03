@@ -5,16 +5,17 @@ import type {
   AgentWebSearchLocaleRouting,
 } from '../../agent-runtime/agent-tool-config'
 
-const WEB_SEARCH_ENGINES: AgentWebSearchEngine[] = ['tavily', 'brave', 'metaso', 'exa']
+import { WEB_SEARCH_ENGINE_IDS } from '@aichat/shared/web-search-contract'
+const WEB_SEARCH_ENGINES: readonly AgentWebSearchEngine[] = WEB_SEARCH_ENGINE_IDS
 const ROUTING_CN_FIRST: AgentWebSearchLocaleRouting = {
-  zh: ['metaso', 'tavily', 'brave', 'exa'],
-  en: ['tavily', 'brave', 'exa', 'metaso'],
-  unknown: ['metaso', 'tavily', 'brave', 'exa'],
+  zh: ['metaso', 'deepseek', 'tavily', 'brave', 'exa'],
+  en: ['tavily', 'brave', 'exa', 'deepseek', 'metaso'],
+  unknown: ['metaso', 'deepseek', 'tavily', 'brave', 'exa'],
 }
 const ROUTING_GLOBAL_FIRST: AgentWebSearchLocaleRouting = {
-  zh: ['tavily', 'brave', 'exa', 'metaso'],
-  en: ['tavily', 'brave', 'exa', 'metaso'],
-  unknown: ['tavily', 'brave', 'exa', 'metaso'],
+  zh: ['tavily', 'brave', 'exa', 'deepseek', 'metaso'],
+  en: ['tavily', 'brave', 'exa', 'deepseek', 'metaso'],
+  unknown: ['tavily', 'brave', 'exa', 'deepseek', 'metaso'],
 }
 
 const getOverrideValue = (

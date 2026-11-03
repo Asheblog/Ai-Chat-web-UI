@@ -26,6 +26,8 @@ import {
 
 export interface UrlReaderHandlerConfig {
   enabled: boolean
+  enableDeepseekFallback?: boolean
+  deepseekApiKey?: string
   timeout?: number
   maxContentLength?: number
   maxBodyBytes?: number
@@ -221,6 +223,9 @@ export class UrlReaderToolHandler implements IToolHandler {
         enableBrowser: this.config.enableBrowser,
         browserExecutablePath: this.config.browserExecutablePath,
         renderWaitMs: this.config.renderWaitMs,
+        enableDeepseekFallback: this.config.enableDeepseekFallback,
+        deepseekApiKey: this.config.deepseekApiKey,
+        signal: context.requestSignal,
       })
 
       if (result.error) {
@@ -293,7 +298,7 @@ export class UrlReaderToolHandler implements IToolHandler {
         summary: result.resourceType === 'image'
           ? '图片读取完成'
           : result.title
-            ? `已读取：${result.title}${result.fallbackUsed === 'crawler' ? '（爬虫回退）' : ''}`
+            ? `已读取：${result.title}${result.fallbackUsed === 'crawler' ? '（爬虫回退）' : result.fallbackUsed === 'deepseek_fetch' ? '（DeepSeek 抓取）' : ''}`
             : result.fallbackUsed === 'crawler'
               ? '网页读取完成（爬虫回退）'
               : '网页读取完成',
@@ -306,6 +311,7 @@ export class UrlReaderToolHandler implements IToolHandler {
         leadImageUrl: result.leadImageUrl,
         details: {
           url,
+          enableDeepseekFallback: Boolean(this.config.enableDeepseekFallback && this.config.deepseekApiKey),
           title: result.title,
           excerpt: result.excerpt,
           wordCount: result.wordCount,

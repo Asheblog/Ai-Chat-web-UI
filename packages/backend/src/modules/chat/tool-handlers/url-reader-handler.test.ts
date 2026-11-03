@@ -116,4 +116,40 @@ describe('UrlReaderToolHandler', () => {
     expect(mockedReadRemoteImages).not.toHaveBeenCalled()
     expect(result.message.content).toContain('## 图片资源')
   })
+
+  it('forwards DeepSeek fallback config and the request signal to the reader', async () => {
+    const readSpy = jest.spyOn(urlReaderModule, 'readUrlContent').mockResolvedValue({
+      title: 'OK',
+      url: 'https://example.com/article',
+      content: '',
+      textContent: '正文',
+      resourceType: 'page',
+      fallbackUsed: 'deepseek_fetch',
+      engine: 'deepseek_fetch',
+      attempts: [{ engine: 'deepseek_fetch', status: 'success', durationMs: 10 }],
+    })
+    const controller = new AbortController()
+
+    const handler = new UrlReaderToolHandler({
+      enabled: true,
+      enableDeepseekFallback: true,
+      deepseekApiKey: 'ds-key',
+    })
+    const context = createContext({ requestSignal: controller.signal })
+    const result = await handler.handle(
+      { id: 'call_3', function: { name: 'read_url', arguments: '{}' } },
+      { url: 'https://example.com/article' },
+      context,
+    )
+
+    expect(readSpy).toHaveBeenCalledWith(
+      'https://example.com/article',
+      expect.objectContaining({
+        enableDeepseekFallback: true,
+        deepseekApiKey: 'ds-key',
+        signal: controller.signal,
+      }),
+    )
+    expect(result.message.content).toContain('DeepSeek')
+  })
 })

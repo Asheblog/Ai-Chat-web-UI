@@ -1,4 +1,5 @@
 import { runWebSearch } from '../web-search'
+import { DEEPSEEK_SEARCH_ENDPOINT } from '../deepseek-tools'
 
 describe('runWebSearch image mapping', () => {
   const originalFetch = global.fetch
@@ -252,5 +253,53 @@ describe('runWebSearch image mapping', () => {
     expect(hits[0].url).toBe('https://example.com/exa-news')
     expect(hits[1].url).toBe('https://example.com/exa-news')
     expect(hits[1].title).toContain('Exa News')
+  })
+})
+
+describe('runWebSearch deepseek adapter', () => {
+  const originalFetch = global.fetch
+
+  afterEach(() => {
+    global.fetch = originalFetch
+    jest.restoreAllMocks()
+  })
+
+  test('uses the fixed DeepSeek endpoint even when a global endpoint is configured', async () => {
+    const fetchMock = jest.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe(DEEPSEEK_SEARCH_ENDPOINT)
+      return new Response(
+        JSON.stringify({
+          results: [{ title: 'DS', url: 'https://example.com/ds', snippet: 's', summary: 'summary' }],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    }) as jest.MockedFunction<typeof fetch>
+    global.fetch = fetchMock
+
+    const hits = await runWebSearch('deepseek query', {
+      engine: 'deepseek',
+      apiKey: 'k',
+      limit: 3,
+      endpoint: 'https://attacker.example/search',
+      scope: 'webpage',
+    })
+
+    expect(hits).toHaveLength(1)
+    expect(hits[0].snippet).toBe('summary')
+  })
+
+  test('rejects non-webpage scopes instead of returning generic web results', async () => {
+    const fetchMock = jest.fn() as jest.MockedFunction<typeof fetch>
+    global.fetch = fetchMock
+
+    await expect(
+      runWebSearch('image query', {
+        engine: 'deepseek',
+        apiKey: 'k',
+        limit: 3,
+        scope: 'image',
+      }),
+    ).rejects.toThrow(/scope/i)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

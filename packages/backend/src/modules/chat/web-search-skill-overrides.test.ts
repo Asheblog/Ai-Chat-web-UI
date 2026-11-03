@@ -43,9 +43,21 @@ describe('applyWebSearchSkillOverrides', () => {
     expect(next.minSources).toBe(1)
     expect(next.conflictEscalation).toBe('off')
     expect(next.localeRouting).toEqual({
-      zh: ['metaso', 'tavily', 'brave', 'exa'],
-      en: ['tavily', 'brave', 'exa', 'metaso'],
-      unknown: ['metaso', 'tavily', 'brave', 'exa'],
+      zh: ['metaso', 'deepseek', 'tavily', 'brave', 'exa'],
+      en: ['tavily', 'brave', 'exa', 'deepseek', 'metaso'],
+      unknown: ['metaso', 'deepseek', 'tavily', 'brave', 'exa'],
+    })
+  })
+
+  it('keeps all five engines available in the global-first preset', () => {
+    const next = applyWebSearchSkillOverrides(createBaseConfig(), {
+      locale_routing: 'global_first',
+    })
+
+    expect(next.localeRouting).toEqual({
+      zh: ['tavily', 'brave', 'exa', 'deepseek', 'metaso'],
+      en: ['tavily', 'brave', 'exa', 'deepseek', 'metaso'],
+      unknown: ['tavily', 'brave', 'exa', 'deepseek', 'metaso'],
     })
   })
 

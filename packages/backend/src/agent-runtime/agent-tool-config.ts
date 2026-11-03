@@ -12,11 +12,12 @@ import {
 import { BUILTIN_SKILL_SLUGS } from '../modules/skills/types';
 import type { RequestedSkillsPayload } from '../modules/skills/types';
 import { loadVisionProxyConfig, type VisionProxyConfig } from '../services/vision/vision-proxy-service';
+import { WEB_SEARCH_ENGINE_IDS, type WebSearchEngine } from '@aichat/shared/web-search-contract';
 
 /**
  * Web 搜索配置
  */
-export type AgentWebSearchEngine = 'tavily' | 'brave' | 'metaso' | 'exa'
+export type AgentWebSearchEngine = WebSearchEngine
 export type AgentWebSearchMergeStrategy = 'hybrid_score_v1'
 export type AgentWebSearchBilingualMode = 'off' | 'conditional' | 'always'
 export type AgentWebSearchConflictEscalation = 'off' | 'auto'
@@ -38,6 +39,7 @@ export interface AgentWebSearchConfig {
   scope?: string;
   includeSummary?: boolean;
   includeRawContent?: boolean;
+  deepseekFetchEnabled?: boolean;
   parallelMaxEngines: number;
   parallelMaxQueriesPerCall: number;
   parallelTimeoutMs: number;
@@ -68,6 +70,8 @@ export interface AgentPythonToolConfig {
  * URL Reader 配置
  */
 export interface AgentUrlReaderConfig {
+  enableDeepseekFallback?: boolean;
+  deepseekApiKey?: string;
   timeout: number;
   maxContentLength: number;
   maxBodyBytes: number;
@@ -87,7 +91,7 @@ export interface AgentWorkspaceToolConfig {
 }
 
 const WEB_SEARCH_SCOPES = ['webpage', 'document', 'paper', 'image', 'video', 'podcast'] as const;
-const WEB_SEARCH_ENGINES: AgentWebSearchEngine[] = ['tavily', 'brave', 'metaso', 'exa'];
+const WEB_SEARCH_ENGINES: readonly AgentWebSearchEngine[] = WEB_SEARCH_ENGINE_IDS;
 
 const parseEngineList = (
   raw: string | undefined | null,
@@ -131,7 +135,10 @@ export const buildAgentWebSearchConfig = (
   const apiKeys: Partial<Record<AgentWebSearchEngine, string>> = {};
   for (const engine of WEB_SEARCH_ENGINES) {
     const envName = `WEB_SEARCH_API_KEY_${engine.toUpperCase()}` as keyof NodeJS.ProcessEnv;
-    const value = (sysMap[`web_search_api_key_${engine}`] || env[envName] || '').trim();
+    const configured = engine === 'deepseek'
+      ? (sysMap.web_search_api_key_deepseek ?? env[envName] ?? '')
+      : (sysMap[`web_search_api_key_${engine}`] || env[envName] || '');
+    const value = configured.trim();
     if (value) {
       apiKeys[engine] = value;
     }
@@ -173,7 +180,7 @@ export const buildAgentWebSearchConfig = (
       { fallback: 3 }
     ),
     1,
-    4
+    WEB_SEARCH_ENGINE_IDS.length
   );
 
   const parallelMaxQueriesPerCall = clampNumber(
@@ -273,6 +280,7 @@ export const buildAgentWebSearchConfig = (
     scope,
     includeSummary,
     includeRawContent,
+    deepseekFetchEnabled: parseBooleanSetting(sysMap.web_search_deepseek_fetch_enable ?? env.WEB_SEARCH_DEEPSEEK_FETCH_ENABLE, false),
     parallelMaxEngines,
     parallelMaxQueriesPerCall,
     parallelTimeoutMs,
@@ -394,6 +402,8 @@ export const buildAgentUrlReaderConfig = (
     enableBrowser,
     browserExecutablePath,
     renderWaitMs,
+    enableDeepseekFallback: parseBooleanSetting(sysMap.web_search_deepseek_fetch_enable ?? env.WEB_SEARCH_DEEPSEEK_FETCH_ENABLE, false),
+    deepseekApiKey: (sysMap.web_search_api_key_deepseek ?? env.WEB_SEARCH_API_KEY_DEEPSEEK ?? '').trim() || undefined,
   };
 };
 

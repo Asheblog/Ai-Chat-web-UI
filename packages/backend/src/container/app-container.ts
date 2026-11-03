@@ -398,6 +398,7 @@ export class AppContainer {
         executor: new BattleExecutor({
           requestBuilder: this.chatRequestBuilder,
           requester: this.providerRequester,
+          secretVault: this.secretVault,
         }),
       })
     registry.register(SERVICE_KEYS.battleService, this.battleService)
@@ -517,6 +518,7 @@ export class AppContainer {
       deps.settingsService ??
       new SettingsService({
         prisma: this.context.prisma,
+        secretVault: this.secretVault,
         getQuotaPolicy,
         getBattlePolicy,
         invalidateQuotaPolicyCache,
