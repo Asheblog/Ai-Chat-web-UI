@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { MutableRefObject } from 'react'
 import {
   READING_ANCHOR_STORAGE_KEY,
   parseReadingAnchorStore,
@@ -28,6 +29,8 @@ interface UseScrollPersistenceParams {
   /** 流式内容版本锚点，由调用方用细粒度 selector 计算，避免订阅完整 messageBodies */
   streamScrollAnchor: string
   loadOlderMessages: (sessionId: number) => Promise<unknown>
+  /** 允许测试或外部宿主注入滚动根节点；默认自建 */
+  scrollAreaRef?: MutableRefObject<HTMLDivElement | null>
 }
 
 export const useScrollPersistence = (params: UseScrollPersistenceParams) => {
@@ -39,13 +42,17 @@ export const useScrollPersistence = (params: UseScrollPersistenceParams) => {
     isStreaming,
     streamScrollAnchor,
     loadOlderMessages,
+    scrollAreaRef: injectedScrollAreaRef,
   } = params
 
-  const scrollAreaRef = useRef<HTMLDivElement>(null)
+  const internalScrollAreaRef = useRef<HTMLDivElement>(null)
+  const scrollAreaRef = injectedScrollAreaRef ?? internalScrollAreaRef
   const [isAutoScrollEnabled, setIsAutoScrollEnabled] = useState(true)
   const autoScrollEnabledRef = useRef(true)
   const prependAnchorRef = useRef<{ sessionId: number; scrollTop: number; scrollHeight: number } | null>(null)
   const loadingOlderRef = useRef(false)
+  const measureFrameRef = useRef<number | null>(null)
+  const pendingScrollElementRef = useRef<HTMLElement | null>(null)
 
   const setAutoScrollState = useCallback((enabled: boolean) => {
     autoScrollEnabledRef.current = enabled
@@ -55,7 +62,7 @@ export const useScrollPersistence = (params: UseScrollPersistenceParams) => {
   const getScrollViewport = useCallback((): HTMLElement | null => {
     if (!scrollAreaRef.current) return null
     return scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null
-  }, [])
+  }, [scrollAreaRef])
 
   const isNearBottom = useCallback((element: HTMLElement) => {
     const distance = element.scrollHeight - element.scrollTop - element.clientHeight
@@ -120,7 +127,7 @@ export const useScrollPersistence = (params: UseScrollPersistenceParams) => {
     const scrollElement = getScrollViewport()
     if (!scrollElement) return
 
-    const updateAutoScrollState = () => {
+    const measure = () => {
       setAutoScrollState(isNearBottom(scrollElement))
       if (!currentSessionId) return
       if (isMessagesLoading) return
@@ -140,11 +147,27 @@ export const useScrollPersistence = (params: UseScrollPersistenceParams) => {
       })
     }
 
+    const updateAutoScrollState = () => {
+      pendingScrollElementRef.current = scrollElement
+      if (measureFrameRef.current !== null) return
+      measureFrameRef.current = window.requestAnimationFrame(() => {
+        measureFrameRef.current = null
+        const target = pendingScrollElementRef.current
+        pendingScrollElementRef.current = null
+        if (!target) return
+        measure()
+      })
+    }
+
     updateAutoScrollState()
     scrollElement.addEventListener('scroll', updateAutoScrollState, { passive: true })
 
     return () => {
       scrollElement.removeEventListener('scroll', updateAutoScrollState)
+      if (measureFrameRef.current !== null) {
+        window.cancelAnimationFrame(measureFrameRef.current)
+        measureFrameRef.current = null
+      }
     }
   }, [
     currentSessionId,

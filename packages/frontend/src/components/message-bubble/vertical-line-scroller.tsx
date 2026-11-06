@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 const LINE_INTERVAL_MS = 1200
+const WINDOW_RADIUS = 1
 
 const splitLines = (value: string): string[] => {
   const lines = value.replace(/\r\n?/g, '\n').split('\n')
@@ -12,6 +13,16 @@ const splitLines = (value: string): string[] => {
     lines.pop()
   }
   return lines
+}
+
+const buildVisibleLines = (lines: string[], index: number) => {
+  const start = Math.max(0, index - WINDOW_RADIUS)
+  const end = Math.min(lines.length - 1, index + WINDOW_RADIUS)
+  const window: Array<{ offset: number; text: string }> = []
+  for (let lineIndex = start; lineIndex <= end; lineIndex += 1) {
+    window.push({ offset: lineIndex, text: lines[lineIndex] })
+  }
+  return window
 }
 
 interface VerticalLineScrollerProps {
@@ -117,11 +128,17 @@ export function VerticalLineScroller({
           'will-change-transform',
           scrolling && 'transition-transform duration-300 ease-out',
         )}
-        style={{ transform: `translateY(-${index}rem)` }}
+        style={{
+          transform: `translateY(-${Math.min(WINDOW_RADIUS, index)}rem)`,
+        }}
       >
-        {lines.map((line, lineIndex) => (
-          <span key={lineIndex} className="block h-4 whitespace-pre text-xs leading-4">
-            {line}
+        {buildVisibleLines(lines, index).map((line) => (
+          <span
+            key={line.offset}
+            data-cot-line={line.offset}
+            className="block h-4 whitespace-pre text-xs leading-4"
+          >
+            {line.text}
           </span>
         ))}
       </div>

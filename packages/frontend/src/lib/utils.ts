@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from "clsx"
 import { extendTailwindMerge } from "tailwind-merge"
+import { formatCachedDate } from './date-format-cache'
 
 const twMerge = extendTailwindMerge({
   extend: {
@@ -24,25 +25,8 @@ export function cn(...inputs: ClassValue[]) {
 export function formatDate(date: string | Date): string {
   const d = new Date(date)
   const now = new Date()
-  const diffInHours = (now.getTime() - d.getTime()) / (1000 * 60 * 60)
-
-  if (diffInHours < 24) {
-    return d.toLocaleTimeString('zh-CN', {
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  } else if (diffInHours < 24 * 7) {
-    return d.toLocaleDateString('zh-CN', {
-      month: 'short',
-      day: 'numeric'
-    })
-  } else {
-    return d.toLocaleDateString('zh-CN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
-  }
+  if (!Number.isFinite(d.getTime())) return 'Invalid Date'
+  return formatCachedDate(d.getTime(), now.getTime())
 }
 
 export function generateSessionTitle(firstMessage: string): string {

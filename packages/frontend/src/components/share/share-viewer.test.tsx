@@ -211,7 +211,7 @@ describe("ShareViewer", () => {
     const renderer = screen.getByTestId("rich-message-renderer")
     expect(renderer).toHaveAttribute("data-layout", "auto")
     expect(renderer).not.toHaveAttribute("data-render-mode")
-    expect(screen.getByText("今日新闻")).toBeInTheDocument()
+    expect(renderer).toHaveTextContent("今日新闻")
     expect(screen.queryByText("证据图 1")).not.toBeInTheDocument()
     expect(screen.queryByRole("link", { name: "查看原文" })).not.toBeInTheDocument()
   })

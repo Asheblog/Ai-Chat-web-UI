@@ -3,19 +3,28 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
+import dynamic from 'next/dynamic'
 import { useSettingsStore } from '@/store/settings-store'
 import { useChatStore } from '@/store/chat-store'
 import { Button } from '@/components/ui/button'
 import { Sidebar } from '@/components/sidebar'
-import { MainContent } from '@/components/main-content'
 import { ModelSelector } from '@/components/model-selector'
 import { UserMenu } from '@/components/user-menu'
 import { SidebarToggleIcon } from '@/components/sidebar-toggle-icon'
 import { useAuthStore } from '@/store/auth-store'
 import { persistPreferredModel } from '@/store/model-preference-store'
-import { SetupWizard } from '@/components/setup-wizard/setup-wizard'
 import { SkillApprovalInbox } from '@/components/skills/skill-approval-inbox'
 import { useMainBootstrap } from '@/hooks/use-main-bootstrap'
+import { AppShell } from '@/components/app-shell'
+
+// 首次安装向导只在管理员身份下加载；内部系统连接页再由向导自身分包。
+const SetupWizard = dynamic(
+  () => import('@/components/setup-wizard/setup-wizard').then((m) => m.SetupWizard),
+  {
+    ssr: false,
+    loading: () => null,
+  },
+)
 
 export default function MainLayout({
   children,
@@ -26,20 +35,21 @@ export default function MainLayout({
   const setSidebarCollapsed = useSettingsStore((state) => state.setSidebarCollapsed)
   const currentSession = useChatStore((state) => state.currentSession)
   const actorState = useAuthStore((state) => state.actorState)
-  const actorType = actorState === 'authenticated' ? 'user' : 'anonymous'
+  const userRole = useAuthStore((state) => state.user?.role ?? null)
   const [mounted, setMounted] = useState(false)
+  const actorType = actorState === 'authenticated' ? 'user' : 'anonymous'
   const router = useRouter()
   const { setTheme } = useTheme()
 
+  useMainBootstrap(true)
+
+  // SSR 与客户端首帧都渲染骨架；挂载后再读持久化身份，避免水合不一致。
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  useMainBootstrap(mounted)
-
   // 迁移旧 Zustand 主题设置到 next-themes（仅执行一次）
   useEffect(() => {
-    if (!mounted) return
     try {
       if (localStorage.getItem('theme-migrated')) return
       const raw = localStorage.getItem('settings-storage')
@@ -51,30 +61,12 @@ export default function MainLayout({
       }
     } catch {}
     localStorage.setItem('theme-migrated', '1')
-  }, [mounted, setTheme])
+  }, [setTheme])
 
-  // 防止服务端渲染hydration问题
-  if (!mounted) {
-    return null
-  }
+  const isActorReady = mounted && actorState !== 'loading'
+  const isAdmin = actorState === 'authenticated' && userRole === 'ADMIN'
 
-  const isActorReady = actorState !== 'loading'
-
-  return (
-    <div className="flex h-screen min-h-0 w-full min-w-0 overflow-x-hidden bg-background">
-      <Sidebar />
-      <MainContent className="v2-app-surface relative">
-        <SetupWizard />
-        <SkillApprovalInbox />
-        {!isActorReady ? (
-          <div className="flex h-full w-full items-center justify-center">
-            <div className="space-y-3 text-center text-muted-foreground">
-              <div className="mx-auto h-9 w-9 animate-spin rounded-full border-2 border-border/80 border-t-primary" />
-              <p>正在同步身份信息...</p>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-col h-full min-h-0">
+  const toolbar = (
             <div className="v2-toolbar sticky top-0 z-40 grid grid-cols-3 items-center gap-2 px-4 lg:hidden">
               <div className="justify-self-start">
                 <Button
@@ -126,12 +118,17 @@ export default function MainLayout({
                 <UserMenu variant="icon" />
               </div>
             </div>
-            <div className="flex-1 min-h-0 flex flex-col">
-              {children}
-            </div>
-          </div>
-        )}
-      </MainContent>
-    </div>
+  )
+
+  return (
+    <AppShell
+      ready={isActorReady}
+      sidebar={<Sidebar />}
+      toolbar={toolbar}
+    >
+      {isAdmin ? <SetupWizard /> : null}
+      {isActorReady ? <SkillApprovalInbox /> : null}
+      {children}
+    </AppShell>
   )
 }

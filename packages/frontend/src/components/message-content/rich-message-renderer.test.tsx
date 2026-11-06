@@ -41,7 +41,7 @@ describe('RichMessageRenderer', () => {
     const root = screen.getByTestId('rich-message-renderer')
     expect(root).toHaveAttribute('data-layout', 'auto')
     expect(root).not.toHaveAttribute('data-render-mode')
-    expect(screen.getByText('今日要闻：')).toBeInTheDocument()
+    expect(root).toHaveTextContent('今日要闻：')
     expect(screen.queryByText('证据图 1')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '查看原图' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '查看原文' })).not.toBeInTheDocument()

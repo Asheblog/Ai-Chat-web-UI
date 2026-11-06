@@ -2,10 +2,10 @@ import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo,
 import type { RefObject } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { MessageBody, MessageMeta, MessageRenderCacheEntry, MessageStreamMetrics } from '@/types'
-import { MessageBubble } from './message-bubble'
-import { CompressedGroupCard } from './compressed-group-card'
+import { MessageRow } from './chat/chat-message-row'
 import { TypingIndicator } from './typing-indicator'
-import { useChatMessages } from '@/store/chat-store'
+import { useChatStore } from '@/store/chat-store'
+import { createFrameBatch, type FrameBatch } from '@/lib/frame-batch'
 
 const messageKey = (id: number | string) => (typeof id === 'string' ? id : String(id))
 
@@ -35,10 +35,11 @@ const compareVariants = (a: MessageMeta, b: MessageMeta) => {
   return messageKey(a.id).localeCompare(messageKey(b.id))
 }
 
-interface MessageListProps {
+export interface MessageListProps {
   metas: MessageMeta[]
-  bodies: Record<string, MessageBody>
-  renderCache: Record<string, MessageRenderCacheEntry>
+  /** 外部只读数据；主聊天传 storeConnected 并留空，由每行自行订阅 */
+  bodies?: Record<string, MessageBody>
+  renderCache?: Record<string, MessageRenderCacheEntry>
   isStreaming: boolean
   isLoading?: boolean
   autoScrollEnabled?: boolean
@@ -53,6 +54,8 @@ interface MessageListProps {
   unshareableMessageIds?: Set<number>
   onShareToggle?: (messageId: number) => void
   onShareStart?: (messageId: number) => void
+  /** 主聊天：每行只订阅自己的 body/cache/metrics；外部只读保持 false */
+  storeConnected?: boolean
 }
 
 interface VirtualizerResizeItem {
@@ -79,15 +82,36 @@ const MessageListComponent = forwardRef<MessageListHandle, MessageListProps>(fun
     unshareableMessageIds,
     onShareToggle,
     onShareStart,
+    storeConnected = false,
   },
   ref,
 ) {
-  const { regenerateAssistantMessage, cycleAssistantVariant } = useChatMessages((state) => ({
-    regenerateAssistantMessage: state.regenerateAssistantMessage,
-    cycleAssistantVariant: state.cycleAssistantVariant,
-  }))
   const containerRef = useRef<HTMLDivElement>(null)
   const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null)
+  const virtualizerRef = useRef<{ measureElement: (element: Element) => void } | null>(null)
+  const measureBatchRef = useRef<FrameBatch<Element> | null>(null)
+
+  if (!measureBatchRef.current) {
+    measureBatchRef.current = createFrameBatch<Element>((elements) => {
+      const virtualizer = virtualizerRef.current
+      if (!virtualizer) return
+      for (const element of elements) {
+        if (!element.isConnected) continue
+        virtualizer.measureElement(element)
+      }
+    })
+  }
+
+  const measureRow = useCallback((element: Element | null) => {
+    if (!element) return
+    measureBatchRef.current?.push(element)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      measureBatchRef.current?.cancel()
+    }
+  }, [])
 
   useEffect(() => {
     const root = scrollRootRef?.current
@@ -165,7 +189,8 @@ const MessageListComponent = forwardRef<MessageListHandle, MessageListProps>(fun
     (index: number) => {
       const meta = displayMetas[index]
       if (!meta) return 180
-      const body = bodies[messageKey(meta.id)]
+      const sourceBodies = storeConnected ? useChatStore.getState().messageBodies : bodies
+      const body = sourceBodies?.[messageKey(meta.id)]
       if (!body) return 150
 
       const contentLen = body.content?.length ?? 0
@@ -187,7 +212,7 @@ const MessageListComponent = forwardRef<MessageListHandle, MessageListProps>(fun
       if (meta.role === 'user') estimated -= 14
       return Math.max(100, estimated)
     },
-    [bodies, displayMetas],
+    [bodies, displayMetas, storeConnected],
   )
 
   const virtualizer = useVirtualizer({
@@ -200,6 +225,7 @@ const MessageListComponent = forwardRef<MessageListHandle, MessageListProps>(fun
     // 当前 react-virtual 类型定义缺少该字段，运行时由 virtual-core 实际支持。
     ...({ shouldAdjustScrollPositionOnItemSizeChange } as Record<string, unknown>),
   })
+  virtualizerRef.current = virtualizer
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = shouldAdjustScrollPositionOnItemSizeChange as any
 
   const SCROLL_TOP_OFFSET_PX = 72
@@ -266,26 +292,15 @@ const MessageListComponent = forwardRef<MessageListHandle, MessageListProps>(fun
         const meta = displayMetas[virtualRow.index]
         const storageKey = messageKey(meta.id)
         const reactKey = meta.stableKey || storageKey
-        const body = bodies[storageKey]
-        if (!body) return null
-        const cache = renderCache[storageKey]
-        const metricEntry = metrics?.[storageKey]
+        const body = storeConnected ? undefined : bodies?.[storageKey]
+        if (!storeConnected && !body) return null
+        const cache = storeConnected ? undefined : renderCache?.[storageKey]
+        const metricEntry = storeConnected ? undefined : metrics?.[storageKey]
         const parentKey = meta.parentMessageId != null ? messageKey(meta.parentMessageId) : null
         const siblings = parentKey ? variantGroups.get(parentKey) || [] : []
         const siblingIndex = parentKey
           ? siblings.findIndex((entry) => messageKey(entry.id) === storageKey)
           : -1
-        const variantInfo =
-          parentKey != null
-            ? {
-                parentKey,
-                total: siblings.length || 1,
-                index: siblingIndex >= 0 ? siblingIndex : 0,
-                onPrev: () => cycleAssistantVariant(parentKey, 'prev'),
-                onNext: () => cycleAssistantVariant(parentKey, 'next'),
-                onRegenerate: () => regenerateAssistantMessage(meta.id),
-              }
-            : undefined
         const streamingForMessage =
           isStreaming &&
           meta.role === 'assistant' &&
@@ -311,7 +326,7 @@ const MessageListComponent = forwardRef<MessageListHandle, MessageListProps>(fun
         return (
           <div
             key={reactKey}
-            ref={virtualizer.measureElement}
+            ref={measureRow}
             data-index={virtualRow.index}
             data-reading-key={reactKey}
             style={{
@@ -323,40 +338,29 @@ const MessageListComponent = forwardRef<MessageListHandle, MessageListProps>(fun
               paddingBottom: 16,
             }}
           >
-            {meta.role === 'compressedGroup' ? (
-              <CompressedGroupCard meta={meta} body={body} />
-            ) : (
-              <MessageBubble
-                meta={meta}
-                body={body}
-                renderCache={cache}
-                isStreaming={streamingForMessage}
-                metrics={metricEntry}
-                canEditUserMessage={canEditUserMessage}
-                variantInfo={variantInfo}
-                shareSelection={
-                  shareSelectable || shareModeActive
-                    ? {
-                        active: shareModeActive,
-                        selectable: shareSelectable,
-                        selected: shareSelected,
-                        onToggle:
-                          shareModeActive && shareSelectable && onShareToggle
-                            ? () => onShareToggle(Number(meta.id))
-                            : undefined,
-                        onStart: shareSelectable && onShareStart ? () => onShareStart(Number(meta.id)) : undefined,
-                      }
-                    : shareSelectable && onShareStart
-                    ? {
-                        active: false,
-                        selectable: shareSelectable,
-                        selected: false,
-                        onStart: () => onShareStart(Number(meta.id)),
-                      }
-                    : undefined
-                }
-              />
-            )}
+            <MessageRow
+              meta={meta}
+              storeConnected={storeConnected}
+              body={body}
+              renderCache={cache}
+              metrics={metricEntry}
+              isStreaming={Boolean(streamingForMessage)}
+              canEditUserMessage={canEditUserMessage}
+              share={
+                shareSelectable || shareModeActive
+                  ? {
+                      active: shareModeActive,
+                      selectable: shareSelectable,
+                      selected: shareSelected,
+                    }
+                  : null
+              }
+              variantParentKey={parentKey}
+              variantTotal={siblings.length || 1}
+              variantIndex={siblingIndex >= 0 ? siblingIndex : 0}
+              onShareToggle={onShareToggle}
+              onShareStart={onShareStart}
+            />
           </div>
         )
       })}
@@ -386,6 +390,9 @@ export const MessageList = memo(
     prev.metas === next.metas &&
     prev.bodies === next.bodies &&
     prev.renderCache === next.renderCache &&
+    prev.metrics === next.metrics &&
+    prev.storeConnected === next.storeConnected &&
+    prev.unshareableMessageIds === next.unshareableMessageIds &&
     prev.autoScrollEnabled === next.autoScrollEnabled &&
     prev.scrollRootRef === next.scrollRootRef &&
     prev.variantSelections === next.variantSelections &&

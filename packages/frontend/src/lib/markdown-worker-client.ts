@@ -1,9 +1,7 @@
 'use client'
 
-type MessageId = number | string
-
-interface RenderRequest {
-  messageId: MessageId
+export interface RenderRequest {
+  messageId: number | string
   content: string
   reasoning?: string
   contentVersion: number
@@ -11,7 +9,7 @@ interface RenderRequest {
   isStreaming?: boolean
 }
 
-interface RenderResponse {
+export interface RenderResponse {
   contentHtml: string | null
   reasoningHtml?: string | null
   contentVersion: number
@@ -23,150 +21,128 @@ interface RenderResponse {
 interface PendingJob {
   request: RenderRequest
   resolve: (value: RenderResponse) => void
-  reject: (error: Error) => void
+  timer?: ReturnType<typeof setTimeout>
+  sent: boolean
 }
 
+const READY_TIMEOUT_MS = 3000
+const JOB_TIMEOUT_MS = 5000
+const RETRY_COOLDOWN_MS = 10000
+const MAX_CONSECUTIVE_FAILURES = 3
 let workerInstance: Worker | null = null
-let workerFailed = false // 标记 Worker 是否初始化失败，避免重复尝试
-const pendingJobs = new Map<string, PendingJob>()
+let ready = false
+let readyTimer: ReturnType<typeof setTimeout> | undefined
+let failures = 0
+let retryAt = 0
 let jobCounter = 0
+const pendingJobs = new Map<string, PendingJob>()
 
-const createFallbackResponse = (
-  request: RenderRequest,
-  errorMessage?: string | null
-): RenderResponse => ({
+const fallback = (request: RenderRequest, reason: string): RenderResponse => ({
   contentHtml: null,
   reasoningHtml: request.reasoning ? null : undefined,
   contentVersion: request.contentVersion,
   reasoningVersion: request.reasoningVersion,
   errored: true,
-  errorMessage: errorMessage ?? undefined,
+  errorMessage: reason,
 })
 
-const ensureWorker = (): Worker | null => {
-  // 服务端渲染时直接返回 null
-  if (typeof window === 'undefined') {
-    return null
-  }
+const settle = (jobId: string, response: RenderResponse) => {
+  const job = pendingJobs.get(jobId)
+  if (!job) return
+  clearTimeout(job.timer)
+  pendingJobs.delete(jobId)
+  job.resolve(response)
+}
 
-  // 如果已有实例，直接返回
-  if (workerInstance) {
-    return workerInstance
-  }
+const dispose = (reason: string) => {
+  const worker = workerInstance
+  workerInstance = null
+  ready = false
+  clearTimeout(readyTimer)
+  readyTimer = undefined
+  worker?.terminate()
+  for (const [id, job] of pendingJobs) settle(id, fallback(job.request, reason))
+}
 
-  // 如果之前初始化失败过，不再尝试
-  if (workerFailed) {
-    return null
-  }
+const fail = (worker: Worker | null, reason: string) => {
+  if (worker !== workerInstance) return
+  failures += 1
+  retryAt = Date.now() + RETRY_COOLDOWN_MS
+  dispose(reason)
+  console.warn('[markdown-worker] ' + reason)
+}
 
+const send = (worker: Worker, jobId: string, job: PendingJob) => {
+  if (!ready || job.sent || worker !== workerInstance) return
+  job.sent = true
+  job.timer = setTimeout(() => fail(worker, 'task-timeout'), JOB_TIMEOUT_MS)
   try {
-    // 使用 try-catch 包裹 Worker 初始化，捕获可能的错误
-    workerInstance = new Worker(new URL('../workers/markdown-worker.ts', import.meta.url), {
-      type: 'module',
-    })
+    worker.postMessage({ ...job.request, jobId, messageId: String(job.request.messageId) })
+  } catch {
+    fail(worker, 'post-message-failed')
+  }
+}
 
-    workerInstance.addEventListener('message', (event: MessageEvent<any>) => {
+const ensureWorker = (): Worker | null => {
+  if (workerInstance) return workerInstance
+  if (failures >= MAX_CONSECUTIVE_FAILURES || Date.now() < retryAt) return null
+  try {
+    const worker = new Worker(new URL('../workers/markdown-worker.ts', import.meta.url), { type: 'module' })
+    workerInstance = worker
+    readyTimer = setTimeout(() => fail(worker, 'initialization-timeout'), READY_TIMEOUT_MS)
+    worker.addEventListener('message', (event: MessageEvent<any>) => {
+      if (worker !== workerInstance) return
       const data = event.data
-      if (!data || typeof data.jobId !== 'string') return
-      const pending = pendingJobs.get(data.jobId)
-      if (!pending) return
-      pendingJobs.delete(data.jobId)
-      if (data.errored) {
-        if (process.env.NODE_ENV !== 'production') {
-          // eslint-disable-next-line no-console
-          console.warn('[markdown-worker-client] Markdown worker fallback', data.errorMessage || '渲染失败')
-        }
-        pending.resolve(createFallbackResponse(pending.request, data.errorMessage))
+      if (data?.type === 'ready') {
+        ready = true
+        clearTimeout(readyTimer)
+        readyTimer = undefined
+        for (const [id, job] of pendingJobs) send(worker, id, job)
         return
       }
-      pending.resolve({
+      if (typeof data?.jobId !== 'string') return
+      const job = pendingJobs.get(data.jobId)
+      if (!job) return
+      if (data.errored || data.contentVersion !== job.request.contentVersion ||
+          data.reasoningVersion !== job.request.reasoningVersion || typeof data.contentHtml !== 'string') {
+        settle(data.jobId, fallback(job.request, 'render-failed'))
+        return
+      }
+      failures = 0
+      retryAt = 0
+      settle(data.jobId, {
         contentHtml: data.contentHtml,
         reasoningHtml: data.reasoningHtml ?? null,
         contentVersion: data.contentVersion,
         reasoningVersion: data.reasoningVersion,
       })
     })
-
-    workerInstance.addEventListener('error', (error) => {
-      const message = error instanceof ErrorEvent ? error.message : '渲染失败'
-      if (process.env.NODE_ENV !== 'production') {
-        // eslint-disable-next-line no-console
-        console.warn('[markdown-worker-client] Worker error, falling back to main thread:', message)
-      }
-      pendingJobs.forEach((job) => {
-        job.resolve(createFallbackResponse(job.request, message))
-      })
-      pendingJobs.clear()
-      workerInstance?.terminate()
-      workerInstance = null
-      workerFailed = true // 标记失败，后续使用 fallback
-    })
-
-    return workerInstance
-  } catch (err) {
-    // Worker 初始化失败（如 standalone 模式下文件不存在）
-    if (process.env.NODE_ENV !== 'production') {
-      // eslint-disable-next-line no-console
-      console.warn('[markdown-worker-client] Failed to initialize worker, using fallback:', err)
-    }
-    workerFailed = true
+    worker.addEventListener('error', () => fail(worker, 'worker-error'))
+    worker.addEventListener('messageerror', () => fail(worker, 'message-error'))
+    return worker
+  } catch {
+    fail(workerInstance, 'initialization-failed')
     return null
   }
 }
 
-export const requestMarkdownRender = async (payload: RenderRequest): Promise<RenderResponse> => {
-  if (!payload.content && !payload.reasoning) {
-    return {
-      contentHtml: '',
-      reasoningHtml: payload.reasoning ? '' : undefined,
-      contentVersion: payload.contentVersion,
-      reasoningVersion: payload.reasoningVersion,
-    }
+export const requestMarkdownRender = async (request: RenderRequest): Promise<RenderResponse> => {
+  if (!request.content && !request.reasoning) {
+    return { contentHtml: '', contentVersion: request.contentVersion, reasoningVersion: request.reasoningVersion }
   }
-
-  if (typeof window === 'undefined') {
-    return {
-      contentHtml: payload.content,
-      reasoningHtml: payload.reasoning,
-      contentVersion: payload.contentVersion,
-      reasoningVersion: payload.reasoningVersion,
-    }
-  }
-
+  if (typeof window === 'undefined') return fallback(request, 'server-render')
   const worker = ensureWorker()
-  if (!worker) {
-    // Worker 不可用时，返回 null 让 MarkdownRenderer 使用 ReactMarkdown fallback
-    // 不能返回原始 content，因为那会被当作 HTML 直接插入导致显示原始 Markdown 文本
-    return {
-      contentHtml: null,
-      reasoningHtml: payload.reasoning ? null : undefined,
-      contentVersion: payload.contentVersion,
-      reasoningVersion: payload.reasoningVersion,
-    }
-  }
-
-  const jobId = `job-${Date.now()}-${jobCounter++}`
-
-  const response = new Promise<RenderResponse>((resolve, reject) => {
-    pendingJobs.set(jobId, { request: payload, resolve, reject })
+  if (!worker) return fallback(request, 'worker-unavailable')
+  const id = 'job-' + jobCounter++
+  return new Promise((resolve) => {
+    const job: PendingJob = { request, resolve, sent: false }
+    pendingJobs.set(id, job)
+    send(worker, id, job)
   })
-
-  worker.postMessage({
-    jobId,
-    messageId: String(payload.messageId),
-    content: payload.content,
-    reasoning: payload.reasoning,
-    contentVersion: payload.contentVersion,
-    reasoningVersion: payload.reasoningVersion,
-    isStreaming: Boolean(payload.isStreaming),
-  })
-
-  return response
 }
 
 export const shutdownMarkdownWorker = () => {
-  workerInstance?.terminate()
-  workerInstance = null
-  pendingJobs.forEach((job) => job.reject(new Error('渲染被取消')))
-  pendingJobs.clear()
+  dispose('cancelled')
+  failures = 0
+  retryAt = 0
 }

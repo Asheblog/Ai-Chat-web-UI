@@ -48,8 +48,7 @@ const ensureMhchem = async () => {
       if (typeof console !== 'undefined') {
         // eslint-disable-next-line no-console
         console.warn(
-          '[markdown-worker] mhchem unavailable, continue without chemistry extension',
-          error,
+          '[markdown-worker] chemistry-extension-unavailable',
         )
       }
     })
@@ -163,7 +162,7 @@ const processJob = async (payload: WorkerRequest) => {
       contentVersion,
       reasoningVersion,
       errored: true,
-      errorMessage: error?.message || '渲染失败',
+      errorMessage: 'render-failed',
     }
     if (reasoning) {
       response.reasoningHtml = `<pre>${escapeHtml(reasoning)}</pre>`
@@ -192,3 +191,6 @@ self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
   }
   queueJob(payload)
 })
+
+// Static dependencies initialized before the client can submit work.
+self.postMessage({ type: 'ready' })

@@ -39,7 +39,7 @@ export function TypewriterReasoning({
     [initialPlayedLength, text.length],
   )
   const [displayText, setDisplayText] = useState(() => text.slice(0, clampedInitial))
-  const rafRef = useRef<number>()
+  const rafRef = useRef<number | null>(null)
   const lastTimeRef = useRef(0)
   const indexRef = useRef(clampedInitial)
   const prevTextRef = useRef(text)
@@ -72,6 +72,10 @@ export function TypewriterReasoning({
 
   useEffect(() => {
     if (!isStreaming) {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
       if (indexRef.current !== text.length || displayText !== text) {
         indexRef.current = text.length
         setDisplayText(text)
@@ -103,18 +107,26 @@ export function TypewriterReasoning({
 
       if (indexRef.current < targetTextRef.current.length) {
         rafRef.current = requestAnimationFrame(animate)
+      } else {
+        rafRef.current = null
       }
     }
 
-    rafRef.current = requestAnimationFrame(animate)
-
-    return () => {
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current)
-      }
+    // 同一帧内多次文本追加只保留一个待执行回调。
+    if (rafRef.current === null) {
+      rafRef.current = requestAnimationFrame(animate)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, isStreaming, speed, charsPerFrame])
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
+    }
+  }, [])
 
   return (
     <span className="block w-full break-words whitespace-pre-wrap">

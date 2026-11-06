@@ -191,7 +191,7 @@ export const renderMarkdownToHtml = (
     return { html: String(file) }
   } catch (error) {
     // eslint-disable-next-line no-console
-    console.error('[markdown-pipeline] render failed', error)
+    console.error('[markdown-pipeline] render-failed')
     return { html: `<pre>${escapeHtml(trimmed)}</pre>` }
   }
 }

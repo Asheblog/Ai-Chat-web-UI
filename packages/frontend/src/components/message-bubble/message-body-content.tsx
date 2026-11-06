@@ -71,10 +71,12 @@ interface MessageBodyContentProps {
   meta: MessageMeta
   bubbleClass: string
   contentHtml: string
+  renderedSource?: string
   content: string
   shouldShowStreamingPlaceholder: boolean
   isStreaming: boolean
   isRendering: boolean
+  renderErrored?: boolean
 }
 
 export function MessageBodyContent({
@@ -82,10 +84,12 @@ export function MessageBodyContent({
   meta,
   bubbleClass,
   contentHtml,
+  renderedSource,
   content,
   shouldShowStreamingPlaceholder,
   isStreaming,
   isRendering,
+  renderErrored = false,
 }: MessageBodyContentProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const lightbox = useImageLightbox()
@@ -191,6 +195,9 @@ export function MessageBodyContent({
         <RichMessageRenderer
           payload={assistantRichPayload}
           textHtml={contentHtml}
+          textSource={renderedSource}
+          managed
+          errored={renderErrored}
           isStreaming={isStreaming}
           isRendering={isRendering}
         />
@@ -210,7 +217,7 @@ export function MessageBodyContent({
           <span className="text-sm text-muted-foreground ml-2">AI正在思考...</span>
         </div>
       ) : (
-        <MarkdownRenderer html={contentHtml} fallback={content} isStreaming={isStreaming} isRendering={isRendering} />
+        <MarkdownRenderer html={contentHtml} source={renderedSource} managed errored={renderErrored} fallback={content} isStreaming={isStreaming} isRendering={isRendering} />
       )}
     </div>
   )

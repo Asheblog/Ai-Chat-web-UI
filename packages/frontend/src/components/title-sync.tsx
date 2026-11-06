@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { useAuthStore } from '@/store/auth-store'
 import { useSettingsStore } from '@/store/settings-store'
+import { getSharedBrandingController } from '@/components/title-sync-controller'
 
 const DEFAULT_TITLE = 'AIChat'
 
@@ -19,12 +20,8 @@ export function TitleSync({ initialBrandText, initialBrandFallback = false }: Ti
   const bootstrapBrandText = useSettingsStore((state) => state.bootstrapBrandText)
   const actorState = useAuthStore((state) => state.actorState)
   const fetchActor = useAuthStore((state) => state.fetchActor)
-  const hasRequestedBrand = useRef(false)
   const lastBrandRef = useRef<string>((initialBrandText ?? '').trim())
-  const fallbackRetryRef = useRef<{ timer: ReturnType<typeof setTimeout> | null; attempts: number }>({
-    timer: null,
-    attempts: 0,
-  })
+  const previousActorStateRef = useRef(actorState)
 
   useEffect(() => {
     if (actorState === 'loading') {
@@ -33,96 +30,48 @@ export function TitleSync({ initialBrandText, initialBrandFallback = false }: Ti
   }, [actorState, fetchActor])
 
   useEffect(() => {
-    const trimmedInitial = (initialBrandText ?? '').trim()
-    if (trimmedInitial) {
-      bootstrapBrandText(trimmedInitial)
-      if (!initialBrandFallback) {
-        hasRequestedBrand.current = true
-        return
-      }
+    const options = {
+      initialBrandText,
+      initialBrandFallback,
+      fetchBranding: fetchPublicBranding,
+      bootstrapBrandText,
     }
-    if (!brandText && !hasRequestedBrand.current) {
-      hasRequestedBrand.current = true
-      fetchPublicBranding()
-        .then((success) => {
-          if (!success) {
-            hasRequestedBrand.current = false
-          }
-        })
-        .catch(() => {
-          hasRequestedBrand.current = false
-        })
-    }
-  }, [initialBrandText, initialBrandFallback, brandText, bootstrapBrandText, fetchPublicBranding])
+    const controller = getSharedBrandingController(options)
+    controller.updateOptions(options)
+    controller.start()
+    return () => controller.dispose()
+  }, [initialBrandText, initialBrandFallback, bootstrapBrandText, fetchPublicBranding])
 
   useEffect(() => {
-    const retryState = fallbackRetryRef.current
+    const previous = previousActorStateRef.current
+    previousActorStateRef.current = actorState
+    // loading → 已就绪 属于首轮拉取，由 start 处理；只对真实身份切换刷新。
+    if (previous === 'loading' || previous === actorState) return
+    getSharedBrandingController({
+      initialBrandText,
+      initialBrandFallback,
+      fetchBranding: fetchPublicBranding,
+      bootstrapBrandText,
+    }).refresh()
+  }, [actorState, initialBrandText, initialBrandFallback, bootstrapBrandText, fetchPublicBranding])
 
-    if (!initialBrandFallback) {
-      return () => {
-        if (retryState.timer) {
-          clearTimeout(retryState.timer)
-          retryState.timer = null
-        }
-      }
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handleOnline = () => {
+      getSharedBrandingController({
+        initialBrandText,
+        initialBrandFallback,
+        fetchBranding: fetchPublicBranding,
+        bootstrapBrandText,
+      }).refresh()
     }
-
-    let cancelled = false
-    retryState.attempts = 0
-
-    const scheduleRetry = () => {
-      const attempt = retryState.attempts
-      const delay = Math.min(30000, 2000 * Math.max(1, attempt + 1))
-      retryState.timer = setTimeout(async () => {
-        if (cancelled) {
-          return
-        }
-        const success = await fetchPublicBranding()
-        if (cancelled) {
-          return
-        }
-        if (success) {
-          if (retryState.timer) {
-            clearTimeout(retryState.timer)
-            retryState.timer = null
-          }
-          return
-        }
-        retryState.attempts = attempt + 1
-        scheduleRetry()
-      }, delay)
-    }
-
-    // 立即尝试一次；如失败再进入调度
-    fetchPublicBranding()
-      .then((success) => {
-        if (cancelled || success) return
-        scheduleRetry()
-      })
-      .catch(() => {
-        if (cancelled) return
-        scheduleRetry()
-      })
-
-    return () => {
-      cancelled = true
-      if (retryState.timer) {
-        clearTimeout(retryState.timer)
-        retryState.timer = null
-      }
-    }
-  }, [initialBrandFallback, fetchPublicBranding])
+    window.addEventListener('online', handleOnline)
+    return () => window.removeEventListener('online', handleOnline)
+  }, [initialBrandText, initialBrandFallback, bootstrapBrandText, fetchPublicBranding])
 
   useEffect(() => {
     const trimmed = (brandText ?? '').trim()
-    if (trimmed) {
-      lastBrandRef.current = trimmed
-      const retryState = fallbackRetryRef.current
-      if (retryState.timer) {
-        clearTimeout(retryState.timer)
-        retryState.timer = null
-      }
-    }
+    if (trimmed) lastBrandRef.current = trimmed
   }, [brandText])
 
   useEffect(() => {

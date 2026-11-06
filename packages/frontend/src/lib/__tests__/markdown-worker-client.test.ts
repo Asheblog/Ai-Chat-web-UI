@@ -15,10 +15,11 @@ class MockWorker {
 
   constructor(..._args: any[]) {
     MockWorker.instances.push(this)
+    queueMicrotask(() => this.listeners.message.forEach((listener) => listener({ data: { type: 'ready' } } as MessageEvent<any>)))
   }
 
   addEventListener(type: 'message' | 'error', listener: any) {
-    this.listeners[type].push(listener)
+    this.listeners[type]?.push(listener)
   }
 
   postMessage(payload: any) {

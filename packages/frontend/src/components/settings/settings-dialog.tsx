@@ -1,5 +1,6 @@
 "use client"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import dynamic from "next/dynamic"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { settingsNav, type SettingsNavItem, resolveSelectTarget } from "./nav"
@@ -10,14 +11,34 @@ import { requestFlash, setDialogOpen } from "./settings-flash-bus"
 import { useAuthStore } from "@/store/auth-store"
 import { useToast } from "@/components/ui/use-toast"
 // import { PersonalModelsPage } from "./pages/PersonalModels"
-import { PersonalPreferencesPage } from "./pages/PersonalPreferences"
-import { PersonalSecurityPage } from "./pages/PersonalSecurity"
-import { PersonalSkillsPage } from "./pages/PersonalSkills"
-import { ShareManagementPanel } from "./pages/ShareManagement"
-import { AboutPage } from "./pages/About"
 import { DEFAULT_SYSTEM_LEAF, renderSystemLeaf } from "./system-settings-registry"
 
 type FlashTarget = { leafKey: string; cardKey?: string }
+
+const leafLoading = () => (
+  <div className="v2-panel-soft p-6 text-sm text-muted-foreground">正在加载设置模块…</div>
+)
+
+const PersonalPreferencesPage = dynamic(
+  () => import("./pages/PersonalPreferences").then((m) => m.PersonalPreferencesPage),
+  { loading: leafLoading },
+)
+const PersonalSecurityPage = dynamic(
+  () => import("./pages/PersonalSecurity").then((m) => m.PersonalSecurityPage),
+  { loading: leafLoading },
+)
+const PersonalSkillsPage = dynamic(
+  () => import("./pages/PersonalSkills").then((m) => m.PersonalSkillsPage),
+  { loading: leafLoading },
+)
+const ShareManagementPanel = dynamic(
+  () => import("./pages/ShareManagement").then((m) => m.ShareManagementPanel),
+  { loading: leafLoading },
+)
+const AboutPage = dynamic(
+  () => import("./pages/About").then((m) => m.AboutPage),
+  { loading: leafLoading },
+)
 
 interface SettingsDialogProps {
   open: boolean

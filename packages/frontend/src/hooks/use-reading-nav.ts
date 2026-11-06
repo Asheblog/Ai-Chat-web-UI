@@ -11,9 +11,10 @@ import {
   serializeReadingAnchorStore,
   shouldShowTurnToc,
   type ReadingAnchorStore,
+  type TurnBodyLike,
   type TurnTocEntry,
 } from '@/features/chat/reading-nav'
-import type { MessageBody, MessageMeta } from '@/types'
+import type { MessageMeta } from '@/types'
 import { messageKey } from '@/features/chat/store/utils'
 import type { MessageListHandle } from '@/components/message-list'
 
@@ -22,7 +23,8 @@ const messageStorageKey = (id: number | string) => messageKey(id)
 interface UseReadingNavParams {
   sessionId: number | null
   metas: MessageMeta[]
-  bodies: Record<string, MessageBody>
+  /** 阅读导航只读取正文用于生成轮次标题，不依赖完整 MessageBody。 */
+  bodies: Record<string, TurnBodyLike | undefined>
   scrollAreaRef: MutableRefObject<HTMLDivElement | null>
   messageListApiRef: MutableRefObject<MessageListHandle | null>
   isMessagesLoading: boolean
@@ -60,6 +62,8 @@ export const useReadingNav = ({
   const [scrollable, setScrollable] = useState(false)
   const [pendingRestoreKey, setPendingRestoreKey] = useState<string | null>(null)
   const restoredSessionRef = useRef<number | null>(null)
+  const measureFrameRef = useRef<number | null>(null)
+  const pendingScrollElementRef = useRef<HTMLElement | null>(null)
 
   const bodyByStorageKey = useMemo(() => {
     const map: Record<string, { content?: string | null }> = {}
@@ -108,7 +112,7 @@ export const useReadingNav = ({
     [schedulePersist],
   )
 
-  const updateActiveFromDom = useCallback(() => {
+  const measureActiveFromDom = useCallback(() => {
     const viewport = getScrollViewport()
     if (!viewport) return
     setScrollable(viewport.scrollHeight > viewport.clientHeight + 8)
@@ -134,12 +138,28 @@ export const useReadingNav = ({
     }
   }, [entries, getScrollViewport, ownership, saveAnchor, sessionId])
 
+  const updateActiveFromDom = useCallback(() => {
+    const viewport = getScrollViewport()
+    if (!viewport) return
+    pendingScrollElementRef.current = viewport
+    if (measureFrameRef.current !== null) return
+    measureFrameRef.current = window.requestAnimationFrame(() => {
+      measureFrameRef.current = null
+      pendingScrollElementRef.current = null
+      measureActiveFromDom()
+    })
+  }, [getScrollViewport, measureActiveFromDom])
+
   useEffect(() => {
     storeRef.current = readStore()
   }, [])
 
   useEffect(() => {
     return () => {
+      if (measureFrameRef.current !== null) {
+        window.cancelAnimationFrame(measureFrameRef.current)
+        measureFrameRef.current = null
+      }
       if (persistTimerRef.current !== null && typeof window !== 'undefined') {
         window.clearTimeout(persistTimerRef.current)
         persistTimerRef.current = null

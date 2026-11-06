@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, Settings } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -15,8 +16,17 @@ import { useAuthStore } from '@/store/auth-store'
 import { useModelsStore } from '@/store/models-store'
 import { refreshModelCatalog } from '@/features/system/api'
 import { getSetupStatus, setSetupState, type SetupStatusResponse } from '@/features/setup/api'
-import { SystemConnectionsPage } from '@/components/settings/pages/SystemConnections'
 import { cn } from '@/lib/utils'
+
+const SystemConnectionsPage = dynamic(
+  () =>
+    import('@/components/settings/pages/SystemConnections').then((m) => m.SystemConnectionsPage),
+  {
+    loading: () => (
+      <div className="v2-panel-soft p-6 text-sm text-muted-foreground">正在加载连接配置…</div>
+    ),
+  },
+)
 
 type WizardStep = 'welcome' | 'connections' | 'models' | 'finish'
 
@@ -75,6 +85,7 @@ export function SetupWizard() {
   const canComplete = Boolean(adminStatus?.can_complete)
 
   const refreshStatus = useCallback(async () => {
+    if (!isAdmin) return null
     if (setupStatusInFlight) return setupStatusInFlight
     setStatusLoading(true)
     setStatusError(null)
@@ -94,14 +105,15 @@ export function SetupWizard() {
       }
     })()
     return setupStatusInFlight
-  }, [])
+  }, [isAdmin])
 
   useEffect(() => {
-    refreshStatus().catch(() => {})
-  }, [refreshStatus])
-
-  useEffect(() => {
-    if (!isAdmin) return
+    if (!isAdmin) {
+      setStatus(null)
+      setStatusError(null)
+      setManualOpen(false)
+      return
+    }
     refreshStatus().catch(() => {})
   }, [isAdmin, refreshStatus])
 

@@ -150,6 +150,8 @@ export interface MessageSlice {
   applyRenderedContent: (
     messageId: MessageId,
     payload: {
+      sourceContent?: string
+      sourceStableKey?: string
       contentHtml?: string | null
       reasoningHtml?: string | null
       contentVersion?: number

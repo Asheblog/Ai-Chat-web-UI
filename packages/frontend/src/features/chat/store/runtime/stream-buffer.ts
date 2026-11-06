@@ -117,12 +117,8 @@ export const createStreamBufferRuntime = (deps: {
       }
 
       const nextBodies = { ...state.messageBodies, [assistantKey]: nextBody }
-      const nextRenderCache = { ...state.messageRenderCache }
-      delete nextRenderCache[assistantKey]
-
       const partial: Partial<ChatState> = {
         messageBodies: nextBodies,
-        messageRenderCache: nextRenderCache,
       }
 
       if (metaChanged) {
