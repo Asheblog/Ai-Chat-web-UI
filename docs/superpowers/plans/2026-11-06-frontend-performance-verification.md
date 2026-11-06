@@ -56,4 +56,4 @@
 
 ## 合并交付
 
-最终浏览器结果、提交与远端核对待收口后回填。
+实现提交146f83bc5368928f1864a0ae038a31d984fa2252；首次main合并14e926894e20083584c61b837eac5cb80205a349。git push --atomic origin codex/frontend-performance main已成功，随后git ls-remote核对两分支与本机一致，未使用force。合并树与已验证修复分支逐文件一致，无新增产品代码，复用现有验证证据。验收记录收尾提交继续从修复分支合入main并推送，最终HEAD见Git历史。
