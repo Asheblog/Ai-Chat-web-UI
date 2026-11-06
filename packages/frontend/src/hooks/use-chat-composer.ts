@@ -8,7 +8,6 @@ import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { useModelsStore } from '@/store/models-store'
 import { useAuthStore } from '@/store/auth-store'
-import { messageKey as toMessageKey } from '@/features/chat/store/utils'
 import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
 import { usePythonToolPreferenceStore } from '@/store/python-tool-preference-store'
 import { useDeepResearchPreferenceStore } from '@/store/deep-research-preference-store'
@@ -22,7 +21,6 @@ import type { ComposerImage, WorkspaceFile } from '@/features/chat/composer'
 import { useSkillsSelection } from './use-skills-selection'
 import { useMcpSessionBindings } from './use-mcp-session-bindings'
 import { useSendCommand } from './use-send-command'
-import { useScrollPersistence } from './use-scroll-persistence'
 import { useDragDrop } from './use-drag-drop'
 
 export type { WorkspaceFile }
@@ -53,63 +51,26 @@ export function useChatComposer(options?: UseChatComposerOptions) {
   const [noSaveThisRound, setNoSaveThisRound] = useState<boolean>(false)
   const {
     currentSession,
-    messageMetas,
-    messageRenderCache,
-    messagePaginationBySession,
-    isMessagesLoading,
     isStreaming,
     activeStreamCount,
     streamMessage,
     stopStreaming,
-    loadOlderMessages,
     clearError,
     error,
-    assistantVariantSelections,
     updateSessionPrefs,
   } = useChatStore(
     (state) => ({
       currentSession: state.currentSession,
-      messageMetas: state.messageMetas,
-      messageRenderCache: state.messageRenderCache,
-      messagePaginationBySession: state.messagePaginationBySession,
-      isMessagesLoading: state.isMessagesLoading,
       isStreaming: state.isStreaming,
       activeStreamCount: state.activeStreamCount,
       streamMessage: state.streamMessage,
       stopStreaming: state.stopStreaming,
-      loadOlderMessages: state.loadOlderMessages,
       clearError: state.clearError,
       error: state.error,
-      assistantVariantSelections: state.assistantVariantSelections,
       updateSessionPrefs: state.updateSessionPrefs,
     }),
     shallow,
   )
-
-  const sessionMessageMetas = useMemo(() => {
-    if (!currentSession) return []
-    return messageMetas.filter((meta) => meta.sessionId === currentSession.id)
-  }, [messageMetas, currentSession])
-
-  const streamScrollAnchor = useChatStore((state) => {
-    if (!state.isStreaming || !currentSession) return 'idle'
-    const sessionMetas = state.messageMetas.filter((meta) => meta.sessionId === currentSession.id)
-    if (sessionMetas.length === 0) return 'idle'
-    const lastMeta = sessionMetas[sessionMetas.length - 1]
-    if (!lastMeta || lastMeta.role !== 'assistant') {
-      return `stream:${sessionMetas.length}`
-    }
-    const key = toMessageKey(lastMeta.id)
-    const body = state.messageBodies[key]
-    return `stream:${key}:${body?.version ?? 0}:${body?.reasoningVersion ?? 0}`
-  })
-
-  const currentSessionPagination = useMemo(() => {
-    if (!currentSession) return null
-    return messagePaginationBySession[currentSession.id] || null
-  }, [messagePaginationBySession, currentSession])
-  const hasOlderMessages = Boolean(currentSessionPagination?.hasOlder)
-  const isLoadingOlderMessages = Boolean(currentSessionPagination?.isLoadingOlder)
 
   const {
     customBodyInput,
@@ -235,25 +196,16 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     setSessionPromptDraft,
   ])
 
-  const { scrollAreaRef, isAutoScrollEnabled, setAutoScrollEnabled } = useScrollPersistence({
-    currentSessionId: currentSession?.id ?? null,
-    sessionMessageMetas,
-    currentSessionPagination,
-    isMessagesLoading,
-    isStreaming,
-    streamScrollAnchor,
-    loadOlderMessages,
-  })
-
   useEffect(() => {
     if (!textareaRef.current) return
-    if (!isAutoScrollEnabled) return
+    if (isStreaming) return
     const active = typeof document !== 'undefined' ? document.activeElement : null
     const advancedEditing = active instanceof HTMLElement && active.dataset?.advancedInput === 'true'
     if (advancedEditing) return
     if (active && active !== document.body && active !== textareaRef.current) return
-    textareaRef.current.focus()
-  }, [isAutoScrollEnabled, isStreaming])
+    const frame = requestAnimationFrame(() => textareaRef.current?.focus())
+    return () => cancelAnimationFrame(frame)
+  }, [currentSession?.id, isStreaming])
 
   // 图片转写代理：非 vision 模型通过代理模型转写图片
   const visionProxyEnabled = systemSettings?.imageTranscriptionEnabled === true
@@ -526,7 +478,6 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     input,
     isComposing,
     textareaRef,
-    scrollAreaRef,
     selectedImages,
     thinkingEnabled,
     effort,
@@ -534,18 +485,10 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     customBodyInput,
     customBodyError,
     customHeaders,
-    messageMetas: sessionMessageMetas,
-    messageRenderCache,
     sessionPromptDraft,
     sessionPromptSaving,
     sessionPromptSourceLabel,
     sessionPromptPlaceholder,
-    isAutoScrollEnabled,
-    setAutoScrollEnabled,
-    hasOlderMessages,
-    isLoadingOlderMessages,
-    assistantVariantSelections,
-    isMessagesLoading,
     isStreaming,
     currentSession,
     error,

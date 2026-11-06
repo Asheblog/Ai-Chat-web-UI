@@ -1,27 +1,25 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MutableRefObject } from 'react'
 import { shallow } from 'zustand/shallow'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { MessageList, type MessageListHandle } from '@/components/message-list'
-import type { MessageBody, MessageMeta, MessageRenderCacheEntry } from '@/types'
+import type { MessageMeta } from '@/types'
 import { ChatErrorBanner } from '@/components/chat/chat-error-banner'
-import { Button } from '@/components/ui/button'
-import { useChatMessages, useChatStore } from '@/store/chat-store'
-import { ShareDialog } from '@/components/chat/share-dialog'
+import { useChatStore } from '@/store/chat-store'
 import { messageKey } from '@/features/chat/store/utils'
-import { ShareSelectionToolSummary } from '@/components/chat/share-selection-tool-summary'
+import { ShareDialog } from '@/components/chat/share-dialog'
+import { ShareSelectionPanel } from '@/components/chat/share-selection-panel'
 import { ChatTurnToc } from '@/components/chat/chat-turn-toc'
 import { useReadingNav } from '@/hooks/use-reading-nav'
+import type { TurnBodyLike } from '@/features/chat/reading-nav'
 import { cn } from '@/lib/utils'
 
 export interface ChatMessageViewportProps {
   scrollAreaRef: MutableRefObject<HTMLDivElement | null>
   error: unknown
   metas: MessageMeta[]
-  bodies: Record<string, MessageBody>
-  renderCache: Record<string, MessageRenderCacheEntry>
   isStreaming: boolean
   isLoading: boolean
   hasOlder?: boolean
@@ -33,12 +31,10 @@ export interface ChatMessageViewportProps {
   sessionTitle: string
 }
 
-export function ChatMessageViewport({
+function ChatMessageViewportComponent({
   scrollAreaRef,
   error,
   metas,
-  bodies,
-  renderCache,
   isStreaming,
   isLoading,
   hasOlder = false,
@@ -51,39 +47,42 @@ export function ChatMessageViewport({
 }: ChatMessageViewportProps) {
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false)
   const messageListApiRef = useRef<MessageListHandle | null>(null)
+  // 只摘取轮次标题所需的正文文本；流式 chunk 改的是助手正文，不会改变这份摘要。
+  const userTurnContents = useChatStore((state) => {
+    const next: Record<string, string> = {}
+    for (const meta of metas) {
+      if (meta.role !== 'user' && meta.role !== 'compressedGroup') continue
+      const body = state.messageBodies[messageKey(meta.id)]
+      if (body) next[messageKey(meta.id)] = body.content ?? ''
+    }
+    return next
+  }, shallow)
+  const userTurnBodies = useMemo(() => {
+    const next: Record<string, TurnBodyLike> = {}
+    for (const [key, content] of Object.entries(userTurnContents)) next[key] = { content }
+    return next
+  }, [userTurnContents])
   const {
     shareSelection,
     enterShareSelectionMode,
     toggleShareSelection,
-    setShareSelection,
-    clearShareSelection,
     exitShareSelectionMode,
   } = useChatStore(
     (state) => ({
       shareSelection: state.shareSelection,
       enterShareSelectionMode: state.enterShareSelectionMode,
       toggleShareSelection: state.toggleShareSelection,
-      setShareSelection: state.setShareSelection,
-      clearShareSelection: state.clearShareSelection,
       exitShareSelectionMode: state.exitShareSelectionMode,
     }),
     shallow,
   )
-  const messageMetrics = useChatStore((state) => state.messageMetrics || {})
-  const messageBodiesMap = useChatMessages((state) => state.messageBodies)
   const shareModeActive = shareSelection.enabled && shareSelection.sessionId === sessionId
   const selectedCount = shareModeActive ? shareSelection.selectedMessageIds.length : 0
-  const highlightedShareMessageId = shareModeActive ? shareSelection.selectedMessageIds[0] ?? null : null
-  const highlightedBodyEvents = useMemo(() => {
-    if (highlightedShareMessageId == null) return null
-    const key = messageKey(highlightedShareMessageId)
-    return messageBodiesMap[key]?.toolEvents ?? null
-  }, [highlightedShareMessageId, messageBodiesMap])
 
   const { entries, activeKey, visible, jumpToKey } = useReadingNav({
     sessionId,
     metas,
-    bodies,
+    bodies: userTurnBodies,
     scrollAreaRef,
     messageListApiRef,
     isMessagesLoading: isLoading,
@@ -99,39 +98,6 @@ export function ChatMessageViewport({
     () => (shareModeActive ? shareSelection.selectedMessageIds : []),
     [shareModeActive, shareSelection.selectedMessageIds],
   )
-  const unshareableResearchMessageIds = useMemo(() => {
-    const blocked = new Set<number>()
-    metas.forEach((meta) => {
-      if (meta.sessionId !== sessionId || typeof meta.id !== 'number') return
-      if (!Number.isFinite(meta.id) || meta.role !== 'assistant') return
-      const events = messageBodiesMap[messageKey(meta.id)]?.toolEvents ?? []
-      const terminal = events.some((event) => {
-        const toolId = event.identifier || event.apiName || event.tool
-        return toolId === 'research_plan' && (event.status === 'rejected' || event.status === 'aborted')
-      })
-      if (terminal) blocked.add(meta.id)
-    })
-    return blocked
-  }, [messageBodiesMap, metas, sessionId])
-
-  const shareSelectableMessageIds = useMemo(() => {
-    const ids: number[] = []
-    const seen = new Set<number>()
-    metas.forEach((meta) => {
-      if (meta.sessionId !== sessionId || typeof meta.id !== 'number') return
-      if (!Number.isFinite(meta.id) || meta.pendingSync || meta.isPlaceholder) return
-      if (unshareableResearchMessageIds.has(meta.id)) return
-      if (seen.has(meta.id)) return
-      ids.push(meta.id)
-      seen.add(meta.id)
-    })
-    return ids
-  }, [metas, sessionId, unshareableResearchMessageIds])
-  const selectedIdSet = useMemo(() => new Set(selectedMessageIds), [selectedMessageIds])
-  const selectableCount = shareSelectableMessageIds.length
-  const isAllSelectableChosen =
-    shareModeActive && selectableCount > 0 && shareSelectableMessageIds.every((id) => selectedIdSet.has(id))
-
   const handleShareNext = () => {
     if (!shareModeActive || selectedCount === 0) return
     setIsShareDialogOpen(true)
@@ -142,19 +108,19 @@ export function ChatMessageViewport({
     exitShareSelectionMode()
   }
 
-  const handleToggleSelectAll = () => {
-    if (!shareModeActive || selectableCount === 0) return
-    if (isAllSelectableChosen) {
-      clearShareSelection()
-      return
-    }
-    setShareSelection(sessionId, shareSelectableMessageIds)
-  }
-
   const handleJump = (key: string) => {
     setAutoScrollEnabled?.(false)
     jumpToKey(key)
   }
+
+  const handleToggleShare = useCallback(
+    (messageId: number) => toggleShareSelection(sessionId, messageId),
+    [sessionId, toggleShareSelection],
+  )
+  const handleStartShare = useCallback(
+    (messageId: number) => enterShareSelectionMode(sessionId, messageId),
+    [enterShareSelectionMode, sessionId],
+  )
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -171,91 +137,29 @@ export function ChatMessageViewport({
             </div>
           )}
           {shareModeActive && (
-            <div className="mb-3 rounded-xl border border-primary/25 bg-primary/8 px-4 py-3 text-sm text-foreground">
-              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="font-medium text-primary">分享选择模式已开启</p>
-                  <p className="text-xs text-primary/80 mt-1">
-                    已选 {selectedCount} 条消息 · 仅当前会话可分享，切换会话将自动清空选择
-                  </p>
-                  <ShareSelectionToolSummary
-                    sessionId={sessionId}
-                    messageId={highlightedShareMessageId}
-                    bodyEvents={highlightedBodyEvents ?? undefined}
-                    title="首条选中消息的工具调用"
-                    className="mt-2 max-w-md"
-                  />
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={handleToggleSelectAll}
-                    disabled={selectableCount === 0}
-                  >
-                    {isAllSelectableChosen ? '反选' : '全选'}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => clearShareSelection()}
-                    disabled={selectedCount === 0}
-                  >
-                    清空选中
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={handleExitShareMode}>
-                    返回聊天
-                  </Button>
-                  <Button type="button" size="sm" onClick={handleShareNext} disabled={selectedCount === 0}>
-                    下一步
-                  </Button>
-                </div>
-              </div>
-            </div>
+            <ShareSelectionPanel
+              sessionId={sessionId}
+              metas={metas}
+              selectedMessageIds={selectedMessageIds}
+              onExit={handleExitShareMode}
+              onNext={handleShareNext}
+            />
           )}
           <ChatErrorBanner error={error} />
           <MessageList
             ref={messageListApiRef}
+            storeConnected
             metas={metas}
-            bodies={bodies}
-            renderCache={renderCache}
             isStreaming={isStreaming}
             isLoading={isLoading}
             autoScrollEnabled={isAutoScrollEnabled}
             scrollRootRef={scrollAreaRef}
             variantSelections={variantSelections}
-            metrics={messageMetrics}
             shareSelection={shareSelection}
-            unshareableMessageIds={unshareableResearchMessageIds}
-            onShareToggle={(messageId) => toggleShareSelection(sessionId, messageId)}
-            onShareStart={(messageId) => enterShareSelectionMode(sessionId, messageId)}
+            onShareToggle={handleToggleShare}
+            onShareStart={handleStartShare}
           />
         </div>
-        {shareModeActive && (
-          <div className="lg:hidden fixed bottom-24 left-0 right-0 z-30 px-4 pointer-events-none">
-            <div className="pointer-events-auto flex items-center justify-between gap-3 rounded-full border border-primary/30 bg-[hsl(var(--surface))/0.95] px-4 py-3 shadow-lg backdrop-blur">
-              <span className="text-sm text-foreground">
-                已选 <span className="font-semibold text-primary">{selectedCount}</span> 条消息
-              </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={handleToggleSelectAll}
-                  disabled={selectableCount === 0}
-                >
-                  {isAllSelectableChosen ? '反选' : '全选'}
-                </Button>
-                <Button type="button" size="sm" onClick={handleShareNext} disabled={selectedCount === 0}>
-                  下一步
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
         <ShareDialog
           sessionId={sessionId}
           sessionTitle={sessionTitle}
@@ -271,3 +175,5 @@ export function ChatMessageViewport({
     </div>
   )
 }
+
+export const ChatMessageViewport = memo(ChatMessageViewportComponent)

@@ -5,21 +5,20 @@ import { useChatComposer } from '@/hooks/use-chat-composer'
 import { useTextareaAutoResize } from '@/hooks/use-textarea-auto-resize'
 import { useChatSessionControls } from '@/hooks/use-chat-session-controls'
 import { useKnowledgeBase } from '@/hooks/use-knowledge-base'
+import { useDesktopComposer } from '@/hooks/use-desktop-composer'
 import type { ChatToolbarProps } from '@/components/chat/chat-toolbar'
 import type { ChatComposerPanelProps } from '@/components/chat/chat-composer-panel'
-import type { ChatMessageViewportProps } from '@/components/chat/chat-message-viewport'
 import { useChatStore } from '@/store/chat-store'
 
 export interface ChatInterfaceViewModel {
   toolbar: ChatToolbarProps
-  viewport: ChatMessageViewportProps
   quotaMessage: string | null
   composer: ChatComposerPanelProps
 }
 
 export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewModel | null {
   const activeSessionId = useChatStore((state) => state.currentSession?.id ?? null)
-  const messageBodies = useChatStore((state) => state.messageBodies)
+  const isDesktopComposer = useDesktopComposer()
   // 知识库 - 需要先于 useChatComposer 调用，以便传递 selectedKbIds
   const knowledgeBase = useKnowledgeBase({ sessionId: activeSessionId })
 
@@ -27,20 +26,12 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     input,
     setIsComposing,
     textareaRef,
-    scrollAreaRef,
     selectedImages,
     thinkingEnabled,
     setThinkingEnabled,
     effort,
     setEffort,
-    messageMetas,
-    messageRenderCache,
-    isMessagesLoading,
     isStreaming,
-    isAutoScrollEnabled,
-    setAutoScrollEnabled,
-    hasOlderMessages,
-    isLoadingOlderMessages,
     currentSession,
     error,
     isVisionEnabled,
@@ -75,7 +66,6 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     mcpError,
     ensureMcpLoaded,
     onToggleMcpBinding,
-    assistantVariantSelections,
     sendLocked,
     sendLockedReason,
     customBodyInput,
@@ -110,7 +100,7 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     dragHandlers,
   } = useChatComposer({ knowledgeBaseIds: knowledgeBase.selectedKbIds })
 
-  const { showExpand } = useTextareaAutoResize(textareaRef, input, autoHeight)
+  const { showExpand } = useTextareaAutoResize(textareaRef, input, autoHeight, isDesktopComposer)
 
   const sessionControls = useChatSessionControls({
     currentSession,
@@ -189,26 +179,10 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     onModelChange: sessionControls.handleModelChange,
   }
 
-  const viewport: ChatMessageViewportProps = {
-    scrollAreaRef,
-    error,
-    metas: messageMetas,
-    bodies: messageBodies,
-    renderCache: messageRenderCache,
-    isStreaming,
-    isLoading: isMessagesLoading,
-    hasOlder: hasOlderMessages,
-    isLoadingOlder: isLoadingOlderMessages,
-    variantSelections: assistantVariantSelections,
-    isAutoScrollEnabled,
-    setAutoScrollEnabled,
-    sessionId: currentSession.id,
-    sessionTitle: currentSession.title || '分享链接',
-  }
-
   const composer: ChatComposerPanelProps = {
     input,
     textareaRef,
+    isDesktopComposer,
     showExpand,
     isStreaming,
     selectedImages,
@@ -299,7 +273,6 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
 
   return {
     toolbar,
-    viewport,
     quotaMessage: sessionControls.quotaNotice?.message ?? null,
     composer,
   }

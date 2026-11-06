@@ -14,6 +14,7 @@ import { SettingsLocationBanner } from "@/components/settings/components/setting
 import { isDialogOpen, requestFlash } from "@/components/settings/settings-flash-bus"
 import { DEFAULT_SYSTEM_LEAF, getAllSystemLeafKeys, getWorkspaceForLeaf } from "@/components/settings/system-settings-registry"
 import { useAuthStore } from "@/store/auth-store"
+import { setPersonalSection, usePersonalSectionFromHash } from "@/components/settings/personal-section"
 
 type FlashTarget = { leafKey: string; cardKey?: string }
 
@@ -43,7 +44,8 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
 
   const isAdmin = actorState === "authenticated" && user?.role === "ADMIN"
   const activeSection = deriveSection(pathname)
-  const [personalSub, setPersonalSub] = useState("profile")
+  // 独立个人设置页的激活页签由 URL hash 决定；布局只负责导航与锚点。
+  const personalSub = usePersonalSectionFromHash()
   const [systemSub, setSystemSub] = useState(DEFAULT_SYSTEM_LEAF)
   const [systemMain, setSystemMain] = useState(DEFAULT_SYSTEM_LEAF)
   const [flashTarget, setFlashTarget] = useState<FlashTarget | null>(null)
@@ -124,52 +126,20 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
     setFlashKey(null)
   }, [])
 
-  useEffect(() => {
-    if (activeSection !== "personal") return
-    if (typeof window === "undefined") return
-
-    const applyHashSelection = () => {
-      const hash = window.location.hash.replace(/^#/, "")
-      const nextKeyByHash: Record<string, string> = {
-        "settings-personal-preferences": "profile",
-        "settings-personal-skills": "skills",
-        "settings-share-management": "shares",
-        "settings-personal-security": "security",
-      }
-      const nextKey = nextKeyByHash[hash]
-      if (!nextKey) return
-      setPersonalSub(nextKey)
-      window.requestAnimationFrame(() => {
-        document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "start" })
-      })
-    }
-
-    applyHashSelection()
-    window.addEventListener("hashchange", applyHashSelection)
-    return () => {
-      window.removeEventListener("hashchange", applyHashSelection)
-    }
-  }, [activeSection])
-
   const handleChange = (key: string) => {
     if (activeSection === "personal") {
-      setPersonalSub(key)
-      const targetIdByKey: Record<string, string> = {
-        profile: "settings-personal-preferences",
-        skills: "settings-personal-skills",
-        shares: "settings-share-management",
-        security: "settings-personal-security",
-      }
-      const targetId = targetIdByKey[key] || "settings-personal-preferences"
-      const target = typeof document !== "undefined" ? document.getElementById(targetId) : null
-      target?.scrollIntoView({ behavior: "smooth", block: "start" })
+      const nextSection = (["profile", "skills", "shares", "security"] as const).includes(
+        key as "profile" | "skills" | "shares" | "security",
+      )
+        ? (key as "profile" | "skills" | "shares" | "security")
+        : "profile"
+      setPersonalSection(nextSection)
       return
     }
 
     // System: leaf selection from nested nav
     if (activeSection === "system") {
       if (key === "personal-skills") {
-        setPersonalSub("skills")
         router.push(`${SECTION_PATH.personal}#settings-personal-skills`)
         return
       }
@@ -229,13 +199,11 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
     )
   }
 
-  const resolvedActive = personalSub
-
   return (
     <SettingsShell
       title="个人设置"
       sections={personalSections}
-      active={resolvedActive}
+      active={personalSub}
       onChange={handleChange}
       showNavTitle={false}
     >

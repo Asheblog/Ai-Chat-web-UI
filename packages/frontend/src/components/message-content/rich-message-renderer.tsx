@@ -15,6 +15,9 @@ interface RichMessageRendererProps {
   payload: RichMessagePayload
   className?: string
   textHtml?: string | null
+  textSource?: string
+  managed?: boolean
+  errored?: boolean
   isStreaming?: boolean
   isRendering?: boolean
 }
@@ -151,6 +154,9 @@ export function RichMessageRenderer({
   payload,
   className,
   textHtml,
+  textSource,
+  managed,
+  errored = false,
   isStreaming = false,
   isRendering = false,
 }: RichMessageRendererProps) {
@@ -162,6 +168,7 @@ export function RichMessageRenderer({
       part.type === 'image' && !isWebEvidenceImage(part),
   )
   const textFallback = textParts.map((part) => part.text).join('\n\n')
+  const sharesTextSource = textSource === undefined || textFallback.startsWith(textSource)
   const hasText = textFallback.trim().length > 0
   const hasImages = imageParts.length > 0
   const layout = normalizeLayout(payload.layout, hasText, hasImages)
@@ -182,7 +189,10 @@ export function RichMessageRenderer({
       {hasText && (
         <div className={cn('min-w-0', sideBySide && 'lg:col-span-7')}>
           <MarkdownRenderer
-            html={textHtml ?? null}
+            html={sharesTextSource ? textHtml ?? null : null}
+            source={textSource}
+            managed={managed && sharesTextSource}
+            errored={errored && sharesTextSource}
             fallback={textFallback}
             isStreaming={isStreaming}
             isRendering={isRendering}

@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useToast } from '@/components/ui/use-toast'
 import { copyToClipboard, formatDate } from '@/lib/utils'
 import { formatFileSize } from '@/lib/format'
-import { requestMarkdownRender } from '@/lib/markdown-worker-client'
+import { useMarkdownRender } from '@/hooks/use-markdown-render'
 import { useChatStore } from '@/store/chat-store'
 import type { MessageBody, MessageMeta, MessageRenderCacheEntry, MessageStreamMetrics } from '@/types'
 import { useSettingsStore } from '@/store/settings-store'
@@ -20,7 +20,7 @@ import { normalizeMetricMs, normalizeMetricNumber } from './message-metrics'
 import { useToolTimeline } from '@/features/chat/tool-events/useToolTimeline'
 import { CotTimeline } from './cot-timeline'
 
-const STREAMING_MARKDOWN_RENDER_INTERVAL_MS = 280
+
 
 interface MessageBubbleProps {
   meta: MessageMeta
@@ -58,18 +58,17 @@ function MessageBubbleComponent({
   const { toast } = useToast()
   const applyRenderedContent = useChatStore((state) => state.applyRenderedContent)
   const editLastUserMessage = useChatStore((state) => state.editLastUserMessage)
-  const activeStreamCount = useChatStore((state) => state.activeStreamCount ?? 0)
   const currentUser = useAuthStore((state) => state.user)
   const { assistantAvatarUrl, assistantAvatarReady } = useSettingsStore((state) => ({
     assistantAvatarUrl: state.systemSettings?.assistantAvatarUrl ?? null,
     assistantAvatarReady: state.assistantAvatarReady,
   }))
   const [isCopied, setIsCopied] = useState(false)
-  const [isRendering, setIsRendering] = useState(false)
+
   const [editOpen, setEditOpen] = useState(false)
   const [editDraft, setEditDraft] = useState('')
   const [editApplying, setEditApplying] = useState(false)
-  const lastStreamingRenderAtRef = useRef(0)
+
   const reasoningRaw = body.reasoning || ''
   const artifacts = body.artifacts ?? meta.artifacts ?? []
   const reasoningPlayedLength =
@@ -90,28 +89,21 @@ function MessageBubbleComponent({
     bodyEvents: body.toolEvents,
   })
 
-  // 缓存匹配逻辑：
-  // 1. 严格匹配：版本完全相同
-  // 2. 宽松匹配：缓存版本与当前版本差距不超过3，且有有效HTML内容（仅用于“先展示”，避免白屏/闪烁）
-  // 注意：宽松匹配不应阻止后续重新渲染，否则可能长期卡在不完整的 HTML（例如代码块围栏跨 chunk 时）
-  const currentIsStreaming = Boolean(isStreaming)
-  const strictCacheMatches =
-    renderCache &&
-    renderCache.contentVersion === body.version &&
-    renderCache.reasoningVersion === body.reasoningVersion &&
-    (renderCache.isStreaming == null || renderCache.isStreaming === currentIsStreaming)
-  // 宽松缓存仅用于 live SSE（activeStreamCount>0）先展示；刷新后 progress 续传时
-  // activeStreamCount===0，若仍宽松命中会把旧 HTML 当成正文导致截断。
-  const allowLooseCache = Boolean(isStreaming && activeStreamCount > 0)
-  const looseCacheMatches =
-    allowLooseCache &&
-    renderCache &&
-    renderCache.contentHtml &&
-    renderCache.contentHtml.length > 0 &&
-    body.version - renderCache.contentVersion <= 3 &&
-    body.reasoningVersion - renderCache.reasoningVersion <= 3
-  const cacheUsableForDisplay = strictCacheMatches || looseCacheMatches
-  const contentHtml = cacheUsableForDisplay ? renderCache.contentHtml ?? '' : ''
+  const cachedSource = renderCache?.sourceContent
+  const cacheUsable = Boolean(renderCache && cachedSource !== undefined && renderCache.sourceStableKey === body.stableKey && renderCache.contentVersion <= body.version && content.startsWith(cachedSource) &&
+    (renderCache.isStreaming || cachedSource === content))
+  const strictCacheMatches = Boolean(cacheUsable && cachedSource === content && renderCache?.contentVersion === body.version && renderCache?.isStreaming === Boolean(isStreaming))
+  const markdown = useMarkdownRender({
+    identity: String(meta.sessionId) + ':' + String(meta.stableKey || meta.id),
+    content, version: body.version, isStreaming: Boolean(isStreaming),
+    enabled: !isUser && !strictCacheMatches,
+    onRendered: (snapshot, result) => applyRenderedContent(meta.id, {
+      ...result, reasoningVersion: body.reasoningVersion, isStreaming: snapshot.isStreaming,
+      sourceContent: snapshot.content, sourceStableKey: body.stableKey,
+    }),
+  })
+  const contentHtml = markdown.html ?? (cacheUsable ? renderCache?.contentHtml : null) ?? ''
+  const isRendering = markdown.isRendering
 
   const handleCopy = useCallback(async () => {
     try {
@@ -131,68 +123,6 @@ function MessageBubbleComponent({
       })
     }
   }, [content, toast])
-
-  useEffect(() => {
-    if (isUser) return
-    const hasReasoning = Boolean(body.reasoning && body.reasoning.trim().length > 0)
-    if (!hasContent && !hasReasoning) return
-    if (!hasContent && body.reasoningVersion === 0) return
-    // 严格命中才跳过；宽松命中仅用于先展示，仍应触发一次 Worker 重新渲染以保证结构完整
-    if (strictCacheMatches) return
-    const isLocalStreaming = isStreaming && activeStreamCount > 0
-
-    let cancelled = false
-    const elapsedSinceStreamingRender = Date.now() - lastStreamingRenderAtRef.current
-    const delay = isLocalStreaming
-      ? Math.max(0, STREAMING_MARKDOWN_RENDER_INTERVAL_MS - elapsedSinceStreamingRender)
-      : 40
-    const timer = window.setTimeout(() => {
-      if (isLocalStreaming) {
-        lastStreamingRenderAtRef.current = Date.now()
-      }
-      setIsRendering(true)
-      requestMarkdownRender({
-        messageId: meta.id,
-        content: body.content,
-        reasoning: '',
-        contentVersion: body.version,
-        reasoningVersion: body.reasoningVersion,
-        isStreaming: Boolean(isStreaming),
-      })
-        .then((result) => {
-          if (cancelled) return
-          applyRenderedContent(meta.id, { ...result, isStreaming: currentIsStreaming })
-        })
-        .catch((error) => {
-          if (process.env.NODE_ENV !== 'production') {
-            // eslint-disable-next-line no-console
-            console.warn('[MessageBubble] Markdown render failed', error)
-          }
-        })
-        .finally(() => {
-          if (!cancelled) {
-            setIsRendering(false)
-          }
-        })
-    }, delay)
-
-    return () => {
-      cancelled = true
-      window.clearTimeout(timer)
-    }
-  }, [
-    applyRenderedContent,
-    body.content,
-    body.reasoning,
-    body.reasoningVersion,
-    body.version,
-    strictCacheMatches,
-    hasContent,
-    isStreaming,
-    activeStreamCount,
-    isUser,
-    meta.id,
-  ])
 
   const bubbleClass = `max-w-full box-border ${
     isUser
@@ -311,10 +241,12 @@ function MessageBubbleComponent({
             meta={meta}
             bubbleClass={bubbleClass}
             contentHtml={contentHtml}
+            renderedSource={markdown.html != null ? markdown.source : cacheUsable ? cachedSource : undefined}
             content={content}
             shouldShowStreamingPlaceholder={shouldShowStreamingPlaceholder}
             isStreaming={Boolean(isStreaming)}
             isRendering={isRendering}
+            renderErrored={markdown.errored}
           />
 
           {!isUser && artifacts.length > 0 && (

@@ -21,6 +21,7 @@ import { buildWorkspaceFileManifest } from '@/features/chat/composer/workspace-f
 import { useKnowledgeBase } from '@/hooks/use-knowledge-base'
 import { useSkillsSelection } from '@/hooks/use-skills-selection'
 import { useDragDrop } from '@/hooks/use-drag-drop'
+import { useTextareaAutoResize } from '@/hooks/use-textarea-auto-resize'
 import { updateSessionSkillBinding } from '@/features/skills/api'
 
 export const useWelcomeScreenViewModel = () => {
@@ -448,14 +449,15 @@ export const useWelcomeScreenViewModel = () => {
     }
   }, [showWebSearchScope, systemSettings?.webSearchScope, webSearchScope])
 
+  const { showExpand: autoShowExpand } = useTextareaAutoResize(textareaRef, query, MAX_AUTO_HEIGHT)
+
   const handleTextareaChange = useCallback((value: string) => {
     setQuery(value)
-    if (!textareaRef.current) return
-    textareaRef.current.style.height = 'auto'
-    const nextHeight = Math.min(textareaRef.current.scrollHeight, MAX_AUTO_HEIGHT)
-    textareaRef.current.style.height = `${nextHeight}px`
-    setShowExpand(textareaRef.current.scrollHeight > MAX_AUTO_HEIGHT)
   }, [])
+
+  useEffect(() => {
+    setShowExpand(autoShowExpand)
+  }, [autoShowExpand])
 
   const handleAddCustomHeader = useCallback(() => {
     const result = appendCustomHeader()

@@ -122,6 +122,9 @@ export interface MessageBody {
 }
 
 export interface MessageRenderCacheEntry {
+  /** Display only while the body is an append of this exact source. */
+  sourceContent?: string;
+  sourceStableKey?: string;
   contentHtml: string | null;
   reasoningHtml: string | null;
   contentVersion: number;

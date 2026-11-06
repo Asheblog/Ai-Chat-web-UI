@@ -114,4 +114,81 @@ describe('server-branding 缓存策略', () => {
     expect(result.theme).toEqual({ brand_primary: '#AABBCC' })
     expect(result.isFallback).toBe(false)
   })
+
+  it('fetch 永不响应时在 1.5 秒 deadline 回退默认品牌', async () => {
+    vi.useFakeTimers()
+    try {
+      let receivedSignal: AbortSignal | undefined
+      fetchSpy.mockImplementation((_url: unknown, init?: RequestInit) => {
+        receivedSignal = init?.signal ?? undefined
+        return new Promise<Response>(() => {})
+      })
+      const { getServerBranding } = await loadModule()
+
+      const pending = getServerBranding()
+      await vi.advanceTimersByTimeAsync(1499)
+      let settled = false
+      void pending.then(() => { settled = true })
+      await Promise.resolve()
+      expect(settled).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(1)
+      await expect(pending).resolves.toEqual({
+        text: 'AIChat',
+        theme: {},
+        isFallback: true,
+      })
+      expect(receivedSignal?.aborted).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('响应体 json 悬挂时同样在 1.5 秒 deadline 回退', async () => {
+    vi.useFakeTimers()
+    try {
+      let receivedSignal: AbortSignal | undefined
+      fetchSpy.mockImplementation((_url: unknown, init?: RequestInit) => {
+        receivedSignal = init?.signal ?? undefined
+        return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => new Promise(() => {}),
+        } as unknown as Response)
+      })
+      const { getServerBranding } = await loadModule()
+
+      const pending = getServerBranding()
+      await vi.advanceTimersByTimeAsync(1500)
+      await expect(pending).resolves.toEqual({
+        text: 'AIChat',
+        theme: {},
+        isFallback: true,
+      })
+      // json 悬挂不能只让 Promise.race 结束：同一 signal 必须在 deadline 时中止。
+      expect(receivedSignal?.aborted).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('同一请求内重复调用复用同一次 fetch', async () => {
+    const { getServerBranding } = await loadModule()
+
+    const [first, second] = await Promise.all([getServerBranding(), getServerBranding()])
+
+    expect(first).toEqual(second)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('use server 模块只导出异步函数，不泄露 deadline 常量', async () => {
+    const mod = await loadModule()
+
+    for (const [name, value] of Object.entries(mod)) {
+      expect(typeof value, `export ${name} must be a function`).toBe('function')
+      if (typeof value === 'function') {
+        expect(value.constructor.name, `export ${name} must be async`).toBe('AsyncFunction')
+      }
+    }
+  })
 })

@@ -5,9 +5,11 @@ import {
   type ClipboardEventHandler,
   type KeyboardEventHandler,
   type MutableRefObject,
+  memo,
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import { createPortal } from 'react-dom'
@@ -33,6 +35,8 @@ export type { ComposerSkillOption } from './composer-types'
 export interface ChatComposerPanelProps {
   input: string
   textareaRef: MutableRefObject<HTMLTextAreaElement | null>
+  /** 768px 以上由桌面 composer 持有共享 ref；SSR 默认移动端。 */
+  isDesktopComposer?: boolean
   showExpand: boolean
   isStreaming: boolean
   sendLocked: boolean
@@ -130,6 +134,24 @@ export interface ChatComposerPanelProps {
 const MAX_PROMPT_TEMPLATE_VARIABLES = 20
 const MAX_PROMPT_TEMPLATE_VARIABLE_LENGTH = 64
 
+/**
+ * 双 composer 始终挂载、仅靠 CSS 断点切换。共享 ref 只能由可见的一侧写入；
+ * 每侧另存自己的节点，断点切换时再显式同步，避免旧节点解绑清空新节点。
+ */
+const createOwnedTextareaRef = (
+  target: MutableRefObject<HTMLTextAreaElement | null>,
+  ownNode: MutableRefObject<HTMLTextAreaElement | null>,
+  owns: () => boolean,
+): MutableRefObject<HTMLTextAreaElement | null> => ({
+  get current() {
+    return ownNode.current
+  },
+  set current(node) {
+    ownNode.current = node
+    if (owns()) target.current = node
+  },
+})
+
 const sortPromptTemplates = (templates: PromptTemplate[]) => {
   return [...templates].sort((a, b) => {
     const aPinned = a.pinnedAt ? new Date(a.pinnedAt).getTime() : 0
@@ -161,9 +183,10 @@ const deriveTemplateTitle = (content: string): string => {
   return `${compact.slice(0, 28)}...`
 }
 
-export function ChatComposerPanel({
+function ChatComposerPanelComponent({
   input,
   textareaRef,
+  isDesktopComposer = false,
   showExpand,
   isStreaming,
   sendLocked,
@@ -252,6 +275,33 @@ export function ChatComposerPanel({
 }: ChatComposerPanelProps) {
   const { toast } = useToast()
   const portalRoot = useMemo(() => (typeof document !== 'undefined' ? document.body : null), [])
+  const desktopOwnsTextareaRef = useRef(isDesktopComposer)
+  desktopOwnsTextareaRef.current = isDesktopComposer
+  const mobileTextareaNodeRef = useRef<HTMLTextAreaElement | null>(null)
+  const desktopTextareaNodeRef = useRef<HTMLTextAreaElement | null>(null)
+  const mobileTextareaRef = useMemo(
+    () =>
+      createOwnedTextareaRef(
+        textareaRef,
+        mobileTextareaNodeRef,
+        () => !desktopOwnsTextareaRef.current,
+      ),
+    [textareaRef],
+  )
+  const desktopTextareaRef = useMemo(
+    () =>
+      createOwnedTextareaRef(
+        textareaRef,
+        desktopTextareaNodeRef,
+        () => desktopOwnsTextareaRef.current,
+      ),
+    [textareaRef],
+  )
+  useEffect(() => {
+    textareaRef.current = isDesktopComposer
+      ? desktopTextareaNodeRef.current
+      : mobileTextareaNodeRef.current
+  }, [isDesktopComposer, textareaRef])
   const [expandOpen, setExpandOpen] = useState(false)
   const [expandDraft, setExpandDraft] = useState('')
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -689,7 +739,7 @@ export function ChatComposerPanel({
 
       <MobileComposer
         input={input}
-        textareaRef={textareaRef}
+        textareaRef={mobileTextareaRef}
         onInputChange={onInputChange}
         onKeyDown={onKeyDown}
         onPaste={onPaste}
@@ -750,7 +800,7 @@ export function ChatComposerPanel({
 
       <DesktopComposer
         input={input}
-        textareaRef={textareaRef}
+        textareaRef={desktopTextareaRef}
         onInputChange={onInputChange}
         onKeyDown={onKeyDown}
         onPaste={onPaste}
@@ -850,3 +900,6 @@ export function ChatComposerPanel({
     </div>
   )
 }
+
+export const ChatComposerPanel = memo(ChatComposerPanelComponent)
+ChatComposerPanel.displayName = 'ChatComposerPanel'

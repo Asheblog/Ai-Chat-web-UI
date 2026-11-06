@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { shallow } from 'zustand/shallow'
 import { WelcomeScreen } from '@/components/welcome-screen'
 import { ChatInterface } from '@/components/chat-interface'
 import { useChatStore } from '@/store/chat-store'
+import type { ChatSession } from '@/types'
 
 interface ChatPageClientProps {
   initialSessionId?: number | null
@@ -28,10 +29,25 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
       ? initialSessionId
       : null
   const [isHydrating, setIsHydrating] = useState<boolean>(() => normalizedSessionId !== null)
+  const requestedMessagesForRef = useRef<number | null>(null)
+
+  // 已知路由会话先建立临时会话身份，消息请求不等待 sessions 列表返回。
+  // 列表到达后由 ensureSelection 用服务端会话对象替换；权限仍由消息请求自身的鉴权结果决定。
+  const provisionalSession = useMemo<ChatSession | null>(() => {
+    if (normalizedSessionId === null) return null
+    return {
+      id: normalizedSessionId,
+      userId: -1,
+      title: '',
+      createdAt: new Date(0).toISOString(),
+    }
+  }, [normalizedSessionId])
 
   useEffect(() => {
     if (normalizedSessionId === null) {
       setIsHydrating(false)
+    } else {
+      requestedMessagesForRef.current = null
     }
   }, [normalizedSessionId])
 
@@ -67,17 +83,77 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
       const state = useChatStore.getState()
       const matched = state.sessions.find((s) => s.id === normalizedSessionId)
       if (matched) {
+        if (requestedMessagesForRef.current === matched.id && state.isMessagesLoading) {
+          // 临时身份已发起首个分页；列表返回只更新元数据，等本次请求完成。
+          if (state.currentSession?.id !== matched.id || state.currentSession.userId === -1) {
+            useChatStore.setState({
+              currentSession: matched,
+              isStreaming: state.activeStreamSessionId === matched.id,
+            })
+          }
+          return
+        }
+        // 已知会话在列表返回前已用临时身份加载过消息时，只替换会话元数据，
+        // 不重复请求同一会话，避免列表返回后二次加载与闪烁。
+        const provisionalLoaded =
+          requestedMessagesForRef.current === matched.id || state.messagesHydrated[matched.id] === true
         if (state.currentSession?.id !== matched.id) {
-          state.selectSession(matched.id)
+          if (provisionalLoaded) {
+            useChatStore.setState({
+              currentSession: matched,
+              isMessagesLoading: false,
+              isStreaming: state.activeStreamSessionId === matched.id,
+            })
+          } else {
+            state.selectSession(matched.id)
+          }
+        } else if (state.currentSession.userId === -1) {
+          // 临时身份与列表命中同一 ID：只替换元数据，保留已发起的消息加载。
+          useChatStore.setState({
+            currentSession: matched,
+            isStreaming: state.activeStreamSessionId === matched.id,
+          })
         } else {
           const hasMatchedMessages = state.messageMetas.some((meta) => meta.sessionId === matched.id)
-          if (state.messagesHydrated[matched.id] !== true) {
+          if (state.isMessagesLoading) return
+          if (requestedMessagesForRef.current !== matched.id && state.messagesHydrated[matched.id] !== true) {
+            requestedMessagesForRef.current = matched.id
             state.fetchMessages(matched.id)
           } else if (!hasMatchedMessages) {
-            state.fetchMessages(matched.id)
+            if (
+              requestedMessagesForRef.current !== matched.id &&
+              !useChatStore.getState().isMessagesLoading
+            ) {
+              requestedMessagesForRef.current = matched.id
+              state.fetchMessages(matched.id)
+            }
           }
         }
         return
+      }
+
+      // sessions 尚未返回时保留临时身份；已加载的消息/加载态不应被清空。
+      if (provisionalSession) {
+        if (state.currentSession?.id !== provisionalSession.id) {
+          useChatStore.setState({
+            currentSession: provisionalSession,
+            isMessagesLoading: true,
+            shareSelection: { enabled: false, sessionId: null, selectedMessageIds: [] },
+          })
+        }
+        const hydrated = state.messagesHydrated[provisionalSession.id] === true
+        if (!hydrated && !state.isMessagesLoading && requestedMessagesForRef.current !== provisionalSession.id) {
+          requestedMessagesForRef.current = provisionalSession.id
+          void state.fetchMessages(provisionalSession.id)
+          setIsHydrating(false)
+          return
+        }
+        // 列表与首个消息分页都结束后仍无该会话：视为无效深链，走原有回退。
+        // 消息成功（hydrated）时保留临时身份，避免列表分页暂时缺项时误跳转。
+        if (hydrated || state.isSessionsLoading || state.isMessagesLoading) {
+          setIsHydrating(false)
+          return
+        }
       }
 
       if (state.sessions.length > 0) {
@@ -94,6 +170,8 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
         if (normalizedSessionId !== null && !cancelled) {
           const hasSessions = useChatStore.getState().sessions.length > 0
           setIsHydrating(!hasSessions)
+          // 已知会话不等列表：先建立临时身份并请求消息，与 sessions 并行。
+          ensureSelection()
         }
         // bootstrap 负责预热；此处仅在仍为空时走 store 内 in-flight 去重 ensure。
         // 禁止把 isSessionsLoading / sessions.length 放进 deps：空列表时 fetchSessions
@@ -112,7 +190,7 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
     return () => {
       cancelled = true
     }
-  }, [fetchSessions, normalizedSessionId, pathname, router])
+  }, [fetchSessions, normalizedSessionId, pathname, provisionalSession, router])
 
   return (
     <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden">

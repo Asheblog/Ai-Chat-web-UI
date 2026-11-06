@@ -3,7 +3,7 @@
 import { ChatToolbar } from '@/components/chat/chat-toolbar'
 import { ChatComposerPanel } from '@/components/chat/chat-composer-panel'
 import { ChatQuotaNotice } from '@/components/chat/chat-quota-notice'
-import { ChatMessageViewport } from '@/components/chat/chat-message-viewport'
+import { ConnectedMessageViewport } from '@/components/chat/connected-message-viewport'
 import { useChatInterfaceViewModel } from '@/hooks/use-chat-interface-viewmodel'
 
 const MAX_AUTO_HEIGHT = 200
@@ -15,13 +15,13 @@ export function ChatInterface() {
     return null
   }
 
-  const { toolbar, viewport, quotaMessage, composer } = viewModel
+  const { toolbar, quotaMessage, composer } = viewModel
 
   return (
     <div className="flex-1 flex flex-col h-full min-h-0 relative">
       <ChatToolbar {...toolbar} />
 
-      <ChatMessageViewport {...viewport} />
+      <ConnectedMessageViewport />
 
       <ChatQuotaNotice message={quotaMessage} />
 

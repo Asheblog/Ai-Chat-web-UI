@@ -503,14 +503,19 @@ export const createMessageSlice: ChatSliceCreator<
         contentVersion = body.version,
         reasoningVersion = body.reasoningVersion,
         isStreaming,
+        sourceContent,
+        sourceStableKey,
       } = payload
 
-      if (
-        (contentVersion != null && contentVersion < body.version) ||
-        (reasoningVersion != null && reasoningVersion < body.reasoningVersion)
-      ) {
-        return state
-      }
+      const previous = state.messageRenderCache[key]
+      if (contentVersion > body.version || reasoningVersion > body.reasoningVersion) return state
+      if (sourceStableKey !== undefined && sourceStableKey !== body.stableKey) return state
+      if (sourceContent !== undefined) {
+        if (!body.content.startsWith(sourceContent)) return state
+        if (contentVersion === body.version && sourceContent !== body.content) return state
+      } else if (contentVersion !== body.version || reasoningVersion !== body.reasoningVersion) return state
+      if (previous && (previous.contentVersion > contentVersion ||
+          (previous.contentVersion === contentVersion && previous.isStreaming === false && isStreaming))) return state
 
       const entry = buildRenderCacheEntry(body, {
         contentHtml,
@@ -519,6 +524,8 @@ export const createMessageSlice: ChatSliceCreator<
         reasoningVersion,
         isStreaming,
       })
+      entry.sourceContent = sourceContent ?? body.content
+      entry.sourceStableKey = sourceStableKey ?? body.stableKey
 
       return {
         messageRenderCache: {

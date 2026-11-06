@@ -1,6 +1,11 @@
-import { describe, it, expect } from 'vitest'
-import { render } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+import { render, waitFor } from '@testing-library/react'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
+
+vi.mock('@/lib/markdown-worker-client', async () => {
+  const { renderMarkdownToHtml } = await import('@/lib/markdown-pipeline')
+  return { requestMarkdownRender: vi.fn(async (request: any) => ({ contentHtml: renderMarkdownToHtml(request.content, { isStreaming: request.isStreaming }).html, contentVersion: request.contentVersion, reasoningVersion: request.reasoningVersion })) }
+})
 
 describe('MarkdownRenderer', () => {
   it('renders provided HTML directly even when fallback contains code blocks', () => {
@@ -39,10 +44,11 @@ describe('MarkdownRenderer', () => {
     expect(container.textContent).toContain('after')
   })
 
-  it('keeps CJK text after a bare URL outside the link', () => {
+  it('keeps CJK text after a bare URL outside the link', async () => {
     const { container } = render(
       <MarkdownRenderer html={null} fallback="访问 https://example.com后续正文" />,
     )
+    await waitFor(() => expect(container.querySelector('a')).toBeTruthy())
     const link = container.querySelector('a')
 
     expect(link?.getAttribute('href')).toBe('https://example.com')
@@ -50,11 +56,11 @@ describe('MarkdownRenderer', () => {
     expect(container.textContent).toContain('后续正文')
   })
 
-  it('renders an unfinished streaming fence as a markdown code block', () => {
+  it('renders an unfinished streaming fence as a markdown code block', async () => {
     const fallback = ['```ts', 'const value = 1'].join('\n')
     const { container } = render(<MarkdownRenderer html="" fallback={fallback} isStreaming />)
 
-    expect(container.querySelector('.rs-terminal')).toBeTruthy()
+    await waitFor(() => expect(container.querySelector('.rs-terminal')).toBeTruthy())
     expect(container.textContent).toContain('const value = 1')
   })
 })

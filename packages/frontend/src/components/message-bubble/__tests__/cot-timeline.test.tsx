@@ -344,4 +344,17 @@ describe('CotTimeline', () => {
     expect(toolHeader).toHaveAttribute('aria-expanded', 'false')
     expect(reasoningButton).toHaveAttribute('aria-expanded', 'false')
   })
+
+  it('超多推理行折叠态只保留当前与相邻行 DOM，展开后显示全文', () => {
+    const huge = Array.from({ length: 400 }, (_, index) => `推理第${index}行`).join('\n')
+    render(<CotTimeline meta={createMeta()} reasoningRaw={huge} toolEvents={[]} />)
+
+    const scroller = screen.getByTestId('cot-vertical-line-scroller')
+    expect(scroller).toHaveAttribute('data-line-count', '400')
+    expect(scroller.querySelectorAll('[data-cot-line]').length).toBeLessThanOrEqual(3)
+
+    fireEvent.click(reasoningButtons()[0])
+    expect(screen.getByText(/推理第0行/)).toBeInTheDocument()
+    expect(screen.getByText(/推理第399行/)).toBeInTheDocument()
+  })
 })

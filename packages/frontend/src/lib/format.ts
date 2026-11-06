@@ -1,3 +1,5 @@
+import { formatCachedDateTime } from './date-format-cache'
+
 /**
  * 前端通用格式化工具。
  *
@@ -18,13 +20,7 @@ export const formatDateTime = (value?: string | Date | null): string => {
   if (!value) return '-'
   const date = value instanceof Date ? value : new Date(value)
   if (!Number.isFinite(date.getTime())) return '-'
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  return formatCachedDateTime(date.getTime())
 }
 
 export const normalizeMetricNumber = (value?: number | null) => {

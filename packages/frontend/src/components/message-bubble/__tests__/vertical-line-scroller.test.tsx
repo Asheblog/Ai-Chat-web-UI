@@ -70,4 +70,27 @@ describe('VerticalLineScroller', () => {
     })
     expect(scroller()).toHaveAttribute('data-line-index', '1')
   })
+
+  it('万行文本只渲染当前行与相邻行，同时保留总行数语义', () => {
+    const huge = Array.from({ length: 10_000 }, (_, index) => `第${index}行`).join('\n')
+    const { container } = render(<VerticalLineScroller text={huge} active={false} />)
+
+    const scroller = getScroller(container)
+    expect(scroller).toHaveAttribute('data-line-count', '10000')
+    expect(scroller).toHaveAttribute('data-line-index', '9999')
+    expect(scroller!.querySelectorAll('[data-cot-line]').length).toBeLessThanOrEqual(3)
+    expect(scroller).toHaveTextContent('第9999行')
+  })
+
+  it('输出结束停在最后一行且不保留滚动计时器', () => {
+    vi.useFakeTimers()
+    const { unmount, container } = render(
+      <VerticalLineScroller text={'第一行\n第二行\n第三行'} active />,
+    )
+
+    expect(vi.getTimerCount()).toBeGreaterThan(0)
+    unmount()
+    expect(vi.getTimerCount()).toBe(0)
+    expect(container.querySelector('[data-testid="cot-vertical-line-scroller"]')).toBeNull()
+  })
 })

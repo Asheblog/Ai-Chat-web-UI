@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef, type MouseEvent } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, type MouseEvent } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ChevronRight, Folder, Github, MessageCircle, Pin, PinOff, Plus, Search, Settings, Trash2, Trophy } from 'lucide-react'
+import { ChevronRight, Folder, Github, MessageCircle, Pin, PinOff, Plus, Settings, Trash2, Trophy } from 'lucide-react'
 import { shallow } from 'zustand/shallow'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -20,11 +20,18 @@ import { useChatStore } from '@/store/chat-store'
 import { useSettingsStore } from '@/store/settings-store'
 import { cn } from '@/lib/utils'
 import type { UsageTotals } from '@/types'
-import { SettingsDialog } from '@/components/settings/settings-dialog'
+import dynamic from 'next/dynamic'
 import { useAuthStore } from '@/store/auth-store'
 import { useModelsStore } from '@/store/models-store'
 import { useModelPreferenceStore, findPreferredModel, persistPreferredModel } from '@/store/model-preference-store'
 import { PROJECT_HOST_PATH, PROJECT_NAME, PROJECT_URL } from '@/lib/app-meta'
+import { SidebarSessionSearch } from '@/components/sidebar-session-search'
+import { formatCachedSidebarDateTime } from '@/lib/date-format-cache'
+
+const SettingsDialog = dynamic(
+  () => import('@/components/settings/settings-dialog').then((m) => m.SettingsDialog),
+  { ssr: false },
+)
 
 const formatUsageLine = (usage?: UsageTotals) => {
   if (!usage) return ''
@@ -39,12 +46,7 @@ const formatUsageLine = (usage?: UsageTotals) => {
 
 // 侧边栏时间显示：固定月/日/时:分，避免同日仅显示时间导致长度不一
 const formatSidebarDate = (date: string | Date): string => {
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(date))
+  return formatCachedSidebarDateTime(new Date(date).getTime())
 }
 
 const normalizeSearchText = (value: string) => value.trim().toLowerCase()
@@ -65,6 +67,7 @@ export function Sidebar() {
   const [includePinned, setIncludePinned] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [hasOpenedSettings, setHasOpenedSettings] = useState(false)
   const [sessionSearch, setSessionSearch] = useState('')
   const {
     sessions,
@@ -110,6 +113,11 @@ export function Sidebar() {
   const settingsDeepLinkHandledRef = useRef(false)
   const router = useRouter()
 
+  const openSettings = useCallback(() => {
+    setHasOpenedSettings(true)
+    setIsSettingsOpen(true)
+  }, [])
+
   // 监听全局事件以从外部打开/关闭移动端侧栏
   useEffect(() => {
     const open = () => setIsMobileMenuOpen(true)
@@ -134,20 +142,20 @@ export function Sidebar() {
     }
     if (isSettingsOpen || settingsDeepLinkHandledRef.current) return
     settingsDeepLinkHandledRef.current = true
-    setIsSettingsOpen(true)
-  }, [settingsDeepLink, isSettingsOpen])
+    openSettings()
+  }, [settingsDeepLink, isSettingsOpen, openSettings])
 
   useEffect(() => {
-    const openSettings = () => setIsSettingsOpen(true)
+    const openFromEvent = () => openSettings()
     if (typeof window !== 'undefined') {
-      window.addEventListener('aichat:open-settings', openSettings)
+      window.addEventListener('aichat:open-settings', openFromEvent)
     }
     return () => {
       if (typeof window !== 'undefined') {
-        window.removeEventListener('aichat:open-settings', openSettings)
+      window.removeEventListener('aichat:open-settings', openFromEvent)
       }
     }
-  }, [])
+  }, [openSettings])
 
   const handleNewChat = async () => {
     if (isCreating || quotaExhausted) return
@@ -353,7 +361,7 @@ export function Sidebar() {
           模型对战
         </Button>
         <Button
-          onClick={() => setIsSettingsOpen(true)}
+          onClick={openSettings}
           className="h-10 w-full justify-center rounded-md border border-border bg-surface text-foreground/80 shadow-none hover:bg-accent hover:text-primary"
           variant="outline"
         >
@@ -383,16 +391,7 @@ export function Sidebar() {
       </div>
       <div className="px-4 pb-3">
         <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
-            <input
-              value={sessionSearch}
-              onChange={(e) => setSessionSearch(e.target.value)}
-              placeholder="搜索对话"
-              className="h-9 w-full rounded-md border border-border bg-surface px-3 pl-9 text-sm outline-none transition focus-visible:border-primary/45 focus-visible:ring-2 focus-visible:ring-ring/25"
-              aria-label="搜索会话"
-            />
-          </div>
+          <SidebarSessionSearch onChange={setSessionSearch} />
           {sessions.length > 0 && (
             <TooltipProvider>
               <Tooltip>
@@ -627,7 +626,7 @@ export function Sidebar() {
                 size="icon"
                 className="h-10 w-10 rounded-lg text-muted-foreground hover:bg-accent hover:text-primary"
                 aria-label="系统设置"
-                onClick={() => setIsSettingsOpen(true)}
+                onClick={openSettings}
               >
                 <Settings className="h-5 w-5" />
               </Button>
@@ -662,7 +661,9 @@ export function Sidebar() {
   return (
     <>
       {/* 全局设置弹框 */}
-      <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
+      {hasOpenedSettings ? (
+        <SettingsDialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
+      ) : null}
 
       {/* 顶栏按钮触发：通过全局事件在 MobileMainLayout 中调用 */}
 

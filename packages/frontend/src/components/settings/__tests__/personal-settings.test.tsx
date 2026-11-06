@@ -99,52 +99,16 @@ const flushAsync = async () => {
   await act(async () => {})
 }
 
-describe("PersonalSettings 渲染顺序与锚点", () => {
-  test("渲染顺序：shares（最近分享）在 security（修改密码）之前，与导航一致", async () => {
+describe("PersonalSettings 个人设置分区", () => {
+  // 旧行为是四个分区同时挂载；性能修复后只挂载当前激活页，
+  // 锚点与数据请求的独立覆盖见 personal-settings-section.test.tsx。
+  test("默认只渲染 profile 激活页", async () => {
     const { container } = render(<PersonalSettings />)
-    await screen.findByText("最近分享")
-    await flushAsync()
+    await screen.findByText("管理你的头像、用户名与界面主题")
 
-    const sharesEl = container.querySelector("#settings-share-management")
-    const securityEl = container.querySelector("#settings-personal-security")
-    expect(sharesEl).not.toBeNull()
-    expect(securityEl).not.toBeNull()
-    const position = sharesEl!.compareDocumentPosition(securityEl!)
-    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  })
-
-  test("四个锚点 id 仍然存在（hash 滚动依赖）", async () => {
-    const { container } = render(<PersonalSettings />)
-    await screen.findByText("最近分享")
-
-    for (const id of [
-      "settings-personal-preferences",
-      "settings-personal-skills",
-      "settings-share-management",
-      "settings-personal-security",
-    ]) {
-      expect(container.querySelector(`#${id}`)).not.toBeNull()
-    }
-  })
-})
-
-describe("个人设置页面白话副标题", () => {
-  test("各个人页面区副标题可见", async () => {
-    render(<PersonalSettings />)
-    await screen.findByText("最近分享")
-
-    // 个人资料区（头像 / 用户名 / 主题）
-    expect(screen.getByText("管理你的头像、用户名与界面主题")).toBeInTheDocument()
-    // 对话与上下文区（上下文记忆开关 + 个人系统提示词）
-    expect(
-      screen.getByText("设置 AI 是否记住对话上下文，以及你的个人系统提示词"),
-    ).toBeInTheDocument()
-    // 最近分享区
-    expect(screen.getByText("查看、复制或撤销你分享出去的对话")).toBeInTheDocument()
-    // 个人 Skills 区（已有副标题，保持不变）
-    expect(
-      screen.getByText("从内置合规清单安装 GitHub Skill；安装后只能由当前账号在聊天会话里启用。"),
-    ).toBeInTheDocument()
+    expect(container.querySelector("#settings-personal-preferences")).not.toBeNull()
+    expect(container.querySelector("#settings-share-management")).toBeNull()
+    expect(screen.queryByText("最近分享")).not.toBeInTheDocument()
   })
 
   test("MCP 页头副标题可见（已有，保持不变）", async () => {
