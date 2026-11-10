@@ -63,6 +63,13 @@
 - **并行搜索**：多个搜索引擎同时查询，属于同一批次
 - **语言路由**：并行数量上限先按管理员引擎顺序筛选，再按查询语言选择首批来源。默认中文路由为 Metaso、DeepSeek、Tavily、Brave、Exa；英文优先 Tavily、Brave、Exa，随后 DeepSeek、Metaso。Skill 的显式语言路由覆盖默认排序，剩余引擎按需参与补充搜索。
 
+## 认证与登录态
+
+- **Session Token（登录令牌）**：登录/注册成功时签发的 JWT；Web 端不持有明文，只存在于 HttpOnly Cookie `token`，移动端在 SecureStore 保存同一令牌并以 Bearer 头发送
+- **Session TTL（登录态有效期）**：令牌与 Cookie 的存活时长，由 `JWT_TTL_SECONDS` 决定（默认 86400 秒，钳制 60 秒–365 天）；登录、续签、登出共用同一常量与 Cookie 选项，各处不得另写魔数
+- **Sliding Renewal（滑动续期）**：令牌剩余寿命不足半个 TTL 时，服务端在解析 actor 的同一处重签令牌并把新 Cookie 写回响应；活跃会话因此不会在 TTL 处被硬踢，最坏每半个 TTL 重签一次；空闲超过一个 TTL 仍会过期
+- **Server-Authoritative Auth State（服务端权威登录态）**：前端只把 actor/user/quota 作为首屏占位快照持久化，`actorState` 不落盘；每次启动必调 `/auth/actor` 以服务端判定为准，Cookie 过期立即降级，不保留「已登录」假象
+
 ## 密钥
 
 - **Secret Vault（密钥库）**：由显式主密钥保护、加密保存用户或管理员私有凭据的系统边界；密钥值只允许写入和运行时使用，不允许对普通用户回显或跨能力继承；系统级模型连接密钥允许管理员在受控管理面导出与导入，用于环境迁移
