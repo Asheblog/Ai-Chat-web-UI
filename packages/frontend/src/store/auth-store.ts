@@ -8,6 +8,7 @@ import {
   register as registerApi,
 } from '@/features/auth/api'
 import { useModelPreferenceStore } from '@/store/model-preference-store'
+import { mergePersistedAuthState } from '@/store/auth-persistence'
 
 interface AuthStore extends AuthState {
   login: (username: string, password: string) => Promise<void>
@@ -179,12 +180,14 @@ export const useAuthStore = create<AuthStore>()(
     },
     {
       name: 'auth-storage',
+      // actorState 不落盘：登录态每次启动都必须由 /auth/actor 重新判定，
+      // 否则 Cookie 过期后本地快照会让 UI 假装还登录着。
       partialize: (state) => ({
         actor: state.actor,
         user: state.user,
         quota: state.quota,
-        actorState: state.actorState,
       }),
+      merge: mergePersistedAuthState,
     }
   )
 )

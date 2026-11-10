@@ -23,11 +23,11 @@ export function TitleSync({ initialBrandText, initialBrandFallback = false }: Ti
   const lastBrandRef = useRef<string>((initialBrandText ?? '').trim())
   const previousActorStateRef = useRef(actorState)
 
+  // 启动即让服务端确认真实身份：本地快照只用于首屏占位，不能当作「已登录」依据。
+  // store 内部有 in-flight 去重，StrictMode 双挂载只发一次请求。
   useEffect(() => {
-    if (actorState === 'loading') {
-      fetchActor().catch(() => {})
-    }
-  }, [actorState, fetchActor])
+    fetchActor().catch(() => {})
+  }, [fetchActor])
 
   useEffect(() => {
     const options = {

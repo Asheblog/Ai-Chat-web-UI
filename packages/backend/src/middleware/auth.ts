@@ -8,6 +8,7 @@ import {
 } from '../utils/profile-images'
 import { authContextService as defaultAuthContextService } from '../services/auth/auth-context-service'
 import { getAppConfig, type AppConfig } from '../config/app-config'
+import { AUTH_TOKEN_COOKIE, buildAuthTokenCookieOptions } from '../utils/auth'
 
 const ANON_COOKIE_KEY = 'anon_key'
 const COOKIE_PATH_ROOT: Parameters<typeof deleteCookie>[2] = { path: '/' }
@@ -48,7 +49,7 @@ export const createAuthMiddleware = (deps: AuthMiddlewareDeps = {}) => {
     let authCookie: string | null = null
     let anonCookie: string | null = null
     try {
-      authCookie = getCookie(c, 'token') || null
+      authCookie = getCookie(c, AUTH_TOKEN_COOKIE) || null
     } catch {}
     try {
       anonCookie = getCookie(c, ANON_COOKIE_KEY) || null
@@ -61,7 +62,7 @@ export const createAuthMiddleware = (deps: AuthMiddlewareDeps = {}) => {
     })
     if (!result.actor) {
       if (result.clearAuth) {
-        try { deleteCookie(c, 'token', COOKIE_PATH_ROOT) } catch {}
+        try { deleteCookie(c, AUTH_TOKEN_COOKIE, COOKIE_PATH_ROOT) } catch {}
       }
       if (result.clearAnon) {
         try { deleteCookie(c, ANON_COOKIE_KEY, COOKIE_PATH_ROOT) } catch {}
@@ -84,6 +85,17 @@ export const createAuthMiddleware = (deps: AuthMiddlewareDeps = {}) => {
         status: result.actor.status,
         avatarUrl: avatarUrl ?? null,
       })
+      // 滑动续期：接近过期时把新令牌写回 Cookie，活跃会话不会在 TTL 处被踢
+      if (result.authCookie) {
+        try {
+          setCookie(
+            c,
+            AUTH_TOKEN_COOKIE,
+            result.authCookie.token,
+            buildAuthTokenCookieOptions(appConfig.server.cookieSecure, result.authCookie.maxAge),
+          )
+        } catch {}
+      }
     } else if (result.anonCookie) {
       ensureAnonCookie(c, result.anonCookie.key, result.anonCookie.retentionDays, appConfig.server.cookieSecure)
     }

@@ -25,6 +25,8 @@ services:
       - DATABASE_URL=file:/app/data/app.db
       - NODE_OPTIONS=${BACKEND_NODE_OPTIONS:---max-old-space-size=1024}
       - JWT_SECRET=${JWT_SECRET:-replace-with-strong-secret}
+      - JWT_TTL_SECONDS=${JWT_TTL_SECONDS:-86400}
+      - COOKIE_SECURE=${COOKIE_SECURE:-}
       - SECRET_VAULT_MASTER_KEY=${SECRET_VAULT_MASTER_KEY}
       - DEFAULT_CONTEXT_TOKEN_LIMIT=${DEFAULT_CONTEXT_TOKEN_LIMIT:-120000}
       - ENABLE_CORS=${ENABLE_CORS:-false}

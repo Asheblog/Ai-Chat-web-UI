@@ -7,6 +7,7 @@ import type { AuthResponse, RegisterResponse, ApiResponse, ActorContext, Actor }
 import { serializeQuotaSnapshot } from '../services/quota/legacy-utils';
 import { AuthServiceError, type AuthService } from '../services/auth/auth-service';
 import type { AppConfig } from '../config/app-config';
+import { AUTH_TOKEN_COOKIE, buildAuthTokenCookieOptions } from '../utils/auth';
 
 export interface AuthApiDeps {
   authService: AuthService
@@ -38,14 +39,12 @@ export const createAuthApi = (deps: AuthApiDeps) => {
 
       if (result.token) {
         try {
-          const secure = appConfig.server.cookieSecure;
-          setCookie(c, 'token', result.token, {
-            httpOnly: true,
-            secure,
-            sameSite: 'Lax',
-            path: '/',
-            maxAge: 24 * 60 * 60,
-          });
+          setCookie(
+            c,
+            AUTH_TOKEN_COOKIE,
+            result.token,
+            buildAuthTokenCookieOptions(appConfig.server.cookieSecure),
+          );
         } catch {}
       }
 
@@ -81,14 +80,12 @@ export const createAuthApi = (deps: AuthApiDeps) => {
       const result = await svc.login({ username, password, request: c.req.raw });
 
       try {
-        const secure = appConfig.server.cookieSecure;
-        setCookie(c, 'token', result.token, {
-          httpOnly: true,
-          secure,
-          sameSite: 'Lax',
-          path: '/',
-          maxAge: 24 * 60 * 60,
-        });
+        setCookie(
+          c,
+          AUTH_TOKEN_COOKIE,
+          result.token,
+          buildAuthTokenCookieOptions(appConfig.server.cookieSecure),
+        );
       } catch {}
 
       const response: AuthResponse = {
@@ -196,7 +193,7 @@ export const createAuthApi = (deps: AuthApiDeps) => {
   // 新增：登出接口（清除 Cookie）
   router.post('/logout', async (c) => {
     try {
-      deleteCookie(c, 'token', { path: '/' });
+      deleteCookie(c, AUTH_TOKEN_COOKIE, { path: '/' });
     } catch {}
     return c.json<ApiResponse>({ success: true, message: 'Logged out' });
   });

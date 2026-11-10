@@ -47,6 +47,28 @@ describe('TitleSync', () => {
     vi.useRealTimers()
   })
 
+  it('挂载即向服务端校验身份，不依赖持久化的 actorState', async () => {
+    authMock.actorState = 'authenticated'
+    render(<TitleSync initialBrandText="AIChat" initialBrandFallback />)
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(authMock.fetchActor).toHaveBeenCalledTimes(1)
+  })
+
+  it('匿名快照同样以服务端结果为准', async () => {
+    authMock.actorState = 'anonymous'
+    render(<TitleSync initialBrandText="AIChat" initialBrandFallback />)
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(authMock.fetchActor).toHaveBeenCalledTimes(1)
+  })
+
   it('StrictMode 双挂载只发起一次品牌请求', async () => {
     render(
       <React.StrictMode>
