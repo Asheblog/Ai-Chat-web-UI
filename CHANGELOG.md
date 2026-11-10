@@ -2,6 +2,7 @@
 
 ## 未发布
 
+- fix: 登录态改为滑动续期——JWT 与 Cookie 的 `maxAge` 统一由 `JWT_TTL_SECONDS` 决定（默认 86400 秒，可用范围 60 秒–365 天），令牌剩余寿命不足半个 TTL 时服务端在解析 actor 处自动重签并写回 HttpOnly Cookie，活跃会话不再在 24 小时处被硬踢；前端不再持久化 `actorState`，启动即以 `/auth/actor` 的服务端判定为准（Cookie 过期立即降级，不再出现「UI 已登录、后端已匿名」的错位）；新增 `COOKIE_SECURE` 显式覆盖与登录/注册页 401 重复跳转护栏。无 DB 迁移，升级只需 `docker compose pull && docker compose up -d`。
 - UI: 折叠态推理卡由横向跑马灯改为单行上下滚屏——标题在上、CoT 内容在下，流式时逐行向下滚动且不循环，输出结束直接停在最后一行；工具卡保持原横向滚屏。无后端协议变更、无迁移。
 - UI: CoT 与工具展示统一为平铺时间轴——推理卡与每个工具卡均为消息体一级兄弟元素，左侧带状态色时间轴轨道，顶部提供统一「全部展开/全部折叠」开关；各卡片仍独立折叠/持久化，不再共享「深度思考过程」总壳；主聊天 / 分享 / Battle / Android 四端统一组件语义与节点构建器。无后端协议变更、无迁移。
 - 重构：将 web / mobile 的 `ChatStreamChunk → ToolEvent` 增量归约逻辑收敛至 `@aichat/shared/stream-message-reducer`（单一 `upsertToolEventFromChunk`），并删除 chat `stream-slice` 与 battle `useBattleFlow` 的 phase/status/stage/source 本地归一化副本；无行为变更、无迁移。
