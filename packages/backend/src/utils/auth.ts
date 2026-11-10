@@ -4,6 +4,64 @@ import type { JWTPayload, AuthPayload } from '../types';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
 
+const DEFAULT_TOKEN_TTL_SECONDS = 24 * 60 * 60;
+const MIN_TOKEN_TTL_SECONDS = 60;
+const MAX_TOKEN_TTL_SECONDS = 365 * 24 * 60 * 60;
+
+/** 登录态有效期（秒）：由 JWT_TTL_SECONDS 覆盖，非法值回落 24h */
+export const resolveTokenTtlSeconds = (raw?: string | null): number => {
+  const parsed = Number.parseInt(String(raw ?? ''), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_TOKEN_TTL_SECONDS;
+  return Math.min(Math.max(parsed, MIN_TOKEN_TTL_SECONDS), MAX_TOKEN_TTL_SECONDS);
+};
+
+export const AUTH_TOKEN_TTL_SECONDS = resolveTokenTtlSeconds(process.env.JWT_TTL_SECONDS);
+/** 剩余寿命不足一半即滑动续期，避免每个请求都重签 Cookie */
+export const AUTH_TOKEN_RENEW_REMAINING_SECONDS = Math.floor(AUTH_TOKEN_TTL_SECONDS / 2);
+export const AUTH_TOKEN_COOKIE = 'token';
+
+export interface AuthTokenCookieOptions {
+  httpOnly: boolean;
+  secure: boolean;
+  sameSite: 'Lax';
+  path: string;
+  maxAge: number;
+}
+
+export const buildAuthTokenCookieOptions = (
+  secure: boolean,
+  maxAge: number = AUTH_TOKEN_TTL_SECONDS,
+): AuthTokenCookieOptions => ({
+  httpOnly: true,
+  secure,
+  sameSite: 'Lax',
+  path: '/',
+  maxAge,
+});
+
+/**
+ * 是否需要重签令牌（滑动续期判据）：
+ * - 有 exp：剩余寿命 <= 半个 TTL 就续（调大 TTL 后旧令牌会立刻升级）
+ * - 只有 iat：已存活超过半个 TTL 就续
+ * - 两者都没有：直接续
+ */
+export const shouldRenewAuthToken = (
+  payload: Pick<JWTPayload, 'iat' | 'exp'> | null | undefined,
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+  ttlSeconds: number = AUTH_TOKEN_TTL_SECONDS,
+): boolean => {
+  const renewRemainingSeconds = Math.floor(ttlSeconds / 2);
+  const exp = payload?.exp;
+  if (typeof exp === 'number' && Number.isFinite(exp)) {
+    return exp - nowSeconds <= renewRemainingSeconds;
+  }
+  const iat = payload?.iat;
+  if (typeof iat === 'number' && Number.isFinite(iat)) {
+    return nowSeconds - iat >= renewRemainingSeconds;
+  }
+  return true;
+};
+
 export class AuthUtils {
   // 密码哈希
   static async hashPassword(password: string): Promise<string> {
@@ -18,12 +76,13 @@ export class AuthUtils {
 
   // 生成JWT Token
   static generateToken(payload: AuthPayload): string {
+    const nowSeconds = Math.floor(Date.now() / 1000);
     const jwtPayload: JWTPayload = {
       userId: payload.userId,
       username: payload.username,
       role: payload.role,
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60), // 24小时过期
+      iat: nowSeconds,
+      exp: nowSeconds + AUTH_TOKEN_TTL_SECONDS,
     };
 
     return jwt.sign(jwtPayload, JWT_SECRET);

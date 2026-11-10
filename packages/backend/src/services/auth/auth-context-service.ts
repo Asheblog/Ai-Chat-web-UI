@@ -1,8 +1,12 @@
 import { randomBytes } from 'node:crypto'
 import type { PrismaClient } from '@prisma/client'
-import type { Actor, AnonymousActor, UserActor } from '../../types'
+import type { Actor, AnonymousActor, JWTPayload, UserActor } from '../../types'
 import { prisma as defaultPrisma } from '../../db'
-import { AuthUtils as defaultAuthUtils } from '../../utils/auth'
+import {
+  AuthUtils as defaultAuthUtils,
+  AUTH_TOKEN_TTL_SECONDS,
+  shouldRenewAuthToken,
+} from '../../utils/auth'
 import { getQuotaPolicy as defaultGetQuotaPolicy } from '../settings/legacy-utils'
 
 const ANON_KEY_REGEX = /^[a-zA-Z0-9_-]{10,128}$/
@@ -14,17 +18,25 @@ export interface AuthContextResult {
   clearAuth?: boolean
   clearAnon?: boolean
   anonCookie?: { key: string; retentionDays: number } | null
+  /** 滑动续期后的新令牌；中间件负责写回 Cookie */
+  authCookie?: { token: string; maxAge: number } | null
 }
 
 export interface AuthContextServiceDeps {
   prisma?: PrismaClient
-  authUtils?: Pick<typeof defaultAuthUtils, 'extractTokenFromHeader' | 'verifyToken'>
+  authUtils?: Pick<
+    typeof defaultAuthUtils,
+    'extractTokenFromHeader' | 'verifyToken' | 'generateToken'
+  >
   getQuotaPolicy?: typeof defaultGetQuotaPolicy
   randomBytesFn?: typeof randomBytes
   now?: () => Date
 }
 
-type AuthContextUtils = Pick<typeof defaultAuthUtils, 'extractTokenFromHeader' | 'verifyToken'>
+type AuthContextUtils = Pick<
+  typeof defaultAuthUtils,
+  'extractTokenFromHeader' | 'verifyToken' | 'generateToken'
+>
 
 export class AuthContextService {
   private prisma: PrismaClient
@@ -92,6 +104,11 @@ export class AuthContextService {
           avatarPath: user.avatarPath ?? null,
           personalPrompt: user.personalPrompt ?? null,
         }),
+        authCookie: this.renewAuthCookie(payload, {
+          id: user.id,
+          username: user.username,
+          role: user.role,
+        }),
       }
     }
 
@@ -105,6 +122,29 @@ export class AuthContextService {
     return {
       actor: this.buildAnonymousActor(anonKey, quotaPolicy.anonymousRetentionDays),
       anonCookie: { key: anonKey, retentionDays: quotaPolicy.anonymousRetentionDays },
+    }
+  }
+
+  /**
+   * 滑动续期：令牌剩余寿命不足半个 TTL 时重签，使活跃用户不会在 24h 处被踢。
+   * 续签失败不阻断本次请求，交给下一个请求重试。
+   */
+  private renewAuthCookie(
+    payload: JWTPayload,
+    user: { id: number; username: string; role: string },
+  ): { token: string; maxAge: number } | null {
+    const nowSeconds = Math.floor(this.now().getTime() / 1000)
+    if (!shouldRenewAuthToken(payload, nowSeconds)) return null
+    try {
+      const token = this.authUtils.generateToken({
+        userId: user.id,
+        username: user.username,
+        role: user.role,
+      })
+      return { token, maxAge: AUTH_TOKEN_TTL_SECONDS }
+    } catch (error) {
+      console.error('Failed to renew auth token:', error)
+      return null
     }
   }
 
