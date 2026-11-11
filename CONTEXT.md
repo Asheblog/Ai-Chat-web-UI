@@ -25,7 +25,7 @@
 - **CoT（Chain of Thought，思维链）**：模型逐步推理的过程。主聊天 / 分享 / Battle / Android 均按 Reasoning Offset 将推理与工具拆为平铺步骤流（每个节点独立卡片）
 - **Reasoning Offset**：工具调用在推理文本中的字符偏移位置；用于将工具事件插入对应推理段落之间，形成步骤流（Start/End 由后端与流式层写入）
 - **Reasoning Text**：推理的文本内容，流式传输；展示前可对历史污染行做剥离，但 offset 切片始终基于原始文本
-- **Cot Timeline（平铺 CoT 时间轴）**：四端统一的过程展示；Web `CotTimeline` 与 Android RN `CotTimeline` 均由 `@aichat/shared/cot-timeline` 的 `buildInterleavedCotNodes` 构建节点，并直接渲染为消息体的一级兄弟卡片；左侧带状态色时间轴轨道，顶部提供统一「全部展开/全部折叠」开关（覆盖全部卡片，个体交互后退出统一态）；每张卡片独立折叠，Web 侧按消息/工具实例持久化（`aichat.cot_reasoning_visibility` / `aichat.cot_tool_visibility`），不再共享「深度思考过程」总壳；列表 key 由 `cotTimelineNodeKey` 生成（推理段仅按 `charStart` 稳定，避免流式增长 remount 打字机）
+- **Cot Timeline（三段折叠 CoT 时间轴）**：四端统一的过程展示；Web `CotTimeline` 与 Android RN `CotTimeline` 均由 `@aichat/shared/cot-timeline` 的 `buildInterleavedCotNodes` 构建节点。Web 侧按三段级别折叠：`collapsed`（L0，整条压成一行摘要，完成态默认，正文不再被上百步顶走）/ `outline`（L1，每步一行紧凑提纲，限高 `min(45vh,20rem)` 内部滚动，单步仍可就地下钻）/ `expanded`（L2，每步细节全开）。级别判定与一行摘要由 `@aichat/shared/cot-timeline-view` 的 `resolveCotTimelineLevel` / `buildCotTimelineSummary` 提供（优先级：用户手选 > 调用方默认（Battle 详情 expanded）> 流式自动 outline > 完成态 collapsed）；级别按消息 key 存入 sessionStorage（`aichat.cot_timeline_level:<消息 key>`），只记住这条消息、不串扰其他消息；每张卡片仍独立折叠，Web 侧按消息/工具实例持久化（`aichat.cot_reasoning_visibility` / `aichat.cot_tool_visibility`）；时间轴轨道与状态色圆点随级别切换（提纲层内轨道位于滚动内容内部）；列表 key 由 `cotTimelineNodeKey` 生成（推理段仅按 `charStart` 稳定，避免流式增长 remount 打字机）。Android RN 仍为单级「全部展开/全部折叠」，待接入同一状态机
 
 ## 工具调用
 

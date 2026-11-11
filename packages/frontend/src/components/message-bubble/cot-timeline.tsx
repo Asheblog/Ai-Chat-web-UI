@@ -1,31 +1,20 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
-import { ChevronDown, ChevronsUpDown, Lightbulb, Loader2 } from 'lucide-react'
-import {
-  buildInterleavedCotNodes,
-  cotTimelineNodeKey,
-  resolveSegmentPlayedLength,
-  type CotTimelineNode,
-} from '@aichat/shared/cot-timeline'
-import { resolveEventStatus } from '@aichat/shared/tool-events'
+import { useId, useMemo } from 'react'
+import { buildInterleavedCotNodes } from '@aichat/shared/cot-timeline'
+import { buildCotTimelineSummary } from '@aichat/shared/cot-timeline-view'
 import type { MessageMeta, ToolEvent } from '@/types'
-import { TypewriterReasoning } from '@/components/typewriter-reasoning'
 import { formatDurationSeconds } from './message-metrics'
-import { CotToolGroupStep, CotToolStep } from './cot-step-parts'
-import { ResearchPlanCard } from './research-plan-card'
-import { usePersistedExpand } from './use-persisted-expand'
-import { FadeScrollContainer } from './fade-scroll-container'
-import { VerticalLineScroller } from './vertical-line-scroller'
-
-const REASONING_VISIBILITY_STORAGE_KEY = 'aichat.cot_reasoning_visibility'
-const TOOL_VISIBILITY_STORAGE_KEY = 'aichat.cot_tool_visibility'
+import { CotTimelineHeader, CotTimelineSummaryBar } from './cot-timeline-summary-bar'
+import { CotTimelineOutline } from './cot-timeline-outline'
+import { CotTimelineNodes } from './cot-timeline-nodes'
+import { useCotTimelineLevel } from './use-cot-timeline-level'
 
 export interface CotTimelineProps {
   meta: MessageMeta
   reasoningRaw: string
   toolEvents: ToolEvent[]
-  /** 完成态下推理卡是否默认展开（Battle 详情传 true） */
+  /** 完成态下直接进入「全部展开」层（Battle 详情传 true） */
   defaultExpanded?: boolean
   /** 流式中：末段推理卡片展开后使用打字机播放 */
   isStreaming?: boolean
@@ -39,18 +28,14 @@ const resolveBaseKey = (meta: Pick<MessageMeta, 'stableKey' | 'id' | 'clientMess
   return ''
 }
 
-const resolveDotClass = (node: CotTimelineNode) => {
-  if (node.type === 'reasoning') return 'bg-amber-400'
-  const status = node.type === 'toolGroup' ? node.status : resolveEventStatus(node.event)
-  if (status === 'running' || status === 'pending') return 'bg-blue-400 animate-pulse'
-  if (status === 'error' || status === 'rejected' || status === 'aborted') return 'bg-rose-400'
-  return 'bg-emerald-400'
-}
-
 /**
  * 统一 CoT 时间轴：主聊天 / 分享 / Battle 共用。
- * 顶部提供统一展开/折叠开关，左侧提供时间轴轨道；
- * 每个 reasoning / tool / toolGroup 节点仍是独立卡片，可单独折叠与持久化。
+ *
+ * 三段折叠：
+ * - collapsed：整条压成一行摘要（完成态默认），正文不再被 100+ 步顶走；
+ * - outline：每步一行的提纲，限高滚动，单步仍可就地展开；
+ * - expanded：每步细节全开，即原来的「全部展开」。
+ * 级别偏好由 useCotTimelineLevel 持久化，用户手选优先于流式自动切换。
  */
 export function CotTimeline({
   meta,
@@ -64,312 +49,77 @@ export function CotTimeline({
     () => buildInterleavedCotNodes(reasoningRaw, toolEvents),
     [reasoningRaw, toolEvents],
   )
+  const summary = useMemo(() => buildCotTimelineSummary(nodes), [nodes])
   const baseKey = resolveBaseKey(meta)
-  const [masterExpanded, setMasterExpanded] = useState<boolean | null>(null)
-
-  const lastReasoningIndex = useMemo(() => {
-    for (let i = nodes.length - 1; i >= 0; i -= 1) {
-      if (nodes[i].type === 'reasoning') return i
-    }
-    return -1
-  }, [nodes])
-
-  const firstReasoningIndex = useMemo(() => {
-    for (let i = 0; i < nodes.length; i += 1) {
-      if (nodes[i].type === 'reasoning') return i
-    }
-    return -1
-  }, [nodes])
-
-  // 只有 reasoningStatus 仍为 streaming 时，末段推理才算“未结束”，
-  // 才会启用单行滚动 / 打字机；已经 done 的推理段即使消息仍在跑工具也保持静态。
-  const activeReasoningIndex = meta.reasoningStatus === 'streaming' ? lastReasoningIndex : -1
+  const bodyId = useId()
+  const { level, setLevel } = useCotTimelineLevel({
+    itemKey: baseKey,
+    isStreaming,
+    defaultLevel: defaultExpanded ? 'expanded' : null,
+  })
 
   const durationText = formatDurationSeconds(meta.reasoningDurationSeconds)
   const hasMeaningfulDuration =
     durationText !== null && (meta.reasoningDurationSeconds ?? 0) > 0
-
-  const clearMasterOverride = useCallback(() => {
-    setMasterExpanded(null)
-  }, [])
+  const effectiveDurationText = hasMeaningfulDuration ? durationText : null
 
   if (nodes.length === 0) return null
 
+  const handleInteract = () => {
+    // 在「全部展开」层点单张卡 = 退出统一态，交回提纲层与该卡自己的记忆
+    if (level === 'expanded') setLevel('outline')
+  }
+
+  const nodesProps = {
+    nodes,
+    baseKey,
+    isStreaming,
+    isReasoningStreaming: meta.reasoningStatus === 'streaming',
+    reasoningPlayedLength,
+    defaultExpanded,
+    durationText: effectiveDurationText,
+    onInteract: handleInteract,
+  }
+
   return (
     <div className="mb-3">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          过程时间轴 · {nodes.length} 步
-        </span>
-        <button
-          type="button"
-          className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border/70 bg-background/60 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors duration-200 hover:bg-muted/40 hover:text-foreground"
-          onClick={() => setMasterExpanded((current) => current !== true)}
-          aria-pressed={masterExpanded === true}
-        >
-          <ChevronsUpDown className="h-3.5 w-3.5" />
-          {masterExpanded === true ? '全部折叠' : '全部展开'}
-        </button>
-      </div>
-
-      <div className="relative pl-6" data-message-panel="interactive">
-        <div
-          aria-hidden
-          className="absolute bottom-2 left-[9px] top-2 w-px bg-border/70"
+      {level === 'collapsed' ? (
+        <CotTimelineSummaryBar
+          summary={summary}
+          durationText={effectiveDurationText}
+          isStreaming={isStreaming}
+          bodyId={bodyId}
+          onExpand={() => setLevel('outline')}
         />
-        <div className="space-y-2">
-          {nodes.map((node, index) => {
-            const reactKey = cotTimelineNodeKey(node, index)
-            const dotClass = resolveDotClass(node)
-            if (node.type === 'reasoning') {
-              return (
-                <CotReasoningCard
-                  key={reactKey}
-                  baseKey={baseKey}
-                  text={node.text}
-                  charStart={node.charStart}
-                  defaultExpanded={defaultExpanded}
-                  isStreamingTail={Boolean(isStreaming) && index === activeReasoningIndex}
-                  playedLength={resolveSegmentPlayedLength(
-                    reasoningPlayedLength,
-                    node.charStart,
-                    node.text.length,
-                  )}
-                  durationText={
-                    index === firstReasoningIndex && hasMeaningfulDuration
-                      ? durationText
-                      : null
-                  }
-                  dotClass={dotClass}
-                  overrideExpanded={masterExpanded}
-                  onInteract={clearMasterOverride}
+      ) : (
+        <>
+          <CotTimelineHeader
+            level={level}
+            stepCount={nodes.length}
+            bodyId={bodyId}
+            onExpandAll={() => setLevel('expanded')}
+            onCollapseAll={() => setLevel('outline')}
+            onCollapse={() => setLevel('collapsed')}
+          />
+          <div id={bodyId} data-testid="cot-timeline-body" data-level={level}>
+            {level === 'outline' ? (
+              <CotTimelineOutline stickToBottomKey={isStreaming ? nodes.length : null}>
+                <CotTimelineNodes {...nodesProps} overrideExpanded={null} compact />
+              </CotTimelineOutline>
+            ) : (
+              <div className="relative pl-6">
+                <div
+                  aria-hidden
+                  className="absolute bottom-2 left-[9px] top-2 w-px bg-border/70"
                 />
-              )
-            }
-            if (node.type === 'toolGroup') {
-              return (
-                <CotToolGroupCard
-                  key={reactKey}
-                  baseKey={baseKey}
-                  node={node}
-                  dotClass={dotClass}
-                  overrideExpanded={masterExpanded}
-                  onInteract={clearMasterOverride}
-                />
-              )
-            }
-            const toolId = node.event.identifier || node.event.apiName || node.event.tool
-            if (toolId === 'research_plan') {
-              return (
-                <div key={reactKey} className="relative">
-                  <span
-                    aria-hidden
-                    className={`absolute -left-[19px] top-4 h-2 w-2 rounded-full border-2 border-background ${dotClass}`}
-                  />
-                  <ResearchPlanCard event={node.event} isStreaming={isStreaming} />
+                <div className="space-y-2">
+                  <CotTimelineNodes {...nodesProps} overrideExpanded />
                 </div>
-              )
-            }
-            return (
-              <CotToolCard
-                key={reactKey}
-                baseKey={baseKey}
-                event={node.event}
-                dotClass={dotClass}
-                overrideExpanded={masterExpanded}
-                onInteract={clearMasterOverride}
-              />
-            )
-          })}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function CotReasoningCard({
-  baseKey,
-  text,
-  charStart,
-  defaultExpanded,
-  isStreamingTail,
-  playedLength = 0,
-  durationText,
-  dotClass,
-  overrideExpanded,
-  onInteract,
-}: {
-  baseKey: string
-  text: string
-  charStart: number
-  defaultExpanded: boolean
-  isStreamingTail?: boolean
-  playedLength?: number
-  durationText?: string | null
-  dotClass: string
-  overrideExpanded?: boolean | null
-  onInteract?: () => void
-}) {
-  const itemKey = baseKey ? `${baseKey}:reasoning:${charStart}` : ''
-  const { expanded, toggle } = usePersistedExpand({
-    storageKey: REASONING_VISIBILITY_STORAGE_KEY,
-    itemKey,
-    defaultExpanded,
-    autoExpand: false,
-    hasData: text.length > 0,
-    overrideExpanded,
-  })
-
-  if (!text) return null
-
-  return (
-    <div className="relative">
-      <span
-        aria-hidden
-        className={`absolute -left-[19px] top-4 h-2 w-2 rounded-full border-2 border-background ${dotClass}`}
-      />
-      <div className="overflow-hidden rounded-lg border border-border/60 bg-background/50">
-        <button
-          type="button"
-          className="flex w-full cursor-pointer flex-col gap-1.5 px-3 py-2 text-left transition-colors duration-200 hover:bg-muted/40"
-          onClick={() => {
-            toggle()
-            onInteract?.()
-          }}
-          aria-expanded={expanded}
-        >
-          <div className="flex w-full items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-muted-foreground">
-              <Lightbulb className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-              <span className="shrink-0">深度思考</span>
-              {isStreamingTail && (
-                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
-              )}
-              {!isStreamingTail && durationText && (
-                <span className="shrink-0 text-xs text-muted-foreground">· {durationText}</span>
-              )}
-            </div>
-            <ChevronDown
-              className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
-                expanded ? 'rotate-180' : ''
-              }`}
-            />
+              </div>
+            )}
           </div>
-          {!expanded && (
-            <VerticalLineScroller
-              text={text}
-              className="w-full pl-[22px] text-xs text-muted-foreground"
-              active={Boolean(isStreamingTail)}
-            />
-          )}
-        </button>
-        {expanded && (
-          <div className="border-t border-border/60 px-3 py-2.5">
-            <FadeScrollContainer
-              maxHeightClassName="max-h-72"
-              stickToBottomKey={isStreamingTail ? text.length : null}
-            >
-              {isStreamingTail ? (
-                <TypewriterReasoning
-                  text={text}
-                  isStreaming
-                  speed={20}
-                  initialPlayedLength={playedLength}
-                />
-              ) : (
-                <div className="whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">
-                  {text}
-                </div>
-              )}
-            </FadeScrollContainer>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function CotToolCard({
-  baseKey,
-  event,
-  dotClass,
-  overrideExpanded,
-  onInteract,
-}: {
-  baseKey: string
-  event: ToolEvent
-  dotClass: string
-  overrideExpanded?: boolean | null
-  onInteract?: () => void
-}) {
-  const eventKey = event.callId || event.id || 'tool'
-  const itemKey = baseKey ? `${baseKey}:tool:${eventKey}` : ''
-  const { expanded, setExpanded } = usePersistedExpand({
-    storageKey: TOOL_VISIBILITY_STORAGE_KEY,
-    itemKey,
-    defaultExpanded: false,
-    autoExpand: false,
-    hasData: true,
-    overrideExpanded,
-  })
-
-  return (
-    <div className="relative">
-      <span
-        aria-hidden
-        className={`absolute -left-[19px] top-4 h-2 w-2 rounded-full border-2 border-background ${dotClass}`}
-      />
-      <CotToolStep
-        event={event}
-        open={expanded}
-        onOpenChange={(next) => {
-          setExpanded(next)
-          onInteract?.()
-        }}
-      />
-    </div>
-  )
-}
-
-function CotToolGroupCard({
-  baseKey,
-  node,
-  dotClass,
-  overrideExpanded,
-  onInteract,
-}: {
-  baseKey: string
-  node: Extract<CotTimelineNode, { type: 'toolGroup' }>
-  dotClass: string
-  overrideExpanded?: boolean | null
-  onInteract?: () => void
-}) {
-  const firstEvent = node.events[0]
-  const groupSeed = firstEvent ? firstEvent.callId || firstEvent.id : node.toolType
-  const itemKey = baseKey ? `${baseKey}:toolgroup:${node.toolType}:${groupSeed}` : ''
-  const { expanded, setExpanded } = usePersistedExpand({
-    storageKey: TOOL_VISIBILITY_STORAGE_KEY,
-    itemKey,
-    defaultExpanded: false,
-    autoExpand: false,
-    hasData: true,
-    overrideExpanded,
-  })
-
-  return (
-    <div className="relative">
-      <span
-        aria-hidden
-        className={`absolute -left-[19px] top-4 h-2 w-2 rounded-full border-2 border-background ${dotClass}`}
-      />
-      <CotToolGroupStep
-        node={node}
-        open={expanded}
-        onOpenChange={(next) => {
-          setExpanded(next)
-          onInteract?.()
-        }}
-      />
+        </>
+      )}
     </div>
   )
 }

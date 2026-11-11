@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { ShareViewer } from "./share-viewer"
 
 describe("ShareViewer", () => {
@@ -84,6 +84,8 @@ describe("ShareViewer", () => {
       />,
     )
 
+    // 时间轴默认折成一行，点开后才是每步一行
+    fireEvent.click(screen.getByRole('button', { name: /过程时间轴，共/ }))
     const reasoningButton = screen.getByRole('button', { name: /深度思考/ })
     expect(reasoningButton).toBeInTheDocument()
     expect(reasoningButton).toHaveAttribute("aria-expanded", "false")
@@ -130,6 +132,7 @@ describe("ShareViewer", () => {
       />,
     )
 
+    fireEvent.click(screen.getByRole('button', { name: /过程时间轴，共/ }))
     const toolButton = screen.getByRole('button', { name: /联网搜索/ })
     expect(toolButton).toBeInTheDocument()
     expect(toolButton).toHaveAttribute('aria-expanded', 'false')

@@ -93,11 +93,14 @@ export function CotToolStep({
   event,
   open: controlledOpen,
   onOpenChange,
+  compact = false,
 }: {
   event: ToolEvent
   /** 受控展开态：由外层时间轴/持久化 hook 接管 */
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /** 提纲层的紧凑单行：去掉卡片边框与摘要滚动行 */
+  compact?: boolean
 }) {
   const [internalOpen, setInternalOpen] = useState(false)
   const open = controlledOpen ?? internalOpen
@@ -143,7 +146,13 @@ export function CotToolStep({
   const collapsedText = [title, previewDetail || statusFallback].filter(Boolean).join(' · ')
 
   return (
-    <div className="rounded-lg border border-border/60 bg-background/50 px-3 py-2">
+    <div
+      className={cn(
+        compact
+          ? 'rounded-md px-2 py-1 transition-colors duration-200 hover:bg-muted/40'
+          : 'rounded-lg border border-border/60 bg-background/50 px-3 py-2',
+      )}
+    >
       <button
         type="button"
         className="flex w-full cursor-pointer items-start justify-between gap-2 text-left"
@@ -157,6 +166,14 @@ export function CotToolStep({
               <span className="truncate">{title}</span>
               <span className={statusBadgeClass}>{statusLabel}</span>
             </div>
+          </div>
+        ) : compact ? (
+          <div className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium text-foreground">
+            <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1 truncate">{title}</span>
+            <span className={cn('shrink-0 text-xs font-normal text-muted-foreground', status === 'error' && 'text-rose-600')}>
+              {statusLabel}
+            </span>
           </div>
         ) : (
           <div className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium text-foreground">
@@ -184,10 +201,13 @@ export function CotToolGroupStep({
   node,
   open: controlledOpen,
   onOpenChange,
+  compact = false,
 }: {
   node: Extract<CotTimelineNode, { type: 'toolGroup' }>
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /** 提纲层的紧凑单行：去掉卡片边框，摘要压成一行 */
+  compact?: boolean
 }) {
   const [internalOpen, setInternalOpen] = useState(false)
   const open = controlledOpen ?? internalOpen
@@ -199,7 +219,13 @@ export function CotToolGroupStep({
   const Icon = ICON_MAP[display.iconKey] || Wrench
 
   return (
-    <div className="rounded-lg border border-border/60 bg-background/50 px-3 py-2">
+    <div
+      className={cn(
+        compact
+          ? 'rounded-md px-2 py-1 transition-colors duration-200 hover:bg-muted/40'
+          : 'rounded-lg border border-border/60 bg-background/50 px-3 py-2',
+      )}
+    >
       <button
         type="button"
         className="flex w-full cursor-pointer items-start justify-between gap-2 text-left"
@@ -214,6 +240,14 @@ export function CotToolGroupStep({
               <span className="text-xs font-normal text-muted-foreground">{node.events.length} 个调用</span>
             </div>
             <p className="mt-1 text-xs text-muted-foreground sm:pl-6">{node.summaryText}</p>
+          </div>
+        ) : compact ? (
+          <div className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium text-foreground">
+            <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className="shrink-0">{display.label}</span>
+            <span className="min-w-0 flex-1 truncate text-xs font-normal text-muted-foreground">
+              {node.summaryText}
+            </span>
           </div>
         ) : (
           <div className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium text-foreground">

@@ -24,10 +24,17 @@ const tool = (override: Partial<ToolEvent> & Pick<ToolEvent, 'id' | 'tool'>): To
 
 const reasoningButtons = () => screen.getAllByRole('button', { name: /深度思考/ })
 const toolButton = () => screen.getByRole('button', { name: /联网搜索：今日新闻/ })
+const summaryBar = () => screen.getByRole('button', { name: /过程时间轴，共/ })
+const timelineBody = () => screen.queryByTestId('cot-timeline-body')
+const openOutline = () => fireEvent.click(summaryBar())
+const expandAllButton = () => screen.getByRole('button', { name: /全部展开/ })
+const collapseAllButton = () => screen.getByRole('button', { name: /全部折叠/ })
+const collapseButton = () => screen.getByRole('button', { name: '收起过程时间轴' })
 
 describe('CotTimeline', () => {
   beforeEach(() => {
     localStorage.clear()
+    sessionStorage.clear()
   })
 
   it('无推理无工具时不渲染', () => {
@@ -37,7 +44,7 @@ describe('CotTimeline', () => {
     expect(container.firstChild).toBeNull()
   })
 
-  it('推理卡与工具卡是独立的一级兄弟卡片，不再共享「深度思考过程」外壳', () => {
+  it('完成态默认把整条时间轴压成一行，不渲染任何步骤卡片', () => {
     render(
       <CotTimeline
         meta={createMeta()}
@@ -54,31 +61,315 @@ describe('CotTimeline', () => {
       />,
     )
 
-    expect(screen.queryByText(/深度思考过程/)).not.toBeInTheDocument()
-    expect(reasoningButtons().length).toBeGreaterThanOrEqual(1)
-    expect(toolButton()).toBeInTheDocument()
+    expect(screen.getByText('过程时间轴 · 2 步')).toBeInTheDocument()
+    expect(timelineBody()).toBeNull()
+    expect(screen.queryByRole('button', { name: /深度思考/ })).toBeNull()
   })
 
-  it('按 offset 交错顺序平铺展示深度思考与工具标题', () => {
+  it('一行摘要带上工具统计细节', () => {
     render(
       <CotTimeline
         meta={createMeta()}
-        reasoningRaw="先想一步AAAAA再想一步"
+        reasoningRaw=""
         toolEvents={[
           tool({
             id: 't2',
             tool: 'web_search',
             callId: 'c2',
             query: '今日新闻',
-            details: { reasoningOffsetStart: 5 },
+            details: { hitsCount: 3 },
           }),
         ]}
+      />,
+    )
+
+    expect(screen.getByText(/搜索 1 次/)).toBeInTheDocument()
+    expect(screen.getByText(/命中 3 条/)).toBeInTheDocument()
+  })
+
+  it('点一行条进入提纲层：卡片都在，但每张都折叠', () => {
+    render(
+      <CotTimeline
+        meta={createMeta()}
+        reasoningRaw="想法"
+        toolEvents={[
+          tool({
+            id: 't3',
+            tool: 'web_search',
+            callId: 'c3',
+            query: '今日新闻',
+            details: { reasoningOffsetStart: 0 },
+          }),
+        ]}
+      />,
+    )
+
+    openOutline()
+
+    expect(timelineBody()).toHaveAttribute('data-level', 'outline')
+    expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'false')
+    expect(toolButton()).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('提纲层「全部展开」进入细节层，「全部折叠」回到提纲层，「收起」回到一行', () => {
+    render(
+      <CotTimeline
+        meta={createMeta()}
+        reasoningRaw="想法"
+        toolEvents={[
+          tool({
+            id: 't4',
+            tool: 'web_search',
+            callId: 'c4',
+            query: '今日新闻',
+            details: { reasoningOffsetStart: 0 },
+          }),
+        ]}
+      />,
+    )
+
+    openOutline()
+    fireEvent.click(expandAllButton())
+
+    expect(timelineBody()).toHaveAttribute('data-level', 'expanded')
+    expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'true')
+    expect(toolButton()).toHaveAttribute('aria-expanded', 'true')
+
+    fireEvent.click(collapseAllButton())
+    expect(timelineBody()).toHaveAttribute('data-level', 'outline')
+    expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'false')
+    expect(toolButton()).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(collapseButton())
+    expect(timelineBody()).toBeNull()
+    expect(screen.getByText('过程时间轴 · 2 步')).toBeInTheDocument()
+  })
+
+  it('提纲层可以单步下钻，且不改变整条级别', () => {
+    render(
+      <CotTimeline
+        meta={createMeta()}
+        reasoningRaw=""
+        toolEvents={[
+          tool({
+            id: 't5',
+            tool: 'web_search',
+            callId: 'c5',
+            query: '今日新闻',
+            status: 'success',
+            resultJson: { hits: 1 },
+          }),
+        ]}
+      />,
+    )
+
+    openOutline()
+    fireEvent.click(toolButton())
+
+    expect(toolButton()).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText(/"hits": 1/)).toBeInTheDocument()
+    expect(timelineBody()).toHaveAttribute('data-level', 'outline')
+  })
+
+  it('细节层点单张卡会退回提纲层', () => {
+    render(
+      <CotTimeline
+        meta={createMeta()}
+        reasoningRaw="想法"
+        toolEvents={[
+          tool({
+            id: 't6',
+            tool: 'web_search',
+            callId: 'c6',
+            query: '今日新闻',
+            details: { reasoningOffsetStart: 0 },
+          }),
+        ]}
+      />,
+    )
+
+    openOutline()
+    fireEvent.click(expandAllButton())
+    expect(timelineBody()).toHaveAttribute('data-level', 'expanded')
+
+    fireEvent.click(toolButton())
+    expect(timelineBody()).toHaveAttribute('data-level', 'outline')
+  })
+
+  it('用户手选的级别只记住这条消息，不污染其他消息', async () => {
+    const first = render(<CotTimeline meta={createMeta()} reasoningRaw="想法" toolEvents={[]} />)
+    openOutline()
+    fireEvent.click(expandAllButton())
+    expect(timelineBody()).toHaveAttribute('data-level', 'expanded')
+    first.unmount()
+
+    const second = render(<CotTimeline meta={createMeta()} reasoningRaw="想法" toolEvents={[]} />)
+    await waitFor(() => {
+      expect(timelineBody()).toHaveAttribute('data-level', 'expanded')
+    })
+    second.unmount()
+
+    render(
+      <CotTimeline
+        meta={createMeta({ stableKey: 'other-cot' })}
+        reasoningRaw="想法"
+        toolEvents={[]}
+      />,
+    )
+    expect(timelineBody()).toBeNull()
+  })
+
+  it('流式作答时默认落在提纲层，结束后自动收成一行', () => {
+    const streamingMeta = createMeta({ reasoningStatus: 'streaming' })
+    const { rerender } = render(
+      <CotTimeline
+        meta={streamingMeta}
+        reasoningRaw="正在想"
+        toolEvents={[]}
+        isStreaming
+        reasoningPlayedLength={0}
+      />,
+    )
+
+    expect(timelineBody()).toHaveAttribute('data-level', 'outline')
+    expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'false')
+
+    rerender(<CotTimeline meta={createMeta()} reasoningRaw="正在想" toolEvents={[]} />)
+    expect(timelineBody()).toBeNull()
+  })
+
+  it('defaultExpanded=true 时直接进入细节层', () => {
+    render(
+      <CotTimeline
+        meta={createMeta()}
+        reasoningRaw="展开的思考内容"
+        toolEvents={[]}
         defaultExpanded
       />,
     )
 
-    expect(reasoningButtons().length).toBe(2)
-    expect(screen.getByText(/联网搜索：今日新闻/)).toBeInTheDocument()
+    expect(timelineBody()).toHaveAttribute('data-level', 'expanded')
+    expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('展开的思考内容')).toBeInTheDocument()
+  })
+
+  it('思考步不展示工具进度污染文案', () => {
+    render(
+      <CotTimeline
+        meta={createMeta()}
+        reasoningRaw={['模型计划', '联网搜索：污染行', '继续'].join('\n')}
+        toolEvents={[]}
+        defaultExpanded
+      />,
+    )
+
+    expect(screen.getByText(/模型计划/)).toBeInTheDocument()
+    expect(screen.queryByText(/联网搜索：污染行/)).not.toBeInTheDocument()
+  })
+
+  it('流式末段打字机在文本增长时保持已显示前缀不回退', async () => {
+    const { rerender } = render(
+      <CotTimeline
+        meta={createMeta({ reasoningStatus: 'streaming' })}
+        reasoningRaw="你"
+        toolEvents={[]}
+        isStreaming
+        reasoningPlayedLength={0}
+      />,
+    )
+
+    // 流式默认提纲层且末段折叠为单行滚屏，点击后才展开播放打字机
+    expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(reasoningButtons()[0])
+    expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'true')
+    await waitFor(
+      () => {
+        expect(screen.getByText(/你/)).toBeInTheDocument()
+      },
+      { timeout: 2000 },
+    )
+
+    rerender(
+      <CotTimeline
+        meta={createMeta({ reasoningStatus: 'streaming' })}
+        reasoningRaw="你好世界"
+        toolEvents={[]}
+        isStreaming
+        reasoningPlayedLength={1}
+      />,
+    )
+
+    expect(screen.getByText(/你/)).toBeInTheDocument()
+    await waitFor(
+      () => {
+        expect(screen.getByText(/你好/)).toBeInTheDocument()
+      },
+      { timeout: 2000 },
+    )
+  })
+
+  it('提纲层推理卡默认折叠，点击后展开并持久化', async () => {
+    const { unmount } = render(
+      <CotTimeline meta={createMeta()} reasoningRaw="思考内容" toolEvents={[]} />,
+    )
+
+    openOutline()
+    const button = reasoningButtons()[0]
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(button)
+    expect(button).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('思考内容')).toBeInTheDocument()
+
+    unmount()
+    render(<CotTimeline meta={createMeta()} reasoningRaw="思考内容" toolEvents={[]} />)
+    await waitFor(() => {
+      expect(timelineBody()).toHaveAttribute('data-level', 'outline')
+    })
+    await waitFor(() => {
+      expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'true')
+    })
+  })
+
+  it('执行中的工具卡在提纲层默认折叠，点击后展开', () => {
+    render(
+      <CotTimeline
+        meta={createMeta()}
+        reasoningRaw=""
+        toolEvents={[
+          tool({
+            id: 't7',
+            tool: 'web_search',
+            callId: 'c7',
+            query: '今日新闻',
+            stage: 'start',
+            status: 'running',
+          }),
+        ]}
+      />,
+    )
+
+    openOutline()
+    expect(toolButton()).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(toolButton())
+    expect(toolButton()).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('同 offset 的多个搜索合并为一个工具组卡', () => {
+    render(
+      <CotTimeline
+        meta={createMeta()}
+        reasoningRaw=""
+        toolEvents={[
+          tool({ id: 't8', tool: 'web_search', callId: 'c8', details: { reasoningOffsetStart: 0 } }),
+          tool({ id: 't9', tool: 'web_search', callId: 'c9', details: { reasoningOffsetStart: 0 } }),
+        ]}
+      />,
+    )
+
+    openOutline()
+    expect(screen.getByRole('button', { name: /联网搜索/ })).toBeInTheDocument()
+    expect(screen.getByText(/搜索 2 个引擎/)).toBeInTheDocument()
   })
 
   it('renders research_plan events as a dedicated plan card', () => {
@@ -110,6 +401,7 @@ describe('CotTimeline', () => {
             },
           }),
         ]}
+        defaultExpanded
       />,
     )
 
@@ -117,244 +409,32 @@ describe('CotTimeline', () => {
     expect(screen.getByText('AI 芯片竞争格局')).toBeInTheDocument()
   })
 
-  it('思考步不展示工具进度污染文案', () => {
-    render(
-      <CotTimeline
-        meta={createMeta()}
-        reasoningRaw={['模型计划', '联网搜索：污染行', '继续'].join('\n')}
-        toolEvents={[]}
-        defaultExpanded
-      />,
-    )
-
-    expect(screen.getByText(/模型计划/)).toBeInTheDocument()
-    expect(screen.queryByText(/联网搜索：污染行/)).not.toBeInTheDocument()
-  })
-
-  it('流式末段打字机在文本增长时保持已显示前缀不回退', async () => {
-    const { rerender } = render(
-      <CotTimeline
-        meta={createMeta({ reasoningStatus: 'streaming' })}
-        reasoningRaw="你"
-        toolEvents={[]}
-        isStreaming
-        reasoningPlayedLength={0}
-      />,
-    )
-
-    // 新默认态：流式时也折叠为单行滚屏，点击后才展开播放打字机
-    expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'false')
-    fireEvent.click(reasoningButtons()[0])
-    expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'true')
-    await waitFor(
-      () => {
-        expect(screen.getByText(/你/)).toBeInTheDocument()
-      },
-      { timeout: 2000 },
-    )
-
-    rerender(
-      <CotTimeline
-        meta={createMeta({ reasoningStatus: 'streaming' })}
-        reasoningRaw="你好世界"
-        toolEvents={[]}
-        isStreaming
-        reasoningPlayedLength={1}
-      />,
-    )
-
-    expect(screen.getByText(/你/)).toBeInTheDocument()
-    await waitFor(
-      () => {
-        expect(screen.getByText(/你好/)).toBeInTheDocument()
-      },
-      { timeout: 2000 },
-    )
-  })
-
-  it('完成态推理卡默认折叠，点击后展开并持久化', async () => {
-    const { unmount } = render(
-      <CotTimeline meta={createMeta()} reasoningRaw="思考内容" toolEvents={[]} />,
-    )
-
-    const button = reasoningButtons()[0]
-    expect(button).toHaveAttribute('aria-expanded', 'false')
-
-    fireEvent.click(button)
-    expect(button).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByText('思考内容')).toBeInTheDocument()
-
-    unmount()
-    render(<CotTimeline meta={createMeta()} reasoningRaw="思考内容" toolEvents={[]} />)
-    await waitFor(() => {
-      expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'true')
-    })
-  })
-
-  it('defaultExpanded=true 时完成态推理卡直接展开', () => {
-    render(
-      <CotTimeline
-        meta={createMeta()}
-        reasoningRaw="展开的思考内容"
-        toolEvents={[]}
-        defaultExpanded
-      />,
-    )
-
-    expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByText('展开的思考内容')).toBeInTheDocument()
-  })
-
-  it('流式末段推理默认折叠为单行滚屏，点击后展开', () => {
-    render(
-      <CotTimeline
-        meta={createMeta({ reasoningStatus: 'streaming' })}
-        reasoningRaw="正在想"
-        toolEvents={[]}
-        isStreaming
-        reasoningPlayedLength={0}
-      />,
-    )
-
-    expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'false')
-    fireEvent.click(reasoningButtons()[0])
-    expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'true')
-  })
-
-  it('执行中的工具卡默认折叠为单行滚屏，点击后展开', () => {
-    render(
-      <CotTimeline
-        meta={createMeta()}
-        reasoningRaw=""
-        toolEvents={[
-          tool({
-            id: 't3',
-            tool: 'web_search',
-            callId: 'c3',
-            query: '今日新闻',
-            stage: 'start',
-            status: 'running',
-          }),
-        ]}
-      />,
-    )
-
-    expect(toolButton()).toHaveAttribute('aria-expanded', 'false')
-    fireEvent.click(toolButton())
-    expect(toolButton()).toHaveAttribute('aria-expanded', 'true')
-  })
-
-  it('已完成的工具卡默认折叠，点击后展示结果', () => {
-    render(
-      <CotTimeline
-        meta={createMeta()}
-        reasoningRaw=""
-        toolEvents={[
-          tool({
-            id: 't4',
-            tool: 'web_search',
-            callId: 'c4',
-            query: '今日新闻',
-            status: 'success',
-            resultJson: { hits: 1 },
-          }),
-        ]}
-      />,
-    )
-
-    expect(toolButton()).toHaveAttribute('aria-expanded', 'false')
-    fireEvent.click(toolButton())
-    expect(toolButton()).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByText(/"hits": 1/)).toBeInTheDocument()
-  })
-
-  it('同 offset 的多个搜索合并为一个工具组卡', () => {
-    render(
-      <CotTimeline
-        meta={createMeta()}
-        reasoningRaw=""
-        toolEvents={[
-          tool({ id: 't5', tool: 'web_search', callId: 'c5', details: { reasoningOffsetStart: 0 } }),
-          tool({ id: 't6', tool: 'web_search', callId: 'c6', details: { reasoningOffsetStart: 0 } }),
-        ]}
-      />,
-    )
-
-    expect(screen.getByRole('button', { name: /联网搜索/ })).toBeInTheDocument()
-    expect(screen.getByText('2 个调用')).toBeInTheDocument()
-  })
-
-  it('顶部展示统一开关与步骤总数', () => {
-    render(
-      <CotTimeline
-        meta={createMeta()}
-        reasoningRaw="想法"
-        toolEvents={[
-          tool({
-            id: 't7',
-            tool: 'web_search',
-            callId: 'c7',
-            details: { reasoningOffsetStart: 0 },
-          }),
-        ]}
-      />,
-    )
-
-    expect(screen.getByText('过程时间轴 · 2 步')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /全部展开/ })).toBeInTheDocument()
-  })
-
-  it('统一开关可全部展开/全部折叠，个体交互后退出统一态', () => {
-    render(
-      <CotTimeline
-        meta={createMeta()}
-        reasoningRaw="想法"
-        toolEvents={[
-          tool({
-            id: 't8',
-            tool: 'web_search',
-            callId: 'c8',
-            query: '今日新闻',
-            details: { reasoningOffsetStart: 0 },
-          }),
-        ]}
-      />,
-    )
-
-    const reasoningButton = reasoningButtons()[0]
-    const toolHeader = toolButton()
-    const masterButton = () => screen.getByRole('button', { name: /全部展开|全部折叠/ })
-
-    fireEvent.click(masterButton())
-    expect(reasoningButton).toHaveAttribute('aria-expanded', 'true')
-    expect(toolHeader).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('button', { name: /全部折叠/ })).toBeInTheDocument()
-
-    fireEvent.click(masterButton())
-    expect(reasoningButton).toHaveAttribute('aria-expanded', 'false')
-    expect(toolHeader).toHaveAttribute('aria-expanded', 'false')
-
-    fireEvent.click(masterButton())
-    expect(reasoningButton).toHaveAttribute('aria-expanded', 'true')
-    expect(toolHeader).toHaveAttribute('aria-expanded', 'true')
-
-    // 个体操作优先：点击任一张卡即退出统一覆盖态
-    fireEvent.click(toolHeader)
-    expect(masterButton()).toHaveAttribute('aria-pressed', 'false')
-    expect(toolHeader).toHaveAttribute('aria-expanded', 'false')
-    expect(reasoningButton).toHaveAttribute('aria-expanded', 'false')
-  })
-
-  it('超多推理行折叠态只保留当前与相邻行 DOM，展开后显示全文', () => {
+  it('提纲层只渲染单行标题，不再挂载推理预览 DOM', () => {
     const huge = Array.from({ length: 400 }, (_, index) => `推理第${index}行`).join('\n')
     render(<CotTimeline meta={createMeta()} reasoningRaw={huge} toolEvents={[]} />)
 
-    const scroller = screen.getByTestId('cot-vertical-line-scroller')
-    expect(scroller).toHaveAttribute('data-line-count', '400')
-    expect(scroller.querySelectorAll('[data-cot-line]').length).toBeLessThanOrEqual(3)
+    openOutline()
+    expect(screen.queryByTestId('cot-vertical-line-scroller')).toBeNull()
 
     fireEvent.click(reasoningButtons()[0])
     expect(screen.getByText(/推理第0行/)).toBeInTheDocument()
     expect(screen.getByText(/推理第399行/)).toBeInTheDocument()
+  })
+
+  it('流式超长推理的单行滚动只保留相邻行 DOM', () => {
+    const huge = Array.from({ length: 400 }, (_, index) => `推理第${index}行`).join('\n')
+    render(
+      <CotTimeline
+        meta={createMeta({ reasoningStatus: 'streaming' })}
+        reasoningRaw={huge}
+        toolEvents={[]}
+        isStreaming
+        reasoningPlayedLength={0}
+      />,
+    )
+
+    const scroller = screen.getByTestId('cot-vertical-line-scroller')
+    expect(scroller).toHaveAttribute('data-line-count', '400')
+    expect(scroller.querySelectorAll('[data-cot-line]').length).toBeLessThanOrEqual(3)
   })
 })

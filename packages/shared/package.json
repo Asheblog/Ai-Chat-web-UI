@@ -18,6 +18,7 @@
     "./tool-events": "./dist/tool-events.js",
     "./strip-tool-progress-from-reasoning": "./dist/strip-tool-progress-from-reasoning.js",
     "./cot-timeline": "./dist/cot-timeline.js",
+    "./cot-timeline-view": "./dist/cot-timeline-view.js",
     "./stream-message-reducer": "./dist/stream-message-reducer.js",
     "./api-contract": "./dist/api-contract.js",
     "./config-parsers": "./dist/config-parsers.js",
