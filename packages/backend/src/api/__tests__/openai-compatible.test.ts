@@ -21,6 +21,8 @@ jest.mock('../../middleware/auth', () => ({
 jest.mock('../../utils/providers', () => ({
   buildHeaders: jest.fn(async () => ({})),
   convertOpenAIReasoningPayload: (payload: any) => payload,
+  supportsSseStreaming: (provider?: string | null) =>
+    provider === 'openai' || provider === 'openai_responses' || provider === 'anthropic',
 }))
 
 import { createOpenAICompatApi } from '../openai-compatible'

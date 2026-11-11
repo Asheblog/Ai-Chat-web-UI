@@ -47,6 +47,7 @@ type ParsedToolTurn = {
   reasoning: string
   toolCalls: ToolCall[]
   usage: Record<string, any> | null
+  thinkingBlocks?: Array<Record<string, any>>
 }
 
 export type ToolOrchestrationResult =
@@ -334,6 +335,9 @@ export async function runToolOrchestration(
       content: assistantToolCallContent,
       ...(includeReasoningInToolMessage && reasoningPayload
         ? { reasoning_content: reasoningPayload }
+        : {}),
+      ...(turn.parsed.thinkingBlocks?.length
+        ? { thinking_blocks: turn.parsed.thinkingBlocks }
         : {}),
       tool_calls: turn.parsed.toolCalls,
     })
@@ -652,6 +656,7 @@ async function parseStreamingTurn(params: {
   let contentAlreadySent = false
   let firstResponseEventSeen = false
   let messageToolCalls: ToolCall[] = []
+  let thinkingBlocks: Array<Record<string, any>> = []
   let legacyFunctionCall: LegacyFunctionCall | null = null
 
   const emitContentDelta = async (delta: string) => {
@@ -748,6 +753,9 @@ async function parseStreamingTurn(params: {
             continue
           }
           await markFirstResponseEvent()
+          if (Array.isArray(parsed?.anthropic_thinking_blocks)) {
+            thinkingBlocks = parsed.anthropic_thinking_blocks
+          }
           if (typeof parsed?.type === 'string' && parsed.type.startsWith('response.')) {
             if (
               parsed.type === 'response.output_text.delta' &&
@@ -861,6 +869,7 @@ async function parseStreamingTurn(params: {
     reasoning,
     toolCalls,
     usage: usageSnapshot,
+    ...(thinkingBlocks.length > 0 ? { thinkingBlocks } : {}),
   }
 }
 
@@ -881,6 +890,7 @@ async function parseNonStreamingTurn(params: {
   let rawContent = ''
   let rawReasoning = ''
   let messageToolCalls: ToolCall[] = []
+  let thinkingBlocks: Array<Record<string, any>> = []
   if (Array.isArray(parsed?.output)) {
     rawContent = extractTextFromResponsesResponse(parsed) || ''
     rawReasoning = extractReasoningFromResponsesResponse(parsed) || ''
@@ -890,6 +900,9 @@ async function parseNonStreamingTurn(params: {
     rawContent = typeof message.content === 'string' ? message.content : ''
     rawReasoning = extractMessageReasoning(message, parsed)
     messageToolCalls = extractToolCallsFromMessage(message)
+    if (Array.isArray(message.thinking_blocks)) {
+      thinkingBlocks = message.thinking_blocks
+    }
   }
 
   const { toolCalls, textContent } = parseToolCalls({
@@ -911,6 +924,7 @@ async function parseNonStreamingTurn(params: {
     reasoning: rawReasoning,
     toolCalls,
     usage: parsed?.usage ?? null,
+    ...(thinkingBlocks.length > 0 ? { thinkingBlocks } : {}),
   }
 }
 

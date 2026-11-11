@@ -199,15 +199,7 @@ export class TitleSummaryService {
       const json = await readProviderJson<any>(response, provider)
 
       // 提取响应内容
-      let title = ''
-      if (provider === 'openai_responses') {
-        title = extractTextFromResponsesResponse(json) || ''
-      } else {
-        title =
-          json?.choices?.[0]?.message?.content ||
-          json?.choices?.[0]?.message?.reasoning_content ||
-          ''
-      }
+      let title = extractTitleFromProviderResponse(json, provider)
       title = title.trim()
 
       // 确保标题长度不超过限制
@@ -244,4 +236,23 @@ export class TitleSummaryService {
       throw new TitleSummaryServiceError('Failed to generate title', 500)
     }
   }
+}
+
+/** 从各 provider 的非流式响应中提取标题文本（供测试与复用）。 */
+export function extractTitleFromProviderResponse(json: any, provider: string): string {
+  if (provider === 'openai_responses') {
+    return extractTextFromResponsesResponse(json) || ''
+  }
+  if (provider === 'google_genai') {
+    const parts = json?.candidates?.[0]?.content?.parts
+    if (!Array.isArray(parts)) return ''
+    return parts
+      .map((part: any) => (typeof part?.text === 'string' ? part.text : ''))
+      .join('')
+  }
+  return (
+    json?.choices?.[0]?.message?.content ||
+    json?.choices?.[0]?.message?.reasoning_content ||
+    ''
+  )
 }

@@ -6,6 +6,7 @@ import { prisma } from '../../db';
 import { BackendLogger as log } from '../../utils/logger';
 import { buildChatProviderRequest } from '../../utils/chat-provider';
 import { adaptProviderResponse } from '../../utils/anthropic';
+import { supportsSseStreaming } from '../../utils/providers';
 import { Tokenizer } from '../../services/tokenizer/legacy-utils';
 import type { WebSearchHit } from '../../utils/web-search';
 import { serializeQuotaSnapshot } from '../../services/quota/legacy-utils';
@@ -709,8 +710,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       const maxIterations =
         agentMaxToolIterations > 0 ? agentMaxToolIterations : Number.POSITIVE_INFINITY;
       let currentProviderController: AbortController | null = null;
-      const streamEnabled =
-        provider === 'openai' || provider === 'openai_responses' || provider === 'anthropic';
+      const streamEnabled = supportsSseStreaming(provider);
 
       const callProvider = async (messages: any[], schema: ToolSchema, iteration: number) => {
         const { body: chatBody, messages: preparedMessages, textPromptAdded } = buildToolRequest({

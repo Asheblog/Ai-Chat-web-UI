@@ -1,5 +1,5 @@
 import type { ProviderType } from './providers'
-import { convertOpenAIReasoningPayload } from './providers'
+import { convertOpenAIReasoningPayload, supportsSseStreaming } from './providers'
 import { convertChatCompletionsRequestToResponses } from './openai-responses'
 import { convertChatCompletionsRequestToAnthropic } from './anthropic'
 
@@ -29,13 +29,7 @@ export function buildChatProviderRequest(params: {
   const stream =
     typeof params.stream === 'boolean' ? params.stream : Boolean(params.body?.stream)
   const streamMode: ProviderStreamMode =
-    params.provider === 'openai' ||
-    params.provider === 'openai_responses' ||
-    params.provider === 'anthropic'
-      ? stream
-        ? 'sse'
-        : 'json'
-      : 'json'
+    supportsSseStreaming(params.provider) && stream ? 'sse' : 'json'
 
   const basePayload = convertOpenAIReasoningPayload({
     ...params.body,

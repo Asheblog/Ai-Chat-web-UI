@@ -34,6 +34,7 @@ type ChatMessage = {
     function?: { name?: string; arguments?: string | Record<string, unknown> }
   }>
   tool_call_id?: string
+  thinking_blocks?: Array<Record<string, unknown>>
 }
 
 const isRecord = (value: unknown): value is Record<string, any> =>
@@ -58,6 +59,9 @@ const flattenText = (content: unknown): string => {
     .filter(Boolean)
     .join('\n')
 }
+
+const createToolCallId = (): string =>
+  'toolu_' + Math.random().toString(36).slice(2, 10)
 
 const parseToolArguments = (raw: unknown): Record<string, unknown> => {
   if (isRecord(raw)) return raw
@@ -235,14 +239,33 @@ export function convertChatCompletionsRequestToAnthropic(requestBody: any): any 
       continue
     }
     if (role === 'assistant') {
-      const blocks = toAnthropicContent(message.content)
+      const thinkingBlocks: AnthropicContentBlock[] = []
+      const rawThinkingBlocks = Array.isArray(message.thinking_blocks) ? message.thinking_blocks : []
+      for (const block of rawThinkingBlocks) {
+        if (!isRecord(block)) continue
+        if (
+          block.type === 'thinking' &&
+          typeof block.thinking === 'string' &&
+          typeof block.signature === 'string' &&
+          block.signature
+        ) {
+          thinkingBlocks.push({
+            type: 'thinking',
+            thinking: block.thinking,
+            signature: block.signature,
+          })
+        } else if (block.type === 'redacted_thinking' && typeof block.data === 'string' && block.data) {
+          thinkingBlocks.push({ type: 'redacted_thinking', data: block.data })
+        }
+      }
+      const blocks = [...thinkingBlocks, ...toAnthropicContent(message.content)]
       const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls : []
       for (const call of toolCalls) {
         const name = typeof call?.function?.name === 'string' ? call.function.name.trim() : ''
         if (!name) continue
         blocks.push({
           type: 'tool_use',
-          id: typeof call.id === 'string' && call.id ? call.id : 'toolu_' + Math.random().toString(36).slice(2, 10),
+          id: typeof call.id === 'string' && call.id ? call.id : createToolCallId(),
           name,
           input: parseToolArguments(call?.function?.arguments),
         })
@@ -373,6 +396,7 @@ export function convertAnthropicMessageToChatCompletion(message: any): any {
   const contentBlocks = Array.isArray(message.content) ? message.content : []
   const textParts: string[] = typeof message.content === 'string' ? [message.content] : []
   const reasoningParts: string[] = []
+  const thinkingBlocks: Array<Record<string, unknown>> = []
   const toolCalls: any[] = []
 
   for (const block of contentBlocks) {
@@ -383,6 +407,17 @@ export function convertAnthropicMessageToChatCompletion(message: any): any {
     }
     if (block.type === 'thinking' && typeof block.thinking === 'string') {
       reasoningParts.push(block.thinking)
+      if (typeof block.signature === 'string' && block.signature) {
+        thinkingBlocks.push({
+          type: 'thinking',
+          thinking: block.thinking,
+          signature: block.signature,
+        })
+      }
+      continue
+    }
+    if (block.type === 'redacted_thinking' && typeof block.data === 'string' && block.data) {
+      thinkingBlocks.push({ type: 'redacted_thinking', data: block.data })
       continue
     }
     if (block.type === 'tool_use') {
@@ -391,7 +426,7 @@ export function convertAnthropicMessageToChatCompletion(message: any): any {
       const id =
         typeof block.id === 'string' && block.id
           ? block.id
-          : 'toolu_' + Math.random().toString(36).slice(2, 10)
+          : createToolCallId()
       toolCalls.push({
         id,
         type: 'function',
@@ -409,6 +444,9 @@ export function convertAnthropicMessageToChatCompletion(message: any): any {
   }
   if (reasoningParts.length > 0) {
     messagePayload.reasoning_content = reasoningParts.join('')
+  }
+  if (thinkingBlocks.length > 0) {
+    messagePayload.thinking_blocks = thinkingBlocks
   }
   if (toolCalls.length > 0) {
     messagePayload.tool_calls = toolCalls
@@ -434,7 +472,8 @@ export function convertAnthropicMessageToChatCompletion(message: any): any {
 
 export interface AnthropicSseState {
   buffer: string
-  blocks: Map<number, { type: string; toolIndex?: number }>
+  blocks: Map<number, { type: string; toolIndex?: number; thinking?: string; signature?: string; data?: string }>
+  thinkingBlocks: Array<Record<string, unknown>>
   nextToolIndex: number
   inputTokens: number
   outputTokens: number
@@ -452,6 +491,7 @@ export function createAnthropicSseState(): AnthropicSseState {
   return {
     buffer: '',
     blocks: new Map(),
+    thinkingBlocks: [],
     nextToolIndex: 0,
     inputTokens: 0,
     outputTokens: 0,
@@ -471,6 +511,7 @@ const buildChunk = (
   delta: Record<string, unknown>,
   finishReason: string | null,
   usage?: Record<string, any>,
+  extra?: Record<string, unknown>,
 ): string => {
   const payload: Record<string, any> = {
     id: state.id ?? 'anthropic-chunk',
@@ -486,6 +527,7 @@ const buildChunk = (
     ],
   }
   if (usage) payload.usage = usage
+  if (extra) Object.assign(payload, extra)
   return 'data: ' + JSON.stringify(payload) + '\n\n'
 }
 
@@ -501,6 +543,9 @@ const buildFinishChunk = (state: AnthropicSseState, finishReason: string): strin
       cache_read_input_tokens: state.cacheReadTokens,
       cache_creation_input_tokens: state.cacheCreationTokens,
     }),
+    state.thinkingBlocks.length > 0
+      ? { anthropic_thinking_blocks: state.thinkingBlocks }
+      : undefined,
   )
 }
 
@@ -527,7 +572,7 @@ const processAnthropicEvent = (state: AnthropicSseState, parsed: any): string =>
         state.nextToolIndex += 1
         state.blocks.set(index, { type, toolIndex })
         const name = typeof block.name === 'string' ? block.name : 'tool'
-        const id = typeof block.id === 'string' ? block.id : 'toolu_' + toolIndex
+        const id = typeof block.id === 'string' ? block.id : `toolu_${toolIndex}`
         return buildChunk(
           state,
           {
@@ -543,7 +588,16 @@ const processAnthropicEvent = (state: AnthropicSseState, parsed: any): string =>
           null,
         )
       }
-      state.blocks.set(index, { type })
+      if (type === 'thinking') {
+        state.blocks.set(index, { type, thinking: '', signature: '' })
+      } else if (type === 'redacted_thinking') {
+        state.blocks.set(index, {
+          type,
+          data: typeof block.data === 'string' ? block.data : '',
+        })
+      } else {
+        state.blocks.set(index, { type })
+      }
       return ''
     }
     case 'content_block_delta': {
@@ -553,7 +607,18 @@ const processAnthropicEvent = (state: AnthropicSseState, parsed: any): string =>
         return buildChunk(state, { content: delta.text }, null)
       }
       if (delta.type === 'thinking_delta' && typeof delta.thinking === 'string' && delta.thinking) {
+        const block = state.blocks.get(index)
+        if (block?.type === 'thinking') {
+          block.thinking = `${block.thinking || ''}${delta.thinking}`
+        }
         return buildChunk(state, { reasoning_content: delta.thinking }, null)
+      }
+      if (delta.type === 'signature_delta' && typeof delta.signature === 'string') {
+        const block = state.blocks.get(index)
+        if (block?.type === 'thinking') {
+          block.signature = `${block.signature || ''}${delta.signature}`
+        }
+        return ''
       }
       if (delta.type === 'input_json_delta' && typeof delta.partial_json === 'string') {
         const block = state.blocks.get(index)
@@ -571,6 +636,20 @@ const processAnthropicEvent = (state: AnthropicSseState, parsed: any): string =>
             null,
           )
         }
+      }
+      return ''
+    }
+    case 'content_block_stop': {
+      const index = toNumber(parsed.index) ?? 0
+      const block = state.blocks.get(index)
+      if (block?.type === 'thinking' && block.thinking) {
+        state.thinkingBlocks.push({
+          type: 'thinking',
+          thinking: block.thinking,
+          signature: block.signature || '',
+        })
+      } else if (block?.type === 'redacted_thinking' && block.data) {
+        state.thinkingBlocks.push({ type: 'redacted_thinking', data: block.data })
       }
       return ''
     }
@@ -719,7 +798,7 @@ export async function adaptProviderResponse(
 
 /** 直接 fetch 的调用点使用：读取并按 provider 归一化 JSON。 */
 export async function readProviderJson<T = any>(
-  response: Pick<Response, 'json' | 'text'>,
+  response: { json?: () => Promise<any>; text: () => Promise<string> },
   provider: string,
 ): Promise<T> {
   let json: any

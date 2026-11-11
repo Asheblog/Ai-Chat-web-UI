@@ -4,7 +4,9 @@ import {
   convertChatCompletionsRequestToAnthropic,
   convertAnthropicSseChunk,
   createAnthropicSseState,
+  createAnthropicSseToOpenAIStream,
   finishAnthropicSse,
+  readProviderJson,
 } from '../anthropic'
 
 const dataFrames = (raw: string): any[] =>
@@ -273,5 +275,119 @@ describe('adaptProviderResponse', () => {
     const json: any = await adapted.json()
     expect(json.choices[0].message.content).toBe('ok')
     expect(adapted.headers.get('content-length')).toBeNull()
+  })
+})
+
+describe('Anthropic thinking blocks', () => {
+  it('replays signed thinking blocks before text and tool_use', () => {
+    const body = convertChatCompletionsRequestToAnthropic({
+      model: 'claude-sonnet-4-5',
+      messages: [
+        {
+          role: 'assistant',
+          content: 'answer',
+          reasoning_content: 'thought',
+          thinking_blocks: [
+            { type: 'thinking', thinking: 'thought', signature: 'sig-1' },
+          ],
+          tool_calls: [
+            {
+              id: 'call_1',
+              type: 'function',
+              function: { name: 'search', arguments: '{"q":"x"}' },
+            },
+          ],
+        },
+        { role: 'tool', tool_call_id: 'call_1', content: 'result' },
+      ],
+    })
+
+    expect(body.messages[0].content).toEqual([
+      { type: 'thinking', thinking: 'thought', signature: 'sig-1' },
+      { type: 'text', text: 'answer' },
+      { type: 'tool_use', id: 'call_1', name: 'search', input: { q: 'x' } },
+    ])
+  })
+
+  it('keeps signed thinking blocks from a non-stream response', () => {
+    const json = convertAnthropicMessageToChatCompletion({
+      content: [
+        { type: 'thinking', thinking: 'thought', signature: 'sig-1' },
+        { type: 'text', text: 'ok' },
+      ],
+      stop_reason: 'end_turn',
+      usage: { input_tokens: 1, output_tokens: 1 },
+    })
+    expect(json.choices[0].message.thinking_blocks).toEqual([
+      { type: 'thinking', thinking: 'thought', signature: 'sig-1' },
+    ])
+  })
+
+  it('captures thinking signatures and exposes them on the final stream chunk', () => {
+    const state = createAnthropicSseState()
+    let output = ''
+    output += convertAnthropicSseChunk(
+      [
+        'data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking"}}',
+        '',
+        'data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"thought"}}',
+        '',
+        'data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig-1"}}',
+        '',
+        'data: {"type":"content_block_stop","index":0}',
+        '',
+        'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}',
+        '',
+        'data: {"type":"message_stop"}',
+        '',
+        '',
+      ].join('\n'),
+      state,
+    )
+    output += finishAnthropicSse(state)
+    const frames = dataFrames(output)
+    const final = frames[frames.length - 1]
+    expect(final.anthropic_thinking_blocks).toEqual([
+      { type: 'thinking', thinking: 'thought', signature: 'sig-1' },
+    ])
+  })
+})
+
+describe('provider response helpers', () => {
+  it('reads JSON from a response-like object without json()', async () => {
+    const json = await readProviderJson<any>(
+      {
+        text: async () =>
+          JSON.stringify({
+            content: [{ type: 'text', text: 'ok' }],
+            stop_reason: 'end_turn',
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }),
+      },
+      'anthropic',
+    )
+    expect(json.choices[0].message.content).toBe('ok')
+  })
+
+  it('pipes Anthropic SSE through the transform stream', async () => {
+    const encoder = new TextEncoder()
+    const sse = [
+      'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hi"}}',
+      '',
+      'data: {"type":"message_stop"}',
+      '',
+      '',
+    ].join('\n')
+    const upstream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(sse))
+        controller.close()
+      },
+    })
+    const text = await new Response(
+      upstream.pipeThrough(createAnthropicSseToOpenAIStream()),
+    ).text()
+    expect(text).toContain('"content":"hi"')
+    expect(text).toContain('data: [DONE]')
   })
 })

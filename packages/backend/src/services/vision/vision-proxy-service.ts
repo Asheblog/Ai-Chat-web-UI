@@ -2,7 +2,7 @@ import type { PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../db'
 import type { SecretVaultService } from '../secret-vault'
 import { buildHeaders, assertSupportedProvider, type ProviderType, type AuthType } from '../../utils/providers'
-import { convertChatCompletionsRequestToResponses, extractTextFromResponsesResponse } from '../../utils/openai-responses'
+import { extractTextFromResponsesResponse } from '../../utils/openai-responses'
 import { buildChatProviderRequest } from '../../utils/chat-provider'
 import { readProviderJson } from '../../utils/anthropic'
 import { BackendLogger as log } from '../../utils/logger'
@@ -228,8 +228,8 @@ export class VisionProxyService {
       max_tokens: 2000,
       stream: false,
     }
-    // openai-style: apply reasoning/thinking on chatBody before responses conversion
-    // (convertChatCompletionsRequestToResponses keeps reasoning_effort→reasoning; strips thinking)
+    // openai-style: apply reasoning/thinking on chatBody before provider conversion
+    // (the provider converter maps reasoning_effort/thinking to each wire format)
     if (provider !== 'google_genai') {
       applyVisionReasoningOptions(chatBody, config, provider, connection.thinkingDialect)
     }

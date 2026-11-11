@@ -64,12 +64,7 @@ export function resolveToolSchema(params: {
   if (modelId && (modelId.includes('claude') || modelId.includes('anthropic'))) {
     return 'text'
   }
-  if (
-    provider &&
-    provider !== 'openai' &&
-    provider !== 'openai_responses' &&
-    provider !== 'anthropic'
-  ) {
+  if (provider && provider !== 'openai' && provider !== 'openai_responses') {
     return 'text'
   }
   return 'tools'

@@ -260,23 +260,6 @@ export function SystemConnectionsPage() {
     })
   }
 
-  /** 模板卡：直接进入第 2 步；OpenAI 卡可带上选中的协议 */
-  const openTemplateWizard = (
-    template: ProviderTemplate,
-    provider: ProviderTemplateKey = template.provider,
-  ) => {
-    cancelEdit()
-    const resolved = provider === template.provider ? template : getProviderTemplate(provider) ?? template
-    setForm(createFormFromTemplate(resolved))
-    setSheet({
-      open: true,
-      mode: "create",
-      step: 2,
-      title: `配置 ${resolved.label}`,
-      description: template.description,
-    })
-  }
-
   const openEditWizard = (group: SystemConnectionGroup) => {
     startEdit(group)
     setSheet({
@@ -288,6 +271,7 @@ export function SystemConnectionsPage() {
     })
   }
 
+  /** 模板卡/第 1 步：预填表单并进入第 2 步；OpenAI 卡可带上选中的协议 */
   const handleSelectTemplate = (
     template: ProviderTemplate,
     provider: ProviderTemplateKey = template.provider,
@@ -301,6 +285,14 @@ export function SystemConnectionsPage() {
       title: `配置 ${resolved.label}`,
       description: template.description,
     })
+  }
+
+  const openTemplateWizard = (
+    template: ProviderTemplate,
+    provider: ProviderTemplateKey = template.provider,
+  ) => {
+    cancelEdit()
+    handleSelectTemplate(template, provider)
   }
 
   const handleStepChange = (step: WizardStep) => {

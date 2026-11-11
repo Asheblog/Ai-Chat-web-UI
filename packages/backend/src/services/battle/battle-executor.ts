@@ -20,7 +20,7 @@ import { resolveMaxToolIterations, buildUsage } from '../../agent-runtime/stream
 import { createSkillRegistry } from '../../modules/skills/skill-registry'
 import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills, type RequestedSkillsPayload } from '../../modules/skills/types'
 import { createLogger } from '../../utils/logger'
-import { computeCapabilities } from '../../utils/providers'
+import { computeCapabilities, supportsSseStreaming } from '../../utils/providers'
 import type { McpService } from '../../services/mcp/mcp-service'
 import type { SecretVaultService } from '../secret-vault'
 import { resolveDeepseekSearchSettings } from '../settings/deepseek-search-credentials'
@@ -572,8 +572,7 @@ export class BattleExecutor {
     emitDelta?: (delta: { content?: string; reasoning?: string }) => void,
   ) {
     const provider = prepared.providerRequest.providerLabel
-    const streamEnabled =
-      provider === 'openai' || provider === 'openai_responses' || provider === 'anthropic'
+    const streamEnabled = supportsSseStreaming(provider)
     const shouldStream = Boolean(emitDelta) && streamEnabled
 
     const sysMap = prepared.systemSettings

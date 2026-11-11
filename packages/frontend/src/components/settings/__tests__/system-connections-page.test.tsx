@@ -360,6 +360,23 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
     )
   })
 
+  test("向导内切换协议时，默认 displayName 跟随协议更新", async () => {
+    render(<SystemConnectionsPage />)
+    await screen.findByText("OpenAI")
+
+    await userEvent.click(within(getCard("openai")).getByRole("button", { name: "配置OpenAI" }))
+    let dialog = await screen.findByRole("dialog")
+    expect(within(dialog).getByLabelText(/显示名称/)).toHaveValue("OpenAI")
+
+    await userEvent.click(within(dialog).getByRole("combobox", { name: "接口协议" }))
+    await userEvent.click(await screen.findByRole("option", { name: "Responses" }))
+    expect(within(dialog).getByLabelText(/显示名称/)).toHaveValue("OpenAI Responses")
+
+    await userEvent.click(within(dialog).getByRole("combobox", { name: "接口协议" }))
+    await userEvent.click(await screen.findByRole("option", { name: "Chat Completions" }))
+    expect(within(dialog).getByLabelText(/显示名称/)).toHaveValue("OpenAI")
+  })
+
   test("编辑已有 openai_responses 连接时协议回显 Responses", async () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")

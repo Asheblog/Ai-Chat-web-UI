@@ -559,4 +559,72 @@ describe('tool-orchestrator research plan termination', () => {
     expect(result.status).toBe('terminated')
     expect(iterations).toEqual([0])
   })
+
+  it('passes anthropic thinking blocks into the next tool iteration', async () => {
+    let calls = 0
+    let capturedMessages: any[] = []
+    const result = await runToolOrchestration({
+      provider: 'anthropic',
+      requestData: {},
+      initialMessages: [{ role: 'user', content: 'hello' }],
+      toolDefinitions: [buildPythonToolDefinition()],
+      allowedToolNames: new Set(['python_runner']),
+      maxIterations: 2,
+      stream: true,
+      requestTurn: async ({ messages }) => {
+        calls += 1
+        if (calls === 1) {
+          return buildSseStreamResponse([
+            {
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: 'call_1',
+                        type: 'function',
+                        function: { name: 'python_runner', arguments: '{"code":"1"}' },
+                      },
+                    ],
+                  },
+                  finish_reason: null,
+                },
+              ],
+            },
+            {
+              choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+              anthropic_thinking_blocks: [
+                { type: 'thinking', thinking: 'plan', signature: 'sig-1' },
+              ],
+            },
+          ])
+        }
+        capturedMessages = JSON.parse(JSON.stringify(messages))
+        return buildSseStreamResponse([
+          { choices: [{ delta: { content: 'done' }, finish_reason: 'stop' }] },
+        ])
+      },
+      handleToolCall: async () => ({
+        toolCallId: 'call_1',
+        toolName: 'python_runner',
+        message: {
+          role: 'tool',
+          tool_call_id: 'call_1',
+          name: 'python_runner',
+          content: 'ok',
+        },
+      }),
+    })
+
+    expect(result.status).toBe('completed')
+    expect(result.content).toBe('done')
+    const assistant = capturedMessages.find(
+      (message) => message.role === 'assistant' && Array.isArray(message.tool_calls),
+    )
+    expect(assistant.thinking_blocks).toEqual([
+      { type: 'thinking', thinking: 'plan', signature: 'sig-1' },
+    ])
+  })
+
 })

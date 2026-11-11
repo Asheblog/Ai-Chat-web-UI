@@ -5,7 +5,13 @@ import { z } from 'zod';
 import type { PrismaClient } from '@prisma/client';
 import { actorMiddleware } from '../../../middleware/auth';
 import type { ApiResponse } from '../../../types';
-import { buildHeaders, type ProviderType } from '../../../utils/providers';
+import {
+  buildHeaders,
+  isSupportedProvider,
+  supportsSseStreaming,
+  type AuthType,
+  type ProviderType,
+} from '../../../utils/providers';
 import { buildChatProviderRequest } from '../../../utils/chat-provider';
 import { readProviderJson } from '../../../utils/anthropic';
 import type { SecretVaultService } from '../../../services/secret-vault';
@@ -133,6 +139,9 @@ export const registerChatControlRoutes = (router: Hono, deps: ChatControlRoutesD
       }
 
       const baseUrl = conn.baseUrl.replace(/\/+$/, '');
+      if (!isSupportedProvider(conn.provider)) {
+        return c.json<ApiResponse>({ success: false, error: 'Unsupported provider' }, 400);
+      }
       const provider = conn.provider as ProviderType;
       let decryptedApiKey = '';
       if (conn.authType === 'bearer' && conn.secretVaultId && secretVault) {
@@ -141,12 +150,12 @@ export const registerChatControlRoutes = (router: Hono, deps: ChatControlRoutesD
       const extraHeaders = conn.headersJson ? JSON.parse(conn.headersJson) : {};
       const headers = await buildHeaders(
         provider,
-        conn.authType as any,
+        conn.authType as AuthType,
         decryptedApiKey || undefined,
         extraHeaders,
       );
 
-      if (provider === 'openai' || provider === 'openai_responses' || provider === 'anthropic') {
+      if (supportsSseStreaming(provider)) {
         const messages = [{ role: 'user', content: body.prompt }];
         const request = buildChatProviderRequest({
           provider,

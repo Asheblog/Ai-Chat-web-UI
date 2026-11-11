@@ -135,6 +135,11 @@ export async function buildHeaders(provider: ProviderType, authType: AuthType, a
 
 export const ANTHROPIC_API_VERSION = '2023-06-01'
 
+/** SSE 可用的 provider 集合（chat completions / responses / anthropic messages）。 */
+export function supportsSseStreaming(provider?: string | null): boolean {
+  return provider === 'openai' || provider === 'openai_responses' || provider === 'anthropic'
+}
+
 const trimTrailingSlashes = (value: string) => value.replace(/\/+$/, '')
 
 const ensureJsonContentType = async (

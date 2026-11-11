@@ -16,6 +16,8 @@ export type ProviderProtocolOption = {
   provider: "openai" | "openai_responses"
   /** 协议人读名称 */
   label: string
+  /** 协议落库后表单默认显示名 */
+  formLabel: string
   /** 卡片内协议说明 */
   hint: string
 }
@@ -31,23 +33,21 @@ export type ProviderTemplate = {
   baseUrl: string
   /** 快速接入模板默认使用 bearer 认证。 */
   authType: "bearer"
-  /** 端点提示（复用 HelperText 语义） */
-  helperText?: string
   /** 同一张卡内可切换的协议（目前仅 OpenAI） */
   protocols?: ProviderProtocolOption[]
-  /** 卡片连接数徽标统计的 provider 集合 */
-  countProviders?: ProviderTemplateKey[]
 }
 
 const OPENAI_PROTOCOLS: ProviderProtocolOption[] = [
   {
     provider: "openai",
     label: "Chat Completions",
+    formLabel: "OpenAI",
     hint: "兼容面最广，支持 DeepSeek / SiliconFlow 等兼容网关的 Thinking 方言。",
   },
   {
     provider: "openai_responses",
     label: "Responses",
+    formLabel: "OpenAI Responses",
     hint: "新版 /responses 协议，原生 reasoning 与函数工具。",
   },
 ]
@@ -65,9 +65,7 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
     icon: Bot,
     baseUrl: "https://api.openai.com/v1",
     authType: "bearer",
-    helperText: "允许完整 Base URL，兼容网关（如 NewAPI）建议填写到版本层。",
     protocols: OPENAI_PROTOCOLS,
-    countProviders: ["openai", "openai_responses"],
   },
   {
     provider: "google_genai",
@@ -84,15 +82,8 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
     icon: MessagesSquare,
     baseUrl: "https://api.anthropic.com/v1",
     authType: "bearer",
-    helperText:
-      "官方端点 https://api.anthropic.com/v1；请求自动携带 x-api-key 与 anthropic-version: 2023-06-01。",
   },
 ]
-
-const PROTOCOL_FORM_LABELS: Record<"openai" | "openai_responses", string> = {
-  openai: "OpenAI",
-  openai_responses: "OpenAI Responses",
-}
 
 export function getProviderTemplate(provider: string): ProviderTemplate | undefined {
   const template = PROVIDER_TEMPLATES.find(
@@ -107,17 +98,17 @@ export function getProviderTemplate(provider: string): ProviderTemplate | undefi
   return {
     ...template,
     provider: protocol.provider,
-    label: PROTOCOL_FORM_LABELS[protocol.provider] ?? template.label,
+    label: protocol.formLabel,
   }
 }
 
 export function getProviderCountProviders(template: ProviderTemplate): ProviderTemplateKey[] {
-  return template.countProviders ?? template.protocols?.map((protocol) => protocol.provider) ?? [template.provider]
+  return template.protocols?.map((protocol) => protocol.provider) ?? [template.provider]
 }
 
 export function getProviderProtocolHint(
   template: ProviderTemplate,
-  provider: ProviderTemplateKey,
+  provider: string,
 ): string | undefined {
   return template.protocols?.find((protocol) => protocol.provider === provider)?.hint
 }

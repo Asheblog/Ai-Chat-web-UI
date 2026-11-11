@@ -1,4 +1,4 @@
-import { buildHeaders, fetchModelsForConnection } from '../providers'
+import { buildHeaders, fetchModelsForConnection, supportsSseStreaming } from '../providers'
 
 describe('anthropic provider foundation', () => {
   it('builds x-api-key and anthropic-version headers', async () => {
@@ -58,3 +58,10 @@ describe('anthropic provider foundation', () => {
     fetchMock.mockRestore()
   })
 })
+  it('identifies SSE-capable providers', () => {
+    expect(supportsSseStreaming('openai')).toBe(true)
+    expect(supportsSseStreaming('openai_responses')).toBe(true)
+    expect(supportsSseStreaming('anthropic')).toBe(true)
+    expect(supportsSseStreaming('google_genai')).toBe(false)
+    expect(supportsSseStreaming(undefined)).toBe(false)
+  })
