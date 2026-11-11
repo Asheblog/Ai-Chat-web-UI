@@ -46,6 +46,9 @@ COPY packages ./packages
 # 重新链接前端所需依赖，确保工作区软链未被覆盖
 RUN pnpm install --frozen-lockfile --filter @aichat/frontend... --prod=false
 
+# 过滤安装不会重跑 shared 的 prepare，显式构建 dist，避免解析不到 dist/cot-timeline-view.js
+RUN pnpm --filter @aichat/shared build
+
 WORKDIR /app/packages/frontend
 
 # 设置构建参数（浏览器端 API 基址默认相对路径；服务端反代目标用于 Next rewrites）

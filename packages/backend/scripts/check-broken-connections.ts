@@ -34,10 +34,11 @@ async function main(): Promise<void> {
   console.log(`连接总数: ${totalConnections}\n`)
 
   const broken: BrokenConnection[] = await prisma.$queryRaw`
-    SELECT id, provider, "apiKeyLabel", enable, "createdAt", "updatedAt"
-    FROM connections
-    WHERE "authType" = 'bearer' AND secret_vault_id IS NULL
-    ORDER BY id ASC
+    SELECT c.id, g.provider, c."apiKeyLabel", c.enable, c."createdAt", c."updatedAt"
+    FROM connections c
+    JOIN connection_groups g ON g.id = c.connection_group_id
+    WHERE g."authType" = 'bearer' AND c.secret_vault_id IS NULL
+    ORDER BY c.id ASC
   `
 
   if (broken.length === 0) {

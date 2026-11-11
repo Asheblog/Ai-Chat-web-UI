@@ -75,6 +75,9 @@ COPY packages ./packages
 
 WORKDIR /app/packages/backend
 
+# 显式构建 shared dist（prepare 可能因缓存或过滤安装被跳过）
+RUN pnpm --filter @aichat/shared build
+
 # 生成Prisma客户端
 RUN pnpm run db:generate
 

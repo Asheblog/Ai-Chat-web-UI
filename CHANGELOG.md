@@ -2,6 +2,9 @@
 
 ## 未发布
 
+- fix: 修正 SQLite `DATABASE_URL` 的相对路径基准——Prisma 的 `file:./...` 以 `prisma/schema.prisma` 所在目录（`packages/backend/prisma`）为基准，而根 `.env` 与 `.env.example` 里写成 `file:./prisma/data/app.db` 会被静默解析到 `packages/backend/prisma/prisma/data/app.db`（另一个历史库），症状是「连上空库 / 缺列 / `prisma migrate` 显示已应用但运行时报 `no such column`」；统一改为 `file:./data/app.db`，并删除误生成的 `prisma/prisma` 目录。后端启动时会打印实际打开的 SQLite 文件（`[Prisma] SQLite file: ...`），检测到重复 `prisma` 目录时给出显式告警。无 DB 迁移，已有库不需要变动。
+- fix: 启动期 bearer 连接诊断适配 `connection_groups` 拆分后的 schema——启动检查与 `scripts/check-broken-connections.ts` 改为 `connections JOIN connection_groups` 取 `provider`/`authType`，消除启动日志里的 `no such column: provider` 噪音。无迁移。
+- build: 显式保障 `@aichat/shared` 的 dist 产出——前端/后端 Dockerfile 在复制源码后各自执行 `pnpm --filter @aichat/shared build`，CI 的 quality job 在 Shared build 后新增 Verify shared dist 断言（校验 `index.js` / `cot-timeline.js` / `cot-timeline-view.js` 均存在），避免 install 的 prepare 被过滤安装或缓存跳过后解析不到子路径入口。无迁移。
 - UI: 过程时间轴改为三段折叠——完成态默认把整条 CoT 压成一行摘要（`过程时间轴 · N 步 · 搜索 x 次 · 命中 y 条 · 读取 z 篇 · 耗时`），点开后是每步一行的紧凑提纲（限高 `min(45vh,20rem)` 内部滚动，单步仍可就地下钻），再点「全部展开」才是逐卡细节层；流式作答期间自动落提纲层并跟随当前步骤，回答结束后自动收回收起态；折叠级别按消息 key 记入 sessionStorage（`aichat.cot_timeline_level:<key>`，只影响该条消息），状态机与一行摘要收敛到 `@aichat/shared/cot-timeline-view` 供 Web/Android 复用。无后端协议变更、无迁移。
 - fix: 登录态改为滑动续期——JWT 与 Cookie 的 `maxAge` 统一由 `JWT_TTL_SECONDS` 决定（默认 86400 秒，可用范围 60 秒–365 天），令牌剩余寿命不足半个 TTL 时服务端在解析 actor 处自动重签并写回 HttpOnly Cookie，活跃会话不再在 24 小时处被硬踢；前端不再持久化 `actorState`，启动即以 `/auth/actor` 的服务端判定为准（Cookie 过期立即降级，不再出现「UI 已登录、后端已匿名」的错位）；新增 `COOKIE_SECURE` 显式覆盖与登录/注册页 401 重复跳转护栏。无 DB 迁移，升级只需 `docker compose pull && docker compose up -d`。
 - UI: 折叠态推理卡由横向跑马灯改为单行上下滚屏——标题在上、CoT 内容在下，流式时逐行向下滚动且不循环，输出结束直接停在最后一行；工具卡保持原横向滚屏。无后端协议变更、无迁移。

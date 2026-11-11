@@ -53,6 +53,11 @@ jobs:
       - name: Shared build
         run: pnpm --filter @aichat/shared build
 
+      # shared 的 dist 不入库：install 的 prepare 或上一步 build 必须真的产出，
+      # 否则前端会解析不到子路径入口（如 dist/cot-timeline-view.js）
+      - name: Verify shared dist
+        run: node -e "const fs=require('fs');const need=['packages/shared/dist/index.js','packages/shared/dist/cot-timeline.js','packages/shared/dist/cot-timeline-view.js'];const miss=need.filter(f=>!fs.existsSync(f));if(miss.length){console.error('missing shared dist:',miss.join(', '));process.exit(1)}console.log('shared dist ok:',need.length,'entries')"
+
       - name: Generate Prisma Client
         run: pnpm --filter @aichat/backend db:generate
 

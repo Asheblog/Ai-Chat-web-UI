@@ -368,8 +368,10 @@ container.workspaceCleanupService.start();
     const broken = await appContext.prisma.$queryRaw<
       Array<{ id: bigint; provider: string; apiKeyLabel: string | null }>
     >`
-      SELECT id, provider, "apiKeyLabel" FROM connections
-      WHERE "authType" = 'bearer' AND secret_vault_id IS NULL
+      SELECT c.id, g.provider, c."apiKeyLabel"
+      FROM connections c
+      JOIN connection_groups g ON g.id = c.connection_group_id
+      WHERE g."authType" = 'bearer' AND c.secret_vault_id IS NULL
       LIMIT 20
     `
     if (broken.length > 0) {

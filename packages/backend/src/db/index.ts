@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import * as fs from 'fs'
+import * as path from 'path'
 
 const DEFAULT_TX_MAX_WAIT_MS = 10_000
 const DEFAULT_TX_TIMEOUT_MS = 30_000
@@ -41,6 +42,23 @@ export const prisma = globalForPrisma.prisma ?? new PrismaClient({
 })
 
 /**
+ * 读取当前连接真正打开的 SQLite 文件。
+ * Prisma 对 file:./ 相对路径以 prisma/schema.prisma 所在目录为基准；
+ * 一旦 URL 多写一层 prisma/（如 file:./prisma/data/app.db），会静默连到
+ * prisma/prisma/data/app.db 这个另一个库，症状是「连上空库 / 缺列 / 迁移已应用却不生效」。
+ */
+async function readOpenSqliteFile(): Promise<string> {
+  try {
+    const rows = await prisma.$queryRawUnsafe<Array<{ file?: string }>>('PRAGMA database_list')
+    return Array.isArray(rows) ? String(rows[0]?.file ?? '') : ''
+  } catch {
+    return ''
+  }
+}
+
+const DOUBLE_PRISMA_SEGMENT = `${path.sep}prisma${path.sep}prisma${path.sep}`
+
+/**
  * SQLite 环境下设置 PRAGMA，提升并发稳定性
  * - WSL: journal_mode = DELETE，避免 WAL 模式锁协议问题
  * - 非 WSL: journal_mode = WAL，提升读写并发
@@ -58,7 +76,13 @@ async function initSqliteCompatibility(): Promise<void> {
     // 使用 $queryRawUnsafe 因为 PRAGMA 会返回结果
     await prisma.$queryRawUnsafe(`PRAGMA journal_mode = ${journalMode}`)
     await prisma.$queryRawUnsafe(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`)
+    const dbFile = await readOpenSqliteFile()
     if (process.env.NODE_ENV !== 'test') {
+      if (dbFile) console.log(`[Prisma] SQLite file: ${dbFile}`)
+      if (dbFile.replace(/\\/g, path.sep).includes(DOUBLE_PRISMA_SEGMENT)) {
+        console.warn('[Prisma] DATABASE_URL 解析出了重复的 prisma 目录（.../prisma/prisma/...），连到的不是预期数据库。')
+        console.warn('[Prisma] SQLite 相对路径以 prisma/schema.prisma 所在目录为基准：应写 file:./data/app.db，不要写 file:./prisma/data/app.db。')
+      }
       console.log(`[Prisma] SQLite PRAGMA applied (${journalMode}, busy_timeout=${SQLITE_BUSY_TIMEOUT_MS}ms)`)
     }
   } catch (e) {
