@@ -26,6 +26,7 @@ export const healthLabel: Record<HealthState, string> = {
 
 export function providerLabel(group: Pick<SystemConnectionGroup, "provider">) {
   if (group.provider === "google_genai") return "Google"
+  if (group.provider === "anthropic") return "Anthropic"
   if (group.provider === "openai_responses") return "OpenAI Responses"
   if (group.provider === "openai") return "OpenAI"
   return group.provider || "Provider"
@@ -51,6 +52,7 @@ export function getModelCount(group: SystemConnectionGroup) {
 
 export function baseUrlPlaceholder(provider: string) {
   if (provider === "google_genai") return "https://generativelanguage.googleapis.com/v1beta"
+  if (provider === "anthropic") return "https://api.anthropic.com/v1"
   return "https://api.openai.com/v1"
 }
 

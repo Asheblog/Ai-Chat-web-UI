@@ -2,7 +2,9 @@ import type { PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../db'
 import type { SecretVaultService } from '../secret-vault'
 import { buildHeaders, assertSupportedProvider, type ProviderType, type AuthType } from '../../utils/providers'
-import { convertChatCompletionsRequestToResponses, extractTextFromResponsesResponse } from '../../utils/openai-responses'
+import { extractTextFromResponsesResponse } from '../../utils/openai-responses'
+import { buildChatProviderRequest } from '../../utils/chat-provider'
+import { readProviderJson } from '../../utils/anthropic'
 import { BackendLogger as log } from '../../utils/logger'
 import { PrismaModelResolverRepository } from '../../repositories/model-resolver-repository'
 import { ensureMinVisionImages } from './vision-image-prepare'
@@ -226,13 +228,14 @@ export class VisionProxyService {
       max_tokens: 2000,
       stream: false,
     }
-    // openai-style: apply reasoning/thinking on chatBody before responses conversion
-    // (convertChatCompletionsRequestToResponses keeps reasoning_effort→reasoning; strips thinking)
+    // openai-style: apply reasoning/thinking on chatBody before provider conversion
+    // (the provider converter maps reasoning_effort/thinking to each wire format)
     if (provider !== 'google_genai') {
       applyVisionReasoningOptions(chatBody, config, provider, connection.thinkingDialect)
     }
     // 各 provider 请求体格式差异在此收敛。
     let body: Record<string, unknown>
+    let url: string
     if (provider === 'google_genai') {
       // Gemini generateContent 多模态格式：contents[].parts 内混排 text 与 inline_data
       const geminiParts: Array<Record<string, unknown>> = [{ text: userText }]
@@ -254,19 +257,19 @@ export class VisionProxyService {
         },
       }
       // google_genai: skip thinking params (YAGNI)
-    } else {
-      body = provider === 'openai_responses' ? convertChatCompletionsRequestToResponses(chatBody) : chatBody
-    }
-    const headers = await buildHeaders(provider, authType, apiKey, extraHeaders)
-
-    let url: string
-    if (provider === 'openai_responses') {
-      url = `${endpoint}/responses`
-    } else if (provider === 'google_genai') {
       url = `${endpoint}/models/${encodeURIComponent(modelId)}:generateContent`
     } else {
-      url = `${endpoint}/chat/completions`
+      const request = buildChatProviderRequest({
+        provider,
+        baseUrl: endpoint,
+        rawModelId: modelId,
+        body: chatBody,
+        stream: false,
+      })
+      body = request.body
+      url = request.url
     }
+    const headers = await buildHeaders(provider, authType, apiKey, extraHeaders)
 
     try {
       const response = await this.fetchFn(url, {
@@ -290,13 +293,7 @@ export class VisionProxyService {
           502,
         )
       }
-      const rawText = await response.text()
-      let json: any = {}
-      try {
-        json = JSON.parse(rawText)
-      } catch {
-        // ignore parse error
-      }
+      const json = await readProviderJson<any>(response, provider)
       let text = ''
       if (provider === 'openai_responses') {
         text = extractTextFromResponsesResponse(json) || ''

@@ -12,7 +12,8 @@ import {
   type ConnectionCapKey,
 } from "./constants"
 import { validateBasicFields, type ConnectionFormState, type ConnectionKeyFormState } from "./form-state"
-import { PROVIDER_TEMPLATES, type ProviderTemplate } from "./provider-templates"
+import { getProviderTemplate, PROVIDER_TEMPLATES, type ProviderTemplate } from "./provider-templates"
+import { ProviderProtocolField, type OpenAIProtocolProvider } from "./ProviderProtocolField"
 import { AdvancedFields, CollapsibleEditorSection } from "./SystemConnectionEditorParts"
 import { Field, HelperText } from "./SystemConnectionsPageParts"
 import { SystemConnectionKeyPool } from "./SystemConnectionKeyPool"
@@ -68,6 +69,7 @@ export function SystemConnectionEditor({
   const { toast } = useToast()
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [keysOpen, setKeysOpen] = useState(false)
+  const isOpenAIProtocol = form.provider === "openai" || form.provider === "openai_responses"
 
   useEffect(() => {
     setAdvancedOpen(false)
@@ -125,6 +127,26 @@ export function SystemConnectionEditor({
                 required
               />
             </Field>
+
+            {isOpenAIProtocol ? (
+              <ProviderProtocolField
+                value={form.provider as OpenAIProtocolProvider}
+                onChange={(nextProvider) => {
+                  setForm((prev) => {
+                    const previousDefault = getProviderTemplate(prev.provider)?.label ?? ""
+                    const nextDefault = getProviderTemplate(nextProvider)?.label ?? ""
+                    return {
+                      ...prev,
+                      provider: nextProvider,
+                      displayName:
+                        prev.displayName === previousDefault ? nextDefault : prev.displayName,
+                      thinkingDialect: nextProvider === "openai" ? prev.thinkingDialect : "off",
+                      baseUrl: prev.baseUrl || getProviderTemplate("openai")?.baseUrl || "",
+                    }
+                  })
+                }}
+              />
+            ) : null}
 
             <Field label="API 端点" htmlFor="connection-base-url">
               <Input

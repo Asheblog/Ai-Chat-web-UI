@@ -2,7 +2,7 @@ import type { CapabilityFlags, CapabilitySource } from './capabilities'
 import { hasDefinedCapability } from './capabilities'
 import { deriveChannelName as deriveChannelNameShared } from '@aichat/shared/model-display'
 
-export const SUPPORTED_PROVIDERS = ['openai', 'openai_responses', 'google_genai'] as const
+export const SUPPORTED_PROVIDERS = ['openai', 'openai_responses', 'anthropic', 'google_genai'] as const
 export type ProviderType = (typeof SUPPORTED_PROVIDERS)[number]
 export type AuthType = 'bearer' | 'none' | 'session' | 'system_oauth'
 
@@ -88,7 +88,7 @@ export function computeCapabilities(rawId: string, tags?: Array<{ name: string }
       'gpt-4o', 'gpt-4.1', 'gpt4o', 'o4', 'omni', 'vision', 'vl',
       'phi-3', 'phi-3.5', 'phi-4', 'minicpm', 'qwen-vl', 'qwen2-vl', 'qwen2.5-vl',
       'llava', 'llama-3.2', 'llama3.2', 'llama-vision', 'llama3-vision', 'moondream', 'bakllava', 'pixtral',
-      'deepseek-vl', 'kling-v', 'grok-vision'
+      'deepseek-vl', 'kling-v', 'grok-vision', 'claude'
     ]
     if (visionHints.some((p) => id.includes(p))) caps.vision = true
   }
@@ -115,6 +115,12 @@ export async function buildHeaders(provider: ProviderType, authType: AuthType, a
     if (authType === 'bearer' && apiKey) {
       h['x-goog-api-key'] = apiKey
     }
+  } else if (provider === 'anthropic') {
+    // Anthropic 官方使用 x-api-key；anthropic-version 为必需头。
+    if (authType === 'bearer' && apiKey) {
+      h['x-api-key'] = apiKey
+    }
+    h['anthropic-version'] = ANTHROPIC_API_VERSION
   } else if (authType === 'bearer' && apiKey) {
     h['Authorization'] = `Bearer ${apiKey}`
   } else if (authType === 'system_oauth') {
@@ -125,6 +131,13 @@ export async function buildHeaders(provider: ProviderType, authType: AuthType, a
     for (const [k, v] of Object.entries(extra)) h[k] = String(v)
   }
   return h
+}
+
+export const ANTHROPIC_API_VERSION = '2023-06-01'
+
+/** SSE 可用的 provider 集合（chat completions / responses / anthropic messages）。 */
+export function supportsSseStreaming(provider?: string | null): boolean {
+  return provider === 'openai' || provider === 'openai_responses' || provider === 'anthropic'
 }
 
 const trimTrailingSlashes = (value: string) => value.replace(/\/+$/, '')
@@ -170,7 +183,34 @@ export async function verifyConnection(cfg: ConnectionConfig): Promise<void> {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
-    if (cfg.provider === 'openai' || cfg.provider === 'openai_responses') {
+    if (cfg.provider === 'anthropic') {
+      const normalizedBase = normalizeHttpBaseUrl(cfg.baseUrl, 'Anthropic')
+      const res = await fetchImpl(`${normalizedBase}/models?limit=1`, { headers, signal: ctrl.signal })
+      if (!res.ok) {
+        // 部分 Anthropic 兼容网关不实现 /models，允许用最小 messages 探测。
+        if (res.status === 404 || res.status === 405) {
+          const probeModel = Array.isArray(cfg.modelIds) ? cfg.modelIds.find(Boolean) : undefined
+          if (!probeModel) {
+            throw new Error('Anthropic verify failed: /models unsupported, please set Model IDs and retry')
+          }
+          const probe = await fetchImpl(`${normalizedBase}/messages`, {
+            method: 'POST',
+            headers,
+            signal: ctrl.signal,
+            body: JSON.stringify({
+              model: probeModel,
+              max_tokens: 1,
+              messages: [{ role: 'user', content: 'ping' }],
+            }),
+          })
+          if (!probe.ok) throw new Error(`Anthropic verify failed: ${probe.status}`)
+          await ensureJsonContentType(probe, 'Anthropic verify')
+          return
+        }
+        throw new Error(`Anthropic verify failed: ${res.status}`)
+      }
+      await ensureJsonContentType(res, 'Anthropic verify')
+    } else if (cfg.provider === 'openai' || cfg.provider === 'openai_responses') {
       const normalizedBase = normalizeHttpBaseUrl(cfg.baseUrl, 'OpenAI')
       const res = await fetchImpl(`${normalizedBase}/models`, { headers, signal: ctrl.signal })
       if (!res.ok) {
@@ -265,6 +305,14 @@ export async function fetchModelsForConnection(cfg: ConnectionConfig): Promise<C
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
+    if (cfg.provider === 'anthropic') {
+      const normalizedBase = normalizeHttpBaseUrl(cfg.baseUrl, 'Anthropic')
+      const res = await fetchImpl(`${normalizedBase}/models?limit=1000`, { headers, signal: ctrl.signal })
+      if (!res.ok) throw new Error(`Anthropic models failed: ${res.status}`)
+      const json: any = await res.json()
+      const list: any[] = Array.isArray(json?.data) ? json.data : []
+      return list.map((m) => apply(m.id, m.display_name || m.name || m.id))
+    }
     if (cfg.provider === 'openai' || cfg.provider === 'openai_responses') {
       const normalizedBase = normalizeHttpBaseUrl(cfg.baseUrl, 'OpenAI')
       const res = await fetchImpl(`${normalizedBase}/models`, { headers, signal: ctrl.signal })

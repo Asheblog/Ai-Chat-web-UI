@@ -1,6 +1,7 @@
 import { getAppConfig, type RetryConfig } from '../config/app-config'
 import { redactHeadersForTrace, summarizeBodyForTrace, summarizeErrorForTrace } from '../utils/trace-helpers'
 import type { TaskTraceRecorder } from '../utils/task-trace'
+import { adaptProviderResponse } from '../utils/anthropic'
 
 export interface ProviderRequest {
   url: string
@@ -100,7 +101,11 @@ export class ProviderRequester {
           attempt,
         )
       }
-      return response
+      return await adaptProviderResponse(
+        response,
+        params.context.provider,
+        Boolean(params.request.body?.stream),
+      )
     } finally {
       clearTimeout(timeout)
       params.onControllerReady?.(null)

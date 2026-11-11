@@ -28,8 +28,11 @@ import {
 } from "@/components/settings/system-connections/SystemConnectionsToolbar"
 import { ProviderTemplateCard } from "@/components/settings/system-connections/provider-template-card"
 import {
+  getProviderCountProviders,
+  getProviderTemplate,
   PROVIDER_TEMPLATES,
   type ProviderTemplate,
+  type ProviderTemplateKey,
 } from "@/components/settings/system-connections/provider-templates"
 import {
   createFormFromTemplate,
@@ -115,7 +118,7 @@ export function SystemConnectionsPage() {
     return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label))
   }, [connections])
 
-  /** 模板卡数据：连接数按 provider 口径统计（openai 含原交错思考连接） */
+  /** 模板卡数据：OpenAI 卡合并 openai + openai_responses 的连接数。 */
   const templateCards = useMemo(() => {
     const countMap = new Map<string, number>()
     connections.forEach((group) => {
@@ -123,7 +126,10 @@ export function SystemConnectionsPage() {
     })
     return PROVIDER_TEMPLATES.map((template) => ({
       template,
-      count: countMap.get(template.provider) ?? 0,
+      count: getProviderCountProviders(template).reduce(
+        (sum, provider) => sum + (countMap.get(provider) ?? 0),
+        0,
+      ),
     }))
   }, [connections])
 
@@ -254,19 +260,6 @@ export function SystemConnectionsPage() {
     })
   }
 
-  /** 模板卡：直接进入第 2 步 */
-  const openTemplateWizard = (template: ProviderTemplate) => {
-    cancelEdit()
-    setForm(createFormFromTemplate(template))
-    setSheet({
-      open: true,
-      mode: "create",
-      step: 2,
-      title: `配置 ${template.label}`,
-      description: template.description,
-    })
-  }
-
   const openEditWizard = (group: SystemConnectionGroup) => {
     startEdit(group)
     setSheet({
@@ -278,15 +271,28 @@ export function SystemConnectionsPage() {
     })
   }
 
-  const handleSelectTemplate = (template: ProviderTemplate) => {
-    setForm(createFormFromTemplate(template))
+  /** 模板卡/第 1 步：预填表单并进入第 2 步；OpenAI 卡可带上选中的协议 */
+  const handleSelectTemplate = (
+    template: ProviderTemplate,
+    provider: ProviderTemplateKey = template.provider,
+  ) => {
+    const resolved = provider === template.provider ? template : getProviderTemplate(provider) ?? template
+    setForm(createFormFromTemplate(resolved))
     setSheet({
       open: true,
       mode: "create",
       step: 2,
-      title: `配置 ${template.label}`,
+      title: `配置 ${resolved.label}`,
       description: template.description,
     })
+  }
+
+  const openTemplateWizard = (
+    template: ProviderTemplate,
+    provider: ProviderTemplateKey = template.provider,
+  ) => {
+    cancelEdit()
+    handleSelectTemplate(template, provider)
   }
 
   const handleStepChange = (step: WizardStep) => {

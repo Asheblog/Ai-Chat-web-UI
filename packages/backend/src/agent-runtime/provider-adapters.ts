@@ -149,6 +149,7 @@ const googleGenaiAdapter: ToolProviderAdapter = (toolDefinitions) => {
 const PROVIDER_ADAPTERS: Record<string, ToolProviderAdapter> = {
   openai: openaiAdapter,
   openai_responses: openaiAdapter,
+  anthropic: openaiAdapter,
   google_genai: googleGenaiAdapter,
 }
 

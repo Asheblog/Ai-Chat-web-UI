@@ -5,8 +5,15 @@ import { z } from 'zod';
 import type { PrismaClient } from '@prisma/client';
 import { actorMiddleware } from '../../../middleware/auth';
 import type { ApiResponse } from '../../../types';
-import type { ProviderType } from '../../../utils/providers';
-import { convertChatCompletionsRequestToResponses } from '../../../utils/openai-responses';
+import {
+  buildHeaders,
+  isSupportedProvider,
+  supportsSseStreaming,
+  type AuthType,
+  type ProviderType,
+} from '../../../utils/providers';
+import { buildChatProviderRequest } from '../../../utils/chat-provider';
+import { readProviderJson } from '../../../utils/anthropic';
 import type { SecretVaultService } from '../../../services/secret-vault';
 import { ConnectionServiceError } from '../../../services/connections/connection-service';
 import { PrismaModelResolverRepository } from '../../../repositories/model-resolver-repository';
@@ -132,31 +139,37 @@ export const registerChatControlRoutes = (router: Hono, deps: ChatControlRoutesD
       }
 
       const baseUrl = conn.baseUrl.replace(/\/+$/, '');
+      if (!isSupportedProvider(conn.provider)) {
+        return c.json<ApiResponse>({ success: false, error: 'Unsupported provider' }, 400);
+      }
       const provider = conn.provider as ProviderType;
       let decryptedApiKey = '';
       if (conn.authType === 'bearer' && conn.secretVaultId && secretVault) {
         decryptedApiKey = await secretVault.decryptById(conn.secretVaultId).catch(() => { throw new ConnectionServiceError('无法解密 API Key：Secret Vault 解密失败', 500) })
       }
       const extraHeaders = conn.headersJson ? JSON.parse(conn.headersJson) : {};
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...(conn.authType === 'bearer' && decryptedApiKey ? { Authorization: `Bearer ${decryptedApiKey}` } : {}),
-        ...extraHeaders,
-      };
+      const headers = await buildHeaders(
+        provider,
+        conn.authType as AuthType,
+        decryptedApiKey || undefined,
+        extraHeaders,
+      );
 
-      if (provider === 'openai' || provider === 'openai_responses') {
+      if (supportsSseStreaming(provider)) {
         const messages = [{ role: 'user', content: body.prompt }];
-        const url = provider === 'openai' ? `${baseUrl}/chat/completions` : `${baseUrl}/responses`;
-        const res = await fetch(url, {
+        const request = buildChatProviderRequest({
+          provider,
+          baseUrl,
+          rawModelId: rawId || '',
+          body: { model: rawId, messages, stream: !!body.stream },
+          stream: !!body.stream,
+        });
+        const res = await fetch(request.url, {
           method: 'POST',
           headers,
-          body: JSON.stringify(
-            provider === 'openai_responses'
-              ? convertChatCompletionsRequestToResponses({ model: rawId, messages, stream: !!body.stream })
-              : { model: rawId, messages, stream: !!body.stream }
-          ),
+          body: JSON.stringify(request.body),
         });
-        const json = await res.json();
+        const json = await readProviderJson(res, provider);
         return c.json(json, toContentfulStatus(res.status));
       }
       return c.json<ApiResponse>({ success: false, error: 'Unsupported provider' }, 400);

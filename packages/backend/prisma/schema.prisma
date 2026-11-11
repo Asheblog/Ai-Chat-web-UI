@@ -501,7 +501,7 @@ model ConnectionGroup {
   id                      Int      @id @default(autoincrement())
   ownerUserId             Int?
   displayName             String
-  provider                String // Active: 'openai' | 'openai_responses' | 'google_genai'; retired records remain historical.
+  provider                String // Active: 'openai' | 'openai_responses' | 'anthropic' | 'google_genai'; retired records remain historical.
   vendor                  String? // retired; kept null after thinkingDialect migration
   thinkingDialect         String  @default("off") @map("thinking_dialect") // 'off' | 'deepseek_compat'
   baseUrl                 String

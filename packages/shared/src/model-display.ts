@@ -93,6 +93,7 @@ export const modelProviderLabel = (provider?: string | null): string => {
   const value = nonEmpty(provider)
   if (!value) return ''
   if (value === 'google_genai') return 'Google'
+  if (value === 'anthropic') return 'Anthropic'
   if (value === 'openai_responses') return 'OpenAI Responses'
   if (value === 'openai') return 'OpenAI'
   return value

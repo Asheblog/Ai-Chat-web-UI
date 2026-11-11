@@ -26,6 +26,10 @@ const KNOWN_GOOGLE_CONTEXT_WINDOWS: Array<{ match: RegExp; tokens: number }> = [
   { match: /^gemini-1\.5-flash(-.*)?$/i, tokens: 1_000_000 },
 ]
 
+const KNOWN_ANTHROPIC_CONTEXT_WINDOWS: Array<{ match: RegExp; tokens: number }> = [
+  { match: /^claude-.*/i, tokens: 200_000 },
+]
+
 const KNOWN_COMPLETION_LIMITS: Array<{ provider?: Provider; match: RegExp; tokens: number }> = [
   { match: /^deepseek-chat(-.*)?$/i, tokens: 4_096 },
   { match: /^deepseek-r1(-.*)?$/i, tokens: 8_192 },
@@ -102,7 +106,12 @@ export class ContextWindowService {
   guessKnownContextWindow(provider: Provider, rawId: string | null | undefined): number | null {
     if (!rawId) return null
     const target = rawId.toLowerCase()
-    const rules = provider === 'google_genai' ? KNOWN_GOOGLE_CONTEXT_WINDOWS : KNOWN_OPENAI_CONTEXT_WINDOWS
+    const rules =
+      provider === 'google_genai'
+        ? KNOWN_GOOGLE_CONTEXT_WINDOWS
+        : provider === 'anthropic'
+          ? KNOWN_ANTHROPIC_CONTEXT_WINDOWS
+          : KNOWN_OPENAI_CONTEXT_WINDOWS
     for (const item of rules) {
       if (item.match.test(target)) {
         return item.tokens

@@ -2,7 +2,9 @@ import type { PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../../db'
 import type { SecretVaultService } from '../../../services/secret-vault'
 import { buildHeaders, assertSupportedProvider, type ProviderType, type AuthType } from '../../../utils/providers'
-import { convertChatCompletionsRequestToResponses, extractTextFromResponsesResponse } from '../../../utils/openai-responses'
+import { extractTextFromResponsesResponse } from '../../../utils/openai-responses'
+import { buildChatProviderRequest } from '../../../utils/chat-provider'
+import { readProviderJson } from '../../../utils/anthropic'
 import { BackendLogger as log } from '../../../utils/logger'
 import {
   PrismaModelResolverRepository,
@@ -153,27 +155,23 @@ export class TitleSummaryService {
       // ignore invalid JSON
     }
 
-    // 构建URL
-    let url: string
-    if (provider === 'openai_responses') {
-      url = `${endpoint}/responses`
-    } else if (provider === 'google_genai') {
-      url = `${endpoint}/models/${encodeURIComponent(modelId)}:generateContent`
-    } else {
-      url = `${endpoint}/chat/completions`
-    }
-
     // 构建请求头 (async)
     const headers = await buildHeaders(provider, authType, apiKey, extraHeaders)
 
-    // 构建请求体
+    // 构建请求体：统一走 provider 协议适配层
     const chatBody: Record<string, unknown> = {
       model: modelId,
       messages,
       temperature: 0.3,
       stream: false,
     }
-    const body = provider === 'openai_responses' ? convertChatCompletionsRequestToResponses(chatBody) : chatBody
+    const { url, body } = buildChatProviderRequest({
+      provider,
+      baseUrl: endpoint,
+      rawModelId: modelId,
+      body: chatBody,
+      stream: false,
+    })
 
     try {
       const response = await this.fetchFn(url, {
@@ -198,24 +196,10 @@ export class TitleSummaryService {
         throw new TitleSummaryServiceError(`Provider request failed: ${response.status}`, 502)
       }
 
-      const rawText = await response.text()
-      let json: any = {}
-      try {
-        json = JSON.parse(rawText)
-      } catch {
-        // ignore parse error; rawText 会在日志里记录
-      }
+      const json = await readProviderJson<any>(response, provider)
 
       // 提取响应内容
-      let title = ''
-      if (provider === 'openai_responses') {
-        title = extractTextFromResponsesResponse(json) || ''
-      } else {
-        title =
-          json?.choices?.[0]?.message?.content ||
-          json?.choices?.[0]?.message?.reasoning_content ||
-          ''
-      }
+      let title = extractTitleFromProviderResponse(json, provider)
       title = title.trim()
 
       // 确保标题长度不超过限制
@@ -252,4 +236,23 @@ export class TitleSummaryService {
       throw new TitleSummaryServiceError('Failed to generate title', 500)
     }
   }
+}
+
+/** 从各 provider 的非流式响应中提取标题文本（供测试与复用）。 */
+export function extractTitleFromProviderResponse(json: any, provider: string): string {
+  if (provider === 'openai_responses') {
+    return extractTextFromResponsesResponse(json) || ''
+  }
+  if (provider === 'google_genai') {
+    const parts = json?.candidates?.[0]?.content?.parts
+    if (!Array.isArray(parts)) return ''
+    return parts
+      .map((part: any) => (typeof part?.text === 'string' ? part.text : ''))
+      .join('')
+  }
+  return (
+    json?.choices?.[0]?.message?.content ||
+    json?.choices?.[0]?.message?.reasoning_content ||
+    ''
+  )
 }

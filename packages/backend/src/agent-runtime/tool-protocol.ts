@@ -56,6 +56,7 @@ export function resolveToolSchema(params: {
   if (normalized === 'functions' || normalized === 'function' || normalized === 'legacy') return 'functions'
   if (normalized === 'text' || normalized === 'xml' || normalized === 'text-protocol') return 'text'
   if (params.provider === 'openai_responses') return 'tools'
+  if (params.provider === 'anthropic') return 'tools'
   const provider = (params.provider || '').toLowerCase()
   const modelId = typeof params.requestData?.model === 'string'
     ? params.requestData.model.toLowerCase()
