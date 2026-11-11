@@ -572,7 +572,8 @@ export class BattleExecutor {
     emitDelta?: (delta: { content?: string; reasoning?: string }) => void,
   ) {
     const provider = prepared.providerRequest.providerLabel
-    const streamEnabled = provider === 'openai' || provider === 'openai_responses'
+    const streamEnabled =
+      provider === 'openai' || provider === 'openai_responses' || provider === 'anthropic'
     const shouldStream = Boolean(emitDelta) && streamEnabled
 
     const sysMap = prepared.systemSettings

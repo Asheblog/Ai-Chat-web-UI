@@ -10,6 +10,7 @@ describe('model-display', () => {
   it('maps provider codes to readable labels', () => {
     expect(modelProviderLabel('openai')).toBe('OpenAI')
     expect(modelProviderLabel('google_genai')).toBe('Google')
+    expect(modelProviderLabel('anthropic')).toBe('Anthropic')
     expect(modelProviderLabel('Custom')).toBe('Custom')
   })
 

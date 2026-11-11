@@ -10,6 +10,7 @@ import {
 } from '../../../utils/providers'
 import { buildChatProviderRequest } from '../../../utils/chat-provider'
 import { extractTextFromResponsesResponse } from '../../../utils/openai-responses'
+import { readProviderJson } from '../../../utils/anthropic'
 import { BackendLogger as log } from '../../../utils/logger'
 import {
   loadSystemSettingsMap,
@@ -488,10 +489,9 @@ export class ConversationCompressionService {
         return this.fallbackSummary(params.messages)
       }
 
-      const raw = await response.text()
       let json: any = null
       try {
-        json = JSON.parse(raw)
+        json = await readProviderJson<any>(response, provider)
       } catch {
         return this.fallbackSummary(params.messages)
       }

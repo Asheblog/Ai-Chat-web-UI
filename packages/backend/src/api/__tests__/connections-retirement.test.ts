@@ -34,7 +34,7 @@ describe('connection protocol API validation', () => {
     for (const handler of Object.values(service)) expect(handler).not.toHaveBeenCalled()
   })
 
-  test.each(['openai', 'openai_responses', 'google_genai'])('still accepts %s connections', async (provider) => {
+  test.each(['openai', 'openai_responses', 'anthropic', 'google_genai'])('still accepts %s connections', async (provider) => {
     const createSystemConnection = jest.fn().mockResolvedValue({ id: 1 })
     const app = createConnectionsApi({ connectionService: { createSystemConnection } as unknown as ConnectionService })
     const response = await app.request('http://localhost/', {

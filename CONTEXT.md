@@ -78,7 +78,7 @@
 
 ## 模型连接身份
 
-- **Supported Provider Protocol（受支持供应商协议）**：当前可配置和调用的模型协议，包括 OpenAI Chat Completions、OpenAI Responses 与 Google Generative AI
+- **Supported Provider Protocol（受支持供应商协议）**：当前可配置和调用的模型协议，包括 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 与 Google Generative AI。设置页把 OpenAI 两种协议合并为一张「OpenAI」供应商卡，通过卡内「接口协议」选择落地为 `openai` / `openai_responses` 两个 provider 值；Anthropic 使用 Messages API（`POST /v1/messages`，`x-api-key` + `anthropic-version`）
 - **Thinking Dialect（思考方言）**：OpenAI Chat Completions 连接组上是否向请求体注入厂商 `thinking` 控制参数；取值 `off` 或 `deepseek_compat`；与协议模板分离，不再用独立供应商配置面表达交错思考
 - **Retired Provider Connection（已停用协议连接）**：使用 Azure OpenAI 或 Ollama 专属协议的历史连接；保留连接身份、凭据与对话关联，但不参与连接管理、模型选择、导入或上游调用
 

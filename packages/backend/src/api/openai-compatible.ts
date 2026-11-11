@@ -7,6 +7,7 @@ import { actorMiddleware, requireUserActor } from '../middleware/auth';
 import { getModelResolverService } from '../utils/model-resolver';
 import { buildHeaders, type ProviderType } from '../utils/providers';
 import { buildChatProviderRequest, flattenMessageContent } from '../utils/chat-provider';
+import { adaptProviderResponse } from '../utils/anthropic';
 import type { SecretVaultService } from '../services/secret-vault';
 import { TaskTraceRecorder, type TaskTraceStatus, truncateString } from '../utils/task-trace';
 import { shouldEnableTaskTrace } from '../services/task-trace/legacy-utils';
@@ -401,7 +402,7 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps) => {
             signal,
           });
 
-        const response = await requestWithBackoff(executor, PROVIDER_TIMEOUT_MS, {
+        const rawResponse = await requestWithBackoff(executor, PROVIDER_TIMEOUT_MS, {
           recorder: traceRecorder,
           context: {
             route: '/v1/chat/completions',
@@ -411,6 +412,7 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps) => {
             stream: Boolean(body.stream),
           },
         });
+        const response = await adaptProviderResponse(rawResponse, provider, Boolean(body.stream));
         traceRecorder.log('http:provider_response', {
           route: '/v1/chat/completions',
           provider,
@@ -584,7 +586,8 @@ export const createOpenAICompatApi = (deps: OpenAICompatDeps) => {
             signal,
           });
 
-        const response = await requestWithBackoff(executor);
+        const rawResponse = await requestWithBackoff(executor);
+        const response = await adaptProviderResponse(rawResponse, provider, Boolean(body.stream));
 
         if (!response.ok && response.status !== 200) {
           const errorPayload = await response.text();

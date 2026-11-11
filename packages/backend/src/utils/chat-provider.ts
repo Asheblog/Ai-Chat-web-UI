@@ -1,6 +1,7 @@
 import type { ProviderType } from './providers'
 import { convertOpenAIReasoningPayload } from './providers'
 import { convertChatCompletionsRequestToResponses } from './openai-responses'
+import { convertChatCompletionsRequestToAnthropic } from './anthropic'
 
 export type ProviderStreamMode = 'sse' | 'json'
 
@@ -29,7 +30,8 @@ export function buildChatProviderRequest(params: {
     typeof params.stream === 'boolean' ? params.stream : Boolean(params.body?.stream)
   const streamMode: ProviderStreamMode =
     params.provider === 'openai' ||
-    params.provider === 'openai_responses'
+    params.provider === 'openai_responses' ||
+    params.provider === 'anthropic'
       ? stream
         ? 'sse'
         : 'json'
@@ -53,6 +55,14 @@ export function buildChatProviderRequest(params: {
     return {
       url: `${baseUrl}/responses`,
       body: convertChatCompletionsRequestToResponses(basePayload),
+      streamMode,
+    }
+  }
+
+  if (params.provider === 'anthropic') {
+    return {
+      url: `${baseUrl}/messages`,
+      body: convertChatCompletionsRequestToAnthropic(basePayload),
       streamMode,
     }
   }

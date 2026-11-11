@@ -4,6 +4,7 @@ import {
   extractReasoningFromResponsesResponse,
   extractTextFromResponsesResponse,
 } from '../../../utils/openai-responses'
+import { convertChatCompletionsRequestToAnthropic, readProviderJson } from '../../../utils/anthropic'
 import type { GeneratedImage } from '../../../services/image-generation'
 import type { TaskTraceRecorder } from '../../../utils/task-trace'
 import { redactHeadersForTrace, summarizeBodyForTrace, summarizeErrorForTrace } from '../../../utils/trace-helpers'
@@ -70,6 +71,9 @@ export class NonStreamFallbackService {
       } else if (params.provider === 'openai_responses') {
         body = convertChatCompletionsRequestToResponses(convertOpenAIReasoningPayload(body))
         url = `${params.baseUrl}/responses`
+      } else if (params.provider === 'anthropic') {
+        body = convertChatCompletionsRequestToAnthropic(convertOpenAIReasoningPayload(body))
+        url = `${params.baseUrl}/messages`
       }
 
       logTrace('http:provider_request', {
@@ -110,7 +114,7 @@ export class NonStreamFallbackService {
         })
         return null
       }
-      const json = (await resp.json()) as any
+      const json = (await readProviderJson(resp, params.provider)) as any
       
       // 调试日志：记录完整响应结构以便分析图片数据位置
       const message = json?.choices?.[0]?.message

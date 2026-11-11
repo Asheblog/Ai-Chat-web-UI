@@ -90,15 +90,22 @@ afterEach(() => {
 })
 
 describe("provider-templates 模板数据", () => {
-  test("3 项且 provider 唯一、顺序固定", () => {
+  test("3 项且 provider 唯一、顺序固定（OpenAI 双协议合并为一张卡）", () => {
     expect(PROVIDER_TEMPLATES).toHaveLength(3)
     const providers = PROVIDER_TEMPLATES.map((item) => item.provider)
     expect(new Set(providers).size).toBe(3)
     expect(providers).toEqual([
       "openai",
-      "openai_responses",
       "google_genai",
+      "anthropic",
     ])
+    expect(PROVIDER_TEMPLATES[0].protocols?.map((item) => item.provider)).toEqual([
+      "openai",
+      "openai_responses",
+    ])
+    expect(getProviderTemplate("openai_responses")?.provider).toBe("openai_responses")
+    expect(getProviderTemplate("openai_responses")?.label).toBe("OpenAI Responses")
+    expect(getProviderTemplate("anthropic")?.baseUrl).toBe("https://api.anthropic.com/v1")
   })
 
   test("每项有 label/description/icon/baseUrl/authType", () => {
@@ -120,35 +127,39 @@ describe("provider-templates 模板数据", () => {
 })
 
 describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
-  test("渲染 3 张模板卡（OpenAI/Responses/Google；交错思考/Azure/Ollama 不可见）", async () => {
+  test("渲染 3 张模板卡（OpenAI 双协议/Google/Anthropic；Responses 不再单独成卡）", async () => {
     render(<SystemConnectionsPage />)
 
     expect(await screen.findByText("OpenAI")).toBeInTheDocument()
-    expect(screen.getByText("OpenAI Responses")).toBeInTheDocument()
     expect(screen.getByText("Google")).toBeInTheDocument()
+    expect(screen.getByText("Anthropic")).toBeInTheDocument()
+    expect(screen.getByTestId("provider-template-openai")).toBeInTheDocument()
+    expect(screen.queryByTestId("provider-template-openai_responses")).not.toBeInTheDocument()
     expect(screen.queryByText("OpenAI（交错思考）")).not.toBeInTheDocument()
     expect(screen.queryByText("Azure")).not.toBeInTheDocument()
     expect(screen.queryByText("Ollama")).not.toBeInTheDocument()
     expect(screen.getByText("供应商与连接")).toBeInTheDocument()
   })
 
-  test("连接数徽标：openai 卡「已有 2 组连接」、google_genai 卡「未配置」；ollama 无模板卡", async () => {
+  test("连接数徽标：OpenAI 卡合并 openai + responses（已有 3 组）、Google/Anthropic 未配置", async () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
-    expect(within(getCard("openai")).getByText("已有 2 组连接")).toBeInTheDocument()
+    expect(within(getCard("openai")).getByText("已有 3 组连接")).toBeInTheDocument()
     expect(within(getCard("google_genai")).getByText("未配置")).toBeInTheDocument()
+    expect(within(getCard("anthropic")).getByText("未配置")).toBeInTheDocument()
     expect(screen.queryByTestId("provider-template-ollama")).not.toBeInTheDocument()
     expect(screen.queryByTestId("provider-template-azure_openai")).not.toBeInTheDocument()
     expect(screen.queryByTestId("provider-template-openai_interleave")).not.toBeInTheDocument()
   })
 
-  test("模板卡按钮可访问名 = 「配置{label}」（整卡可点、朗读简洁）", async () => {
+  test("模板卡可访问名 = 「配置{label}」；OpenAI 卡用独立配置按钮避免嵌套 select", async () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
     expect(screen.getByRole("button", { name: "配置Google" })).toBe(getCard("google_genai"))
-    expect(screen.getByRole("button", { name: "配置OpenAI" })).toBe(getCard("openai"))
+    expect(screen.getByRole("button", { name: "配置Anthropic" })).toBe(getCard("anthropic"))
+    expect(within(getCard("openai")).getByRole("button", { name: "配置OpenAI" })).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "配置OpenAI（交错思考）" })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "配置Ollama" })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "配置Azure" })).not.toBeInTheDocument()
@@ -302,7 +313,7 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
     })
 
-    await userEvent.click(within(getCard("openai")).getByText("配置"))
+    await userEvent.click(within(getCard("openai")).getByRole("button", { name: "配置OpenAI" }))
     dialog = await screen.findByRole("dialog")
 
     expect(within(dialog).getByLabelText(/显示名称/)).toHaveValue("OpenAI")
@@ -324,6 +335,42 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
     await userEvent.click(getCard("google_genai"))
     expect(await screen.findByRole("dialog")).toBeInTheDocument()
     expect(within(screen.getByRole("dialog")).getByLabelText(/显示名称/)).toHaveValue("Google")
+  })
+
+  test("OpenAI 卡选择 Responses 后配置：预填 Responses 并提交 openai_responses", async () => {
+    render(<SystemConnectionsPage />)
+    await screen.findByText("OpenAI")
+
+    const card = getCard("openai")
+    await userEvent.click(within(card).getByRole("combobox", { name: "OpenAI 接口协议" }))
+    await userEvent.click(await screen.findByRole("option", { name: "Responses" }))
+    await userEvent.click(within(card).getByRole("button", { name: "配置OpenAI" }))
+
+    const dialog = await screen.findByRole("dialog")
+    expect(within(dialog).getByLabelText(/显示名称/)).toHaveValue("OpenAI Responses")
+    expect(within(dialog).getByRole("combobox", { name: "接口协议" })).toHaveTextContent("Responses")
+
+    await userEvent.type(within(dialog).getByLabelText("API Key"), "sk-responses-test")
+    await userEvent.click(within(dialog).getByRole("button", { name: "下一步" }))
+    await userEvent.click(within(dialog).getByRole("button", { name: "创建连接" }))
+
+    await waitFor(() => expect(services.createSystemConnection).toHaveBeenCalledTimes(1))
+    expect(services.createSystemConnection.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ provider: "openai_responses", displayName: "OpenAI Responses" }),
+    )
+  })
+
+  test("编辑已有 openai_responses 连接时协议回显 Responses", async () => {
+    render(<SystemConnectionsPage />)
+    await screen.findByText("OpenAI")
+
+    await userEvent.click(screen.getByRole("button", { name: /高级管理/ }))
+    const editButtons = screen.getAllByRole("button", { name: /编辑/ })
+    await userEvent.click(editButtons[2])
+
+    const dialog = await screen.findByRole("dialog")
+    expect(within(dialog).getByLabelText(/显示名称/)).toHaveValue("Responses 网关")
+    expect(within(dialog).getByRole("combobox", { name: "接口协议" })).toHaveTextContent("Responses")
   })
 
   test("列表编辑打开同一向导 Sheet，主屏含 displayName", async () => {

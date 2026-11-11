@@ -4,6 +4,13 @@ import { useEffect, useState, type Dispatch, type SetStateAction } from "react"
 import { ArrowLeft, ArrowRight, KeyRound, Loader2, Settings2, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { useToast } from "@/components/ui/use-toast"
 import type { SystemConnectionGroup, VerifyConnectionResult } from "@/services/system-connections"
@@ -12,7 +19,11 @@ import {
   type ConnectionCapKey,
 } from "./constants"
 import { validateBasicFields, type ConnectionFormState, type ConnectionKeyFormState } from "./form-state"
-import { PROVIDER_TEMPLATES, type ProviderTemplate } from "./provider-templates"
+import {
+  getProviderTemplate,
+  PROVIDER_TEMPLATES,
+  type ProviderTemplate,
+} from "./provider-templates"
 import { AdvancedFields, CollapsibleEditorSection } from "./SystemConnectionEditorParts"
 import { Field, HelperText } from "./SystemConnectionsPageParts"
 import { SystemConnectionKeyPool } from "./SystemConnectionKeyPool"
@@ -68,6 +79,9 @@ export function SystemConnectionEditor({
   const { toast } = useToast()
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [keysOpen, setKeysOpen] = useState(false)
+  const openaiTemplate = getProviderTemplate("openai")
+  const openaiProtocols = openaiTemplate?.protocols ?? []
+  const isOpenAIProtocol = form.provider === "openai" || form.provider === "openai_responses"
 
   useEffect(() => {
     setAdvancedOpen(false)
@@ -125,6 +139,39 @@ export function SystemConnectionEditor({
                 required
               />
             </Field>
+
+            {isOpenAIProtocol ? (
+              <Field label="接口协议" htmlFor="connection-provider-protocol">
+                <Select
+                  value={form.provider}
+                  onValueChange={(value) => {
+                    const nextProvider = value as "openai" | "openai_responses"
+                    setForm((prev) => ({
+                      ...prev,
+                      provider: nextProvider,
+                      thinkingDialect: nextProvider === "openai" ? prev.thinkingDialect : "off",
+                      baseUrl: prev.baseUrl || openaiTemplate?.baseUrl || "",
+                    }))
+                  }}
+                >
+                  <SelectTrigger id="connection-provider-protocol" aria-label="接口协议">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {openaiProtocols.map((protocol) => (
+                      <SelectItem key={protocol.provider} value={protocol.provider}>
+                        {protocol.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  {form.provider === "openai_responses"
+                    ? "Responses：新版 /responses 协议，原生 reasoning 与函数工具。"
+                    : "Chat Completions：兼容面最广；DeepSeek / SiliconFlow 等端点可开启下方 Thinking 方言。"}
+                </p>
+              </Field>
+            ) : null}
 
             <Field label="API 端点" htmlFor="connection-base-url">
               <Input

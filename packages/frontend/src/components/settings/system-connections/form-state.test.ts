@@ -54,6 +54,25 @@ describe("form-state displayName", () => {
     expect(form.thinkingDialect).toBe("off")
   })
 
+  test("OpenAI 卡的 Responses 协议解析为独立 provider 与 displayName", () => {
+    const template = getProviderTemplate("openai_responses")!
+    const form = createFormFromTemplate(template)
+    expect(template.provider).toBe("openai_responses")
+    expect(form.provider).toBe("openai_responses")
+    expect(form.displayName).toBe("OpenAI Responses")
+    expect(form.baseUrl).toBe("https://api.openai.com/v1")
+    expect(form.thinkingDialect).toBe("off")
+  })
+
+  test("Anthropic 模板预填官方端点与 off 方言", () => {
+    const template = getProviderTemplate("anthropic")!
+    const form = createFormFromTemplate(template)
+    expect(form.provider).toBe("anthropic")
+    expect(form.displayName).toBe("Anthropic")
+    expect(form.baseUrl).toBe("https://api.anthropic.com/v1")
+    expect(form.thinkingDialect).toBe("off")
+  })
+
   test("openai 模板按 baseUrl 启发 thinkingDialect", () => {
     const template = getProviderTemplate("openai")!
     expect(createFormFromTemplate(template).thinkingDialect).toBe("off")
