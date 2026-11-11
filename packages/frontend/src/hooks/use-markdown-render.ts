@@ -1,7 +1,11 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { requestMarkdownRender, type RenderResponse } from '@/lib/markdown-worker-client'
+import {
+  requestMarkdownRender,
+  subscribeMarkdownWorkerReady,
+  type RenderResponse,
+} from '@/lib/markdown-worker-client'
 
 interface Snapshot {
   identity: string
@@ -22,6 +26,7 @@ const sameSnapshot = (a: Snapshot | null, b: Snapshot) => Boolean(a &&
   a.identity === b.identity && a.content === b.content &&
   a.version === b.version && a.isStreaming === b.isStreaming)
 const RECOVERY_COOLDOWN_MS = 10000
+const MIN_RECOVERY_DELAY_MS = 1000
 const MAX_RECOVERY_ATTEMPTS = 2
 
 /** One job plus one latest snapshot; appending must not cancel in-flight work. */
@@ -37,13 +42,22 @@ export function useMarkdownRender(options: Options) {
   const timer = useRef<ReturnType<typeof setTimeout>>()
   const recoveryTimer = useRef<ReturnType<typeof setTimeout>>()
   const recoveryAttempts = useRef(0)
+  const erroredRef = useRef(false)
   const lastStarted = useRef(-Infinity)
   const onRendered = useRef(options.onRendered)
   onRendered.current = options.onRendered
   const enabledRef = useRef(enabled)
   enabledRef.current = enabled
   const scheduleRef = useRef<() => void>(() => {})
-  const recover = (snapshot: Snapshot, token: number) => {
+
+  /** 客户端会给出建议的重试间隔（Worker 冷却/弱网初始化），缺省 10 秒。 */
+  const retryDelay = (result?: RenderResponse) => {
+    const hint = result?.retryAfterMs
+    if (typeof hint !== 'number' || !Number.isFinite(hint)) return RECOVERY_COOLDOWN_MS
+    return Math.max(MIN_RECOVERY_DELAY_MS, hint)
+  }
+
+  const recover = (snapshot: Snapshot, token: number, delay = RECOVERY_COOLDOWN_MS) => {
     if (!alive.current || !enabledRef.current || token !== generation.current ||
         !sameSnapshot(snapshot, latest.current) || recoveryAttempts.current >= MAX_RECOVERY_ATTEMPTS) return
     recoveryAttempts.current += 1
@@ -53,7 +67,7 @@ export function useMarkdownRender(options: Options) {
       if (!alive.current || token !== generation.current || !sameSnapshot(snapshot, latest.current)) return
       attempted.current = null
       scheduleRef.current()
-    }, RECOVERY_COOLDOWN_MS)
+    }, delay)
   }
 
   scheduleRef.current = () => {
@@ -77,13 +91,15 @@ export function useMarkdownRender(options: Options) {
         const current = latest.current
         if (snapshot.identity !== current.identity || !current.content.startsWith(snapshot.content)) return
         const valid = !result.errored && result.contentVersion === snapshot.version && typeof result.contentHtml === 'string'
+        erroredRef.current = !valid
         setRendered({ ...snapshot, html: valid ? result.contentHtml : null, errored: !valid })
         if (valid) {
           recoveryAttempts.current = 0
           onRendered.current?.(snapshot, result)
-        } else recover(snapshot, token)
+        } else recover(snapshot, token, retryDelay(result))
       }).catch(() => {
         if (alive.current && token === generation.current) {
+          erroredRef.current = true
           setRendered({ ...snapshot, html: null, errored: true })
           recover(snapshot, token)
         }
@@ -110,6 +126,19 @@ export function useMarkdownRender(options: Options) {
     }
   }, [])
 
+  // Worker 迟到 ready（弱网下首包可能晚于软超时）：把已经降级成纯文本的快照
+  // 重新排队，不需要等固定冷却，也不需要刷新页面。
+  useEffect(() => {
+    return subscribeMarkdownWorkerReady(() => {
+      if (!alive.current || !enabledRef.current || !erroredRef.current) return
+      clearTimeout(recoveryTimer.current)
+      recoveryTimer.current = undefined
+      recoveryAttempts.current = 0
+      attempted.current = null
+      scheduleRef.current()
+    })
+  }, [])
+
   useEffect(() => {
     clearTimeout(recoveryTimer.current)
     recoveryTimer.current = undefined
@@ -119,6 +148,7 @@ export function useMarkdownRender(options: Options) {
     if (replaced) {
       generation.current += 1
       attempted.current = null
+      erroredRef.current = false
       lastStarted.current = -Infinity
       recoveryAttempts.current = 0
       setRendered(null)

@@ -1,8 +1,7 @@
 'use client'
 
-import { memo, useEffect, useId, useMemo, useRef } from 'react'
+import { memo, useId, useMemo, useRef } from 'react'
 import { cn } from '@/lib/utils'
-import { ensureKatexResources } from '@/lib/load-katex'
 import { useMarkdownRender } from '@/hooks/use-markdown-render'
 import { TerminalCodeBlock } from '@/components/terminal-code-block'
 
@@ -86,10 +85,6 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ html, fallback,
   const renderedSource = external ? source ?? fallback : markdown.source
   const tail = renderedHtml ? fallback.slice(renderedSource.length) : fallback
   const parts = useMemo(() => splitHtmlByCodeMarkers(renderedHtml), [renderedHtml])
-  useEffect(() => {
-    if (!renderedHtml.includes('katex')) return
-    void ensureKatexResources().catch(() => console.warn('[markdown] math-resources-unavailable'))
-  }, [renderedHtml])
   if (!fallback && !renderedHtml) return null
   return (
     <div className={cn('markdown-body prose prose-zinc dark:prose-invert max-w-none break-words', (isStreaming || isRendering || markdown.isRendering) && 'markdown-body--pending')}>

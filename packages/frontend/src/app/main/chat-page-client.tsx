@@ -6,6 +6,7 @@ import { shallow } from 'zustand/shallow'
 import { WelcomeScreen } from '@/components/welcome-screen'
 import { ChatInterface } from '@/components/chat-interface'
 import { useChatStore } from '@/store/chat-store'
+import { prewarmMarkdownWorker } from '@/lib/markdown-worker-client'
 import type { ChatSession } from '@/types'
 
 interface ChatPageClientProps {
@@ -42,6 +43,12 @@ export function ChatPageClient({ initialSessionId = null }: ChatPageClientProps)
       createdAt: new Date(0).toISOString(),
     }
   }, [normalizedSessionId])
+
+  // 会话初始化阶段就启动 Markdown Worker：弱网下把首包下载与编译提前，
+  // 避免第一条消息到达时才撞上初始化等待。
+  useEffect(() => {
+    prewarmMarkdownWorker()
+  }, [])
 
   useEffect(() => {
     if (normalizedSessionId === null) {

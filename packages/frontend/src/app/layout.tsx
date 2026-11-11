@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import { Source_Sans_3, Noto_Sans_SC } from 'next/font/google'
+// KaTeX 样式与字体随应用本地打包：公式不再依赖 jsDelivr 等第三方 CDN。
+import 'katex/dist/katex.min.css'
 import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/toaster'

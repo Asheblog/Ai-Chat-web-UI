@@ -2,6 +2,7 @@
 
 ## 未发布
 
+- fix: 修复弱网下 Markdown 格式渲染整体降级——Worker 首包不再静态打包 KaTeX/rehype-katex（构建产物 6.18 MB，改后仅在正文命中公式时按需加载），ready 握手改为 15 秒软等待（2g/3g 30 秒）且超时不终止 Worker，迟到 ready 会广播并让已降级消息自动重渲染；失败重建改为 10/20/40/60 秒指数冷却且不再永久停用，`online`、ready 与成功渲染都会清零预算；KaTeX 样式与字体改为随应用本地打包，移除 jsDelivr CDN 依赖。无后端协议变更、无迁移。
 - fix: 修正 SQLite `DATABASE_URL` 的相对路径基准——Prisma 的 `file:./...` 以 `prisma/schema.prisma` 所在目录（`packages/backend/prisma`）为基准，而根 `.env` 与 `.env.example` 里写成 `file:./prisma/data/app.db` 会被静默解析到 `packages/backend/prisma/prisma/data/app.db`（另一个历史库），症状是「连上空库 / 缺列 / `prisma migrate` 显示已应用但运行时报 `no such column`」；统一改为 `file:./data/app.db`，并删除误生成的 `prisma/prisma` 目录。后端启动时会打印实际打开的 SQLite 文件（`[Prisma] SQLite file: ...`），检测到重复 `prisma` 目录时给出显式告警。无 DB 迁移，已有库不需要变动。
 - fix: 启动期 bearer 连接诊断适配 `connection_groups` 拆分后的 schema——启动检查与 `scripts/check-broken-connections.ts` 改为 `connections JOIN connection_groups` 取 `provider`/`authType`，消除启动日志里的 `no such column: provider` 噪音。无迁移。
 - build: 显式保障 `@aichat/shared` 的 dist 产出——前端/后端 Dockerfile 在复制源码后各自执行 `pnpm --filter @aichat/shared build`，CI 的 quality job 在 Shared build 后新增 Verify shared dist 断言（校验 `index.js` / `cot-timeline.js` / `cot-timeline-view.js` 均存在），避免 install 的 prepare 被过滤安装或缓存跳过后解析不到子路径入口。无迁移。

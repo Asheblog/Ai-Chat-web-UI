@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { requestMarkdownRender, shutdownMarkdownWorker } from '@/lib/markdown-worker-client'
+import {
+  requestMarkdownRender,
+  shutdownMarkdownWorker,
+  subscribeMarkdownWorkerReady,
+} from '@/lib/markdown-worker-client'
 
 class MockWorker {
   static instances: MockWorker[] = []
@@ -52,21 +56,63 @@ describe('markdown-worker-client lifecycle', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
-  it('settles all jobs when initialization never completes', async () => {
+  it('keeps a slow worker alive and self-heals when ready arrives late', async () => {
+    const onReady = vi.fn()
+    const unsubscribe = subscribeMarkdownWorkerReady(onReady)
     const first = requestMarkdownRender(payload)
     const second = requestMarkdownRender({ ...payload, messageId: 456 })
-    await vi.advanceTimersByTimeAsync(3000)
-    expect((await first).errored).toBe(true)
+    await vi.advanceTimersByTimeAsync(15000)
+    const firstResult = await first
+    expect(firstResult.errored).toBe(true)
+    expect(firstResult.errorMessage).toBe('initialization-slow')
+    expect(firstResult.retryAfterMs).toBeGreaterThan(0)
     expect((await second).errored).toBe(true)
+    // 弱网下模块仍在下载：只结算等待中的任务，不终止 Worker。
+    expect(MockWorker.instances[0].terminated).toBe(false)
+    expect(onReady).not.toHaveBeenCalled()
+
+    MockWorker.instances[0].ready()
+    expect(onReady).toHaveBeenCalledTimes(1)
+    const next = requestMarkdownRender(payload)
+    MockWorker.instances[0].reply()
+    expect((await next).contentHtml).toBe('<p>ok</p>')
+    expect(MockWorker.instances).toHaveLength(1)
+    expect(vi.getTimerCount()).toBe(0)
+    unsubscribe()
+  })
+
+  it('terminates a worker that never initializes after the hard timeout', async () => {
+    const result = requestMarkdownRender(payload)
+    await vi.advanceTimersByTimeAsync(15000)
+    expect((await result).errored).toBe(true)
+    expect(MockWorker.instances[0].terminated).toBe(false)
+    await vi.advanceTimersByTimeAsync(45000)
     expect(MockWorker.instances[0].terminated).toBe(true)
     expect(vi.getTimerCount()).toBe(0)
   })
 
-  it('settles jobs whose ready worker stops responding', async () => {
+  it('settles a job whose ready worker stops responding without killing it', async () => {
     const result = requestMarkdownRender(payload)
-    MockWorker.instances[0].ready()
-    await vi.advanceTimersByTimeAsync(5000)
-    expect((await result).errored).toBe(true)
+    const worker = MockWorker.instances[0]
+    worker.ready()
+    await vi.advanceTimersByTimeAsync(15000)
+    const response = await result
+    expect(response.errored).toBe(true)
+    expect(response.errorMessage).toBe('task-timeout')
+    expect(worker.terminated).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('restarts a worker that keeps missing task deadlines', async () => {
+    const first = requestMarkdownRender(payload)
+    const worker = MockWorker.instances[0]
+    worker.ready()
+    await vi.advanceTimersByTimeAsync(15000)
+    expect((await first).errored).toBe(true)
+    const second = requestMarkdownRender({ ...payload, messageId: 456 })
+    await vi.advanceTimersByTimeAsync(15000)
+    expect((await second).errored).toBe(true)
+    expect(worker.terminated).toBe(true)
     expect(vi.getTimerCount()).toBe(0)
   })
 
@@ -88,22 +134,19 @@ describe('markdown-worker-client lifecycle', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
-  it('limits consecutive restarts and permits explicit shutdown recovery', async () => {
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+  it('backs off exponentially without permanently disabling the worker', async () => {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
       const result = requestMarkdownRender(payload)
-      const worker = MockWorker.instances[MockWorker.instances.length - 1]
-      worker.emit('error')
+      MockWorker.instances.at(-1)!.emit('error')
       expect((await result).errored).toBe(true)
-      await vi.advanceTimersByTimeAsync(10000)
+      await vi.advanceTimersByTimeAsync(60000)
     }
-    expect((await requestMarkdownRender(payload)).errored).toBe(true)
-    expect(MockWorker.instances).toHaveLength(3)
-    shutdownMarkdownWorker()
     const recovered = requestMarkdownRender(payload)
-    const worker = MockWorker.instances[MockWorker.instances.length - 1]
+    const worker = MockWorker.instances.at(-1)!
     worker.ready()
     worker.reply()
-    expect((await recovered).contentHtml).toBe('<p>ok</p>')
+    expect((await recovered).errored).not.toBe(true)
+    expect(MockWorker.instances.length).toBeGreaterThanOrEqual(5)
   })
 
   it('cools down failures before creating another worker', async () => {
@@ -114,6 +157,20 @@ describe('markdown-worker-client lifecycle', () => {
     expect(MockWorker.instances).toHaveLength(1)
     await vi.advanceTimersByTimeAsync(10000)
     const recovered = requestMarkdownRender(payload)
+    MockWorker.instances[1].ready()
+    MockWorker.instances[1].reply()
+    expect((await recovered).contentHtml).toBe('<p>ok</p>')
+  })
+
+  it('resets the cooldown when the browser comes back online', async () => {
+    const failed = requestMarkdownRender(payload)
+    MockWorker.instances[0].emit('error')
+    await failed
+    expect((await requestMarkdownRender(payload)).errored).toBe(true)
+    expect(MockWorker.instances).toHaveLength(1)
+    window.dispatchEvent(new Event('online'))
+    const recovered = requestMarkdownRender(payload)
+    expect(MockWorker.instances).toHaveLength(2)
     MockWorker.instances[1].ready()
     MockWorker.instances[1].reply()
     expect((await recovered).contentHtml).toBe('<p>ok</p>')
@@ -141,8 +198,8 @@ describe('markdown-worker-client lifecycle', () => {
     expect((await requestMarkdownRender(payload)).errored).toBe(true)
     await requestMarkdownRender(payload)
     expect(construct).toHaveBeenCalledTimes(1)
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      await vi.advanceTimersByTimeAsync(10000)
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await vi.advanceTimersByTimeAsync(60000)
       await requestMarkdownRender(payload)
     }
     expect(construct).toHaveBeenCalledTimes(3)
