@@ -92,7 +92,7 @@ export const createPromptTemplatesApi = (deps: PromptTemplatesApiDeps) => {
         if (actor.type !== 'user') {
           return c.json<ApiResponse>({ success: false, error: 'Authentication required' }, 401)
         }
-        const templateId = parseTemplateId(c.req.param('id'))
+        const templateId = parseTemplateId(c.req.param('id')!)
         if (!templateId) {
           return c.json<ApiResponse>({ success: false, error: 'Invalid template id' }, 400)
         }
@@ -111,7 +111,7 @@ export const createPromptTemplatesApi = (deps: PromptTemplatesApiDeps) => {
       if (actor.type !== 'user') {
         return c.json<ApiResponse>({ success: false, error: 'Authentication required' }, 401)
       }
-      const templateId = parseTemplateId(c.req.param('id'))
+      const templateId = parseTemplateId(c.req.param('id')!)
       if (!templateId) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid template id' }, 400)
       }

@@ -25,7 +25,7 @@ export const registerChatMessageRoutes = (router: Hono, deps: ChatMessageRoutesD
   router.get('/sessions/:sessionId/messages', actorMiddleware, async (c) => {
     try {
       const actor = c.get('actor') as Actor;
-      const sessionId = parseInt(c.req.param('sessionId'));
+      const sessionId = parseInt(c.req.param('sessionId')!);
 
       if (isNaN(sessionId)) {
         return c.json<ApiResponse>({
@@ -112,8 +112,8 @@ export const registerChatMessageRoutes = (router: Hono, deps: ChatMessageRoutesD
     async (c) => {
       try {
         const actor = c.get('actor') as Actor;
-        const sessionId = parseInt(c.req.param('sessionId'));
-        const messageId = parseInt(c.req.param('messageId'));
+        const sessionId = parseInt(c.req.param('sessionId')!);
+        const messageId = parseInt(c.req.param('messageId')!);
 
         if (Number.isNaN(sessionId) || Number.isNaN(messageId)) {
           return c.json<ApiResponse>({ success: false, error: 'Invalid identifiers' }, 400);
@@ -209,8 +209,8 @@ export const registerChatMessageRoutes = (router: Hono, deps: ChatMessageRoutesD
   router.get('/sessions/:sessionId/messages/:messageId/progress', actorMiddleware, async (c) => {
     try {
       const actor = c.get('actor') as Actor;
-      const sessionId = parseInt(c.req.param('sessionId'));
-      const messageId = parseInt(c.req.param('messageId'));
+      const sessionId = parseInt(c.req.param('sessionId')!);
+      const messageId = parseInt(c.req.param('messageId')!);
 
       if (Number.isNaN(sessionId) || Number.isNaN(messageId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid identifiers' }, 400);
@@ -251,8 +251,8 @@ export const registerChatMessageRoutes = (router: Hono, deps: ChatMessageRoutesD
   router.get('/sessions/:sessionId/messages/by-client/:clientMessageId', actorMiddleware, async (c) => {
     try {
       const actor = c.get('actor') as Actor;
-      const sessionId = parseInt(c.req.param('sessionId'));
-      const clientParam = c.req.param('clientMessageId') || '';
+      const sessionId = parseInt(c.req.param('sessionId')!);
+      const clientParam = c.req.param('clientMessageId')! || '';
       const clientMessageId = decodeURIComponent(clientParam).trim();
 
       if (Number.isNaN(sessionId) || !clientMessageId) {

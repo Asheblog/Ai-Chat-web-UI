@@ -48,7 +48,7 @@ const withinStorageRoot = (target: string) => {
 
 const processAvatarBuffer = async (buffer: Buffer, mime: string) => {
   const format = resolveOutputFormat(mime)
-  const pipeline = sharp(buffer, { failOnError: false })
+  const pipeline = sharp(buffer, { failOn: 'none' })
     .rotate()
     .resize(TARGET_AVATAR_SIZE, TARGET_AVATAR_SIZE, {
       fit: 'cover',

@@ -85,7 +85,7 @@ export const createSharesApi = (deps: SharesApiDeps) => {
 
   router.get('/:token', async (c) => {
     try {
-      const token = (c.req.param('token') || '').trim()
+      const token = (c.req.param('token')! || '').trim()
       if (!token) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid share token' }, 400)
       }
@@ -102,7 +102,7 @@ export const createSharesApi = (deps: SharesApiDeps) => {
 
   router.get('/:token/messages', async (c) => {
     try {
-      const token = (c.req.param('token') || '').trim()
+      const token = (c.req.param('token')! || '').trim()
       if (!token) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid share token' }, 400)
       }
@@ -120,7 +120,7 @@ export const createSharesApi = (deps: SharesApiDeps) => {
 
   router.patch('/:id', actorMiddleware, zValidator('json', updateShareSchema), async (c) => {
     try {
-      const shareId = Number.parseInt(c.req.param('id'), 10)
+      const shareId = Number.parseInt(c.req.param('id')!, 10)
       if (Number.isNaN(shareId) || shareId <= 0) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid share id' }, 400)
       }
@@ -135,7 +135,7 @@ export const createSharesApi = (deps: SharesApiDeps) => {
 
   router.post('/:id/revoke', actorMiddleware, async (c) => {
     try {
-      const shareId = Number.parseInt(c.req.param('id'), 10)
+      const shareId = Number.parseInt(c.req.param('id')!, 10)
       if (Number.isNaN(shareId) || shareId <= 0) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid share id' }, 400)
       }
@@ -150,7 +150,7 @@ export const createSharesApi = (deps: SharesApiDeps) => {
   const resolveStreamKeepaliveIntervalMs = () => streamSettings.resolveKeepaliveIntervalMs()
 
   router.get('/:token/stream', async (c) => {
-    const token = (c.req.param('token') || '').trim()
+    const token = (c.req.param('token')! || '').trim()
     if (!token) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid share token' }, 400)
     }

@@ -31,7 +31,7 @@ const connectionSchema = z.object({
   thinkingDialect: thinkingDialectEnum.optional(),
   baseUrl: z.string().url(),
   authType: z.enum(['bearer', 'none', 'session', 'system_oauth']).optional().default('bearer'),
-  headers: z.record(z.string()).optional(),
+  headers: z.record(z.string(), z.string()).optional(),
   prefixId: z.string().optional(),
   tags: z.array(z.object({ name: z.string() })).optional(),
   connectionType: z.enum(['external', 'local']).optional(),
@@ -147,7 +147,7 @@ export const createConnectionsApi = (deps: ConnectionsApiDeps) => {
     zValidator('json', connectionSchema),
     async (c) => {
       try {
-        const id = parseInt(c.req.param('id'), 10)
+        const id = parseInt(c.req.param('id')!, 10)
         if (Number.isNaN(id)) {
           return c.json<ApiResponse>({ success: false, error: 'Invalid connection id' }, 400)
         }
@@ -162,7 +162,7 @@ export const createConnectionsApi = (deps: ConnectionsApiDeps) => {
 
   router.delete('/:id', requireUserActor, adminOnlyMiddleware, async (c) => {
     try {
-      const id = parseInt(c.req.param('id'), 10)
+      const id = parseInt(c.req.param('id')!, 10)
       if (Number.isNaN(id)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid connection id' }, 400)
       }

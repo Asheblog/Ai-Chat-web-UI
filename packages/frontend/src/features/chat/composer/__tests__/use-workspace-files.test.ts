@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { useWorkspaceFiles } from '../use-workspace-files'
+import type { ToastHandler } from '../types'
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -29,10 +30,10 @@ const mockUploadResponse = (overrides = {}) => ({
 })
 
 describe('useWorkspaceFiles - upload states', () => {
-  let toast: ReturnType<typeof vi.fn>
+  let toast: Mock<ToastHandler>
 
   beforeEach(() => {
-    toast = vi.fn()
+    toast = vi.fn<ToastHandler>()
     vi.spyOn(globalThis, 'fetch').mockReset()
   })
 

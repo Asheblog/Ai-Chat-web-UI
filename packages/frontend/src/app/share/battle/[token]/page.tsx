@@ -4,13 +4,13 @@ import { getServerBranding } from '@/lib/server-branding'
 import { BattleShareViewer } from '@/components/share/battle-share-viewer'
 
 interface BattleSharePageProps {
-  params: { token: string }
+  params: Promise<{ token: string }>
 }
 
 export const revalidate = 0
 
 export default async function BattleSharePage({ params }: BattleSharePageProps) {
-  const token = params?.token || ''
+  const token = (await params)?.token || ''
   const [share, branding] = await Promise.all([
     fetchBattleShare(token),
     getServerBranding(),

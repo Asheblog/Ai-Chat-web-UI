@@ -150,7 +150,7 @@ export const createMcpApi = (deps: McpApiDeps) => {
 
   router.get('/installations/:id', actorMiddleware, async (c) => {
     try {
-      const id = Number(c.req.param('id'))
+      const id = Number(c.req.param('id')!)
       const inst = await svc.getInstallation(id)
       return c.json({ success: true, data: inst } satisfies ApiResponse)
     } catch (error) {
@@ -165,7 +165,7 @@ export const createMcpApi = (deps: McpApiDeps) => {
     zValidator('json', installationSchema.partial()),
     async (c) => {
       try {
-        const id = Number(c.req.param('id'))
+        const id = Number(c.req.param('id')!)
         const body = c.req.valid('json')
         const inst = await svc.updateInstallation(id, body)
         return c.json({ success: true, data: inst } satisfies ApiResponse)
@@ -244,7 +244,7 @@ export const createMcpApi = (deps: McpApiDeps) => {
 
   router.get('/connections/:id', actorMiddleware, async (c) => {
     try {
-      const id = Number(c.req.param('id'))
+      const id = Number(c.req.param('id')!)
       const actor = c.get('actor') as Actor
       const conn = await svc.getConnection(id)
       // Non-admin users can only access their own connections or system-shared connections
@@ -267,7 +267,7 @@ export const createMcpApi = (deps: McpApiDeps) => {
     zValidator('json', connectionUpdateSchema),
     async (c) => {
       try {
-        const id = Number(c.req.param('id'))
+        const id = Number(c.req.param('id')!)
         const actor = c.get('actor') as Actor
         const conn = await svc.getConnection(id)
         // Non-admin users can only modify their own connections (not system-shared)
@@ -291,7 +291,7 @@ export const createMcpApi = (deps: McpApiDeps) => {
 
   router.delete('/connections/:id', actorMiddleware, adminOnlyMiddleware, async (c) => {
     try {
-      const id = Number(c.req.param('id'))
+      const id = Number(c.req.param('id')!)
       await svc.deleteConnection(id)
       return c.json({ success: true } satisfies ApiResponse)
     } catch (error) {
@@ -399,7 +399,7 @@ export const createMcpApi = (deps: McpApiDeps) => {
     zValidator('json', bindingUpdateSchema),
     async (c) => {
       try {
-        const id = Number(c.req.param('id'))
+        const id = Number(c.req.param('id')!)
         const actor = c.get('actor') as Actor
         const body = c.req.valid('json')
 
@@ -442,7 +442,7 @@ export const createMcpApi = (deps: McpApiDeps) => {
 
   router.delete('/bindings/:id', actorMiddleware, requireUserActor, async (c) => {
     try {
-      const id = Number(c.req.param('id'))
+      const id = Number(c.req.param('id')!)
       const actor = c.get('actor') as Actor
 
       // Fetch the binding to check ownership
@@ -487,7 +487,7 @@ export const createMcpApi = (deps: McpApiDeps) => {
     adminOnlyMiddleware,
     async (c) => {
       try {
-        const id = Number(c.req.param('id'))
+        const id = Number(c.req.param('id')!)
         const revision = await svc.refreshToolCache(id)
         return c.json({ success: true, data: { toolSetRevision: revision } } satisfies ApiResponse)
       } catch (error) {
@@ -518,8 +518,8 @@ export const createMcpApi = (deps: McpApiDeps) => {
 
   router.get('/tools/:connectionId/:originalName', actorMiddleware, async (c) => {
     try {
-      const connectionId = Number(c.req.param('connectionId'))
-      const originalName = c.req.param('originalName')
+      const connectionId = Number(c.req.param('connectionId')!)
+      const originalName = c.req.param('originalName')!
       const actor = c.get('actor') as Actor
 
       // Non-admin: check connection visibility
@@ -616,7 +616,7 @@ export const createMcpApi = (deps: McpApiDeps) => {
 
   router.get('/sessions/:sessionId/tools', actorMiddleware, async (c) => {
     try {
-      const sessionId = Number(c.req.param('sessionId'))
+      const sessionId = Number(c.req.param('sessionId')!)
       const actor = c.get('actor') as Actor
 
       // Validate session ownership (admin also must own or have access)

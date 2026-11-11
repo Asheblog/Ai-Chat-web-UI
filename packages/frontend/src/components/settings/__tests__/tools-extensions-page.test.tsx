@@ -101,8 +101,8 @@ const baseStatus: PythonRuntimeStatus = {
   ],
 }
 
-const refreshSpy = vi.fn<[], Promise<void>>(() => Promise.resolve())
-const updateSpy = vi.fn<[Partial<SystemSettings>], Promise<void>>(() => Promise.resolve())
+const refreshSpy = vi.fn<() => Promise<void>>(() => Promise.resolve())
+const updateSpy = vi.fn<(arg: Partial<SystemSettings>) => Promise<void>>(() => Promise.resolve())
 
 /** 运行时状态加载使用可手动 resolve 的 deferred，避免异步 setState 脱离 act */
 let resolveRuntimeStatus: (value: { data: PythonRuntimeStatus }) => void = () => {}

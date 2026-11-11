@@ -46,7 +46,7 @@ export const registerChatWorkspaceRoutes = (router: Hono, deps: ChatWorkspaceRou
   router.get('/sessions/:sessionId/artifacts', actorMiddleware, async (c) => {
     try {
       const actor = c.get('actor') as Actor
-      const sessionId = Number(c.req.param('sessionId'))
+      const sessionId = Number(c.req.param('sessionId')!)
       const messageIdRaw = c.req.query('messageId')
       const messageId = messageIdRaw ? Number(messageIdRaw) : undefined
 
@@ -80,7 +80,7 @@ export const registerChatWorkspaceRoutes = (router: Hono, deps: ChatWorkspaceRou
   router.post('/sessions/:sessionId/files', actorMiddleware, async (c) => {
     try {
       const actor = c.get('actor') as Actor
-      const sessionId = Number(c.req.param('sessionId'))
+      const sessionId = Number(c.req.param('sessionId')!)
 
       if (!Number.isFinite(sessionId) || sessionId <= 0) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
@@ -178,7 +178,7 @@ export const registerChatWorkspaceRoutes = (router: Hono, deps: ChatWorkspaceRou
   router.delete('/sessions/:sessionId/files', actorMiddleware, async (c) => {
     try {
       const actor = c.get('actor') as Actor
-      const sessionId = Number(c.req.param('sessionId'))
+      const sessionId = Number(c.req.param('sessionId')!)
       const filePath = c.req.query('path')
 
       if (!Number.isFinite(sessionId) || sessionId <= 0) {
@@ -213,7 +213,7 @@ export const registerChatWorkspaceRoutes = (router: Hono, deps: ChatWorkspaceRou
   router.delete('/sessions/:sessionId/workspace', actorMiddleware, async (c) => {
     try {
       const actor = c.get('actor') as Actor
-      const sessionId = Number(c.req.param('sessionId'))
+      const sessionId = Number(c.req.param('sessionId')!)
 
       if (!Number.isFinite(sessionId) || sessionId <= 0) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)

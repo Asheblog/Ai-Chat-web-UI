@@ -37,7 +37,7 @@ export const createArtifactsApi = (deps: ArtifactsApiDeps) => {
   router.get('/:id/download', actorMiddleware, async (c) => {
     try {
       const actor = c.get('actor') as Actor
-      const artifactId = Number(c.req.param('id'))
+      const artifactId = Number(c.req.param('id')!)
       const expRaw = c.req.query('exp') || ''
       const sig = c.req.query('sig') || ''
 

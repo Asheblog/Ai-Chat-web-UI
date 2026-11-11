@@ -112,7 +112,7 @@ export const createKnowledgeBasesApi = (prisma: PrismaClient) => {
    */
   router.get('/:id', actorMiddleware, async (c) => {
     try {
-      const id = parseInt(c.req.param('id'), 10)
+      const id = parseInt(c.req.param('id')!, 10)
       if (isNaN(id)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid ID' }, 400)
       }
@@ -170,7 +170,7 @@ export const createKnowledgeBasesApi = (prisma: PrismaClient) => {
    */
   router.patch('/:id', actorMiddleware, adminOnlyMiddleware, zValidator('json', updateSchema), async (c) => {
     try {
-      const id = parseInt(c.req.param('id'), 10)
+      const id = parseInt(c.req.param('id')!, 10)
       if (isNaN(id)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid ID' }, 400)
       }
@@ -193,7 +193,7 @@ export const createKnowledgeBasesApi = (prisma: PrismaClient) => {
    */
   router.delete('/:id', actorMiddleware, adminOnlyMiddleware, async (c) => {
     try {
-      const id = parseInt(c.req.param('id'), 10)
+      const id = parseInt(c.req.param('id')!, 10)
       if (isNaN(id)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid ID' }, 400)
       }
@@ -215,7 +215,7 @@ export const createKnowledgeBasesApi = (prisma: PrismaClient) => {
    */
   router.post('/:id/refresh-stats', actorMiddleware, adminOnlyMiddleware, async (c) => {
     try {
-      const id = parseInt(c.req.param('id'), 10)
+      const id = parseInt(c.req.param('id')!, 10)
       if (isNaN(id)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid ID' }, 400)
       }
@@ -243,7 +243,7 @@ export const createKnowledgeBasesApi = (prisma: PrismaClient) => {
    */
   router.post('/:id/documents/upload', actorMiddleware, adminOnlyMiddleware, async (c) => {
     try {
-      const kbId = parseInt(c.req.param('id'), 10)
+      const kbId = parseInt(c.req.param('id')!, 10)
       if (isNaN(kbId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid knowledge base ID' }, 400)
       }
@@ -296,7 +296,7 @@ export const createKnowledgeBasesApi = (prisma: PrismaClient) => {
    */
   router.post('/:id/documents/batch-upload', actorMiddleware, adminOnlyMiddleware, async (c) => {
     try {
-      const kbId = parseInt(c.req.param('id'), 10)
+      const kbId = parseInt(c.req.param('id')!, 10)
       if (isNaN(kbId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid knowledge base ID' }, 400)
       }
@@ -389,7 +389,7 @@ export const createKnowledgeBasesApi = (prisma: PrismaClient) => {
    */
   router.post('/:id/documents', actorMiddleware, adminOnlyMiddleware, zValidator('json', addDocumentSchema), async (c) => {
     try {
-      const kbId = parseInt(c.req.param('id'), 10)
+      const kbId = parseInt(c.req.param('id')!, 10)
       if (isNaN(kbId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid knowledge base ID' }, 400)
       }
@@ -413,8 +413,8 @@ export const createKnowledgeBasesApi = (prisma: PrismaClient) => {
    */
   router.delete('/:id/documents/:docId', actorMiddleware, adminOnlyMiddleware, async (c) => {
     try {
-      const kbId = parseInt(c.req.param('id'), 10)
-      const docId = parseInt(c.req.param('docId'), 10)
+      const kbId = parseInt(c.req.param('id')!, 10)
+      const docId = parseInt(c.req.param('docId')!, 10)
 
       if (isNaN(kbId) || isNaN(docId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid IDs' }, 400)
@@ -439,7 +439,7 @@ export const createKnowledgeBasesApi = (prisma: PrismaClient) => {
     documentIds: z.array(z.number().int().positive()).min(1).max(100),
   })), async (c) => {
     try {
-      const kbId = parseInt(c.req.param('id'), 10)
+      const kbId = parseInt(c.req.param('id')!, 10)
       if (isNaN(kbId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid knowledge base ID' }, 400)
       }

@@ -46,8 +46,8 @@ const bindingSchema = z.object({
   scopeType: z.enum(['system', 'user', 'session', 'battle_model']),
   scopeId: z.string().min(1).max(128),
   enabled: z.boolean().optional(),
-  policy: z.record(z.unknown()).optional(),
-  overrides: z.record(z.unknown()).optional(),
+  policy: z.record(z.string(), z.unknown()).optional(),
+  overrides: z.record(z.string(), z.unknown()).optional(),
 })
 
 const sessionSkillBindingSchema = z.object({
@@ -591,7 +591,7 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
         if (!isUserActor(actor)) {
           return c.json<ApiResponse>({ success: false, error: 'Authentication required' }, 401)
         }
-        const sessionId = Number.parseInt(c.req.param('sessionId'), 10)
+        const sessionId = Number.parseInt(c.req.param('sessionId')!, 10)
         if (!Number.isFinite(sessionId)) {
           return c.json<ApiResponse>({ success: false, error: 'Invalid session id' }, 400)
         }
@@ -673,7 +673,7 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
 
   router.get('/:skillId/uninstall-plan', actorMiddleware, requireUserActor, async (c) => {
     try {
-      const skillId = Number.parseInt(c.req.param('skillId'), 10)
+      const skillId = Number.parseInt(c.req.param('skillId')!, 10)
       if (!Number.isFinite(skillId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid skill id' }, 400)
       }
@@ -757,7 +757,7 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
 
   router.delete('/:skillId', actorMiddleware, requireUserActor, async (c) => {
     try {
-      const skillId = Number.parseInt(c.req.param('skillId'), 10)
+      const skillId = Number.parseInt(c.req.param('skillId')!, 10)
       if (!Number.isFinite(skillId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid skill id' }, 400)
       }
@@ -908,8 +908,8 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
 
   router.post('/:skillId/versions/:versionId/approve', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
     try {
-      const skillId = Number.parseInt(c.req.param('skillId'), 10)
-      const versionId = Number.parseInt(c.req.param('versionId'), 10)
+      const skillId = Number.parseInt(c.req.param('skillId')!, 10)
+      const versionId = Number.parseInt(c.req.param('versionId')!, 10)
       if (!Number.isFinite(skillId) || !Number.isFinite(versionId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid id' }, 400)
       }
@@ -944,8 +944,8 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
     zValidator('json', activateVersionSchema),
     async (c) => {
       try {
-        const skillId = Number.parseInt(c.req.param('skillId'), 10)
-        const versionId = Number.parseInt(c.req.param('versionId'), 10)
+        const skillId = Number.parseInt(c.req.param('skillId')!, 10)
+        const versionId = Number.parseInt(c.req.param('versionId')!, 10)
         const payload = c.req.valid('json')
         if (!Number.isFinite(skillId) || !Number.isFinite(versionId)) {
           return c.json<ApiResponse>({ success: false, error: 'Invalid id' }, 400)
@@ -1097,7 +1097,7 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
 
   router.delete('/bindings/:bindingId', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
     try {
-      const bindingId = Number.parseInt(c.req.param('bindingId'), 10)
+      const bindingId = Number.parseInt(c.req.param('bindingId')!, 10)
       if (!Number.isFinite(bindingId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid binding id' }, 400)
       }
@@ -1121,7 +1121,7 @@ export const createSkillsApi = (deps: SkillsApiDeps) => {
         if (!actorUserId) {
           return c.json<ApiResponse>({ success: false, error: 'Only user can respond approval' }, 403)
         }
-        const requestId = Number.parseInt(c.req.param('requestId'), 10)
+        const requestId = Number.parseInt(c.req.param('requestId')!, 10)
         if (!Number.isFinite(requestId)) {
           return c.json<ApiResponse>({ success: false, error: 'Invalid request id' }, 400)
         }

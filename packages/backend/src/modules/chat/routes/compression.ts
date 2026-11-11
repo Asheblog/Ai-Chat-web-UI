@@ -27,8 +27,8 @@ export const registerChatCompressionRoutes = (router: Hono, deps: ChatCompressio
     async (c) => {
       try {
         const actor = c.get('actor') as Actor
-        const sessionId = Number.parseInt(c.req.param('sessionId'), 10)
-        const groupId = Number.parseInt(c.req.param('groupId'), 10)
+        const sessionId = Number.parseInt(c.req.param('sessionId')!, 10)
+        const groupId = Number.parseInt(c.req.param('groupId')!, 10)
         if (!Number.isFinite(sessionId) || !Number.isFinite(groupId)) {
           return c.json<ApiResponse>({ success: false, error: 'Invalid identifiers' }, 400)
         }
@@ -71,8 +71,8 @@ export const registerChatCompressionRoutes = (router: Hono, deps: ChatCompressio
   router.post('/sessions/:sessionId/compression/:groupId/cancel', actorMiddleware, async (c) => {
     try {
       const actor = c.get('actor') as Actor
-      const sessionId = Number.parseInt(c.req.param('sessionId'), 10)
-      const groupId = Number.parseInt(c.req.param('groupId'), 10)
+      const sessionId = Number.parseInt(c.req.param('sessionId')!, 10)
+      const groupId = Number.parseInt(c.req.param('groupId')!, 10)
       if (!Number.isFinite(sessionId) || !Number.isFinite(groupId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid identifiers' }, 400)
       }

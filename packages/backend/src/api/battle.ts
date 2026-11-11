@@ -31,7 +31,7 @@ const skillSchema = z
           .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'skill slug 必须为 kebab-case'),
       )
       .max(64),
-    overrides: z.record(z.record(z.unknown())).optional(),
+    overrides: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
   })
   .optional()
 
@@ -43,7 +43,7 @@ const battleModelSchema = z.object({
   // 无向后兼容：旧字段 features 明确报错
   features: z.unknown().optional(),
   extraPrompt: z.string().max(4000).optional(),
-  custom_body: z.record(z.any()).optional(),
+  custom_body: z.record(z.string(), z.any()).optional(),
   custom_headers: z.array(headerSchema).max(10).optional(),
   reasoningEnabled: z.boolean().optional(),
   reasoningEffort: z.enum(['low', 'medium', 'high', 'max', 'xhigh']).optional(),
@@ -247,7 +247,7 @@ export const createBattleApi = (deps: BattleApiDeps) => {
   router.get('/runs/:id', actorMiddleware, async (c) => {
     try {
       const actor = c.get('actor') as Actor
-      const runId = Number.parseInt(c.req.param('id'), 10)
+      const runId = Number.parseInt(c.req.param('id')!, 10)
       if (!Number.isFinite(runId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid run id' }, 400)
       }
@@ -264,7 +264,7 @@ export const createBattleApi = (deps: BattleApiDeps) => {
   router.delete('/runs/:id', actorMiddleware, async (c) => {
     try {
       const actor = c.get('actor') as Actor
-      const runId = Number.parseInt(c.req.param('id'), 10)
+      const runId = Number.parseInt(c.req.param('id')!, 10)
       if (!Number.isFinite(runId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid run id' }, 400)
       }
@@ -291,7 +291,7 @@ export const createBattleApi = (deps: BattleApiDeps) => {
   router.post('/runs/:id/cancel', actorMiddleware, async (c) => {
     try {
       const actor = c.get('actor') as Actor
-      const runId = Number.parseInt(c.req.param('id'), 10)
+      const runId = Number.parseInt(c.req.param('id')!, 10)
       if (!Number.isFinite(runId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid run id' }, 400)
       }
@@ -308,7 +308,7 @@ export const createBattleApi = (deps: BattleApiDeps) => {
   router.post('/runs/:id/attempts/cancel', actorMiddleware, zValidator('json', attemptActionSchema), async (c) => {
     try {
       const actor = c.get('actor') as Actor
-      const runId = Number.parseInt(c.req.param('id'), 10)
+      const runId = Number.parseInt(c.req.param('id')!, 10)
       if (!Number.isFinite(runId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid run id' }, 400)
       }
@@ -323,7 +323,7 @@ export const createBattleApi = (deps: BattleApiDeps) => {
   router.post('/runs/:id/attempts/retry', actorMiddleware, zValidator('json', attemptActionSchema), async (c) => {
     try {
       const actor = c.get('actor') as Actor
-      const runId = Number.parseInt(c.req.param('id'), 10)
+      const runId = Number.parseInt(c.req.param('id')!, 10)
       if (!Number.isFinite(runId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid run id' }, 400)
       }
@@ -338,7 +338,7 @@ export const createBattleApi = (deps: BattleApiDeps) => {
   router.post('/results/:id/judge/retry', actorMiddleware, async (c) => {
     try {
       const actor = c.get('actor') as Actor
-      const resultId = Number.parseInt(c.req.param('id'), 10)
+      const resultId = Number.parseInt(c.req.param('id')!, 10)
       if (!Number.isFinite(resultId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid result id' }, 400)
       }
@@ -352,7 +352,7 @@ export const createBattleApi = (deps: BattleApiDeps) => {
   router.post('/runs/:id/judge/retry', actorMiddleware, zValidator('json', judgeRetrySchema), async (c) => {
     try {
       const actor = c.get('actor') as Actor
-      const runId = Number.parseInt(c.req.param('id'), 10)
+      const runId = Number.parseInt(c.req.param('id')!, 10)
       if (!Number.isFinite(runId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid run id' }, 400)
       }
@@ -366,7 +366,7 @@ export const createBattleApi = (deps: BattleApiDeps) => {
 
   router.post('/runs/:id/rejudge', actorMiddleware, zValidator('json', rejudgeSchema), async (c) => {
     const actor = c.get('actor') as Actor
-    const runId = Number.parseInt(c.req.param('id'), 10)
+    const runId = Number.parseInt(c.req.param('id')!, 10)
     if (!Number.isFinite(runId)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid run id' }, 400)
     }
@@ -426,7 +426,7 @@ export const createBattleApi = (deps: BattleApiDeps) => {
   router.post('/runs/:id/share', actorMiddleware, zValidator('json', shareSchema), async (c) => {
     try {
       const actor = c.get('actor') as Actor
-      const runId = Number.parseInt(c.req.param('id'), 10)
+      const runId = Number.parseInt(c.req.param('id')!, 10)
       if (!Number.isFinite(runId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid run id' }, 400)
       }
@@ -444,7 +444,7 @@ export const createBattleApi = (deps: BattleApiDeps) => {
   })
 
   router.get('/shares/:token/stream', async (c) => {
-    const token = c.req.param('token')
+    const token = c.req.param('token')!
     if (!token) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid token' }, 400)
     }
@@ -522,7 +522,7 @@ export const createBattleApi = (deps: BattleApiDeps) => {
 
   router.get('/shares/:token', async (c) => {
     try {
-      const token = c.req.param('token')
+      const token = c.req.param('token')!
       if (!token) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid token' }, 400)
       }

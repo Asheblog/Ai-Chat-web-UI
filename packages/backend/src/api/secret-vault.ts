@@ -126,7 +126,7 @@ export const createSecretVaultApi = (secretVault: SecretVaultService) => {
   router.patch('/:id', actorMiddleware, requireUserActor, zValidator('json', updateSchema), async (c) => {
     try {
       const actor = c.get('actor') as Actor
-      const id = Number(c.req.param('id'))
+      const id = Number(c.req.param('id')!)
 
       // Fetch current secret to check ownership
       let view: ReturnType<typeof secretVault.getSecretView> extends Promise<infer U> ? U : never
@@ -160,7 +160,7 @@ export const createSecretVaultApi = (secretVault: SecretVaultService) => {
   router.delete('/:id', actorMiddleware, requireUserActor, async (c) => {
     try {
       const actor = c.get('actor') as Actor
-      const id = Number(c.req.param('id'))
+      const id = Number(c.req.param('id')!)
 
       // Fetch current secret to check ownership
       let view: ReturnType<typeof secretVault.getSecretView> extends Promise<infer U> ? U : never

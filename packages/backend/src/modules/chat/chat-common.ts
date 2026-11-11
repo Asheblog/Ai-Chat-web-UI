@@ -41,17 +41,17 @@ export const sendMessageSchema = z.object({
           z.object({
             skillId: z.number().int().positive(),
             versionId: z.number().int().positive(),
-            overrides: z.record(z.unknown()).optional(),
+            overrides: z.record(z.string(), z.unknown()).optional(),
           }),
         )
         .max(64)
         .optional(),
-      overrides: z.record(z.record(z.unknown())).optional(),
+      overrides: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
     })
     .optional(),
   // 无向后兼容：旧字段明确报错，提示升级到 skills。
   features: z.unknown().optional(),
-  custom_body: z.record(z.any()).optional(),
+  custom_body: z.record(z.string(), z.any()).optional(),
   custom_headers: z
     .array(
       z.object({

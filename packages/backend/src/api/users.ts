@@ -100,7 +100,7 @@ users.get('/', async (c) => {
 
 users.get('/:id', async (c) => {
   try {
-    const userId = parseId(c.req.param('id'))
+    const userId = parseId(c.req.param('id')!)
     if (!userId) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid user ID' }, 400)
     }
@@ -113,7 +113,7 @@ users.get('/:id', async (c) => {
 
 users.get('/:id/quota', async (c) => {
   try {
-    const targetId = parseId(c.req.param('id'))
+    const targetId = parseId(c.req.param('id')!)
     if (!targetId) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid user ID' }, 400)
     }
@@ -131,7 +131,7 @@ users.get('/:id/quota', async (c) => {
 
 users.put('/:id/username', zValidator('json', updateUsernameSchema), async (c) => {
   try {
-    const targetId = parseId(c.req.param('id'))
+    const targetId = parseId(c.req.param('id')!)
     if (!targetId) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid user ID' }, 400)
     }
@@ -146,7 +146,7 @@ users.put('/:id/username', zValidator('json', updateUsernameSchema), async (c) =
 
 users.put('/:id/role', async (c) => {
   try {
-    const userId = parseId(c.req.param('id'))
+    const userId = parseId(c.req.param('id')!)
     if (!userId) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid user ID' }, 400)
     }
@@ -164,7 +164,7 @@ users.put('/:id/role', async (c) => {
 
 users.post('/:id/approve', async (c) => {
   try {
-    const targetId = parseId(c.req.param('id'))
+    const targetId = parseId(c.req.param('id')!)
     if (!targetId) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid user ID' }, 400)
     }
@@ -178,7 +178,7 @@ users.post('/:id/approve', async (c) => {
 
 users.post('/:id/reject', zValidator('json', rejectionSchema), async (c) => {
   try {
-    const targetId = parseId(c.req.param('id'))
+    const targetId = parseId(c.req.param('id')!)
     if (!targetId) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid user ID' }, 400)
     }
@@ -193,7 +193,7 @@ users.post('/:id/reject', zValidator('json', rejectionSchema), async (c) => {
 
 users.post('/:id/status', zValidator('json', statusUpdateSchema), async (c) => {
   try {
-    const targetId = parseId(c.req.param('id'))
+    const targetId = parseId(c.req.param('id')!)
     if (!targetId) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid user ID' }, 400)
     }
@@ -208,7 +208,7 @@ users.post('/:id/status', zValidator('json', statusUpdateSchema), async (c) => {
 
 users.put('/:id/password', zValidator('json', resetPasswordSchema), async (c) => {
   try {
-    const targetId = parseId(c.req.param('id'))
+    const targetId = parseId(c.req.param('id')!)
     if (!targetId) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid user ID' }, 400)
     }
@@ -223,7 +223,7 @@ users.put('/:id/password', zValidator('json', resetPasswordSchema), async (c) =>
 
 users.delete('/:id', async (c) => {
   try {
-    const userId = parseId(c.req.param('id'))
+    const userId = parseId(c.req.param('id')!)
     if (!userId) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid user ID' }, 400)
     }
@@ -237,7 +237,7 @@ users.delete('/:id', async (c) => {
 
 users.put('/:id/quota', zValidator('json', quotaUpdateSchema), async (c) => {
   try {
-    const targetId = parseId(c.req.param('id'))
+    const targetId = parseId(c.req.param('id')!)
     if (!targetId) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid user ID' }, 400)
     }

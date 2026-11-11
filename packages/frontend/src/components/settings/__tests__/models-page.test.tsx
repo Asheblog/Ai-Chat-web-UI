@@ -39,8 +39,8 @@ vi.mock("@/components/ui/use-toast", () => ({
   toast: toastSpy,
 }))
 
-const refreshSpy = vi.fn<[], Promise<void>>(() => Promise.resolve())
-const updateSpy = vi.fn<[Partial<typeof baseSettings>], Promise<void>>(() => Promise.resolve())
+const refreshSpy = vi.fn<() => Promise<void>>(() => Promise.resolve())
+const updateSpy = vi.fn<(arg: Partial<typeof baseSettings>) => Promise<void>>(() => Promise.resolve())
 
 const mockSystemSettings = () => {
   useSystemSettingsMock.mockReturnValue({

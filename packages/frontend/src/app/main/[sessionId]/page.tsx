@@ -2,13 +2,13 @@ import { redirect } from 'next/navigation'
 import { ChatPageClient } from '../chat-page-client'
 
 interface SessionPageProps {
-  params: { sessionId?: string }
+  params: Promise<{ sessionId?: string }>
 }
 
 export const dynamic = 'force-dynamic'
 
-export default function SessionPage({ params }: SessionPageProps) {
-  const raw = params?.sessionId
+export default async function SessionPage({ params }: SessionPageProps) {
+  const raw = (await params)?.sessionId
   if (!raw) {
     redirect('/main')
   }

@@ -5,13 +5,13 @@ import { getServerBranding } from '@/lib/server-branding'
 import { ShareViewer } from '@/components/share/share-viewer'
 
 interface SharePageProps {
-  params: { token: string }
+  params: Promise<{ token: string }>
 }
 
 export const revalidate = 0
 
 export async function generateMetadata({ params }: SharePageProps): Promise<Metadata> {
-  const token = params?.token || ''
+  const token = (await params)?.token || ''
   const [share, branding] = await Promise.all([
     fetchSharedConversation(token),
     getServerBranding(),
@@ -36,7 +36,7 @@ export async function generateMetadata({ params }: SharePageProps): Promise<Meta
 }
 
 export default async function SharePage({ params }: SharePageProps) {
-  const token = params?.token || ''
+  const token = (await params)?.token || ''
   const [share, firstPage, branding] = await Promise.all([
     fetchSharedConversation(token),
     fetchSharedConversationMessages(token, 1, 50),

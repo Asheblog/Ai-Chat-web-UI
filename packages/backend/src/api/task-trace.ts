@@ -63,7 +63,7 @@ taskTrace.get('/', actorMiddleware, requireUserActor, adminOnlyMiddleware, async
 
 taskTrace.get('/:id', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
-    const id = Number.parseInt(c.req.param('id'), 10)
+    const id = Number.parseInt(c.req.param('id')!, 10)
     if (!Number.isFinite(id)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
     }
@@ -94,7 +94,7 @@ taskTrace.get('/:id', actorMiddleware, requireUserActor, adminOnlyMiddleware, as
 
 taskTrace.get('/:id/export', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
-    const id = Number.parseInt(c.req.param('id'), 10)
+    const id = Number.parseInt(c.req.param('id')!, 10)
     if (!Number.isFinite(id)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
     }
@@ -132,7 +132,7 @@ taskTrace.get('/:id/export', actorMiddleware, requireUserActor, adminOnlyMiddlew
 
 taskTrace.get('/:id/latex', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
-    const id = Number.parseInt(c.req.param('id'), 10)
+    const id = Number.parseInt(c.req.param('id')!, 10)
     if (!Number.isFinite(id)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
     }
@@ -154,7 +154,7 @@ taskTrace.get('/:id/latex', actorMiddleware, requireUserActor, adminOnlyMiddlewa
 
 taskTrace.get('/:id/latex/events', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
-    const id = Number.parseInt(c.req.param('id'), 10)
+    const id = Number.parseInt(c.req.param('id')!, 10)
     if (!Number.isFinite(id)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
     }
@@ -175,7 +175,7 @@ taskTrace.get('/:id/latex/events', actorMiddleware, requireUserActor, adminOnlyM
 
 taskTrace.get('/:id/latex/export', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
-    const id = Number.parseInt(c.req.param('id'), 10)
+    const id = Number.parseInt(c.req.param('id')!, 10)
     if (!Number.isFinite(id)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
     }
@@ -210,7 +210,7 @@ taskTrace.get('/:id/latex/export', actorMiddleware, requireUserActor, adminOnlyM
 
 taskTrace.delete('/:id/latex', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
-    const id = Number.parseInt(c.req.param('id'), 10)
+    const id = Number.parseInt(c.req.param('id')!, 10)
     if (!Number.isFinite(id)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
     }
@@ -237,7 +237,7 @@ taskTrace.delete('/all', actorMiddleware, requireUserActor, adminOnlyMiddleware,
 
 taskTrace.delete('/:id', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
   try {
-    const id = Number.parseInt(c.req.param('id'), 10)
+    const id = Number.parseInt(c.req.param('id')!, 10)
     if (!Number.isFinite(id)) {
       return c.json<ApiResponse>({ success: false, error: 'Invalid trace id' }, 400)
     }

@@ -41,8 +41,8 @@ vi.mock("@/components/settings/system-users/use-system-users", () => ({
   useSystemUsers: () => useSystemUsersMock(),
 }))
 
-const refreshSpy = vi.fn<[], Promise<void>>(() => Promise.resolve())
-const updateSpy = vi.fn<[Partial<typeof baseSettings>], Promise<void>>(() => Promise.resolve())
+const refreshSpy = vi.fn<() => Promise<void>>(() => Promise.resolve())
+const updateSpy = vi.fn<(arg: Partial<typeof baseSettings>) => Promise<void>>(() => Promise.resolve())
 
 const mockSystemSettings = (
   settings: typeof baseSettings | null,

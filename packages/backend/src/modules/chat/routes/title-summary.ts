@@ -37,7 +37,7 @@ export const registerTitleSummaryRoutes = (
     async (c) => {
       try {
         const actor = c.get('actor') as Actor
-        const sessionId = parseInt(c.req.param('sessionId'), 10)
+        const sessionId = parseInt(c.req.param('sessionId')!, 10)
         const { content } = c.req.valid('json')
 
         if (Number.isNaN(sessionId)) {

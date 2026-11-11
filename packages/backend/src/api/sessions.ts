@@ -70,7 +70,7 @@ export const createSessionsApi = (deps: SessionsApiDeps) => {
 
   router.get('/:id', actorMiddleware, async (c) => {
     try {
-      const sessionId = parseInt(c.req.param('id'), 10)
+      const sessionId = parseInt(c.req.param('id')!, 10)
       if (Number.isNaN(sessionId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
       }
@@ -84,7 +84,7 @@ export const createSessionsApi = (deps: SessionsApiDeps) => {
 
   router.put('/:id', actorMiddleware, zValidator('json', updateSessionSchema), async (c) => {
     try {
-      const sessionId = parseInt(c.req.param('id'), 10)
+      const sessionId = parseInt(c.req.param('id')!, 10)
       if (Number.isNaN(sessionId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
       }
@@ -103,7 +103,7 @@ export const createSessionsApi = (deps: SessionsApiDeps) => {
 
   router.put('/:id/model', actorMiddleware, zValidator('json', switchModelSchema), async (c) => {
     try {
-      const sessionId = parseInt(c.req.param('id'), 10)
+      const sessionId = parseInt(c.req.param('id')!, 10)
       if (Number.isNaN(sessionId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
       }
@@ -135,7 +135,7 @@ export const createSessionsApi = (deps: SessionsApiDeps) => {
 
   router.delete('/:id', actorMiddleware, async (c) => {
     try {
-      const sessionId = parseInt(c.req.param('id'), 10)
+      const sessionId = parseInt(c.req.param('id')!, 10)
       if (Number.isNaN(sessionId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
       }
@@ -149,7 +149,7 @@ export const createSessionsApi = (deps: SessionsApiDeps) => {
 
   router.delete('/:id/messages', actorMiddleware, async (c) => {
     try {
-      const sessionId = parseInt(c.req.param('id'), 10)
+      const sessionId = parseInt(c.req.param('id')!, 10)
       if (Number.isNaN(sessionId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
       }

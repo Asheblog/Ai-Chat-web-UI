@@ -87,7 +87,7 @@ const chatCompletionsSchema = z.object({
   top_p: z.number().optional(),
   response_format: z.any().optional(),
   max_tokens: z.number().optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 
 const responseInputSchema = z.union([
@@ -109,7 +109,7 @@ const responsesSchema = z.object({
   temperature: z.number().optional(),
   top_p: z.number().optional(),
   max_output_tokens: z.number().optional(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 
 const messageCreateSchema = z.object({

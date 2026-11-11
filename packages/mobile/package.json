@@ -16,7 +16,7 @@
   "dependencies": {
     "@aichat/shared": "workspace:*",
     "@expo/vector-icons": "^15.1.1",
-    "expo": "~56.0.12",
+    "expo": "~56.0.24",
     "expo-secure-store": "^56.0.4",
     "expo-status-bar": "~56.0.4",
     "react": "19.2.3",
@@ -24,9 +24,9 @@
     "react-native-safe-area-context": "~5.7.0"
   },
   "devDependencies": {
-    "@expo/config-plugins": "^56.0.9",
-    "@types/react": "^19.2.17",
+    "@expo/config-plugins": "^56.0.17",
+    "@types/react": "^19.3.0",
     "typescript": "~6.0.3",
-    "vitest": "^1.6.0"
+    "vitest": "^4.1.12"
   }
 }

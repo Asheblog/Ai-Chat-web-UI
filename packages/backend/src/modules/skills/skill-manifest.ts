@@ -6,7 +6,7 @@ const runtimeSchema = z.object({
   type: z.enum(['node', 'python', 'shell', 'powershell', 'cmd']),
   command: z.string().min(1).max(256).optional(),
   args: z.array(z.string().min(1).max(256)).max(32).optional(),
-  env: z.record(z.string().max(4096)).optional(),
+  env: z.record(z.string(), z.string().max(4096)).optional(),
   timeout_ms: z.number().int().min(1000).max(120000).optional(),
   max_output_chars: z.number().int().min(256).max(200000).optional(),
 })
@@ -14,7 +14,7 @@ const runtimeSchema = z.object({
 const toolSchema = z.object({
   name: z.string().min(1).max(128),
   description: z.string().min(1).max(4000),
-  input_schema: z.record(z.unknown()),
+  input_schema: z.record(z.string(), z.unknown()),
   aliases: z.array(z.string().min(1).max(128)).max(10).optional(),
 })
 

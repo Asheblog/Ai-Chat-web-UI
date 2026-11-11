@@ -9,12 +9,12 @@ export async function ensureMinVisionImageEdge(
 ): Promise<{ data: string; mime: string }> {
   try {
     const buffer = Buffer.from(image.data, 'base64')
-    const meta = await sharp(buffer, { failOnError: false }).metadata()
+    const meta = await sharp(buffer, { failOn: 'none' }).metadata()
     const width = meta.width ?? 0
     const height = meta.height ?? 0
     if (width <= 0 || height <= 0) return image
     if (width >= minEdge && height >= minEdge) return image
-    const out = await sharp(buffer, { failOnError: false })
+    const out = await sharp(buffer, { failOn: 'none' })
       .resize(Math.max(width, minEdge), Math.max(height, minEdge), {
         fit: 'contain',
         background: { r: 255, g: 255, b: 255, alpha: 1 },

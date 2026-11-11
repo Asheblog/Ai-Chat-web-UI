@@ -85,8 +85,8 @@ const sampleEmbeddingModels = [
   },
 ]
 
-const refreshSpy = vi.fn<[], Promise<void>>(() => Promise.resolve())
-const updateSpy = vi.fn<[Partial<SystemSettings>], Promise<void>>(() => Promise.resolve())
+const refreshSpy = vi.fn<() => Promise<void>>(() => Promise.resolve())
+const updateSpy = vi.fn<(arg: Partial<SystemSettings>) => Promise<void>>(() => Promise.resolve())
 
 const mockSystemSettings = (
   settings: SystemSettings | null,

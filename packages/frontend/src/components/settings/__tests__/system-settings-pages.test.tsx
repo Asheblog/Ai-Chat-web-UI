@@ -59,8 +59,8 @@ vi.mock('@/features/system/api', () => ({
   cleanupTaskTraces: vi.fn().mockResolvedValue({ data: { deleted: 0 } }),
 }))
 
-const refreshSpy = vi.fn<[], Promise<void>>(() => Promise.resolve())
-const updateSpy = vi.fn<[Partial<SystemSettings>], Promise<void>>(() => Promise.resolve())
+const refreshSpy = vi.fn<() => Promise<void>>(() => Promise.resolve())
+const updateSpy = vi.fn<(arg: Partial<SystemSettings>) => Promise<void>>(() => Promise.resolve())
 
 const mockUseAuthStore = (state: typeof adminAuthState | typeof userAuthState) => {
   useAuthStoreMock.mockImplementation((selector: any) => {

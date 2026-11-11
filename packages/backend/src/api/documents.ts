@@ -200,7 +200,7 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
    */
   router.get('/:id', actorMiddleware, requireRAGEnabled, async (c) => {
     try {
-      const documentId = parseInt(c.req.param('id'), 10)
+      const documentId = parseInt(c.req.param('id')!, 10)
       if (isNaN(documentId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid document ID' }, 400)
       }
@@ -249,7 +249,7 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
    */
   router.post('/:id/cancel', actorMiddleware, requireRAGEnabled, async (c) => {
     try {
-      const documentId = parseInt(c.req.param('id'), 10)
+      const documentId = parseInt(c.req.param('id')!, 10)
       if (isNaN(documentId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid document ID' }, 400)
       }
@@ -282,7 +282,7 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
    */
   router.delete('/:id', actorMiddleware, requireRAGEnabled, async (c) => {
     try {
-      const documentId = parseInt(c.req.param('id'), 10)
+      const documentId = parseInt(c.req.param('id')!, 10)
       if (isNaN(documentId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid document ID' }, 400)
       }
@@ -364,7 +364,7 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
    */
   router.post('/:id/attach', actorMiddleware, requireRAGEnabled, zValidator('json', attachSchema), async (c) => {
     try {
-      const documentId = parseInt(c.req.param('id'), 10)
+      const documentId = parseInt(c.req.param('id')!, 10)
       if (isNaN(documentId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid document ID' }, 400)
       }
@@ -400,8 +400,8 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
    */
   router.delete('/:id/detach/:sessionId', actorMiddleware, requireRAGEnabled, async (c) => {
     try {
-      const documentId = parseInt(c.req.param('id'), 10)
-      const sessionId = parseInt(c.req.param('sessionId'), 10)
+      const documentId = parseInt(c.req.param('id')!, 10)
+      const sessionId = parseInt(c.req.param('sessionId')!, 10)
 
       if (isNaN(documentId) || isNaN(sessionId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid IDs' }, 400)
@@ -431,7 +431,7 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
    */
   router.post('/:id/bridge', actorMiddleware, requireRAGEnabled, zValidator('json', bridgeSyncSchema), async (c) => {
     try {
-      const documentId = parseInt(c.req.param('id'), 10)
+      const documentId = parseInt(c.req.param('id')!, 10)
       if (isNaN(documentId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid document ID' }, 400)
       }
@@ -467,7 +467,7 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
    */
   router.get('/session/:sessionId/bridges', actorMiddleware, requireRAGEnabled, async (c) => {
     try {
-      const sessionId = parseInt(c.req.param('sessionId'), 10)
+      const sessionId = parseInt(c.req.param('sessionId')!, 10)
       if (isNaN(sessionId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
       }
@@ -488,8 +488,8 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
    */
   router.delete('/:id/bridge/:sessionId', actorMiddleware, requireRAGEnabled, async (c) => {
     try {
-      const documentId = parseInt(c.req.param('id'), 10)
-      const sessionId = parseInt(c.req.param('sessionId'), 10)
+      const documentId = parseInt(c.req.param('id')!, 10)
+      const sessionId = parseInt(c.req.param('sessionId')!, 10)
       if (isNaN(documentId) || isNaN(sessionId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid IDs' }, 400)
       }
@@ -507,7 +507,7 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
    */
   router.get('/session/:sessionId', actorMiddleware, requireRAGEnabled, async (c) => {
     try {
-      const sessionId = parseInt(c.req.param('sessionId'), 10)
+      const sessionId = parseInt(c.req.param('sessionId')!, 10)
       if (isNaN(sessionId)) {
         return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
       }
