@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { createServer } from 'node:http'
 
@@ -14,12 +14,10 @@ const nl = String.fromCharCode(10)
 await mkdir(output, { recursive: true })
 const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) })
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
-// Use the installed KaTeX assets for deterministic offline screenshots.
-const katexDist = path.join(path.dirname(require.resolve('katex/package.json')), 'dist')
-await context.route('https://cdn.jsdelivr.net/npm/katex@0.16.25/dist/**', async route => {
-  const asset = new URL(route.request().url()).pathname.split('/dist/')[1]
-  assert.ok(asset && !asset.includes('..'), 'unexpected KaTeX asset path')
-  await route.fulfill({ body: await readFile(path.join(katexDist, asset)), contentType: asset.endsWith('.css') ? 'text/css' : 'font/woff2' })
+// KaTeX 样式与字体随应用本地打包；弱网/离线时不得回落到第三方 CDN。
+const externalRequests = []
+context.on('request', request => {
+  if (/cdn\.jsdelivr\.net|unpkg\.com|cdnjs\.cloudflare\.com/.test(request.url())) externalRequests.push(request.url())
 })
 const errors = [], requests = []
 const uncaughtErrors = []
@@ -150,6 +148,7 @@ try {
   if (!baseline) assert.ok(workerScripts.length && workerScripts.every(script => script.status === 200), 'packaged Worker script did not load successfully')
   const resources = await page.evaluate(() => performance.getEntriesByType('resource').filter(e => e.initiatorType === 'script').reduce((sum, e) => ({ transfer: sum.transfer + e.transferSize, decoded: sum.decoded + e.decodedBodySize }), { transfer: 0, decoded: 0 }))
   if (!baseline) assert.equal(errors.some(e => /DOMParser|document is not defined|SecurityError/.test(e)), false, 'Worker DOM dependency failure')
+  if (!baseline) assert.deepEqual(externalRequests, [], 'third-party CDN dependency detected')
   let input = null
   const faults = []
   const flows = {}
@@ -168,22 +167,40 @@ try {
     await page.waitForTimeout(100)
     input.clearedHeight = await textarea.evaluate(el => el.clientHeight)
     assert.ok(input.clearedHeight < input.height, 'clearing did not shrink the textarea')
-    for (const mode of ['constructor', 'unresponsive']) {
+    for (const mode of ['constructor', 'delayed-ready']) {
       const faultPage = await context.newPage()
       await faultPage.addInitScript(mode => {
         const RealWorker = window.Worker
         window.__restoreWorker = () => { window.Worker = RealWorker }
-        window.Worker = mode === 'constructor'
-          ? class { constructor() { throw new Error('injected-construction-failure') } }
-          : class { addEventListener() {} postMessage() {} terminate() {} }
+        if (mode === 'constructor') {
+          window.Worker = class { constructor() { throw new Error('injected-construction-failure') } }
+          return
+        }
+        // 弱网回归：Worker 真实运行，但 ready 握手晚于旧的 3 秒预算（6 秒）。
+        // 修复前这里会误判 initialization-timeout 并把整条 Markdown 降级成纯文本。
+        window.Worker = class extends RealWorker {
+          addEventListener(type, listener, options) {
+            if (type !== 'message') return super.addEventListener(type, listener, options)
+            const started = performance.now()
+            super.addEventListener('message', event => {
+              const wait = Math.max(0, 6000 - (performance.now() - started))
+              setTimeout(() => listener(event), wait)
+            }, options)
+          }
+        }
       }, mode)
       await faultPage.goto(baseURL + '/main/991', { waitUntil: 'networkidle' })
-      await faultPage.waitForFunction(() => document.body.textContent.includes('格式渲染暂不可用'), null, { timeout: 6500 })
-      assert.ok((await faultPage.locator('body').textContent()).includes('中文回归验证'), 'failure hid the source text')
-      await faultPage.evaluate(() => window.__restoreWorker())
+      if (mode === 'constructor') {
+        await faultPage.waitForFunction(() => document.body.textContent.includes('格式渲染暂不可用'), null, { timeout: 6500 })
+        assert.ok((await faultPage.locator('body').textContent()).includes('中文回归验证'), 'failure hid the source text')
+        await faultPage.evaluate(() => window.__restoreWorker())
+      } else {
+        await faultPage.waitForSelector('.katex', { timeout: 16000 })
+        assert.equal((await faultPage.locator('body').textContent()).includes('格式渲染暂不可用'), false, 'slow worker wrongly degraded to plain text')
+      }
       await faultPage.waitForSelector('.katex', { timeout: 16000 })
       await faultPage.waitForSelector('.rs-terminal', { timeout: 10000 })
-      faults.push({ mode, fallbackVisible: true, samePageRecovered: true })
+      faults.push({ mode, fallbackVisible: mode === 'constructor', samePageRecovered: true })
       await faultPage.close()
     }
     await page.reload({ waitUntil: 'networkidle' })
@@ -202,16 +219,17 @@ try {
       const reasoning = Array.from({ length: 10000 }, (_, i) => '中文推理第' + i + '行，验证折叠窗口与展开阅读。').join(String.fromCharCode(10))
       store.setState({ messageBodies: { ...state.messageBodies, '8': { ...state.messageBodies['8'], reasoning } }, messageMetas: state.messageMetas.map(m => m.id === 8 ? { ...m, reasoningStatus: 'done' } : m) })
     })
-    const reasoningButton = page.getByRole('button', { name: /深度思考/ }).last()
-    await reasoningButton.waitFor()
-    assert.equal(await reasoningButton.getAttribute('aria-expanded'), 'false')
-    const collapsedLines = await reasoningButton.locator('span').count()
-    assert.ok(collapsedLines < 12, 'collapsed reasoning rendered too many lines')
-    await reasoningButton.click()
+    // 三段折叠后，完成态 CoT 默认压在“过程时间轴 · N 步”一行里。
+    const summaryBar = page.getByRole('button', { name: /过程时间轴，共/ }).last()
+    await summaryBar.waitFor()
+    const collapsedSpans = await summaryBar.locator('span').count()
+    assert.ok(collapsedSpans < 12, 'collapsed reasoning rendered too many lines')
+    await summaryBar.click()
+    await page.locator('[data-level="outline"]').waitFor()
+    await page.getByRole('button', { name: '全部展开' }).last().click()
     await page.getByText('中文推理第9999行，验证折叠窗口与展开阅读。', { exact: false }).waitFor()
     await page.screenshot({ path: path.join(output, 'reasoning-expanded.png'), fullPage: true })
-    await reasoningButton.click()
-    flows.reasoning = { lines: 10000, collapsedSpans: collapsedLines, expanded: true }
+    flows.reasoning = { lines: 10000, collapsedSpans, expanded: true }
     for (const streamStatus of ['stopped', 'error']) {
       await page.evaluate(status => {
         const store = window.__perfStore, state = store.getState()
@@ -278,7 +296,7 @@ try {
     flows.loadingShell = true
   }
   if (!baseline) assert.deepEqual(uncaughtErrors, [], 'uncaught application error during browser regression')
-  const result = { baseline, navigationMs, metrics, cache, resources, input, faults, flows, errors, uncaughtErrors, workerEvents, workerScripts, requests }
+  const result = { baseline, navigationMs, metrics, cache, resources, input, faults, flows, errors, uncaughtErrors, workerEvents, workerScripts, requests, externalRequests }
   await writeFile(path.join(output, 'result.json'), JSON.stringify(result, null, 2) + nl)
   process.stdout.write(JSON.stringify(result, null, 2) + nl)
 } catch (error) {

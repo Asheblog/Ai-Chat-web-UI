@@ -1,5 +1,5 @@
 import { renderMarkdownToHtml } from '@/lib/markdown-pipeline'
-import rehypeKatex from 'rehype-katex'
+import { containsMath } from '@/lib/markdown-math'
 
 interface WorkerRequest {
   jobId: string
@@ -29,45 +29,48 @@ const escapeHtml = (input: string) =>
     .replace(/>/g, '&gt;')
 
 // ---------------------------------------------------------------------------
-// mhchem 懒加载（仅在 Worker 中处理，因为主线程已通过 load-katex 处理）
+// KaTeX 懒加载
+//
+// KaTeX + rehype-katex 是 Worker 里最大的依赖（构建产物以 MB 计）。静态导入会
+// 把它塞进 Worker 首包，弱网下 ready 握手轻松超过初始化预算，整条 Markdown 链路
+// 都会降级成纯文本。这里只在正文真的含公式时才按需加载；加载失败也只损失公式，
+// 普通 Markdown 照常渲染。
 // ---------------------------------------------------------------------------
-let mhchemReady = false
-let mhchemLoading: Promise<void> | null = null
+let mathPlugin: any = null
+let mathReady = false
+let mathLoading: Promise<any | null> | null = null
 
-const ensureMhchem = async () => {
-  if (mhchemReady) return
-  if (mhchemLoading) {
-    await mhchemLoading
-    return
-  }
-  mhchemLoading = import('katex/contrib/mhchem')
-    .then(() => {
-      mhchemReady = true
+const loadMathPipeline = (): Promise<any | null> => {
+  if (mathReady) return Promise.resolve(mathPlugin)
+  if (mathLoading) return mathLoading
+  mathLoading = Promise.all([
+    import('rehype-katex'),
+    import('katex/contrib/mhchem'),
+  ])
+    .then(([rehypeKatexModule]) => {
+      mathPlugin = rehypeKatexModule.default ?? rehypeKatexModule
+      mathReady = true
+      return mathPlugin
     })
-    .catch((error) => {
-      if (typeof console !== 'undefined') {
-        // eslint-disable-next-line no-console
-        console.warn(
-          '[markdown-worker] chemistry-extension-unavailable',
-        )
-      }
+    .catch(() => {
+      // 失败不缓存：下次含公式的渲染仍可重试，普通 Markdown 不受影响。
+      console.warn('[markdown-worker] math-renderer-unavailable')
+      return null
     })
     .finally(() => {
-      mhchemLoading = null
+      mathLoading = null
     })
-
-  await mhchemLoading
+  return mathLoading
 }
 
 const renderMarkdown = async (
   markdown: string,
   isStreaming?: boolean,
 ): Promise<{ html: string }> => {
-  await ensureMhchem()
-  // renderMarkdownToHtml 是同步函数，但 mhchem 需要异步加载
+  const rehypeKatexPlugin = containsMath(markdown) ? await loadMathPipeline() : null
   return renderMarkdownToHtml(markdown, {
     isStreaming,
-    rehypeKatexPlugin: rehypeKatex,
+    rehypeKatexPlugin: rehypeKatexPlugin ?? undefined,
   })
 }
 

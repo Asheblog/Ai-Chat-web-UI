@@ -4,7 +4,10 @@ import { MarkdownRenderer } from '@/components/markdown-renderer'
 
 vi.mock('@/lib/markdown-worker-client', async () => {
   const { renderMarkdownToHtml } = await import('@/lib/markdown-pipeline')
-  return { requestMarkdownRender: vi.fn(async (request: any) => ({ contentHtml: renderMarkdownToHtml(request.content, { isStreaming: request.isStreaming }).html, contentVersion: request.contentVersion, reasoningVersion: request.reasoningVersion })) }
+  return {
+    requestMarkdownRender: vi.fn(async (request: any) => ({ contentHtml: renderMarkdownToHtml(request.content, { isStreaming: request.isStreaming }).html, contentVersion: request.contentVersion, reasoningVersion: request.reasoningVersion })),
+    subscribeMarkdownWorkerReady: vi.fn(() => () => {}),
+  }
 })
 
 describe('MarkdownRenderer', () => {

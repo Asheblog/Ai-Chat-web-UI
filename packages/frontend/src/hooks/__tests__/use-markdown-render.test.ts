@@ -3,11 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useMarkdownRender } from '../use-markdown-render'
 import { requestMarkdownRender, type RenderResponse } from '@/lib/markdown-worker-client'
 
-vi.mock('@/lib/markdown-worker-client', () => ({ requestMarkdownRender: vi.fn() }))
+const { readyListeners } = vi.hoisted(() => ({ readyListeners: new Set<() => void>() }))
+vi.mock('@/lib/markdown-worker-client', () => ({
+  requestMarkdownRender: vi.fn(),
+  subscribeMarkdownWorkerReady: vi.fn((listener: () => void) => {
+    readyListeners.add(listener)
+    return () => { readyListeners.delete(listener) }
+  }),
+}))
 const response = (content: string, version: number): RenderResponse => ({ contentHtml: '<p>' + content + '</p>', contentVersion: version, reasoningVersion: 0 })
 
 describe('useMarkdownRender latest snapshot', () => {
-  beforeEach(() => { vi.useFakeTimers(); vi.mocked(requestMarkdownRender).mockReset() })
+  beforeEach(() => { vi.useFakeTimers(); vi.mocked(requestMarkdownRender).mockReset(); readyListeners.clear() })
   afterEach(() => { vi.useRealTimers() })
 
   it('accepts an in-flight append snapshot and flushes the final snapshot without starvation', async () => {
@@ -26,6 +33,30 @@ describe('useMarkdownRender latest snapshot', () => {
     await act(async () => pending[1](response('one two END', 3)))
     expect(result.current.html).toContain('END')
     expect(result.current.isRendering).toBe(false)
+  })
+
+  it('re-renders an errored snapshot when the worker signals ready', async () => {
+    vi.mocked(requestMarkdownRender)
+      .mockResolvedValueOnce({ ...response('', 1), contentHtml: null, errored: true, retryAfterMs: 5000 })
+      .mockResolvedValueOnce(response('text', 1))
+    const { result } = renderHook(() => useMarkdownRender({ identity: 'one', content: 'text', version: 1, isStreaming: false }))
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(result.current.errored).toBe(true)
+    act(() => { readyListeners.forEach((listener) => listener()) })
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(result.current.html).toBe('<p>text</p>')
+    expect(result.current.errored).toBe(false)
+    expect(requestMarkdownRender).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not replay a successful snapshot when the worker signals ready', async () => {
+    vi.mocked(requestMarkdownRender).mockResolvedValue(response('text', 1))
+    const { result } = renderHook(() => useMarkdownRender({ identity: 'one', content: 'text', version: 1, isStreaming: false }))
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(result.current.html).toBe('<p>text</p>')
+    act(() => { readyListeners.forEach((listener) => listener()) })
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(requestMarkdownRender).toHaveBeenCalledTimes(1)
   })
 
   it('never displays stale results after replacement or identity reuse', async () => {
