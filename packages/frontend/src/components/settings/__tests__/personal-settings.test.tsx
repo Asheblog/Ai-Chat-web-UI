@@ -2,7 +2,7 @@ import React from "react"
 import { act, cleanup, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { PersonalSettings } from "@/components/personal-settings"
-import { SystemMcpPage } from "@/components/settings/pages/SystemMcpPage"
+import { McpSection } from "@/components/settings/pages/extensions/sections/mcp-section"
 
 // jsdom 未实现 Pointer Capture API（Radix Select / Dropdown 交互依赖）
 if (!Element.prototype.hasPointerCapture) {
@@ -29,6 +29,13 @@ const settingsStoreMock = vi.hoisted(() => ({
   newConversationContextEnabled: false,
   setContextEnabled: vi.fn(),
   setNewConversationContextEnabled: vi.fn(),
+  // McpSection 的全局开关走 useSystemSettings（共享 store）
+  systemSettings: null,
+  isLoading: false,
+  error: null,
+  fetchSystemSettings: vi.fn(() => Promise.resolve()),
+  updateSystemSettings: vi.fn(() => Promise.resolve()),
+  clearError: vi.fn(),
 }))
 vi.mock("@/store/settings-store", () => ({
   useSettingsStore: () => settingsStoreMock,
@@ -53,6 +60,22 @@ vi.mock("@/features/settings/api", () => ({
   getSystemSettings: settingsApiMocks.getSystemSettings,
   updateSystemSettings: settingsApiMocks.updateSystemSettings,
   updatePersonalSettings: settingsApiMocks.updatePersonalSettings,
+}))
+
+/**
+ * MCP 页壳已并入能力扩展页：本文件只剩一条页头副标题断言，
+ * 它渲染的 McpSection 默认落「安装模板」标签，会拉安装模板与凭据列表，一并 mock。
+ */
+const mcpApiMocks = vi.hoisted(() => ({ listInstallations: vi.fn() }))
+vi.mock("@/features/mcp/api", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  listInstallations: mcpApiMocks.listInstallations,
+}))
+
+const secretVaultMocks = vi.hoisted(() => ({ listSecrets: vi.fn() }))
+vi.mock("@/features/secret-vault/api", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  listSecrets: secretVaultMocks.listSecrets,
 }))
 
 const shareApiMocks = vi.hoisted(() => ({
@@ -88,6 +111,8 @@ beforeEach(() => {
   shareApiMocks.listChatShares.mockResolvedValue({ success: true, data: { shares: [] } })
   skillsApiMocks.listSkillStore.mockResolvedValue({ success: true, data: { items: [], sources: [] } })
   skillsApiMocks.listSkillCatalog.mockResolvedValue({ success: true, data: [] })
+  mcpApiMocks.listInstallations.mockResolvedValue({ success: true, data: [] })
+  secretVaultMocks.listSecrets.mockResolvedValue({ success: true, data: [] })
 })
 
 afterEach(() => {
@@ -111,10 +136,13 @@ describe("PersonalSettings 个人设置分区", () => {
     expect(screen.queryByText("最近分享")).not.toBeInTheDocument()
   })
 
-  test("MCP 页头副标题可见（已有，保持不变）", async () => {
-    render(<SystemMcpPage />)
-    await screen.findByText("MCP 管理")
+  // MCP 页壳已收进能力扩展页的 MCP 段，副标题断言随组件一起搬过来；
+  // 段头文案现在唯一来源是 EXTENSION_SECTIONS，这里断言的正是段配置里那一句。
+  test("MCP 段页头副标题来自段配置", async () => {
+    render(<McpSection segment="installations" onSegmentChange={() => {}} />)
+    await flushAsync()
+    await screen.findByRole("heading", { name: "MCP 服务" })
 
-    expect(screen.getByText(/连接外部工具与数据源/)).toBeInTheDocument()
+    expect(screen.getByText(/MCP 服务模板、连接、凭据、工具与绑定作用域/)).toBeInTheDocument()
   })
 })

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest"
-import { consumeFlash, isDialogOpen, requestFlash, setDialogOpen } from "../settings-flash-bus"
+import { consumeFlash, isDialogOpen, peekFlash, requestFlash, setDialogOpen } from "../settings-flash-bus"
 
 afterEach(() => {
   consumeFlash() // 无参 = 消费任意残留请求
@@ -33,6 +33,37 @@ describe("settings-flash-bus", () => {
       leafKey: "models",
       cardKey: "models:catalog",
       hostId: "dialog",
+    })
+  })
+
+  test("peekFlash 返回匹配请求但不清空，consumeFlash 仍能取到同一请求", () => {
+    requestFlash({ leafKey: "extensions", cardKey: "extensions:mcp-secrets", hostId: "layout" })
+
+    expect(peekFlash("extensions", "layout")).toEqual({
+      leafKey: "extensions",
+      cardKey: "extensions:mcp-secrets",
+      hostId: "layout",
+    })
+    // peek 不改状态：包装器/宿主仍能按原语义消费
+    expect(consumeFlash("extensions", "layout")).toEqual({
+      leafKey: "extensions",
+      cardKey: "extensions:mcp-secrets",
+      hostId: "layout",
+    })
+    expect(peekFlash("extensions", "layout")).toBeNull()
+  })
+
+  test("peekFlash 与 consumeFlash 同匹配规则：leafKey 与 hostId 都须精确相等", () => {
+    requestFlash({ leafKey: "extensions", cardKey: "extensions:mcp-secrets" })
+
+    // leafKey 不匹配
+    expect(peekFlash("models", undefined)).toBeNull()
+    // hostId 不匹配（请求的 hostId 为 undefined）
+    expect(peekFlash("extensions", "layout")).toBeNull()
+    // 不匹配的 peek 不影响后续消费
+    expect(consumeFlash("extensions", undefined)).toEqual({
+      leafKey: "extensions",
+      cardKey: "extensions:mcp-secrets",
     })
   })
 

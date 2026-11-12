@@ -4,7 +4,7 @@ import {
   ArrowRight,
   Cable,
   Database,
-  ShieldCheck,
+  Users,
   Wrench,
   type LucideIcon,
 } from "lucide-react"
@@ -31,15 +31,15 @@ const overviewCards: OverviewCard[] = [
   },
   {
     label: "功能与工具",
-    value: "搜索与知识库 / 工具与扩展 / MCP",
+    value: "搜索与知识库 / 能力扩展",
     tone: "text-emerald-600",
     icon: Wrench,
   },
   {
-    label: "成员与安全",
-    value: "用户与注册 / Skill 治理",
+    label: "用户与注册",
+    value: "用户注册 / 用户管理",
     tone: "text-violet-600",
-    icon: ShieldCheck,
+    icon: Users,
   },
   {
     label: "系统与数据",

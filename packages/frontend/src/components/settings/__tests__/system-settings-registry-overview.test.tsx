@@ -43,7 +43,7 @@ const satisfiedSettings = {
 } as SystemSettings
 
 const checklistLabels = ["模型接入", "注册开放", "搜索配置", "默认模型"]
-const statusCardTitles = ["模型与连接", "功能与工具", "成员与安全", "系统与数据"]
+const statusCardTitles = ["模型与连接", "功能与工具", "用户与注册", "系统与数据"]
 
 beforeEach(() => {
   vi.clearAllMocks()

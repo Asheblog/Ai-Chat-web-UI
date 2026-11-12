@@ -463,11 +463,11 @@ export function PythonRuntimeCard() {
       icon={FlaskConical}
       title="Python 运行时管理"
       description="索引源、依赖安装与已安装包"
-      cardKey="tools-extensions:python-runtime"
+      cardKey="extensions:python-runtime"
       more={content}
     >
       <p className="text-xs text-muted-foreground">
-        统一管理 `/app/data/python-runtime/venv` 中的依赖，并支持按激活 Skill 自动补装。
+        统一管理 /app/data/python-runtime/venv 中的依赖，并支持按激活 Skill 自动补装。
       </p>
     </FeatureCard>
   )

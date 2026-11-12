@@ -169,15 +169,15 @@ export function ConnectionsTab() {
           }
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <McpField label="安装" required>
+            <McpField label="安装模板（installationId）" required>
               <select className="h-9 w-full rounded-md border bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary" value={formInstId} onChange={(e) => setFormInstId(e.target.value)}>
                 <option value="">选择...</option>
                 {installations.map((i) => <option key={i.id} value={i.id}>{i.namespaceKey}</option>)}
               </select>
             </McpField>
             <McpField label="名称" required><Input value={formName} onChange={(e) => setFormName(e.target.value)} /></McpField>
-            <McpField label="configJson"><Input value={formConfig} onChange={(e) => setFormConfig(e.target.value)} placeholder='{"key": "val"}' /></McpField>
-            <McpField label="Secret Vault 凭据">
+            <McpField label="连接配置 JSON（configJson）"><Input value={formConfig} onChange={(e) => setFormConfig(e.target.value)} placeholder='{"key": "val"}' /></McpField>
+            <McpField label="凭据（secretVaultId）">
               <div className="flex gap-1">
                 <select className="h-9 flex-1 rounded-md border bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary" value={formSecretVaultId} onChange={(e) => setFormSecretVaultId(e.target.value)}>
                   <option value="">无（不关联凭据）</option>

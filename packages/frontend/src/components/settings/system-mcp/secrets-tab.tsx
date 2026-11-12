@@ -95,9 +95,9 @@ export function SecretsTab() {
           }
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <McpSelectField label="scope" value={formScope} onChange={(v) => setFormScope(v as any)} options={['system', 'user']} />
-            <McpSelectField label="kind" value={formKind} onChange={(v) => setFormKind(v as any)} options={['mcp_credential', 'api_key', 'skill_secret']} />
-            <McpField label="标签" required><Input value={formLabel} onChange={(e) => setFormLabel(e.target.value)} /></McpField>
+            <McpSelectField label="作用域（scope）" value={formScope} onChange={(v) => setFormScope(v as any)} options={['system', 'user']} />
+            <McpSelectField label="凭据类型" value={formKind} onChange={(v) => setFormKind(v as any)} options={['mcp_credential', 'api_key', 'skill_secret']} />
+            <McpField label="凭据名称" required><Input value={formLabel} onChange={(e) => setFormLabel(e.target.value)} /></McpField>
             <McpField label={editId ? '新值（留空不改）' : '值'} required={!editId}>
               <Input type="password" value={formValue} onChange={(e) => setFormValue(e.target.value)} />
             </McpField>

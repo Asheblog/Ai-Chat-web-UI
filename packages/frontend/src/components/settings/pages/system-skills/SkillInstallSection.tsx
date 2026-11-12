@@ -14,8 +14,8 @@ type SkillInstallSectionProps = {
 }
 
 /**
- * Skill 安装表单（单消费者收口：仅 tools-extensions 的 SkillInstallCard 使用）。
- * 无内部标题/刷新按钮——标题与描述由外层 FeatureCard 承担。
+ * Skill 安装表单（单消费者：能力扩展页 Skill 段的 SkillInstallPanel）。
+ * 无内部标题/刷新按钮——段页头已给出标题与说明。
  */
 export function SkillInstallSection({
   installSource,

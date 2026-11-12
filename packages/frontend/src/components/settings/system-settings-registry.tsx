@@ -8,21 +8,19 @@ import {
   Database,
   HardDrive,
   Image,
+  Layers,
   LayoutDashboard,
-  Link2,
   Palette,
   PlugZap,
-  Puzzle,
   ScrollText,
   Search,
-  ShieldCheck,
   SlidersHorizontal,
-  Terminal,
   Users,
   Wrench,
   type LucideIcon,
 } from "lucide-react"
 import type { ComponentType, ReactNode } from "react"
+import { peekFlash } from "./settings-flash-bus"
 import { SystemLeafWrapper } from "./system-leaf-wrapper"
 
 // Leaf metadata
@@ -78,16 +76,12 @@ const SystemSkillAuditsPage = dynamic(
   () => import("@/components/settings/pages/SystemSkillAudits").then((m) => m.SystemSkillAuditsPage),
   { loading: pageLoading },
 )
-const SystemMcpPage = dynamic(
-  () => import("@/components/settings/pages/SystemMcpPage").then((m) => m.SystemMcpPage),
-  { loading: pageLoading },
-)
 const SearchKnowledgePage = dynamic(
   () => import("@/components/settings/pages/search-knowledge/SearchKnowledgePage").then((m) => m.SearchKnowledgePage),
   { loading: pageLoading },
 )
-const ToolsExtensionsPage = dynamic(
-  () => import("@/components/settings/pages/tools-extensions/ToolsExtensionsPage").then((m) => m.ToolsExtensionsPage),
+const ExtensionsPage = dynamic(
+  () => import("./pages/extensions/ExtensionsPage").then((m) => m.ExtensionsPage),
   { loading: pageLoading },
 )
 const ReasoningNetworkPage = dynamic(
@@ -114,12 +108,8 @@ const BrandingPage = dynamic(
   () => import("@/components/settings/pages/branding/BrandingPage").then((m) => m.BrandingPage),
   { loading: pageLoading },
 )
-const SkillsGovernancePage = dynamic(
-  () => import("@/components/settings/pages/skills-governance/SkillsGovernancePage").then((m) => m.SkillsGovernancePage),
-  { loading: pageLoading },
-)
 
-// Navigation tree: overview leaf + 5 workspace groups, 12 leaves in total
+// Navigation tree: overview leaf + 4 workspace groups + users-registration leaf, 11 leaves in total
 
 export const systemSettingsTree: SystemSettingsEntry[] = [
   {
@@ -160,22 +150,31 @@ export const systemSettingsTree: SystemSettingsEntry[] = [
         keywords: ["联网搜索", "web search", "RAG", "知识库", "嵌入"],
       },
       {
-        key: "tools-extensions",
-        label: "工具与扩展",
-        icon: Terminal,
-        keywords: ["Python", "运行时", "Skill 安装", "乱斗", "标题总结"],
+        key: "extensions",
+        label: "能力扩展",
+        icon: Layers,
+        keywords: [
+          "MCP",
+          "模型上下文协议",
+          "Skill",
+          "Python",
+          "扩展",
+          "工具",
+          "审批",
+          "绑定",
+          "凭据",
+          "安装",
+          "大乱斗",
+          "标题",
+        ],
       },
-      { key: "mcp", label: "MCP 管理", icon: Link2, keywords: ["模型上下文协议", "连接", "工具", "模板", "安装", "凭据", "绑定"] },
     ],
   },
   {
-    key: "members-security",
-    label: "成员与安全",
-    icon: ShieldCheck,
-    children: [
-      { key: "users-registration", label: "用户与注册", icon: Users, keywords: ["成员", "注册", "配额", "额度"] },
-      { key: "skills-governance", label: "Skill 治理", icon: Puzzle, keywords: ["审批", "版本", "绑定", "安装"] },
-    ],
+    key: "users-registration",
+    label: "用户与注册",
+    icon: Users,
+    keywords: ["成员", "注册", "配额", "额度"],
   },
   {
     key: "system-data",
@@ -234,19 +233,25 @@ export const systemSettingsCards: SystemCardMeta[] = [
   { leafKey: "search-knowledge", key: "search-knowledge:web-search", label: "联网搜索", keywords: ["web search", "引擎", "API Key", "并行", "白名单", "DeepSeek", "Fetch", "付费回退"] },
   { leafKey: "search-knowledge", key: "search-knowledge:rag", label: "RAG 文档解析", keywords: ["Embedding", "分块", "检索", "TopK", "文档管理"] },
   { leafKey: "search-knowledge", key: "search-knowledge:knowledge-base", label: "知识库", keywords: ["持久化", "新建", "文档"] },
-  // 工具与扩展
-  { leafKey: "tools-extensions", key: "tools-extensions:python-tools", label: "Python 工具", keywords: ["沙箱", "代码执行"] },
-  { leafKey: "tools-extensions", key: "tools-extensions:python-runtime", label: "Python 运行时管理", keywords: ["依赖安装", "索引", "Reconcile", "已安装包"] },
-  { leafKey: "tools-extensions", key: "tools-extensions:skill-install", label: "Skill 安装", keywords: ["GitHub", "仓库"] },
-  { leafKey: "tools-extensions", key: "tools-extensions:battle", label: "模型大乱斗", keywords: ["乱斗", "每日次数"] },
-  { leafKey: "tools-extensions", key: "tools-extensions:title-summary", label: "标题智能总结", keywords: ["对话标题", "模型", "字数"] },
+  // 能力扩展 · MCP 服务段
+  { leafKey: "extensions", key: "extensions:mcp-installations", label: "MCP 安装模板", keywords: ["模板", "远程", "本地", "服务定义"] },
+  { leafKey: "extensions", key: "extensions:mcp-connections", label: "MCP 连接", keywords: ["实例", "工具缓存"] },
+  { leafKey: "extensions", key: "extensions:mcp-secrets", label: "MCP 凭据", keywords: ["API 密钥", "secret-vault", "密钥"] },
+  { leafKey: "extensions", key: "extensions:mcp-tools", label: "MCP 工具", keywords: ["Schema", "搜索", "固定", "工具清单"] },
+  { leafKey: "extensions", key: "extensions:mcp-bindings", label: "MCP 绑定", keywords: ["作用域", "system", "user", "session"] },
+  // 能力扩展 · Skill 段
+  { leafKey: "extensions", key: "extensions:skill-install", label: "Skill 安装", keywords: ["GitHub", "仓库"] },
+  { leafKey: "extensions", key: "extensions:skill-approvals", label: "待审批调用", keywords: ["审批", "待审批"] },
+  { leafKey: "extensions", key: "extensions:skill-versions", label: "Skill 版本管理", keywords: ["版本", "激活", "默认", "卸载"] },
+  { leafKey: "extensions", key: "extensions:skill-bindings", label: "绑定策略", keywords: ["作用域", "策略 JSON"] },
+  // 能力扩展 · 内置工具段 / 对话增强段
+  { leafKey: "extensions", key: "extensions:python-tools", label: "Python 工具", keywords: ["沙箱", "代码执行", "迭代上限"] },
+  { leafKey: "extensions", key: "extensions:python-runtime", label: "Python 运行时管理", keywords: ["依赖安装", "索引", "Reconcile", "已安装包"] },
+  { leafKey: "extensions", key: "extensions:battle", label: "模型大乱斗", keywords: ["乱斗", "每日次数"] },
+  { leafKey: "extensions", key: "extensions:title-summary", label: "标题智能总结", keywords: ["对话标题", "模型", "字数"] },
   // 用户与注册
   { leafKey: "users-registration", key: "users-registration:policy", label: "用户注册", keywords: ["注册开放", "访客", "每日额度", "配额"] },
   { leafKey: "users-registration", key: "users-registration:users", label: "用户管理", keywords: ["用户列表", "审批", "账号状态", "角色"] },
-  // Skill 治理
-  { leafKey: "skills-governance", key: "skills-governance:approvals", label: "待审批调用", keywords: ["审批", "待审批"] },
-  { leafKey: "skills-governance", key: "skills-governance:versions", label: "Skill 版本管理", keywords: ["版本", "激活", "默认", "卸载"] },
-  { leafKey: "skills-governance", key: "skills-governance:bindings", label: "绑定策略", keywords: ["作用域", "策略 JSON"] },
   // 品牌与界面
   { leafKey: "branding", key: "branding:avatar", label: "AI 头像", keywords: ["上传", "图片"] },
   { leafKey: "branding", key: "branding:branding", label: "品牌定制", keywords: ["LOGO", "系统提示词", "siteBaseUrl", "图片域名"] },
@@ -270,10 +275,8 @@ const leafComponentMap: Record<string, ComponentType> = {
   models: ModelsPage,
   "image-transcription": ImageTranscriptionPage,
   "search-knowledge": SearchKnowledgePage,
-  "tools-extensions": ToolsExtensionsPage,
-  mcp: SystemMcpPage,
+  extensions: ExtensionsPage,
   "users-registration": UsersRegistrationPage,
-  "skills-governance": SkillsGovernancePage,
   branding: BrandingPage,
   "logs-audit": SystemSkillAuditsPage,
   "data-maintenance": DataMaintenancePage,
@@ -292,9 +295,17 @@ export const DEFAULT_SYSTEM_LEAF = "overview"
 export function renderSystemLeaf(key: string, hostId?: string): ReactNode | null {
   const Component = leafComponentMap[key]
   if (!Component) return null
+  // 渲染期读取（不消费）待处理定位请求：dynamic 页面挂载晚于 wrapper 的挂载副作用，
+  // 等页面自己的 effect 再读就已经被 consumeFlash 取走，冷启动会落回默认段。
+  const initialCardKey = peekFlash(key, hostId)?.cardKey
   return (
     <SystemLeafWrapper leafKey={key} hostId={hostId}>
-      <Component />
+      {/* 能力扩展页需要宿主标识与冷启动目标卡；其余叶子保持无 props 渲染 */}
+      {key === "extensions" ? (
+        <ExtensionsPage hostId={hostId} initialCardKey={initialCardKey} />
+      ) : (
+        <Component />
+      )}
     </SystemLeafWrapper>
   )
 }

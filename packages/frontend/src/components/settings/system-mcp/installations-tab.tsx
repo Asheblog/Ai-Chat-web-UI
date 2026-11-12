@@ -113,18 +113,24 @@ export function InstallationsTab() {
           }
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <McpField label="namespaceKey" required><Input value={form.namespaceKey} onChange={(e) => setForm({ ...form, namespaceKey: e.target.value })} /></McpField>
+            <McpField label="标识（namespaceKey）" required><Input value={form.namespaceKey} onChange={(e) => setForm({ ...form, namespaceKey: e.target.value })} /></McpField>
             <McpField label="名称" required><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></McpField>
             <div className="md:col-span-2"><McpField label="描述"><Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></McpField></div>
-            <McpSelectField label="sourceType" value={form.sourceType} onChange={(v) => setForm({ ...form, sourceType: v as any })} options={['remote', 'local_package']} />
-            <McpSelectField label="transport" value={form.transport} onChange={(v) => setForm({ ...form, transport: v as any })} options={['streamable_http', 'sse', 'stdio']} />
-            <McpField label="Endpoint / SourceUrl"><Input value={form.endpoint} onChange={(e) => setForm({ ...form, endpoint: e.target.value })} /></McpField>
-            <McpField label="Command（stdio）"><Input value={form.command} onChange={(e) => setForm({ ...form, command: e.target.value })} /></McpField>
-            <McpField label="argsJson"><Input value={form.argsJson} onChange={(e) => setForm({ ...form, argsJson: e.target.value })} /></McpField>
-            <McpField label="envJson"><Input value={form.envJson} onChange={(e) => setForm({ ...form, envJson: e.target.value })} /></McpField>
-            <McpField label="sourceUrl"><Input value={form.sourceUrl} onChange={(e) => setForm({ ...form, sourceUrl: e.target.value })} /></McpField>
-            <McpField label="sourceKey"><Input value={form.sourceKey} onChange={(e) => setForm({ ...form, sourceKey: e.target.value })} /></McpField>
-            <McpField label="registrySource"><Input value={form.registrySource} onChange={(e) => setForm({ ...form, registrySource: e.target.value })} /></McpField>
+            <McpSelectField label="来源类型" value={form.sourceType} onChange={(v) => setForm({ ...form, sourceType: v as any })} options={['remote', 'local_package']} />
+            <McpSelectField label="传输方式" value={form.transport} onChange={(v) => setForm({ ...form, transport: v as any })} options={['streamable_http', 'sse', 'stdio']} />
+            <McpField label="服务端点"><Input value={form.endpoint} onChange={(e) => setForm({ ...form, endpoint: e.target.value })} /></McpField>
+            {/* 原样字段：字段名与值保持原样，只默认折叠起来，避免模板表单第一屏被 JSON 淹没 */}
+            <details className="md:col-span-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2">
+              <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground">高级（原样字段）</summary>
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                <McpField label="command"><Input value={form.command} onChange={(e) => setForm({ ...form, command: e.target.value })} /></McpField>
+                <McpField label="argsJson"><Input value={form.argsJson} onChange={(e) => setForm({ ...form, argsJson: e.target.value })} /></McpField>
+                <McpField label="envJson"><Input value={form.envJson} onChange={(e) => setForm({ ...form, envJson: e.target.value })} /></McpField>
+                <McpField label="sourceUrl"><Input value={form.sourceUrl} onChange={(e) => setForm({ ...form, sourceUrl: e.target.value })} /></McpField>
+                <McpField label="sourceKey"><Input value={form.sourceKey} onChange={(e) => setForm({ ...form, sourceKey: e.target.value })} /></McpField>
+                <McpField label="registrySource"><Input value={form.registrySource} onChange={(e) => setForm({ ...form, registrySource: e.target.value })} /></McpField>
+              </div>
+            </details>
           </div>
         </McpFormPanel>
       )}

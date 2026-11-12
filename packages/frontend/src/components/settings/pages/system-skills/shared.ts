@@ -14,16 +14,6 @@ export const SKILL_STATUS_BADGE_VARIANT: Record<string, 'default' | 'secondary' 
 // formatDateTime 已收敛至 features/settings/shared（可空容忍版），此处为兼容再导出
 export { formatDateTime }
 
-export const parseDraftJson = (value: string, fieldName: string) => {
-  const trimmed = value.trim()
-  if (!trimmed) return {}
-  const parsed = JSON.parse(trimmed)
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error(`${fieldName} 必须是 JSON 对象`)
-  }
-  return parsed as Record<string, unknown>
-}
-
 export const resolveVersionLabel = (
   skill: SkillCatalogItem | undefined,
   versionId: number | null | undefined,
