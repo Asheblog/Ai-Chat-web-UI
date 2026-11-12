@@ -20,7 +20,8 @@ const DEFINITION: ToolDefinition = {
     description:
       '安装一个 AI 能力扩展：MCP 服务或 Skill。当用户给出 MCP / Skill 的 GitHub 仓库链接，' +
       '或要求「安装/接入/添加某个能力、工具、服务」时调用。' +
-      '工具会自动识别来源类型（远程 MCP / 本地包 MCP / Skill）、生成配置、完成安装与启用，并验证 MCP 工具清单。' +
+      '工具会自动识别来源类型（远程 MCP / 本地包 MCP / Skill）、生成配置、完成安装与登记；' +
+      'MCP 会真实握手验证工具清单，Skill 仍需通过既有审批/校验后才会启用。' +
       '不要凭猜测调用：没有明确仓库链接或服务来源时，先向用户确认。',
     parameters: {
       type: 'object',
@@ -39,7 +40,7 @@ const DEFINITION: ToolDefinition = {
         scope: {
           type: 'string',
           enum: ['user', 'system'],
-          description: '安装范围。默认 user（仅自己可用）；system 仅管理员可用，表示系统级模板。',
+          description: '安装范围。不填时管理员默认 system（系统级模板），普通用户默认 user（仅自己可用）。',
         },
         enable: {
           type: 'boolean',
@@ -116,7 +117,8 @@ export class InstallExtensionToolHandler implements IToolHandler {
     const kindRaw = asString(args.kind).toLowerCase()
     const kind = kindRaw === 'mcp' || kindRaw === 'skill' ? kindRaw : 'auto'
     const scopeRaw = asString(args.scope).toLowerCase()
-    const scope = scopeRaw === 'system' ? 'system' : 'user'
+    // 缺省留给服务层按角色决定（管理员 → system，普通用户 → user）
+    const scope = scopeRaw === 'system' || scopeRaw === 'user' ? (scopeRaw as 'system' | 'user') : undefined
     const enable = args.enable === undefined ? true : Boolean(args.enable)
 
     const finish = (content: string): ToolHandlerResult => ({

@@ -167,7 +167,8 @@ function fromPackageJson(pkg: any): LocalCandidate | null {
   if (!name) return null
   const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) }
   const usesSdk = Object.keys(deps).some((dep) => dep.includes('@modelcontextprotocol/sdk'))
-  if (!usesSdk) return null
+  // 只有「提供可执行入口 + 依赖 MCP SDK」才是 MCP 服务；单纯引用 SDK 的客户端仓库不算
+  if (!usesSdk || !pkg.bin) return null
   return {
     command: 'npx',
     args: ['-y', name],
@@ -239,15 +240,35 @@ function fromReadmeRemote(readme: string): { url: string; transport: McpTranspor
   return { url: url.replace(/[).,;\]]+$/, ''), transport: /\/sse\b/.test(url) ? 'sse' : 'streamable_http' }
 }
 
+/** 通用大写词不是配置项，误判会让用户被要求填根本不存在的东西。 */
+const ENV_NAME_BLOCKLIST = new Set([
+  'API', 'URL', 'URI', 'HTTP', 'HTTPS', 'JSON', 'MCP', 'SKILL', 'README', 'SDK', 'CLI', 'ID',
+  'OK', 'TODO', 'NOTE', 'WARNING', 'IMPORTANT', 'GET', 'POST', 'PUT', 'DELETE', 'PATCH',
+  'SSL', 'TLS', 'CPU', 'RAM', 'SSE', 'HTML', 'CSS', 'JS', 'TS', 'OS', 'AI', 'LLM', 'GPT', 'ENV',
+])
+
+function isLikelyEnvName(name: string): boolean {
+  if (name.length < 3 || name.length > 48) return false
+  if (ENV_NAME_BLOCKLIST.has(name)) return false
+  // 环境变量惯例：带下划线，或以 KEY/TOKEN/SECRET/PASSWORD/HOST/PORT/URL 结尾
+  return name.includes('_') || /(KEY|TOKEN|SECRET|PASSWORD|ENDPOINT|HOST|PORT|URL)$/.test(name)
+}
+
+/**
+ * 只认反引号包裹或「NAME=」赋值形式。整行全大写词一律不采信——
+ * 否则 README 里任意技术名词都会变成「需要填写的密钥」。
+ */
 function collectReadmeEnv(readme: string): ExtensionEnvRequirement[] {
   if (!readme) return []
   const result: ExtensionEnvRequirement[] = []
   const lines = readme.split(/\r?\n/)
   for (const line of lines) {
     if (!/(env|environment|token|api[_ -]?key|secret|credential|变量)/i.test(line)) continue
-    const matches = line.match(/\b([A-Z][A-Z0-9_]{2,})\b/g) || []
-    for (const name of matches) {
-      if (name.length > 48) continue
+    const names = new Set<string>()
+    for (const match of line.matchAll(/`([A-Z][A-Z0-9_]{2,})`/g)) names.add(match[1]!)
+    for (const match of line.matchAll(/\b([A-Z][A-Z0-9_]{2,})\s*=(?!=)/g)) names.add(match[1]!)
+    for (const name of names) {
+      if (!isLikelyEnvName(name)) continue
       result.push({ name, reason: 'README 提到的配置项' })
     }
     if (result.length >= MAX_ENV_HINTS) break

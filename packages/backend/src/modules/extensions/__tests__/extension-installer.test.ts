@@ -52,7 +52,12 @@ describe('ExtensionInstaller · MCP', () => {
     expect(outcome.installed).toEqual({ installationId: 11, connectionId: 22 })
     expect(outcome.tools).toHaveLength(2)
     expect(mcpService.createInstallation).toHaveBeenCalledWith(
-      expect.objectContaining({ namespaceKey: 'acme/demo', sourceType: 'remote', argsJson: '[]' }),
+      expect.objectContaining({
+        namespaceKey: 'acme/demo',
+        sourceType: 'remote',
+        argsJson: '[]',
+        envJson: JSON.stringify({ requiredEnv: ['ACME_TOKEN'] }),
+      }),
       true,
     )
     expect(mcpService.bindConnection).toHaveBeenCalledWith(
@@ -176,7 +181,7 @@ describe('ExtensionInstaller · Skill', () => {
       }),
     }
     const installer = new ExtensionInstaller({
-      prisma: { skillBinding: { upsert } } as any,
+      prisma: { skillBinding: { upsert }, chatSession: { findFirst: jest.fn().mockResolvedValue({ id: 42 }) } } as any,
       skillInstaller: skillInstaller as any,
     })
 
@@ -205,7 +210,7 @@ describe('ExtensionInstaller · Skill', () => {
       }),
     }
     const installer = new ExtensionInstaller({
-      prisma: { skillBinding: { upsert: jest.fn() } } as any,
+      prisma: { skillBinding: { upsert: jest.fn() }, chatSession: { findFirst: jest.fn().mockResolvedValue({ id: 42 }) } } as any,
       skillInstaller: skillInstaller as any,
     })
 

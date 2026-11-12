@@ -51,13 +51,14 @@ export class ExtensionInstallService implements ExtensionInstallServiceLike {
 
   async installFromSource(input: InstallFromSourceInput): Promise<InstallOutcome> {
     const kindHint = input.kindHint ?? 'auto'
-    const scope = input.scope ?? 'user'
     const enable = input.enable !== false
 
     const capability = await this.loadActorCapability(input.actorUserId)
     if (!capability.active) {
       return { ok: false, error: '当前账号不可用，不能安装扩展' }
     }
+    // 未显式指定范围时按角色取默认：管理员装系统级模板，普通用户装私有
+    const scope = input.scope ?? (capability.isAdmin ? 'system' : 'user')
     if (scope === 'system' && !capability.isAdmin) {
       return { ok: false, error: '只有管理员可以安装系统级扩展；可改用 scope=user' }
     }

@@ -108,11 +108,16 @@ export class ExtensionInstaller {
     const status = mapSkillStatus(result.version.status)
     const nextSteps: string[] = []
 
+    const warnings: string[] = []
     if (status === 'ready' && input.enable) {
-      await this.bindSkillToSession(result.skill.id, result.version.id, actorUserId, input.sessionId)
-      nextSteps.push(
-        '已绑定到本会话；需开启「聊天侧第三方动态 Skill Runtime」后模型才能执行该 Skill',
-      )
+      const bound = await this.bindSkillToSession(result.skill.id, result.version.id, actorUserId, input.sessionId)
+      if (bound) {
+        nextSteps.push(
+          '已绑定到本会话；需开启「聊天侧第三方动态 Skill Runtime」后模型才能执行该 Skill',
+        )
+      } else {
+        warnings.push('会话归属校验未通过，已安装但未自动绑定到当前会话')
+      }
     } else if (status === 'pending_approval') {
       nextSteps.push('该 Skill 风险等级较高，需管理员在「待审批」通过后才能运行')
     } else if (status === 'pending_validation') {
@@ -128,6 +133,7 @@ export class ExtensionInstaller {
         versionId: result.version.id,
       },
       nextSteps,
+      warnings: warnings.length > 0 ? warnings : undefined,
     }
   }
 
@@ -136,8 +142,14 @@ export class ExtensionInstaller {
     versionId: number,
     actorUserId: number,
     sessionId?: number | null,
-  ): Promise<void> {
-    if (!sessionId) return
+  ): Promise<boolean> {
+    if (!sessionId) return false
+    // 与 PUT /skills/sessions/:id 同一条校验：会话必须属于当前用户
+    const owned = await (this.prisma as any).chatSession.findFirst({
+      where: { id: sessionId, userId: actorUserId },
+      select: { id: true },
+    })
+    if (!owned) return false
     await (this.prisma as any).skillBinding.upsert({
       where: {
         skillId_scopeType_scopeId: {
@@ -164,6 +176,7 @@ export class ExtensionInstaller {
         overridesJson: '{}',
       },
     })
+    return true
   }
 
   private async installMcp(input: InstallExtensionInput): Promise<InstallOutcome> {
@@ -229,7 +242,8 @@ export class ExtensionInstaller {
       endpoint: plan.endpoint ?? null,
       command: plan.command ?? null,
       argsJson: JSON.stringify(plan.args ?? []),
-      envJson: JSON.stringify({}),
+      // envJson 没有运行期消费方，这里只登记「需要哪些密钥」，供安装模板页展示与人工填写
+      envJson: JSON.stringify(envKeys.length > 0 ? { requiredEnv: envKeys.map((item) => item.name) } : {}),
     }, true)
 
     let connectionId: number | null = null

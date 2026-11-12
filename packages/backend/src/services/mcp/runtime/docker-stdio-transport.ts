@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { spawn, execFile } from 'node:child_process'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import type { McpTransport } from './transport'
 
 export class McpGatewayError extends Error {
@@ -61,6 +64,8 @@ export class DockerStdioTransport implements McpTransport {
   private errorHandler: ((error: Error) => void) | null = null
   private closeHandler: (() => void) | null = null
   private closed = false
+  private envDir: string | null = null
+  private envFile: string | null = null
 
   constructor(
     private readonly target: GatewayTarget,
@@ -89,8 +94,14 @@ export class DockerStdioTransport implements McpTransport {
       '--network',
       process.env.MCP_GATEWAY_NETWORK || 'bridge',
     ]
-    for (const [key, value] of Object.entries(this.env)) {
-      args.push('-e', `${key}=${value}`)
+    // 密钥优先走 0600 的临时 env-file：-e KEY=VALUE 会把凭据留在宿主进程列表里
+    await this.writeEnvFile()
+    if (this.envFile) {
+      args.push('--env-file', this.envFile)
+    } else {
+      for (const [key, value] of Object.entries(this.env)) {
+        args.push('-e', `${key}=${value}`)
+      }
     }
     args.push(this.target.image, ...this.target.command)
 
@@ -123,6 +134,7 @@ export class DockerStdioTransport implements McpTransport {
       this.stderrTail = (this.stderrTail + chunk.toString('utf8')).slice(-4000)
     })
     child.on('close', (code) => {
+      void this.cleanupEnvFile()
       if (this.closed) return
       this.closed = true
       const detail = this.stderrTail.trim().split('\n').slice(-4).join(' | ')
@@ -134,6 +146,32 @@ export class DockerStdioTransport implements McpTransport {
       )
       this.closeHandler?.()
     })
+  }
+
+  /** 值里含换行时 env-file 不可用，退回 -e；其余情况都走文件。 */
+  private async writeEnvFile(): Promise<void> {
+    const entries = Object.entries(this.env)
+    if (entries.length === 0) return
+    if (entries.some(([, value]) => /[\r\n]/.test(value))) return
+    try {
+      this.envDir = await fs.mkdtemp(path.join(os.tmpdir(), 'aichat-mcp-'))
+      const file = path.join(this.envDir, 'env')
+      await fs.writeFile(file, entries.map(([key, value]) => `${key}=${value}`).join('\n'), { mode: 0o600 })
+      this.envFile = file
+    } catch {
+      this.envFile = null
+    }
+  }
+
+  private async cleanupEnvFile(): Promise<void> {
+    if (!this.envDir) return
+    try {
+      await fs.rm(this.envDir, { recursive: true, force: true })
+    } catch {
+      // 清理失败不影响容器本身
+    }
+    this.envDir = null
+    this.envFile = null
   }
 
   private consumeStdout(chunk: string): void {
@@ -161,6 +199,7 @@ export class DockerStdioTransport implements McpTransport {
       // 忽略
     }
     execFile('docker', ['rm', '-f', this.containerName], () => undefined)
+    void this.cleanupEnvFile()
   }
 
   onMessage(handler: (payload: string) => void): void { this.messageHandler = handler }

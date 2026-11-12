@@ -179,7 +179,7 @@ source ──parse──▶ {owner, repo, ref, subdir?}
 4. **设置开关**：`extension_install_tool_enable`（默认开启），落在能力扩展页头「AI 自助安装」。
 5. **返回字段对齐 §3**：对外用 `detected` 描述判定结果（内部类型仍叫 `InstallPlan`），并补 `candidates` 供 ambiguous 时追问。
 6. **多出两个状态**：`already_installed`（同仓库重复安装直接复用）与 `pending_validation`（Skill 版本待校验）；§3 的五态仍是主路径。
-7. **默认范围取 §3 的 `user`**：§6 那行「管理员默认仍装 system」与 §3 参数默认冲突，实现以 §3 为准，管理员要系统级需显式传 `scope=system`。
+7. **默认范围按角色**：未显式传 `scope` 时，管理员装系统级模板（§6），普通用户装私有；显式传值永远优先。
 8. **安装审计**：只复用工具事件与 `McpInstallation` / `McpConnection` / Skill 版本记录，不新增审计表（§6「沿用已有」）。
 9. **仅 ACTIVE 用户可安装**：`PENDING` 状态账号直接拒绝，避免待审批账号通过工具绕过注册审批。
 

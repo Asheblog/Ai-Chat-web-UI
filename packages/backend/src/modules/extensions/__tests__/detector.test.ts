@@ -48,7 +48,7 @@ describe('detectExtensionPlan', () => {
         'server.json': JSON.stringify({
           remotes: [{ type: 'streamable-http', url: 'https://mcp.acme.dev/mcp' }],
         }),
-        'package.json': JSON.stringify({ name: 'demo', dependencies: { '@modelcontextprotocol/sdk': '^1' } }),
+        'package.json': JSON.stringify({ name: 'demo', bin: { demo: 'cli.js' }, dependencies: { '@modelcontextprotocol/sdk': '^1' } }),
       }),
     })
     expect(result.plan).toMatchObject({
@@ -108,7 +108,7 @@ describe('detectExtensionPlan', () => {
       source,
       probe: probe({
         'SKILL.md': '---\nname: Demo\n---',
-        'package.json': JSON.stringify({ name: 'demo', dependencies: { '@modelcontextprotocol/sdk': '^1' } }),
+        'package.json': JSON.stringify({ name: 'demo', bin: { demo: 'cli.js' }, dependencies: { '@modelcontextprotocol/sdk': '^1' } }),
       }),
     })
     expect(result.status).toBe('ambiguous')

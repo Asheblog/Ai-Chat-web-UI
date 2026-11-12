@@ -167,6 +167,7 @@ export async function probeRepository(
 
   const files: Record<string, string> = {}
   const skipped: string[] = []
+  const failures: string[] = []
   let totalBytes = 0
 
   for (const name of targets) {
@@ -175,8 +176,9 @@ export async function probeRepository(
     try {
       content = await fetchRepoFile(source.owner, source.repo, ref, path)
     } catch (error) {
-      // 单个文件探测失败不阻断整体判定，但记录缺口
+      // 单个文件失败不阻断整体判定，但要留下原因：全都没读到时必须把真实原因抛给调用方
       skipped.push(path)
+      failures.push((error as Error)?.message ?? 'unknown')
       continue
     }
     if (!content) {
@@ -188,6 +190,12 @@ export async function probeRepository(
     }
     totalBytes += content.length
     files[name] = content
+  }
+
+  if (Object.keys(files).length === 0 && failures.length > 0) {
+    throw new ExtensionProbeError(
+      `读取 ${source.owner}/${source.repo} 失败：${failures[0]}`,
+    )
   }
 
   return { files, skipped, ref }
