@@ -1,8 +1,11 @@
 import React from "react"
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { OverviewSection } from "../pages/extensions/sections/overview-section"
 import { McpSection, type McpSegment } from "../pages/extensions/sections/mcp-section"
+import { ToolsSection } from "../pages/extensions/sections/tools-section"
+import { ExtraSection } from "../pages/extensions/sections/extra-section"
+import { baseSettings } from "./system-settings-pages.fixtures"
 
 /**
  * 总览段单测：三路数据（系统设置 / Skill 待审批 / MCP 连接）全部 mock，
@@ -22,6 +25,20 @@ vi.mock("@/features/skills/api", () => ({
 const mcpApiMocks = vi.hoisted(() => ({ listConnections: vi.fn() }))
 vi.mock("@/features/mcp/api", () => ({
   listConnections: mcpApiMocks.listConnections,
+}))
+
+/** 内置工具段的 Python 运行时卡一挂载就拉 /api/python-runtime：给空状态，避免真实请求。 */
+const pythonRuntimeApiMocks = vi.hoisted(() => ({ getPythonRuntimeStatus: vi.fn() }))
+vi.mock("@/features/settings/api", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getPythonRuntimeStatus: pythonRuntimeApiMocks.getPythonRuntimeStatus,
+}))
+
+/** 乱斗卡的非法值提示要断言：toast 换成 spy，不渲染 Toaster。 */
+const toastSpy = vi.hoisted(() => vi.fn())
+vi.mock("@/components/ui/use-toast", () => ({
+  useToast: () => ({ toast: toastSpy }),
+  toast: toastSpy,
 }))
 
 /**
@@ -64,6 +81,30 @@ function mockSettings(settings: Record<string, unknown> | null) {
   })
 }
 
+/** 内置工具 / 对话增强两段共用：补齐 python、乱斗、标题卡的 key（baseSettings 已含 python 与 battle 四项）。 */
+const toolsAndExtrasSettings = { ...baseSettings, chatDynamicSkillRuntimeEnabled: false }
+
+/** 空运行时状态：本文件只关心段布局与保存 payload，不渲染真实包清单。 */
+const emptyRuntimeStatus = {
+  dataRoot: "/app/data",
+  runtimeRoot: "/app/data/python-runtime",
+  venvPath: "/app/data/python-runtime/venv",
+  pythonPath: "/app/data/python-runtime/venv/bin/python",
+  ready: true,
+  indexes: {
+    indexUrl: "",
+    extraIndexUrls: [],
+    trustedHosts: [],
+    autoInstallOnActivate: true,
+    autoInstallOnMissing: true,
+  },
+  manualPackages: [],
+  installedPackages: [],
+  packageSources: [],
+  activeDependencies: [],
+  conflicts: [],
+}
+
 const onNavigate = vi.fn<(section: string, segment?: string) => void>()
 
 /** 待处理行是 li：用例统一靠文案定位，再在行内取按钮，避免与卡片上的「进入」混淆。 */
@@ -86,6 +127,7 @@ beforeEach(() => {
   mockSettings(allEnabled)
   skillsApiMocks.listSkillApprovals.mockResolvedValue({ success: true, data: [] })
   mcpApiMocks.listConnections.mockResolvedValue({ success: true, data: [] })
+  pythonRuntimeApiMocks.getPythonRuntimeStatus.mockResolvedValue({ data: emptyRuntimeStatus })
   updateSpy.mockReturnValue(Promise.resolve())
 })
 
@@ -365,3 +407,192 @@ describe("MCP 段：五标签与全局开关", () => {
     })
   })
 })
+
+/* ------------------------------ 内置工具段 / 对话增强段 ------------------------------ */
+
+/** FeatureCard 的标题是 span（不是 heading），用它定位卡片的 <section> 根节点。 */
+function featureCardOf(title: string): HTMLElement {
+  const card = screen.getByText(title).closest("section")
+  if (!card) throw new Error(`未找到功能卡: ${title}`)
+  return card as HTMLElement
+}
+
+describe("内置工具段：两卡与唯一控制点", () => {
+  test("渲染 Python 工具与 Python 运行时管理两卡，卡 key 为 extensions:python-tools / extensions:python-runtime", async () => {
+    mockSettings(toolsAndExtrasSettings)
+    const { container } = render(<ToolsSection />)
+
+    expect(screen.getByRole("heading", { name: "内置工具" })).toBeInTheDocument()
+    expect(screen.getByText("让模型在沙箱里执行 Python 与受管依赖")).toBeInTheDocument()
+
+    expect(featureCardOf("Python 工具")).toHaveAttribute(
+      "data-card-key",
+      "extensions:python-tools",
+    )
+    expect(featureCardOf("Python 运行时管理")).toHaveAttribute(
+      "data-card-key",
+      "extensions:python-runtime",
+    )
+    // 旧页的卡 key 不得残留，否则搜索定位会指向不存在的段
+    expect(container.querySelector('[data-card-key^="tools-extensions:"]')).toBeNull()
+
+    await act(async () => {}) // 冲掉运行时状态请求
+  })
+
+  test("「更多参数」只剩迭代上限，不再重复动态 Skill Runtime 开关（回归：双控制点）", async () => {
+    mockSettings(toolsAndExtrasSettings)
+    render(<ToolsSection />)
+    const card = featureCardOf("Python 工具")
+
+    expect(within(card).queryByText(/动态 Skill Runtime/)).toBeNull()
+
+    fireEvent.click(within(card).getByRole("button", { name: "更多参数" }))
+
+    expect(within(card).getByText("Agent 工具最大迭代次数（0 表示无限制）")).toBeInTheDocument()
+    expect(within(card).queryByText("启用聊天侧第三方动态 Skill Runtime")).toBeNull()
+    // 该 key 的唯一控制点已归 Skill 段页头：本卡只保留主开关
+    expect(within(card).queryAllByRole("switch")).toHaveLength(1)
+
+    await act(async () => {})
+  })
+
+  test("改超时与 stdout 截断后保存，payload 精确等于 5 个 key（不再提交动态 Skill Runtime）", async () => {
+    mockSettings(toolsAndExtrasSettings)
+    render(<ToolsSection />)
+    const card = featureCardOf("Python 工具")
+
+    fireEvent.click(screen.getByRole("switch", { name: "启用Python 工具" }))
+    fireEvent.change(within(card).getByDisplayValue("8000"), { target: { value: "9000" } })
+    // 两个 4000 分别是 stdout 截断与代码长度限制，前者在前
+    const [stdoutInput] = within(card).getAllByDisplayValue("4000")
+    fireEvent.change(stdoutInput, { target: { value: "5000" } })
+
+    fireEvent.click(within(card).getByRole("button", { name: "保存 Python 工具设置" }))
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1))
+    expect(updateSpy.mock.calls[0][0]).toEqual({
+      pythonToolEnable: true,
+      pythonToolTimeoutMs: 9000,
+      pythonToolMaxOutputChars: 5000,
+      pythonToolMaxSourceChars: 4000,
+      agentMaxToolIterations: 4,
+    })
+    expect(Object.keys(updateSpy.mock.calls[0][0]).sort()).toEqual(
+      [
+        "pythonToolEnable",
+        "pythonToolTimeoutMs",
+        "pythonToolMaxOutputChars",
+        "pythonToolMaxSourceChars",
+        "agentMaxToolIterations",
+      ].sort(),
+    )
+
+    await act(async () => {})
+  })
+})
+
+describe("对话增强段：两卡与保存", () => {
+  test("渲染模型大乱斗与标题智能总结两卡，卡 key 为 extensions:battle / extensions:title-summary", () => {
+    mockSettings(toolsAndExtrasSettings)
+    render(<ExtraSection />)
+
+    expect(screen.getByRole("heading", { name: "对话增强" })).toBeInTheDocument()
+    expect(screen.getByText("模型大乱斗与标题智能总结")).toBeInTheDocument()
+
+    expect(featureCardOf("模型大乱斗")).toHaveAttribute("data-card-key", "extensions:battle")
+    expect(featureCardOf("标题智能总结")).toHaveAttribute(
+      "data-card-key",
+      "extensions:title-summary",
+    )
+  })
+
+  test("乱斗每日次数填 -1 阻止保存并提示；改成合法值后按 4 个 battle* key 提交", async () => {
+    mockSettings(toolsAndExtrasSettings)
+    render(<ExtraSection />)
+    const card = featureCardOf("模型大乱斗")
+
+    fireEvent.change(within(card).getByDisplayValue("8"), { target: { value: "-1" } })
+    fireEvent.click(within(card).getByRole("button", { name: "保存乱斗设置" }))
+
+    expect(updateSpy).not.toHaveBeenCalled()
+    expect(toastSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "输入无效", variant: "destructive" }),
+    )
+
+    fireEvent.change(within(card).getByDisplayValue("-1"), { target: { value: "12" } })
+    fireEvent.click(within(card).getByRole("button", { name: "保存乱斗设置" }))
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1))
+    expect(updateSpy.mock.calls[0][0]).toEqual({
+      battleAllowAnonymous: true,
+      battleAllowUsers: true,
+      battleAnonymousDailyQuota: 12,
+      battleUserDailyQuota: 40,
+    })
+  })
+
+  test("标题总结开关保存 3 个 titleSummary* key", async () => {
+    mockSettings(toolsAndExtrasSettings)
+    render(<ExtraSection />)
+    const card = featureCardOf("标题智能总结")
+    const save = within(card).getByRole("button", { name: "保存标题总结设置" })
+    expect(save).toBeDisabled()
+
+    fireEvent.click(within(card).getAllByRole("switch")[0])
+    expect(save).toBeEnabled()
+    fireEvent.click(save)
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1))
+    expect(updateSpy.mock.calls[0][0]).toEqual({
+      titleSummaryEnabled: true,
+      titleSummaryMaxLength: 20,
+      titleSummaryModelSource: "current",
+    })
+  })
+})
+
+describe("两段的设置读取降级", () => {
+  test("settings 为 null + error：两段都显示错误文案与「重试」，不渲染任何卡片", () => {
+    useSystemSettingsMock.mockReturnValue({
+      settings: null,
+      isLoading: false,
+      error: "加载系统设置失败",
+      refresh: refreshSpy,
+      update: updateSpy,
+      clearError: vi.fn(),
+    })
+
+    const { container } = render(
+      <>
+        <ToolsSection />
+        <ExtraSection />
+      </>,
+    )
+
+    expect(screen.getAllByText("加载系统设置失败")).toHaveLength(2)
+    expect(screen.getAllByRole("button", { name: "重试" })).toHaveLength(2)
+    expect(container.querySelector("[data-card-key]")).toBeNull()
+    expect(screen.queryByText("Python 工具")).toBeNull()
+    expect(screen.queryByText("模型大乱斗")).toBeNull()
+    // 两段各自补拉一次，不因重渲染反复请求
+    expect(refreshSpy).toHaveBeenCalledTimes(2)
+  })
+
+  test("settings 为 null 且尚无结果时给骨架，而不是「无法加载」的假错误", () => {
+    useSystemSettingsMock.mockReturnValue({
+      settings: null,
+      isLoading: false,
+      error: null,
+      refresh: refreshSpy,
+      update: updateSpy,
+      clearError: vi.fn(),
+    })
+
+    const { container } = render(<ToolsSection />)
+
+    expect(container.querySelectorAll(".animate-pulse").length).toBeGreaterThanOrEqual(2)
+    expect(screen.queryByText("无法加载系统设置")).toBeNull()
+    expect(refreshSpy).toHaveBeenCalledTimes(1)
+  })
+})
+

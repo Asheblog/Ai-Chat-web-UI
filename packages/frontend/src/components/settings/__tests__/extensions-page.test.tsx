@@ -49,14 +49,13 @@ vi.mock("@/features/secret-vault/api", async (importOriginal) => ({
   listSecrets: secretVaultMocks.listSecrets,
 }))
 
-const settingsApiMocks = vi.hoisted(() => ({
-  getSystemSettings: vi.fn(),
-  updateSystemSettings: vi.fn(),
-}))
-vi.mock("@/features/settings/api", async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  getSystemSettings: settingsApiMocks.getSystemSettings,
-  updateSystemSettings: settingsApiMocks.updateSystemSettings,
+/**
+ * 内置工具段里的 Python 运行时卡自带 /api/python-runtime 请求与独立用例
+ * （system-python-runtime-page.test.tsx）。页面用例只验证段路由，这里整卡替换，
+ * 避免真实 XHR 与异步 setState 抖动。
+ */
+vi.mock("@/components/settings/pages/tools-extensions/python-runtime-card", () => ({
+  PythonRuntimeCard: () => <p>运行时面板</p>,
 }))
 
 // jsdom 未实现 scrollIntoView：MCP 段挂上 data-card-key 后，SystemLeafWrapper 会真的滚动到目标卡
@@ -92,8 +91,6 @@ beforeEach(() => {
   overviewDataMocks.listSkillCatalog.mockResolvedValue({ success: true, data: [] })
   overviewDataMocks.listSkillBindings.mockResolvedValue({ success: true, data: [] })
   overviewDataMocks.listConnections.mockResolvedValue({ success: true, data: [] })
-  settingsApiMocks.getSystemSettings.mockResolvedValue({ data: { mcpGlobalEnabled: true } })
-  settingsApiMocks.updateSystemSettings.mockResolvedValue({ data: {} })
   mcpListMocks.listInstallations.mockResolvedValue({ success: true, data: [] })
   mcpListMocks.listBindings.mockResolvedValue({ success: true, data: [] })
   secretVaultMocks.listSecrets.mockResolvedValue({ success: true, data: [] })

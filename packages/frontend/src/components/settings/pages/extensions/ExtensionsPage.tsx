@@ -13,9 +13,11 @@ import {
   type ExtensionSection,
   type ExtensionSectionEventDetail,
 } from "./extensions-sections"
+import { ExtraSection } from "./sections/extra-section"
 import { McpSection, isMcpSegment, type McpSegment } from "./sections/mcp-section"
 import { OverviewSection } from "./sections/overview-section"
 import { SkillSection, isSkillSegment, type SkillSegment } from "./sections/skill-section"
+import { ToolsSection } from "./sections/tools-section"
 
 const DEFAULT_MCP_SEGMENT: McpSegment = "installations"
 const DEFAULT_SKILL_SEGMENT: SkillSegment = "install"
@@ -27,8 +29,8 @@ function isExtensionSection(value: unknown): value is ExtensionSection {
 /**
  * 能力扩展：MCP 服务 / Skill / 内置工具 / 对话增强的统一入口。
  *
- * 骨架负责段路由与卡定位（flash-bus + 三个 window 事件）；总览、MCP、Skill 段已接入真实内容，
- * 内置工具 / 对话增强段仍为占位，由后续任务填实。
+ * 骨架只负责段路由与卡定位（flash-bus + 三个 window 事件），5 个段各自取数、
+ * 各自保存；MCP / Skill 段的次级标签状态由本页持有，卡定位才能先切段再滚动。
  */
 export function ExtensionsPage({
   hostId,
@@ -117,7 +119,6 @@ export function ExtensionsPage({
     return () => window.removeEventListener(EXTENSION_SECTION_EVENT, handler as EventListener)
   }, [applyRoute])
 
-  const activeMeta = EXTENSION_SECTIONS.find((item) => item.key === section) ?? EXTENSION_SECTIONS[0]
   const activeSegment =
     section === "mcp" ? mcpSegment : section === "skills" ? skillSegment : undefined
 
@@ -176,12 +177,10 @@ export function ExtensionsPage({
               <McpSection segment={mcpSegment} onSegmentChange={setMcpSegment} />
             ) : section === "skills" ? (
               <SkillSection segment={skillSegment} onSegmentChange={setSkillSegment} />
+            ) : section === "tools" ? (
+              <ToolsSection />
             ) : (
-              <>
-                <p className="text-sm font-medium">{activeMeta.label}</p>
-                <p className="text-sm text-muted-foreground">{activeMeta.description}</p>
-                <p className="text-xs text-muted-foreground">该段内容将在后续任务接入</p>
-              </>
+              <ExtraSection />
             )}
           </div>
         </div>
