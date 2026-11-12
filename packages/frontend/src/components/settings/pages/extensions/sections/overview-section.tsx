@@ -82,6 +82,8 @@ type CapabilityCardProps = {
   icon: LucideIcon
   title: string
   description: string
+  /** 补充说明（如 MCP 的五步配置流程），可选 */
+  hint?: string
   /** null = 设置加载中 */
   status: FlagStatus
   /** undefined = 本卡无副信息；null = 统计加载中 */
@@ -89,7 +91,15 @@ type CapabilityCardProps = {
   onEnter: () => void
 }
 
-function CapabilityCard({ icon: Icon, title, description, status, meta, onEnter }: CapabilityCardProps) {
+function CapabilityCard({
+  icon: Icon,
+  title,
+  description,
+  hint,
+  status,
+  meta,
+  onEnter,
+}: CapabilityCardProps) {
   return (
     <section className="v2-panel flex flex-col gap-2 p-4">
       <div className="flex items-start justify-between gap-3">
@@ -107,6 +117,7 @@ function CapabilityCard({ icon: Icon, title, description, status, meta, onEnter 
       </div>
 
       <p className="text-sm text-muted-foreground text-pretty">{description}</p>
+      {hint ? <p className="v2-muted-line text-xs">{hint}</p> : null}
 
       <div className="mt-auto flex items-center gap-2 pt-1">
         {meta === undefined ? null : meta === null ? (
@@ -114,7 +125,14 @@ function CapabilityCard({ icon: Icon, title, description, status, meta, onEnter 
         ) : (
           <span className="v2-muted-line">{meta}</span>
         )}
-        <Button type="button" variant="outline" size="xs" className="ml-auto gap-1" onClick={onEnter}>
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          className="ml-auto gap-1"
+          onClick={onEnter}
+          aria-label={`进入 ${title}`}
+        >
           进入
           <ArrowRight className="h-3.5 w-3.5" />
         </Button>
@@ -153,6 +171,7 @@ function PendingRow({
           className="gap-1"
           onClick={onHandle}
           disabled={!actionable}
+          aria-label={`${text}：去处理`}
         >
           去处理
           <ArrowRight className="h-3.5 w-3.5" />
@@ -217,6 +236,7 @@ export function OverviewSection({
           icon={Link2}
           title="MCP 服务"
           description="连接外部工具与数据源"
+          hint="推荐流程：安装模板 → 连接 → 凭据 → 工具 → 绑定"
           status={flagStatus(settingsLoading, settingsUnknown, settings?.mcpGlobalEnabled ?? true, "已启用", "已关闭")}
           meta={metaText(connections, "个连接")}
           onEnter={() => onNavigate("mcp")}

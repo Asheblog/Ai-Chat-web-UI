@@ -123,12 +123,12 @@ describe("总览段：待处理列表", () => {
     render(<OverviewSection onNavigate={onNavigate} />)
 
     const row = await rowOf("3 条 Skill 调用待审批")
-    fireEvent.click(within(row).getByRole("button", { name: "去处理" }))
+    fireEvent.click(within(row).getByRole("button", { name: /去处理$/ }))
 
     expect(onNavigate).toHaveBeenCalledWith("skills", "approvals")
     // Skill 卡副信息同步显示待审批数，进入时直接落到待审批标签
     expect(screen.getByText("3 条待审批")).toBeInTheDocument()
-    fireEvent.click(within(cardOf("Skill")).getByRole("button", { name: "进入" }))
+    fireEvent.click(within(cardOf("Skill")).getByRole("button", { name: /^进入/ }))
     expect(onNavigate).toHaveBeenLastCalledWith("skills", "approvals")
   })
 
@@ -145,7 +145,7 @@ describe("总览段：待处理列表", () => {
     render(<OverviewSection onNavigate={onNavigate} />)
 
     const row = await rowOf("2 个 MCP 连接未绑定凭据")
-    fireEvent.click(within(row).getByRole("button", { name: "去处理" }))
+    fireEvent.click(within(row).getByRole("button", { name: /去处理$/ }))
 
     expect(onNavigate).toHaveBeenCalledWith("mcp", "connections")
     // 卡副信息统计的是全部连接数（含已绑定凭据的那条）
@@ -156,9 +156,9 @@ describe("总览段：待处理列表", () => {
     render(<OverviewSection onNavigate={onNavigate} />)
 
     const row = await rowOf("没有待审批的调用")
-    expect(within(row).getByRole("button", { name: "去处理" })).toBeDisabled()
+    expect(within(row).getByRole("button", { name: /去处理$/ })).toBeDisabled()
 
-    fireEvent.click(within(cardOf("Skill")).getByRole("button", { name: "进入" }))
+    fireEvent.click(within(cardOf("Skill")).getByRole("button", { name: /^进入/ }))
     expect(onNavigate).toHaveBeenCalledWith("skills", "versions")
   })
 
@@ -173,12 +173,37 @@ describe("总览段：待处理列表", () => {
 
     const row = await rowOf("状态未知")
     expect(within(row).getByText("—")).toBeInTheDocument()
-    expect(within(row).getByRole("button", { name: "去处理" })).toBeDisabled()
+    expect(within(row).getByRole("button", { name: /去处理$/ })).toBeDisabled()
 
     // 其余内容不受影响：另外两卡与另一行照常渲染
     expect(screen.getByRole("heading", { name: "内置工具" })).toBeInTheDocument()
     expect(screen.getByText("1 个 MCP 连接未绑定凭据")).toBeInTheDocument()
     expect(screen.getByText("— 条待审批")).toBeInTheDocument()
+  })
+
+  test("连接都已绑定凭据时显示 0 态文案且按钮禁用", async () => {
+    mcpApiMocks.listConnections.mockResolvedValue({
+      success: true,
+      data: [{ id: 1, secretVaultId: 9 }],
+    })
+
+    render(<OverviewSection onNavigate={onNavigate} />)
+
+    const row = await rowOf("连接都已绑定凭据")
+    expect(within(row).getByRole("button", { name: /去处理$/ })).toBeDisabled()
+  })
+
+  test("listConnections 失败：MCP 行数量显示「—」、行尾「状态未知」、按钮禁用，卡副信息「— 个连接」", async () => {
+    skillsApiMocks.listSkillApprovals.mockResolvedValue({ success: true, data: [] })
+    mcpApiMocks.listConnections.mockRejectedValue(new Error("500"))
+
+    render(<OverviewSection onNavigate={onNavigate} />)
+
+    const row = await rowOf("MCP 连接未绑定凭据")
+    expect(within(row).getByText("—")).toBeInTheDocument()
+    expect(within(row).getByText("状态未知")).toBeInTheDocument()
+    expect(within(row).getByRole("button", { name: /去处理$/ })).toBeDisabled()
+    expect(within(cardOf("MCP 服务")).getByText("— 个连接")).toBeInTheDocument()
   })
 })
 
@@ -186,7 +211,7 @@ describe("总览段：入口跳转", () => {
   test("「进入」MCP 卡导航到 mcp 段", async () => {
     render(<OverviewSection onNavigate={onNavigate} />)
 
-    fireEvent.click(within(cardOf("MCP 服务")).getByRole("button", { name: "进入" }))
+    fireEvent.click(within(cardOf("MCP 服务")).getByRole("button", { name: /^进入/ }))
 
     expect(onNavigate).toHaveBeenCalledWith("mcp")
     await screen.findByText("0 个连接")
