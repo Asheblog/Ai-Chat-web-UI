@@ -13,6 +13,8 @@ import { renderSystemLeaf, systemSettingsCards } from "../system-settings-regist
 const overviewDataMocks = vi.hoisted(() => ({
   useSystemSettings: vi.fn(),
   listSkillApprovals: vi.fn(),
+  listSkillCatalog: vi.fn(),
+  listSkillBindings: vi.fn(),
   listConnections: vi.fn(),
 }))
 
@@ -22,6 +24,8 @@ vi.mock("@/hooks/use-system-settings", () => ({
 vi.mock("@/features/skills/api", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   listSkillApprovals: overviewDataMocks.listSkillApprovals,
+  listSkillCatalog: overviewDataMocks.listSkillCatalog,
+  listSkillBindings: overviewDataMocks.listSkillBindings,
 }))
 
 /**
@@ -85,6 +89,8 @@ beforeEach(() => {
     clearError: vi.fn(),
   })
   overviewDataMocks.listSkillApprovals.mockResolvedValue({ success: true, data: [] })
+  overviewDataMocks.listSkillCatalog.mockResolvedValue({ success: true, data: [] })
+  overviewDataMocks.listSkillBindings.mockResolvedValue({ success: true, data: [] })
   overviewDataMocks.listConnections.mockResolvedValue({ success: true, data: [] })
   settingsApiMocks.getSystemSettings.mockResolvedValue({ data: { mcpGlobalEnabled: true } })
   settingsApiMocks.updateSystemSettings.mockResolvedValue({ data: {} })
@@ -126,7 +132,8 @@ describe("ExtensionsPage 段路由", () => {
   test("aichat:system-settings-select 携带合法 section 时切段", async () => {
     const { container } = await renderPage(<ExtensionsPage />)
 
-    act(() => {
+    // Skill 段挂载后会拉 catalog / bindings / approvals，flush 掉这些 promise 再断言
+    await act(async () => {
       window.dispatchEvent(
         new CustomEvent("aichat:system-settings-select", {
           detail: { key: "extensions", section: "skills" },
@@ -207,7 +214,7 @@ describe("ExtensionsPage 段路由", () => {
   test("aichat:settings-flash-card 热更新定位", async () => {
     const { container } = await renderPage(<ExtensionsPage hostId="layout" />)
 
-    act(() => {
+    await act(async () => {
       window.dispatchEvent(
         new CustomEvent("aichat:settings-flash-card", {
           detail: { leafKey: "extensions", cardKey: "extensions:skill-versions", hostId: "layout" },
@@ -248,7 +255,9 @@ describe("ExtensionsPage 段路由", () => {
   test("页头两个按钮分别切到「新增 MCP 服务」与「从 GitHub 安装 Skill」的位置", async () => {
     const { container } = await renderPage(<ExtensionsPage />)
 
-    fireEvent.click(screen.getByRole("button", { name: "从 GitHub 安装 Skill" }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "从 GitHub 安装 Skill" }))
+    })
     expect(rootOf(container).dataset.section).toBe("skills")
     expect(rootOf(container).dataset.segment).toBe("install")
 

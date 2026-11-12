@@ -1,17 +1,15 @@
 "use client"
 
 import { useState } from "react"
-import { Download } from "lucide-react"
-import { useToast } from "@/components/ui/use-toast"
-import { FeatureCard } from "@/components/settings/components/feature-card"
 import { SkillInstallSection } from "@/components/settings/pages/system-skills/SkillInstallSection"
+import { useToast } from "@/components/ui/use-toast"
 import { installSkillFromGithub } from "@/features/skills/api"
 
 /**
- * Skill 安装卡：受控复用 SkillInstallSection，安装 state 与 installSkillFromGithub
- * 逻辑从 SystemSkills 迁入（无 settings key）。
+ * Skill 安装面板：安装 state 与 installSkillFromGithub 调用从原 `SkillInstallCard` 迁入，
+ * 去掉 FeatureCard 外壳后直接渲染既有 `SkillInstallSection`（校验、payload、按钮态都没改）。
  */
-export function SkillInstallCard() {
+export function SkillInstallPanel(): JSX.Element {
   const { toast } = useToast()
   const [installSource, setInstallSource] = useState("")
   const [installToken, setInstallToken] = useState("")
@@ -33,12 +31,10 @@ export function SkillInstallCard() {
         source,
         token: installToken.trim() ? installToken.trim() : undefined,
       })
-      if (!response?.success) {
-        throw new Error(response?.error || "安装失败")
-      }
+      if (!response?.success) throw new Error(response?.error || "安装失败")
       toast({
         title: "Skill 安装请求已完成",
-        description: "请根据版本状态继续审批或激活",
+        description: "已提交安装，去「待审批」或「版本」继续",
       })
       setInstallSource("")
       setInstallToken("")
@@ -54,20 +50,13 @@ export function SkillInstallCard() {
   }
 
   return (
-    <FeatureCard
-      icon={Download}
-      title="Skill 安装"
-      description="从 GitHub 仓库安装系统级 Skill"
-      cardKey="tools-extensions:skill-install"
-    >
-      <SkillInstallSection
-        installSource={installSource}
-        installToken={installToken}
-        installing={installing}
-        onInstallSourceChange={setInstallSource}
-        onInstallTokenChange={setInstallToken}
-        onInstall={handleInstall}
-      />
-    </FeatureCard>
+    <SkillInstallSection
+      installSource={installSource}
+      installToken={installToken}
+      installing={installing}
+      onInstallSourceChange={setInstallSource}
+      onInstallTokenChange={setInstallToken}
+      onInstall={handleInstall}
+    />
   )
 }

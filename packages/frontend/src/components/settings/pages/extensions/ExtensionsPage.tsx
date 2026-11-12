@@ -5,10 +5,8 @@ import { Layers } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { SectionRail } from "../../components/section-rail"
-import { SegmentedTabs } from "../../components/segmented-tabs"
 import {
   EXTENSION_SECTIONS,
-  EXTENSION_SEGMENTS,
   EXTENSION_SECTION_EVENT,
   routeForCard,
   type ExtensionCardRoute,
@@ -17,12 +15,10 @@ import {
 } from "./extensions-sections"
 import { McpSection, isMcpSegment, type McpSegment } from "./sections/mcp-section"
 import { OverviewSection } from "./sections/overview-section"
+import { SkillSection, isSkillSegment, type SkillSegment } from "./sections/skill-section"
 
 const DEFAULT_MCP_SEGMENT: McpSegment = "installations"
-const DEFAULT_SKILL_SEGMENT = "install"
-
-/** Skill 段合法次级标签 key，用于丢弃事件里越界的 segment（MCP 段由 McpSection 自校验）。 */
-const SKILL_SEGMENT_KEYS = EXTENSION_SEGMENTS.skills.map((item) => item.key)
+const DEFAULT_SKILL_SEGMENT: SkillSegment = "install"
 
 function isExtensionSection(value: unknown): value is ExtensionSection {
   return typeof value === "string" && EXTENSION_SECTIONS.some((item) => item.key === value)
@@ -31,8 +27,8 @@ function isExtensionSection(value: unknown): value is ExtensionSection {
 /**
  * 能力扩展：MCP 服务 / Skill / 内置工具 / 对话增强的统一入口。
  *
- * 骨架负责段路由与卡定位（flash-bus + 三个 window 事件）；总览与 MCP 段已接入真实内容，
- * Skill / 内置工具 / 对话增强段仍为占位，由后续任务填实。
+ * 骨架负责段路由与卡定位（flash-bus + 三个 window 事件）；总览、MCP、Skill 段已接入真实内容，
+ * 内置工具 / 对话增强段仍为占位，由后续任务填实。
  */
 export function ExtensionsPage({
   hostId,
@@ -50,9 +46,9 @@ export function ExtensionsPage({
       ? initialRoute.segment
       : DEFAULT_MCP_SEGMENT,
   )
-  const [skillSegment, setSkillSegment] = useState(
-    initialRoute?.section === "skills"
-      ? (initialRoute.segment ?? DEFAULT_SKILL_SEGMENT)
+  const [skillSegment, setSkillSegment] = useState<SkillSegment>(
+    initialRoute?.section === "skills" && isSkillSegment(initialRoute.segment)
+      ? initialRoute.segment
       : DEFAULT_SKILL_SEGMENT,
   )
 
@@ -63,7 +59,7 @@ export function ExtensionsPage({
     const segment = route.segment
     if (!segment) return
     if (route.section === "mcp" && isMcpSegment(segment)) setMcpSegment(segment)
-    if (route.section === "skills" && SKILL_SEGMENT_KEYS.includes(segment)) setSkillSegment(segment)
+    if (route.section === "skills" && isSkillSegment(segment)) setSkillSegment(segment)
   }, [])
 
   // 冷启动目标卡冻结在首帧：wrapper 挂载时会消费 flash-bus，父级随后重渲染拿到的
@@ -122,7 +118,6 @@ export function ExtensionsPage({
   }, [applyRoute])
 
   const activeMeta = EXTENSION_SECTIONS.find((item) => item.key === section) ?? EXTENSION_SECTIONS[0]
-  const segments = section === "skills" ? EXTENSION_SEGMENTS.skills : []
   const activeSegment =
     section === "mcp" ? mcpSegment : section === "skills" ? skillSegment : undefined
 
@@ -167,16 +162,7 @@ export function ExtensionsPage({
         />
 
         <div className="min-w-0 flex-1 space-y-3 mt-3 md:mt-0">
-          {/* MCP 段的次级标签随段组件一起渲染（页头在上、标签在下），这里只保留尚未接入的 Skill 段 */}
-          {section === "skills" && activeSegment !== undefined && (
-            <SegmentedTabs
-              items={segments}
-              active={activeSegment}
-              onChange={setSkillSegment}
-              ariaLabel={`${activeMeta.label}次级标签`}
-            />
-          )}
-
+          {/* MCP / Skill 段的次级标签随段组件一起渲染（页头在上、标签在下） */}
           <div
             data-section-panel={section}
             // 总览是卡片堆叠，不需要占位面板的浅底色；其余段保持占位外观不动
@@ -188,6 +174,8 @@ export function ExtensionsPage({
               />
             ) : section === "mcp" ? (
               <McpSection segment={mcpSegment} onSegmentChange={setMcpSegment} />
+            ) : section === "skills" ? (
+              <SkillSection segment={skillSegment} onSegmentChange={setSkillSegment} />
             ) : (
               <>
                 <p className="text-sm font-medium">{activeMeta.label}</p>

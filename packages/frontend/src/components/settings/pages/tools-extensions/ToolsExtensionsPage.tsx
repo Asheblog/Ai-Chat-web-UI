@@ -8,13 +8,13 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useSystemSettings } from "@/hooks/use-system-settings"
 import { PythonToolsCard } from "./python-tools-card"
 import { PythonRuntimeCard } from "./python-runtime-card"
-import { SkillInstallCard } from "./skill-install-card"
 import { BattleCard } from "./battle-card"
 import { TitleSummaryCard } from "./title-summary-card"
 
 /**
- * 工具与扩展页：页壳（单一 useSystemSettings + 共享骨架/错误重试），
- * 5 张 FeatureCard：Python 工具 / Python 运行时管理 / Skill 安装 / 模型大乱斗 / 标题智能总结。
+ * 工具与扩展页（已从系统设置下线，仅保留给尚未迁移的用例）：
+ * 页壳（单一 useSystemSettings + 共享骨架/错误重试）+ 4 张 FeatureCard。
+ * Skill 安装已随能力扩展页迁至「Skill」段，不再属于本页。
  */
 export function ToolsExtensionsPage() {
   const {
@@ -56,14 +56,13 @@ export function ToolsExtensionsPage() {
         <div className="space-y-1">
           <CardTitle>工具与扩展</CardTitle>
           <CardDescription className="text-sm text-muted-foreground">
-            Python 计算、Skill 安装与增强功能
+            Python 计算与增强功能
           </CardDescription>
         </div>
       </div>
 
       <PythonToolsCard settings={settings} update={updateSystemSettings} />
       <PythonRuntimeCard />
-      <SkillInstallCard />
       <BattleCard settings={settings} update={updateSystemSettings} />
       <TitleSummaryCard settings={settings} update={updateSystemSettings} />
     </div>

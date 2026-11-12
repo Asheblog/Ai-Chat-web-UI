@@ -42,13 +42,6 @@ vi.mock("@/features/settings/api", () => ({
   reconcilePythonRuntime: runtimeApiMocks.reconcilePythonRuntime,
 }))
 
-const skillsApiMocks = vi.hoisted(() => ({
-  installSkillFromGithub: vi.fn(),
-}))
-vi.mock("@/features/skills/api", () => ({
-  installSkillFromGithub: skillsApiMocks.installSkillFromGithub,
-}))
-
 /** 工具与扩展页所需 key 的完整设置（baseSettings 已含 python 四个 key，本地补齐其余缺省值） */
 const toolsExtensionsSettings: SystemSettings = {
   ...baseSettings,
@@ -145,7 +138,6 @@ beforeEach(() => {
   runtimeApiMocks.installPythonRuntimeRequirements.mockResolvedValue({ data: {} })
   runtimeApiMocks.uninstallPythonRuntimePackages.mockResolvedValue({ data: {} })
   runtimeApiMocks.reconcilePythonRuntime.mockResolvedValue({ data: {} })
-  skillsApiMocks.installSkillFromGithub.mockResolvedValue({ success: true, data: {} })
 })
 
 afterEach(() => {
@@ -153,13 +145,13 @@ afterEach(() => {
 })
 
 describe("ToolsExtensionsPage", () => {
-  test("渲染五张功能卡：Python 工具 / Python 运行时管理 / Skill 安装 / 模型大乱斗 / 标题智能总结", () => {
+  test("渲染四张功能卡：Python 工具 / Python 运行时管理 / 模型大乱斗 / 标题智能总结", () => {
     render(<ToolsExtensionsPage />)
     expect(screen.getByText("工具与扩展")).toBeInTheDocument()
     expect(screen.getByText("Python 工具")).toBeInTheDocument()
     expect(screen.getByText("Python 运行时管理")).toBeInTheDocument()
-    // FeatureCard 标题唯一（SkillInstallSection 内部标题已随单消费者收口移除）
-    expect(screen.getAllByText("Skill 安装").length).toBeGreaterThan(0)
+    // Skill 安装已迁至能力扩展页的 Skill 段
+    expect(screen.queryByText("Skill 安装")).not.toBeInTheDocument()
     expect(screen.getByText("模型大乱斗")).toBeInTheDocument()
     expect(screen.getByText("标题智能总结")).toBeInTheDocument()
     // Python 卡主开关
