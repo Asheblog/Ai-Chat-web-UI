@@ -70,6 +70,14 @@ graph TD
 
 协议层已采用**无向后兼容直接替换**：聊天和 Battle 请求统一使用 `skills` 字段，旧 `features` 字段不再接受。
 
+### 3.4 MCP 运行层与扩展安装
+
+- **ExtensionInstallService**：`install_extension` 工具的编排层，负责链接解析、白名单清单探测、类型判定、权限判定与安装；工具层只做参数归一与事件回填。
+- **Extension detection**：只读取 `SKILL.md` / `server.json` / `mcp.json` / `smithery.yaml` / `package.json` / `README.md`，不整包下载、不执行仓库代码；Skill 与 MCP 同时命中时返回候选由模型追问。
+- **McpRuntimeClient**：无 SDK 依赖的 JSON-RPC 2.0 客户端，支持 Streamable HTTP（`Mcp-Session-Id`）、旧版 HTTP+SSE 与 stdio 三种传输。
+- **MCP Gateway Container**：本地包型 MCP 通过 `docker run -i` 承载 stdin/stdout，容器开启 cap-drop、no-new-privileges 与 pids/cpus/memory 限额；宿主机不直接执行第三方代码（ADR-0015）。
+- **凭据边界**：运行层只接收 `{ env, headers }` 形状的已解密凭据，解密失败显式报错，不静默降级为无凭据调用。
+
 ## 4. 核心数据流 (Core Data Flows)
 
 本章节详细描述了两个关键业务场景的数据流动过程。

@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 import type { Actor } from '../../types'
 import { prisma as defaultPrisma } from '../../db'
-import { parseMcpArgsJson } from './mcp-connection-config'
+import { parseMcpArgsJson, type McpRuntimeConnection } from './mcp-connection-config'
 import {
   PrismaMcpRepository,
   type McpRepository,
@@ -29,25 +29,9 @@ export interface McpToolManifest {
 }
 
 export interface McpRuntimeClient {
-  listTools(connection: {
-    id: number
-    transport?: string
-    endpoint?: string | null
-    command?: string | null
-    args?: string[] | null
-    configJson?: string
-    secretVaultId?: number | null
-  }): Promise<McpToolManifest[]>
+  listTools(connection: McpRuntimeConnection): Promise<McpToolManifest[]>
   callTool(
-    connection: {
-      id: number
-      transport?: string
-      endpoint?: string | null
-      command?: string | null
-      args?: string[] | null
-      configJson?: string
-      secretVaultId?: number | null
-    },
+    connection: McpRuntimeConnection,
     toolName: string,
     args: Record<string, unknown>,
   ): Promise<{ content: Array<{ type: string; text?: string }>; isError?: boolean }>
@@ -310,7 +294,7 @@ export class McpService {
       transport: conn.installation.transport,
       endpoint: conn.installation.endpoint,
       command: conn.installation.command,
-      args: this.parseArgs(conn.installation.argsJson),
+      args: parseMcpArgsJson(conn.installation.argsJson),
       configJson: conn.configJson,
       secretVaultId: conn.secretVaultId,
     })
@@ -471,17 +455,13 @@ export class McpService {
         transport: conn.installation.transport,
         endpoint: conn.installation.endpoint,
         command: conn.installation.command,
-        args: this.parseArgs(conn.installation.argsJson),
+        args: parseMcpArgsJson(conn.installation.argsJson),
         configJson: conn.configJson,
         secretVaultId: conn.secretVaultId,
       },
       originalName,
       args,
     )
-  }
-
-  private parseArgs(raw?: string | null): string[] | null {
-    return parseMcpArgsJson(raw)
   }
 
   private safeParseJson(raw: string): Record<string, unknown> {

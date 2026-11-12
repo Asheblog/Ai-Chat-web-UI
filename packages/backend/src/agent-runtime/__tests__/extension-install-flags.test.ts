@@ -43,9 +43,15 @@ describe('detectExtensionSourceInMessage', () => {
     expect(detectExtensionSourceInMessage('https://raw.githubusercontent.com/a/b/main/SKILL.md')).toBe(true)
   })
 
+  it('detects the owner/repo@ref shorthand from the tool contract', () => {
+    expect(detectExtensionSourceInMessage('装一下 acme/demo@main')).toBe(true)
+    expect(detectExtensionSourceInMessage('用 acme/demo@v1:skills/pdf 这个')).toBe(true)
+  })
+
   it('ignores ordinary text', () => {
     expect(detectExtensionSourceInMessage('你好，解释一下这个报错')).toBe(false)
     expect(detectExtensionSourceInMessage('https://example.com/acme/demo')).toBe(false)
+    expect(detectExtensionSourceInMessage('对比 a/b 两个方案')).toBe(false)
   })
 })
 

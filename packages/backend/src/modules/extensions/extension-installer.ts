@@ -35,6 +35,16 @@ export interface InstallExtensionInput {
 
 const PINNED_TOOL_LIMIT = 3
 
+/** 容器网关不可用 / 不支持的启动命令：两种都要落成「需要网关」，而不是普通失败。 */
+function isGatewayError(error: unknown): boolean {
+  const code = (error as { code?: string } | null)?.code
+  return code === 'MCP_GATEWAY_UNAVAILABLE' || code === 'MCP_GATEWAY_UNSUPPORTED_COMMAND'
+}
+
+function toToolViews(rows: Array<{ originalName: string; description?: string | null }>) {
+  return rows.map((row) => ({ name: row.originalName, description: row.description ?? null }))
+}
+
 function toSkillSource(plan: InstallPlan, ref: string): string {
   const base = `${plan.source.owner}/${plan.source.repo}@${ref}`
   return plan.source.subdir ? `${base}:${plan.source.subdir}` : base
@@ -200,7 +210,7 @@ export class ExtensionInstaller {
           status: 'already_installed',
           plan,
           installed: { installationId: existing.id, connectionId: owned.id },
-          tools: tools.map((tool: any) => ({ name: tool.originalName, description: tool.description ?? null })),
+          tools: toToolViews(tools),
           nextSteps: ['该扩展已安装，本次未重复创建'],
         }
       }
@@ -256,8 +266,7 @@ export class ExtensionInstaller {
     } catch (error) {
       await this.rollback(installation.id, connectionId, Boolean(existing))
       const message = (error as Error)?.message ?? 'unknown'
-      const isGateway = (error as any)?.code === 'MCP_GATEWAY_UNAVAILABLE'
-        || (error as any)?.code === 'MCP_GATEWAY_UNSUPPORTED_COMMAND'
+      const isGateway = isGatewayError(error)
       return {
         ok: false,
         status: isGateway ? 'pending_gateway' : 'registered_unverified',
@@ -303,7 +312,7 @@ export class ExtensionInstaller {
     try {
       await mcpService.refreshToolCache(connectionId)
       const cached = await mcpService.listToolCache({ connectionId })
-      tools = cached.map((tool: any) => ({ name: tool.originalName, description: tool.description ?? null }))
+      tools = toToolViews(cached)
 
       if (sessionId && cached.length > 0) {
         for (const tool of cached.slice(0, PINNED_TOOL_LIMIT)) {
@@ -312,8 +321,7 @@ export class ExtensionInstaller {
       }
     } catch (error) {
       const message = (error as Error)?.message ?? 'unknown'
-      const isGateway = (error as any)?.code === 'MCP_GATEWAY_UNAVAILABLE'
-        || (error as any)?.code === 'MCP_GATEWAY_UNSUPPORTED_COMMAND'
+      const isGateway = isGatewayError(error)
       if (isGateway) {
         return {
           ok: true,

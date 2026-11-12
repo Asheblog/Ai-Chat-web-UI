@@ -49,6 +49,7 @@ import { StreamSettingsService } from '../services/stream'
 import { ImageGenerationService } from '../services/image-generation'
 import { McpService } from '../services/mcp'
 import { HttpMcpRuntimeClient } from '../services/mcp/mcp-runtime-client'
+import { parseMcpVaultSecrets } from '../services/mcp/mcp-connection-config'
 import { ExtensionInstallService } from '../modules/extensions/extension-install-service'
 import { SkillInstaller } from '../modules/skills/skill-installer'
 import { SkillApprovalService } from '../modules/skills/skill-approval-service'
@@ -338,17 +339,9 @@ export class AppContainer {
         runtimeClient: new HttpMcpRuntimeClient({
           resolveSecrets: async (connection) => {
             if (!connection.secretVaultId) return {}
-            try {
-              const raw = await this.secretVault.decryptById(connection.secretVaultId)
-              const parsed = JSON.parse(raw)
-              if (!parsed || typeof parsed !== 'object') return {}
-              return {
-                env: parsed.env && typeof parsed.env === 'object' ? parsed.env : undefined,
-                headers: parsed.headers && typeof parsed.headers === 'object' ? parsed.headers : undefined,
-              }
-            } catch {
-              return {}
-            }
+            // 解密失败或形状不对要显式抛错：静默空凭据只会让调用在上游变成难查的 401
+            const raw = await this.secretVault.decryptById(connection.secretVaultId)
+            return parseMcpVaultSecrets(raw)
           },
         }),
         getSystemSetting: async (key: string) => {

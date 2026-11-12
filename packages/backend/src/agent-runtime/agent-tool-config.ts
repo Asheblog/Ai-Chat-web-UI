@@ -482,7 +482,8 @@ export function detectExtensionSourceInMessage(content: string): boolean {
   if (!text) return false
   if (/https?:\/\/(www\.)?github\.com\//i.test(text)) return true
   if (/https?:\/\/raw\.githubusercontent\.com\//i.test(text)) return true
-  return false
+  // 与 install_extension 的参数契约一致：owner/repo@ref[:subdir] 简写同样算安装意图
+  return /[A-Za-z0-9][A-Za-z0-9_.-]*\/[A-Za-z0-9][A-Za-z0-9_.-]*@[A-Za-z0-9][A-Za-z0-9_./-]*/.test(text)
 }
 
 export interface AgentToolFlags {

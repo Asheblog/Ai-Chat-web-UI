@@ -1,19 +1,14 @@
 import type { McpRuntimeClient, McpToolManifest } from './mcp-service'
-import { parseMcpArgs, parseMcpConfigJson, pickStringRecord } from './mcp-connection-config'
+import {
+  parseMcpArgs,
+  parseMcpConfigJson,
+  pickStringRecord,
+  type McpRuntimeConnection,
+} from './mcp-connection-config'
 import { McpProtocolClient } from './runtime/client'
 import { StreamableHttpTransport, SseHttpTransport } from './runtime/http-transport'
 import { DockerStdioTransport, resolveGatewayTarget, McpGatewayError } from './runtime/docker-stdio-transport'
 import type { McpTransport } from './runtime/transport'
-
-export interface McpRuntimeConnection {
-  id: number
-  transport?: string
-  endpoint?: string | null
-  command?: string | null
-  args?: string[] | null
-  configJson?: string
-  secretVaultId?: number | null
-}
 
 export interface McpRuntimeConnectionConfig {
   env: Record<string, string>

@@ -167,8 +167,6 @@ function fromPackageJson(pkg: any): LocalCandidate | null {
   if (!name) return null
   const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) }
   const usesSdk = Object.keys(deps).some((dep) => dep.includes('@modelcontextprotocol/sdk'))
-  const hasBin = Boolean(pkg.bin)
-  if (!usesSdk && !hasBin) return null
   if (!usesSdk) return null
   return {
     command: 'npx',

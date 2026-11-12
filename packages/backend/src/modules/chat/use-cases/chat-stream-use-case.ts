@@ -114,7 +114,7 @@ import { StreamPersistenceSink } from './stream/persistence-sink';
 import { SSE_HEADERS } from '../../../http/sse';
 import type { SecretVaultService } from '../../../services/secret-vault';
 import type { McpService } from '../../../services/mcp/mcp-service';
-import type { ExtensionInstallService } from '../../extensions/extension-install-service';
+import type { ExtensionInstallServiceLike } from '../../extensions/types';
 import { resolveDeepseekSearchSettings } from '../../../services/settings/deepseek-search-credentials';
 
 type SendMessagePayload = z.infer<typeof sendMessageSchema>
@@ -137,7 +137,7 @@ export interface ChatStreamRoutesDeps {
   conversationCompressionService: ConversationCompressionService
   visionProxyService: VisionProxyService
   mcpService?: McpService
-  extensionInstallService?: ExtensionInstallService
+  extensionInstallService?: ExtensionInstallServiceLike
 }
 
 export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
