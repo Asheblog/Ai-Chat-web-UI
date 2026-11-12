@@ -64,7 +64,7 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
   {
     provider: "openai",
     label: "OpenAI",
-    description: "官方 OpenAI 端点，或 NewAPI 等兼容网关；按需选择 Chat Completions 或 Responses 协议",
+    description: "官方 OpenAI 端点，或 NewAPI 等兼容网关；进入配置后选择 Chat Completions 或 Responses 协议",
     icon: Bot,
     baseUrl: "https://api.openai.com/v1",
     authType: "bearer",

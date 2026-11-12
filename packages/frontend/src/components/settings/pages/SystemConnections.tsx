@@ -29,10 +29,8 @@ import {
 import { ProviderTemplateCard } from "@/components/settings/system-connections/provider-template-card"
 import {
   getProviderCountProviders,
-  getProviderTemplate,
   PROVIDER_TEMPLATES,
   type ProviderTemplate,
-  type ProviderTemplateKey,
 } from "@/components/settings/system-connections/provider-templates"
 import {
   createFormFromTemplate,
@@ -271,28 +269,21 @@ export function SystemConnectionsPage() {
     })
   }
 
-  /** 模板卡/第 1 步：预填表单并进入第 2 步；OpenAI 卡可带上选中的协议 */
-  const handleSelectTemplate = (
-    template: ProviderTemplate,
-    provider: ProviderTemplateKey = template.provider,
-  ) => {
-    const resolved = provider === template.provider ? template : getProviderTemplate(provider) ?? template
-    setForm(createFormFromTemplate(resolved))
+  /** 模板卡/第 1 步：预填表单并进入第 2 步；协议在第 2 步选择 */
+  const handleSelectTemplate = (template: ProviderTemplate) => {
+    setForm(createFormFromTemplate(template))
     setSheet({
       open: true,
       mode: "create",
       step: 2,
-      title: `配置 ${resolved.label}`,
+      title: `配置 ${template.label}`,
       description: template.description,
     })
   }
 
-  const openTemplateWizard = (
-    template: ProviderTemplate,
-    provider: ProviderTemplateKey = template.provider,
-  ) => {
+  const openTemplateWizard = (template: ProviderTemplate) => {
     cancelEdit()
-    handleSelectTemplate(template, provider)
+    handleSelectTemplate(template)
   }
 
   const handleStepChange = (step: WizardStep) => {

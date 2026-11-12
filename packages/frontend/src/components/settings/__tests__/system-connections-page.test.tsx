@@ -153,13 +153,14 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
     expect(screen.queryByTestId("provider-template-openai_interleave")).not.toBeInTheDocument()
   })
 
-  test("模板卡可访问名 = 「配置{label}」；OpenAI 卡用独立配置按钮避免嵌套 select", async () => {
+  test("模板卡可访问名 = 「配置{label}」，三张卡都是整卡按钮", async () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
+    expect(screen.getByRole("button", { name: "配置OpenAI" })).toBe(getCard("openai"))
     expect(screen.getByRole("button", { name: "配置Google" })).toBe(getCard("google_genai"))
     expect(screen.getByRole("button", { name: "配置Anthropic" })).toBe(getCard("anthropic"))
-    expect(within(getCard("openai")).getByRole("button", { name: "配置OpenAI" })).toBeInTheDocument()
+    expect(screen.queryByRole("combobox", { name: "OpenAI 接口协议" })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "配置OpenAI（交错思考）" })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "配置Ollama" })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "配置Azure" })).not.toBeInTheDocument()
@@ -313,7 +314,7 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
     })
 
-    await userEvent.click(within(getCard("openai")).getByRole("button", { name: "配置OpenAI" }))
+    await userEvent.click(getCard("openai"))
     dialog = await screen.findByRole("dialog")
 
     expect(within(dialog).getByLabelText(/显示名称/)).toHaveValue("OpenAI")
@@ -337,16 +338,16 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
     expect(within(screen.getByRole("dialog")).getByLabelText(/显示名称/)).toHaveValue("Google")
   })
 
-  test("OpenAI 卡选择 Responses 后配置：预填 Responses 并提交 openai_responses", async () => {
+  test("OpenAI 卡进入配置后选择 Responses，提交 openai_responses", async () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
-    const card = getCard("openai")
-    await userEvent.click(within(card).getByRole("combobox", { name: "OpenAI 接口协议" }))
-    await userEvent.click(await screen.findByRole("option", { name: "Responses" }))
-    await userEvent.click(within(card).getByRole("button", { name: "配置OpenAI" }))
+    await userEvent.click(getCard("openai"))
 
     const dialog = await screen.findByRole("dialog")
+    expect(within(dialog).getByLabelText(/显示名称/)).toHaveValue("OpenAI")
+    await userEvent.click(within(dialog).getByRole("combobox", { name: "接口协议" }))
+    await userEvent.click(await screen.findByRole("option", { name: "Responses" }))
     expect(within(dialog).getByLabelText(/显示名称/)).toHaveValue("OpenAI Responses")
     expect(within(dialog).getByRole("combobox", { name: "接口协议" })).toHaveTextContent("Responses")
 
@@ -364,7 +365,7 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
-    await userEvent.click(within(getCard("openai")).getByRole("button", { name: "配置OpenAI" }))
+    await userEvent.click(getCard("openai"))
     let dialog = await screen.findByRole("dialog")
     expect(within(dialog).getByLabelText(/显示名称/)).toHaveValue("OpenAI")
 
