@@ -5,7 +5,6 @@ import { Layers } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SectionRail } from "../../components/section-rail"
 import { SegmentedTabs } from "../../components/segmented-tabs"
-import { peekFlash } from "../../settings-flash-bus"
 import {
   EXTENSION_SECTIONS,
   EXTENSION_SEGMENTS,
@@ -35,10 +34,27 @@ function isExtensionSection(value: unknown): value is ExtensionSection {
  * 本任务只落地骨架：段路由、卡定位（flash-bus + 三个 window 事件）与占位面板；
  * 各段真实内容由后续任务接入。
  */
-export function ExtensionsPage({ hostId }: { hostId?: string }): JSX.Element {
-  const [section, setSection] = useState<ExtensionSection>("overview")
-  const [mcpSegment, setMcpSegment] = useState(DEFAULT_MCP_SEGMENT)
-  const [skillSegment, setSkillSegment] = useState(DEFAULT_SKILL_SEGMENT)
+export function ExtensionsPage({
+  hostId,
+  initialCardKey,
+}: {
+  hostId?: string
+  /** 冷启动目标卡：由 renderSystemLeaf 在渲染期读取 flash-bus 后传入（页面挂载前请求已被 wrapper 消费） */
+  initialCardKey?: string
+}): JSX.Element {
+  // 冷启动首次渲染就必须落在目标段/次级标签上，否则卡元素根本不会挂载，wrapper 的重试必然落空
+  const initialRoute = initialCardKey ? routeForCard(initialCardKey) : null
+  const [section, setSection] = useState<ExtensionSection>(initialRoute?.section ?? "overview")
+  const [mcpSegment, setMcpSegment] = useState(
+    initialRoute?.section === "mcp"
+      ? (initialRoute.segment ?? DEFAULT_MCP_SEGMENT)
+      : DEFAULT_MCP_SEGMENT,
+  )
+  const [skillSegment, setSkillSegment] = useState(
+    initialRoute?.section === "skills"
+      ? (initialRoute.segment ?? DEFAULT_SKILL_SEGMENT)
+      : DEFAULT_SKILL_SEGMENT,
+  )
 
   /** 段路由的唯一入口：卡定位、select 事件与页头按钮都走这里。 */
   const applyRoute = useCallback((route: ExtensionCardRoute | null) => {
@@ -50,11 +66,20 @@ export function ExtensionsPage({ hostId }: { hostId?: string }): JSX.Element {
     if (route.section === "skills" && SEGMENT_KEYS.skills?.includes(segment)) setSkillSegment(segment)
   }, [])
 
-  // 1. 挂载：dynamic 异步挂载期间的定位请求由 flash-bus 兜底读取（只读，不抢消费）。
+  // 1. 冷启动：initialCardKey 已在首帧决定段，这里把定位请求重新广播一次，
+  //    让 SystemLeafWrapper 在目标卡真正挂载后重开一轮重试（它早先那轮随首次提交已经耗尽）。
   useEffect(() => {
-    const pending = peekFlash("extensions", hostId)
-    if (pending?.cardKey) applyRoute(routeForCard(pending.cardKey))
-  }, [hostId, applyRoute])
+    if (!initialCardKey) return
+    // 放到下一个宏任务：保证 SystemLeafWrapper 的事件监听已注册（子 effect 先于父 effect 执行）
+    const timer = window.setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent("aichat:settings-flash-card", {
+          detail: { leafKey: "extensions", cardKey: initialCardKey, hostId },
+        }),
+      )
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [initialCardKey, hostId])
 
   // 2. 已挂载时宿主热更新定位请求。
   useEffect(() => {

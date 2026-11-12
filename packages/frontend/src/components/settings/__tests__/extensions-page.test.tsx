@@ -79,20 +79,43 @@ describe("ExtensionsPage 段路由", () => {
     expect(rootOf(container).dataset.section).toBe("overview")
   })
 
-  test("挂载时按 flash 请求的卡 key 定位到段与次级标签", () => {
+  test("冷启动带 initialCardKey 时首帧就落在目标段与次级标签", () => {
     requestFlash({ leafKey: "extensions", cardKey: "extensions:mcp-secrets", hostId: "layout" })
 
-    const { container } = render(<ExtensionsPage hostId="layout" />)
+    const { container } = render(
+      <ExtensionsPage hostId="layout" initialCardKey="extensions:mcp-secrets" />,
+    )
 
     const root = rootOf(container)
     expect(root.dataset.section).toBe("mcp")
     expect(root.dataset.segment).toBe("secrets")
   })
 
+  test("冷启动后在下一宏任务重播定位请求，供 wrapper 重开重试窗口", async () => {
+    const seen: Array<{ leafKey?: string; cardKey?: string; hostId?: string }> = []
+    const listener = (event: Event) => {
+      seen.push((event as CustomEvent<{ leafKey?: string; cardKey?: string; hostId?: string }>).detail)
+    }
+    window.addEventListener("aichat:settings-flash-card", listener)
+
+    render(<ExtensionsPage hostId="layout" initialCardKey="extensions:mcp-installations" />)
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+    window.removeEventListener("aichat:settings-flash-card", listener)
+
+    expect(seen).toContainEqual({
+      leafKey: "extensions",
+      cardKey: "extensions:mcp-installations",
+      hostId: "layout",
+    })
+  })
+
   test("其它宿主（dialog）的 flash 请求不参与本页定位且不被清空", () => {
     requestFlash({ leafKey: "extensions", cardKey: "extensions:mcp-secrets", hostId: "dialog" })
 
-    const { container } = render(<ExtensionsPage hostId="layout" />)
+    const { container } = render(<ExtensionsPage hostId="layout" initialCardKey={undefined} />)
 
     expect(rootOf(container).dataset.section).toBe("overview")
     expect(consumeFlash()).toEqual({
@@ -158,6 +181,18 @@ describe("注册表挂载路径", () => {
     render(<>{renderSystemLeaf("extensions", "layout")}</>)
 
     expect(await screen.findByText("能力扩展")).toBeInTheDocument()
+  })
+
+  test("冷启动搜索定位：renderSystemLeaf 渲染期读取 flash 请求并落到目标段（回归：曾落回总览）", async () => {
+    requestFlash({ leafKey: "extensions", cardKey: "extensions:mcp-secrets", hostId: "layout" })
+
+    const { container } = render(<>{renderSystemLeaf("extensions", "layout")}</>)
+
+    const root = await screen.findByRole("heading", { name: "能力扩展" })
+    expect(root).toBeInTheDocument()
+    const panel = container.querySelector<HTMLElement>("[data-section]")
+    expect(panel?.dataset.section).toBe("mcp")
+    expect(panel?.dataset.segment).toBe("secrets")
   })
 
   test("未知与已废弃 leaf key 仍返回 null", () => {

@@ -20,6 +20,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import type { ComponentType, ReactNode } from "react"
+import { peekFlash } from "./settings-flash-bus"
 import { SystemLeafWrapper } from "./system-leaf-wrapper"
 
 // Leaf metadata
@@ -294,10 +295,17 @@ export const DEFAULT_SYSTEM_LEAF = "overview"
 export function renderSystemLeaf(key: string, hostId?: string): ReactNode | null {
   const Component = leafComponentMap[key]
   if (!Component) return null
+  // 渲染期读取（不消费）待处理定位请求：dynamic 页面挂载晚于 wrapper 的挂载副作用，
+  // 等页面自己的 effect 再读就已经被 consumeFlash 取走，冷启动会落回默认段。
+  const initialCardKey = peekFlash(key, hostId)?.cardKey
   return (
     <SystemLeafWrapper leafKey={key} hostId={hostId}>
-      {/* 能力扩展页需要宿主标识来精确匹配卡定位请求；其余叶子保持无 props 渲染 */}
-      {key === "extensions" ? <ExtensionsPage hostId={hostId} /> : <Component />}
+      {/* 能力扩展页需要宿主标识与冷启动目标卡；其余叶子保持无 props 渲染 */}
+      {key === "extensions" ? (
+        <ExtensionsPage hostId={hostId} initialCardKey={initialCardKey} />
+      ) : (
+        <Component />
+      )}
     </SystemLeafWrapper>
   )
 }
