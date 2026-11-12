@@ -94,11 +94,13 @@ export function McpSection({
         <p className="text-xs text-muted-foreground">{GLOBAL_OFF_HINT}</p>
       )}
 
+      {/* 段内容需要自己的承载面：表格与空态在页面底色上会显得悬空（Skills/工具段由 v2-panel 卡片自理） */}
       <div
         data-card-key={`extensions:mcp-${segment}`}
         id={segmentPanelId(TAB_PREFIX, segment)}
         role="tabpanel"
         aria-labelledby={segmentTabId(TAB_PREFIX, segment)}
+        className="v2-panel p-4"
       >
         <ActiveContent />
       </div>
