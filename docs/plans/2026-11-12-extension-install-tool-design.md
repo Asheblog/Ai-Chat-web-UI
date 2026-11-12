@@ -13,7 +13,7 @@
 | 事实 | 证据 | 后果 |
 |---|---|---|
 | MCP 只有数据模型和配置界面，没有运行时 | `app-container.ts:329` 未注入 `runtimeClient`；`mcp-service.ts:282`/`:447` 直接抛「Runtime Client 未配置」；全仓无 `@modelcontextprotocol/*` 依赖 | MCP 装完也调不通，工具必须如实返回 `registered_unverified`，不能假装成功 |
-| 本地包型 MCP 被 ADR-0015 锁在沙箱网关里 | `docs/adr/0015-...`；`mcp-service.ts:288`/`:456` 对 `local_package` 抛 501 | 首版不做网关；`npx/uvx` 型只能登记为 `pending_gateway` |
+| 本地包型 MCP 被 ADR-0015 锁在沙箱网关里 | `docs/adr/0015-...`；改造前 `mcp-service.ts` 对 `local_package` 抛 501 | 由容器网关承载（`docker run -i` 受限容器）；宿主机 docker 不可用时才登记 `pending_gateway` |
 | Skill 安装链路已完整 | `skill-installer.ts` `installFromGithub()`；`POST /api/skills/install` | 工具可以直接复用，Phase 1 就能端到端跑通 |
 | 工具层有完整扩展点 | `tool-handler-types.ts:80` `IToolHandler`；`registry.ts:193` 工厂；`agent-web-search-response.ts:665` 装配点 | 加工具不需要改编排器 |
 | 会话上下文已带身份 | `ToolCallContext.actorUserId` / `actorIdentifier` / `sendToolEvent` | 权限判定与安装进度渲染都有现成通道 |
@@ -26,7 +26,7 @@
 parameters: {
   source: string        // GitHub URL / owner/repo@ref:subdir / github.com/.../tree|blob/...
   kind?: 'auto' | 'mcp' | 'skill'   // 默认 auto
-  scope?: 'user' | 'system'         // 默认 user；system 仅管理员
+  scope?: 'user' | 'system'         // 缺省按角色：管理员 system，其余 user；system 仅管理员
   enable?: boolean                  // 默认 true
 }
 ```
@@ -105,12 +105,12 @@ source ──parse──▶ {owner, repo, ref, subdir?}
 `install_extension` 注册、判定表、Skill 安装到可用、MCP 登记到 `registered_unverified`/`pending_gateway`。
 验收：聊天里贴一条 Skill 仓库链接 → AI 调工具 → 装好并在「版本 / 绑定」里出现；贴 MCP 仓库 → 安装模板 + 连接 + 绑定生成，工具清单为空且状态如实。
 
-**Phase 2 — MCP 运行时（远程）**
-新增 `mcp-runtime-client.ts`（`@modelcontextprotocol/sdk` 的 `Client` + `StreamableHTTPClientTransport`/`SSEClientTransport`），注入 `app-container`。
+**Phase 2 — MCP 运行时（远程，已实现）**
+新增 `mcp-runtime-client.ts`（自实现 JSON-RPC 2.0 + Streamable HTTP / HTTP+SSE，零新增依赖），注入 `app-container`。
 验收：远程 MCP 装完 `status=ready` 且能真调通一个工具；`refresh-tools` 不再 500。
 
-**Phase 3 — MCP Gateway（本地包）**
-复用 `docker-socket-proxy` 与 `workspace/docker-executor.ts` 在容器内跑 `npx/uvx`，落实 ADR-0015。
+**Phase 3 — MCP Gateway（本地包，已实现）**
+`docker run -i` 承载 stdio，复用 `DOCKER_HOST`（生产即 docker-socket-proxy），容器开启 cap-drop / no-new-privileges / pids·cpus·memory 限额，落实 ADR-0015。
 验收：stdio 型装完 `status=ready`，进程跑在容器里而非宿主。
 
 ## 8. 文件影响面
@@ -182,6 +182,9 @@ source ──parse──▶ {owner, repo, ref, subdir?}
 7. **默认范围按角色**：未显式传 `scope` 时，管理员装系统级模板（§6），普通用户装私有；显式传值永远优先。
 8. **安装审计**：只复用工具事件与 `McpInstallation` / `McpConnection` / Skill 版本记录，不新增审计表（§6「沿用已有」）。
 9. **仅 ACTIVE 用户可安装**：`PENDING` 状态账号直接拒绝，避免待审批账号通过工具绕过注册审批。
+10. **额外识别 `docker run`**：README 里以 `docker run` 声明启动方式时也能识别为本地包（§4 判定表未列，属扩展）；镜像引用必须是 `registry/namespace/name[:tag]` 形式，宿主路径一律拒绝。
+11. **密钥传递**：容器凭据走 0600 临时 env-file 注入，不用 `-e KEY=VALUE`（避免留在宿主进程列表）。
+12. **envJson 语义**：安装模板的 `envJson` 在自动安装时只登记 `{ requiredEnv: [...] }`，不写密钥值；值由用户在 Secret Vault 中维护。
 
 ### 使用示例
 
