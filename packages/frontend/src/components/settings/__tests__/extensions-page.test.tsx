@@ -249,6 +249,29 @@ describe("ExtensionsPage 段路由", () => {
     expect(rootOf(container).dataset.segment).toBeUndefined()
   })
 
+  test("点击左栏「内置工具」切段后渲染段头与 tools 面板", async () => {
+    const { container } = await renderPage(<ExtensionsPage />)
+
+    // 段内两卡读的是同一个设置（mock 已给非空），flush 掉它们的初次渲染再断言
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "内置工具" }))
+    })
+
+    expect(screen.getByRole("heading", { name: "内置工具" })).toBeInTheDocument()
+    expect(container.querySelector('[data-section-panel="tools"]')).not.toBeNull()
+  })
+
+  test("点击左栏「对话增强」切段后渲染段头与 extra 面板", async () => {
+    const { container } = await renderPage(<ExtensionsPage />)
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "对话增强" }))
+    })
+
+    expect(screen.getByRole("heading", { name: "对话增强" })).toBeInTheDocument()
+    expect(container.querySelector('[data-section-panel="extra"]')).not.toBeNull()
+  })
+
   test("页头两个按钮分别切到「新增 MCP 服务」与「从 GitHub 安装 Skill」的位置", async () => {
     const { container } = await renderPage(<ExtensionsPage />)
 

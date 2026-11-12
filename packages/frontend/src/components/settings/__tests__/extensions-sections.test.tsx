@@ -1,11 +1,22 @@
 import React from "react"
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { OverviewSection } from "../pages/extensions/sections/overview-section"
 import { McpSection, type McpSegment } from "../pages/extensions/sections/mcp-section"
 import { ToolsSection } from "../pages/extensions/sections/tools-section"
 import { ExtraSection } from "../pages/extensions/sections/extra-section"
 import { baseSettings } from "./system-settings-pages.fixtures"
+
+// jsdom 未实现 Pointer Capture API，Radix Select 打开菜单依赖它
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = () => false
+  Element.prototype.setPointerCapture = () => {}
+  Element.prototype.releasePointerCapture = () => {}
+}
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {}
+}
 
 /**
  * 总览段单测：三路数据（系统设置 / Skill 待审批 / MCP 连接）全部 mock，
@@ -489,6 +500,30 @@ describe("内置工具段：两卡与唯一控制点", () => {
 
     await act(async () => {})
   })
+
+  test("主开关 true→false 后保存，payload 里 pythonToolEnable 为 false 且其余 key 不变", async () => {
+    mockSettings({ ...toolsAndExtrasSettings, pythonToolEnable: true })
+    render(<ToolsSection />)
+    const card = featureCardOf("Python 工具")
+
+    const toggle = screen.getByRole("switch", { name: "启用Python 工具" })
+    expect(toggle).toHaveAttribute("aria-checked", "true")
+
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute("aria-checked", "false")
+    fireEvent.click(within(card).getByRole("button", { name: "保存 Python 工具设置" }))
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1))
+    expect(updateSpy.mock.calls[0][0]).toEqual({
+      pythonToolEnable: false,
+      pythonToolTimeoutMs: 8000,
+      pythonToolMaxOutputChars: 4000,
+      pythonToolMaxSourceChars: 4000,
+      agentMaxToolIterations: 4,
+    })
+
+    await act(async () => {}) // 冲掉运行时状态请求
+  })
 })
 
 describe("对话增强段：两卡与保存", () => {
@@ -548,6 +583,49 @@ describe("对话增强段：两卡与保存", () => {
       titleSummaryMaxLength: 20,
       titleSummaryModelSource: "current",
     })
+  })
+})
+
+describe("对话增强段：草稿链路", () => {
+  test("标题总结：长度改 30 + 模型来源切到「指定模型（暂不支持）」后保存，payload 精确 3 个 key", async () => {
+    mockSettings(toolsAndExtrasSettings)
+    render(<ExtraSection />)
+    const card = featureCardOf("标题智能总结")
+
+    // 先开启智能标题：关闭态下长度输入与模型选择都是 disabled，改不动
+    const titleSummaryEnabled = true
+    fireEvent.click(within(card).getAllByRole("switch")[0])
+    fireEvent.change(within(card).getByDisplayValue("20"), { target: { value: "30" } })
+
+    await userEvent.click(within(card).getByRole("combobox"))
+    await userEvent.click(await screen.findByRole("option", { name: "指定模型（暂不支持）" }))
+
+    fireEvent.click(within(card).getByRole("button", { name: "保存标题总结设置" }))
+
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1))
+    expect(updateSpy.mock.calls[0][0]).toEqual({
+      titleSummaryEnabled,
+      titleSummaryMaxLength: 30,
+      titleSummaryModelSource: "specified",
+    })
+  })
+
+  test("乱斗：改每日次数后点「还原更改」，输入框回到 store 值且保存按钮重新禁用", async () => {
+    mockSettings(toolsAndExtrasSettings)
+    render(<ExtraSection />)
+    const card = featureCardOf("模型大乱斗")
+    const saveButton = within(card).getByRole("button", { name: "保存乱斗设置" })
+    expect(saveButton).toBeDisabled()
+
+    fireEvent.change(within(card).getByDisplayValue("8"), { target: { value: "12" } })
+    expect(within(card).getByDisplayValue("12")).toBeInTheDocument()
+    expect(saveButton).toBeEnabled()
+
+    fireEvent.click(within(card).getByRole("button", { name: "还原更改" }))
+
+    expect(within(card).getByDisplayValue("8")).toBeInTheDocument()
+    expect(saveButton).toBeDisabled()
+    expect(updateSpy).not.toHaveBeenCalled()
   })
 })
 
