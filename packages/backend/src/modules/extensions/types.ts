@@ -56,7 +56,6 @@ export interface InstallPlan {
   command?: string
   args?: string[]
   envKeys?: ExtensionEnvRequirement[]
-  headers?: Record<string, string>
 
   // --- kind = skill ---
   /** Skill 实际所在子目录（相对仓库根） */

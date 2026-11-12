@@ -1,4 +1,5 @@
 import type { McpRuntimeClient, McpToolManifest } from './mcp-service'
+import { parseMcpArgs, parseMcpConfigJson, pickStringRecord } from './mcp-connection-config'
 import { McpProtocolClient } from './runtime/client'
 import { StreamableHttpTransport, SseHttpTransport } from './runtime/http-transport'
 import { DockerStdioTransport, resolveGatewayTarget, McpGatewayError } from './runtime/docker-stdio-transport'
@@ -30,39 +31,12 @@ export interface McpRuntimeClientDeps {
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.MCP_RUNTIME_TIMEOUT_MS || 30000)
 
-function parseConfig(configJson?: string): Record<string, any> {
-  if (!configJson) return {}
-  try {
-    const parsed = JSON.parse(configJson)
-    return parsed && typeof parsed === 'object' ? parsed : {}
-  } catch {
-    return {}
-  }
-}
-
-function parseArgs(raw: string[] | null | undefined, configJson?: string): string[] {
-  if (Array.isArray(raw) && raw.length > 0) return raw.map(String)
-  const config = parseConfig(configJson)
-  const nested = config?.args
-  if (Array.isArray(nested)) return nested.map(String)
-  return []
-}
-
-function pickStringRecord(value: unknown): Record<string, string> {
-  if (!value || typeof value !== 'object') return {}
-  const result: Record<string, string> = {}
-  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof item === 'string') result[key] = item
-  }
-  return result
-}
-
 export function resolveConnectionConfig(connection: McpRuntimeConnection): McpRuntimeConnectionConfig {
-  const config = parseConfig(connection.configJson)
+  const config = parseMcpConfigJson(connection.configJson)
   return {
     env: pickStringRecord(config?.env),
     headers: pickStringRecord(config?.headers),
-    args: parseArgs(connection.args ?? null, connection.configJson),
+    args: parseMcpArgs(connection.args ?? null, connection.configJson),
     command: typeof config?.command === 'string' ? config.command : connection.command ?? undefined,
     endpoint: typeof config?.endpoint === 'string' ? config.endpoint : connection.endpoint ?? undefined,
   }

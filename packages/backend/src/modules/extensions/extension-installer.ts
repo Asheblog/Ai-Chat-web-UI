@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../db'
-import type { McpService } from '../../services/mcp'
+import type { McpService } from '../../services/mcp/mcp-service'
 import type { InstallOutcome, InstallPlan, InstallStatus, ExtensionEnvRequirement } from './types'
 import { toNamespaceKey } from './source-parser'
 
@@ -229,7 +229,7 @@ export class ExtensionInstaller {
         ownerUserId: scope === 'user' ? actorUserId : null,
         name: plan.name,
         enabled: enable,
-        configJson: JSON.stringify({ env: {}, headers: plan.headers ?? {}, envKeys }),
+        configJson: JSON.stringify({ env: {}, headers: {}, envKeys }),
       }, actorIsAdmin)
       connectionId = connection.id
 

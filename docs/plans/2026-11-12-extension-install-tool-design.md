@@ -150,7 +150,8 @@ source ──parse──▶ {owner, repo, ref, subdir?}
 - **回滚**：installation 建成功而 connection 失败时不留孤儿记录
 - **工具名冲突**：`install_extension` 不得与 MCP 动态 `mcp_*` 前缀或既有工具重名
 - **识别误判**：Skill 与 MCP 同时命中必须返回 ambiguous 让模型追问，不得默认选一个
-- **大仓库**：repo-probe 只取白名单文件（≤8 个、单文件 ≤256KB），不得整包下载
+- **大仓库**：repo-probe 只取白名单文件（≤10 个、单文件 ≤256KB、总量 ≤1MB），不得整包下载
+
 ---
 
 ## 11. 实现落点
@@ -176,6 +177,11 @@ source ──parse──▶ {owner, repo, ref, subdir?}
 2. **工具激活条件**：不是常驻注册，而是消息里出现 GitHub 链接（`detectExtensionSourceInMessage`）时才把请求放进工具循环，避免普通聊天承担工具 schema 与多轮开销。
 3. **网关镜像与配额走环境变量**：`MCP_GATEWAY_NODE_IMAGE`、`MCP_GATEWAY_PYTHON_IMAGE`、`MCP_GATEWAY_CPUS`、`MCP_GATEWAY_MEMORY`、`MCP_GATEWAY_PIDS_LIMIT`、`MCP_GATEWAY_NETWORK`；docker 不可用时如实返回 `pending_gateway`。
 4. **设置开关**：`extension_install_tool_enable`（默认开启），落在能力扩展页头「AI 自助安装」。
+5. **返回字段对齐 §3**：对外用 `detected` 描述判定结果（内部类型仍叫 `InstallPlan`），并补 `candidates` 供 ambiguous 时追问。
+6. **多出两个状态**：`already_installed`（同仓库重复安装直接复用）与 `pending_validation`（Skill 版本待校验）；§3 的五态仍是主路径。
+7. **默认范围取 §3 的 `user`**：§6 那行「管理员默认仍装 system」与 §3 参数默认冲突，实现以 §3 为准，管理员要系统级需显式传 `scope=system`。
+8. **安装审计**：只复用工具事件与 `McpInstallation` / `McpConnection` / Skill 版本记录，不新增审计表（§6「沿用已有」）。
+9. **仅 ACTIVE 用户可安装**：`PENDING` 状态账号直接拒绝，避免待审批账号通过工具绕过注册审批。
 
 ### 使用示例
 

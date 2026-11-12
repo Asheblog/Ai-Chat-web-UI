@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../db'
-import type { McpService } from '../../services/mcp'
+import type { McpService } from '../../services/mcp/mcp-service'
 import { probeRepository } from './github-probe'
 import { detectExtensionPlan } from './detector'
 import { parseExtensionSource, ExtensionSourceError } from './source-parser'
@@ -46,7 +46,7 @@ export class ExtensionInstallService implements ExtensionInstallServiceLike {
       select: { role: true, status: true },
     })
     if (!user) return { isAdmin: false, active: false }
-    return { isAdmin: user.role === 'ADMIN', active: user.status !== 'DISABLED' }
+    return { isAdmin: user.role === 'ADMIN', active: user.status === 'ACTIVE' }
   }
 
   async installFromSource(input: InstallFromSourceInput): Promise<InstallOutcome> {

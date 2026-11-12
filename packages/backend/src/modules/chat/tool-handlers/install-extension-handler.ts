@@ -7,6 +7,7 @@ import type {
   ToolDefinition,
   ToolHandlerResult,
 } from '../../../agent-runtime/tool-handler-types'
+import type { InstallOutcome, InstallPlan } from '../../extensions/types'
 
 export type { ExtensionInstallHandlerConfig }
 
@@ -52,6 +53,40 @@ const DEFINITION: ToolDefinition = {
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+/** 对外契约：规格 §3 用 detected 描述判定结果，内部类型仍叫 plan。 */
+function toDetected(plan: InstallPlan) {
+  return {
+    kind: plan.kind,
+    name: plan.name,
+    confidence: plan.confidence,
+    reason: plan.reason,
+    source: plan.source,
+    sourceUrl: plan.sourceUrl,
+    sourceType: plan.sourceType,
+    transport: plan.transport,
+    endpoint: plan.endpoint,
+    command: plan.command,
+    args: plan.args,
+    subdir: plan.subdir,
+    envKeys: plan.envKeys,
+  }
+}
+
+function toToolPayload(outcome: InstallOutcome) {
+  return {
+    ok: outcome.ok,
+    status: outcome.status,
+    detected: outcome.plan ? toDetected(outcome.plan) : undefined,
+    candidates: outcome.candidates?.map(toDetected),
+    installed: outcome.installed,
+    tools: outcome.tools,
+    requiredSecrets: outcome.requiredSecrets,
+    nextSteps: outcome.nextSteps,
+    warnings: outcome.warnings,
+    error: outcome.error,
+  }
 }
 
 /**
@@ -148,7 +183,7 @@ export class InstallExtensionToolHandler implements IToolHandler {
         },
       })
 
-      return finish(JSON.stringify(outcome, null, 2))
+      return finish(JSON.stringify(toToolPayload(outcome), null, 2))
     } catch (error) {
       const message = (error as Error)?.message ?? 'unknown'
       context.sendToolEvent({

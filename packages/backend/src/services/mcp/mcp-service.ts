@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 import type { Actor } from '../../types'
 import { prisma as defaultPrisma } from '../../db'
+import { parseMcpArgsJson } from './mcp-connection-config'
 import {
   PrismaMcpRepository,
   type McpRepository,
@@ -480,14 +481,7 @@ export class McpService {
   }
 
   private parseArgs(raw?: string | null): string[] | null {
-    if (!raw) return null
-    try {
-      const parsed = JSON.parse(raw)
-      if (!Array.isArray(parsed)) return null
-      return parsed.map((item) => String(item))
-    } catch {
-      return null
-    }
+    return parseMcpArgsJson(raw)
   }
 
   private safeParseJson(raw: string): Record<string, unknown> {
