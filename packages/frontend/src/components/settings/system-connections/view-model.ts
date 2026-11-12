@@ -1,4 +1,5 @@
 import type { SystemConnectionGroup } from "@/services/system-connections"
+import { ANTHROPIC_BASE_URL } from "./provider-templates"
 
 export type HealthState = "healthy" | "warning" | "error"
 export type WizardMode = "create" | "edit"
@@ -52,7 +53,7 @@ export function getModelCount(group: SystemConnectionGroup) {
 
 export function baseUrlPlaceholder(provider: string) {
   if (provider === "google_genai") return "https://generativelanguage.googleapis.com/v1beta"
-  if (provider === "anthropic") return "https://api.anthropic.com/v1"
+  if (provider === "anthropic") return ANTHROPIC_BASE_URL
   return "https://api.openai.com/v1"
 }
 

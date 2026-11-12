@@ -5,6 +5,9 @@ import {
   type LucideIcon,
 } from "lucide-react"
 
+export const ANTHROPIC_BASE_URL = "https://api.anthropic.com/v1"
+export const ANTHROPIC_API_VERSION = "2023-06-01"
+
 export type ProviderTemplateKey =
   | "openai"
   | "openai_responses"
@@ -80,7 +83,7 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
     label: "Anthropic",
     description: "Claude 官方端点，使用 Anthropic Messages API（/v1/messages）",
     icon: MessagesSquare,
-    baseUrl: "https://api.anthropic.com/v1",
+    baseUrl: ANTHROPIC_BASE_URL,
     authType: "bearer",
   },
 ]

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react"
 import { Label } from "@/components/ui/label"
+import { ANTHROPIC_API_VERSION, ANTHROPIC_BASE_URL } from "./provider-templates"
 
 export function Field({
   label,
@@ -49,10 +50,10 @@ export function HelperText({ provider }: { provider: string }) {
   if (provider === "anthropic") {
     return (
       <p className="text-xs leading-5 text-muted-foreground">
-        允许完整 Base URL。官方端点：<span className="font-mono">https://api.anthropic.com/v1</span>；
+        允许完整 Base URL。官方端点：<span className="font-mono">{ANTHROPIC_BASE_URL}</span>；
         兼容网关也建议填写到版本层。请求会自动携带{" "}
         <span className="font-mono">x-api-key</span> 与{" "}
-        <span className="font-mono">anthropic-version: 2023-06-01</span>，可在自定义 Headers 中覆盖版本或追加 beta 头。
+        <span className="font-mono">anthropic-version: {ANTHROPIC_API_VERSION}</span>，可在自定义 Headers 中覆盖版本或追加 beta 头。
       </p>
     )
   }

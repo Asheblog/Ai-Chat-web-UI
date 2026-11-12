@@ -261,6 +261,19 @@ export async function verifyConnection(cfg: ConnectionConfig): Promise<void> {
   }
 }
 
+const fetchOpenAIStyleModelList = async (
+  fetchImpl: FetchLike,
+  url: string,
+  headers: Record<string, string>,
+  signal: AbortSignal,
+  label: string,
+): Promise<any[]> => {
+  const res = await fetchImpl(url, { headers, signal })
+  if (!res.ok) throw new Error(`${label} models failed: ${res.status}`)
+  const json: any = await res.json()
+  return Array.isArray(json?.data) ? json.data : []
+}
+
 /**
  * 拉取一个连接的模型列表，返回 CatalogItem[]
  * 若配置了 modelIds，则直接以这些 ID 合成列表，不发请求。
@@ -307,18 +320,24 @@ export async function fetchModelsForConnection(cfg: ConnectionConfig): Promise<C
   try {
     if (cfg.provider === 'anthropic') {
       const normalizedBase = normalizeHttpBaseUrl(cfg.baseUrl, 'Anthropic')
-      const res = await fetchImpl(`${normalizedBase}/models?limit=1000`, { headers, signal: ctrl.signal })
-      if (!res.ok) throw new Error(`Anthropic models failed: ${res.status}`)
-      const json: any = await res.json()
-      const list: any[] = Array.isArray(json?.data) ? json.data : []
+      const list = await fetchOpenAIStyleModelList(
+        fetchImpl,
+        `${normalizedBase}/models?limit=1000`,
+        headers,
+        ctrl.signal,
+        'Anthropic',
+      )
       return list.map((m) => apply(m.id, m.display_name || m.name || m.id))
     }
     if (cfg.provider === 'openai' || cfg.provider === 'openai_responses') {
       const normalizedBase = normalizeHttpBaseUrl(cfg.baseUrl, 'OpenAI')
-      const res = await fetchImpl(`${normalizedBase}/models`, { headers, signal: ctrl.signal })
-      if (!res.ok) throw new Error(`OpenAI models failed: ${res.status}`)
-      const json: any = await res.json()
-      const list: any[] = Array.isArray(json?.data) ? json.data : []
+      const list = await fetchOpenAIStyleModelList(
+        fetchImpl,
+        `${normalizedBase}/models`,
+        headers,
+        ctrl.signal,
+        'OpenAI',
+      )
       return list.map((m) => apply(m.id, m.name || m.id))
     }
     if (cfg.provider === 'google_genai') {
