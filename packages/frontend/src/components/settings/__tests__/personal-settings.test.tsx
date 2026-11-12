@@ -29,6 +29,13 @@ const settingsStoreMock = vi.hoisted(() => ({
   newConversationContextEnabled: false,
   setContextEnabled: vi.fn(),
   setNewConversationContextEnabled: vi.fn(),
+  // McpSection 的全局开关走 useSystemSettings（共享 store）
+  systemSettings: null,
+  isLoading: false,
+  error: null,
+  fetchSystemSettings: vi.fn(() => Promise.resolve()),
+  updateSystemSettings: vi.fn(() => Promise.resolve()),
+  clearError: vi.fn(),
 }))
 vi.mock("@/store/settings-store", () => ({
   useSettingsStore: () => settingsStoreMock,

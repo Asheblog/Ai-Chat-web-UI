@@ -9,7 +9,7 @@ import { InstallationsTab } from "@/components/settings/system-mcp/installations
 import { SecretsTab } from "@/components/settings/system-mcp/secrets-tab"
 import { ToolsTab } from "@/components/settings/system-mcp/tools-tab"
 import { Switch } from "@/components/ui/switch"
-import { getSystemSettings, updateSystemSettings } from "@/features/settings/api"
+import { useSystemSettings } from "@/hooks/use-system-settings"
 import { EXTENSION_SEGMENTS } from "../extensions-sections"
 
 /**
@@ -53,44 +53,31 @@ export function McpSection({
   segment: McpSegment
   onSegmentChange: (segment: McpSegment) => void
 }): JSX.Element {
-  const [enabled, setEnabled] = useState(true)
-  const [loading, setLoading] = useState(true)
+  // 全局开关走共享 settings store（不是裸 API）：同页总览与其他设置卡读同一份状态，
+  // 切回总览不会看到过期值。
+  const { settings, update, refresh } = useSystemSettings()
   const [saving, setSaving] = useState(false)
   const switchId = useId()
+  const enabled = Boolean(settings?.mcpGlobalEnabled ?? true)
+  const loading = settings === null
 
   useEffect(() => {
-    let cancelled = false
-    getSystemSettings()
-      .then((res) => {
-        if (cancelled) return
-        if (res.data?.mcpGlobalEnabled !== undefined) {
-          setEnabled(Boolean(res.data.mcpGlobalEnabled))
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
+    if (settings) return
+    void refresh().catch(() => {})
+  }, [settings, refresh])
 
-  // 乐观更新 + 失败回滚：与旧 MCP 页头完全一致。
   const handleToggle = useCallback(
     async (next: boolean) => {
       setSaving(true)
-      const prev = enabled
-      setEnabled(next)
       try {
-        await updateSystemSettings({ mcpGlobalEnabled: next })
+        await update({ mcpGlobalEnabled: next })
       } catch {
-        setEnabled(prev)
+        // 开关值直接来自 store：写入失败时 store 不变，UI 自动回到原状态
       } finally {
         setSaving(false)
       }
     },
-    [enabled],
+    [update],
   )
 
   const ActiveContent = SEGMENT_CONTENT[segment]

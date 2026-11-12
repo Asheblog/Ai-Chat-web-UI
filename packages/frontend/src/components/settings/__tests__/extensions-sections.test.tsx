@@ -24,16 +24,6 @@ vi.mock("@/features/mcp/api", () => ({
   listConnections: mcpApiMocks.listConnections,
 }))
 
-/** MCP 段页头的全局开关直接读写信箱设置接口，独立 mock 以便断言请求载荷。 */
-const settingsApiMocks = vi.hoisted(() => ({
-  getSystemSettings: vi.fn(),
-  updateSystemSettings: vi.fn(),
-}))
-vi.mock("@/features/settings/api", () => ({
-  getSystemSettings: settingsApiMocks.getSystemSettings,
-  updateSystemSettings: settingsApiMocks.updateSystemSettings,
-}))
-
 /**
  * 5 个既有 tab 组件背后各是一整组 mcp / secret-vault 请求。
  * 段级用例只关心标签、卡 key 与开关，用 stub 替换，避免连带 mock 三层 API。
@@ -55,6 +45,7 @@ vi.mock("@/components/settings/system-mcp/bindings-tab", () => ({
 }))
 
 const refreshSpy = vi.fn<() => Promise<void>>(() => Promise.resolve())
+const updateSpy = vi.fn<(patch: Record<string, unknown>) => Promise<void>>(() => Promise.resolve())
 
 const allEnabled = {
   mcpGlobalEnabled: true,
@@ -68,7 +59,7 @@ function mockSettings(settings: Record<string, unknown> | null) {
     isLoading: false,
     error: null,
     refresh: refreshSpy,
-    update: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+    update: updateSpy,
     clearError: vi.fn(),
   })
 }
@@ -95,8 +86,7 @@ beforeEach(() => {
   mockSettings(allEnabled)
   skillsApiMocks.listSkillApprovals.mockResolvedValue({ success: true, data: [] })
   mcpApiMocks.listConnections.mockResolvedValue({ success: true, data: [] })
-  settingsApiMocks.getSystemSettings.mockResolvedValue({ data: { mcpGlobalEnabled: true } })
-  settingsApiMocks.updateSystemSettings.mockResolvedValue({ data: {} })
+  updateSpy.mockReturnValue(Promise.resolve())
 })
 
 afterEach(() => {
@@ -308,7 +298,7 @@ describe("MCP 段：五标签与全局开关", () => {
   })
 
   test("全局关闭时安装模板不提示，切到「连接」显示全局关闭提示", async () => {
-    settingsApiMocks.getSystemSettings.mockResolvedValue({ data: { mcpGlobalEnabled: false } })
+    mockSettings({ ...allEnabled, mcpGlobalEnabled: false })
 
     await renderMcp()
 
@@ -321,7 +311,7 @@ describe("MCP 段：五标签与全局开关", () => {
     expect(screen.getByText(GLOBAL_OFF_HINT)).toBeInTheDocument()
   })
 
-  test("切换全局开关调用一次 updateSystemSettings({ mcpGlobalEnabled: false })", async () => {
+  test("切换全局开关走共享 store，只写一次 { mcpGlobalEnabled: false }", async () => {
     await renderMcp()
     const toggle = screen.getByRole("switch", { name: "全局 MCP 开关" })
     expect(toggle).toHaveAttribute("aria-checked", "true")
@@ -330,25 +320,26 @@ describe("MCP 段：五标签与全局开关", () => {
       fireEvent.click(toggle)
     })
 
-    expect(settingsApiMocks.updateSystemSettings).toHaveBeenCalledTimes(1)
-    expect(settingsApiMocks.updateSystemSettings).toHaveBeenCalledWith({ mcpGlobalEnabled: false })
-    expect(screen.getByText("全局 已关闭")).toBeInTheDocument()
+    expect(updateSpy).toHaveBeenCalledTimes(1)
+    expect(updateSpy).toHaveBeenCalledWith({ mcpGlobalEnabled: false })
   })
 
-  test("保存失败时开关回滚到原状态", async () => {
-    settingsApiMocks.updateSystemSettings.mockRejectedValue(new Error("500"))
+  test("保存失败时开关仍显示 store 里的原值，不出现半更新状态", async () => {
+    updateSpy.mockRejectedValueOnce(new Error("500"))
     await renderMcp()
 
     await act(async () => {
       fireEvent.click(screen.getByRole("switch", { name: "全局 MCP 开关" }))
     })
 
+    expect(updateSpy).toHaveBeenCalledTimes(1)
     await vi.waitFor(() => {
       expect(screen.getByText("全局 已开启")).toBeInTheDocument()
       expect(screen.getByRole("switch", { name: "全局 MCP 开关" })).toHaveAttribute(
         "aria-checked",
         "true",
       )
+      expect(screen.queryByText("保存中...")).toBeNull()
     })
   })
 })
