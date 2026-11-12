@@ -75,7 +75,8 @@ describe("SettingsSearch", () => {
     fireEvent.keyDown(input, { key: "Enter" })
     const selectEvents = getSelectEvents(dispatchSpy)
     expect(selectEvents).toHaveLength(1)
-    expect(selectEvents[0][0].detail.key).toBe("mcp")
+    // 「模型」的第二个叶子命中项：模型管理（models）之后的「能力扩展」（extensions，keywords 含「模型上下文协议」）
+    expect(selectEvents[0][0].detail.key).toBe("extensions")
   })
 
   test("Escape 收起下拉；清空输入后结果消失", () => {
