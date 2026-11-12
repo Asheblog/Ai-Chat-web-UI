@@ -15,6 +15,10 @@ export type SectionSettingsState =
 /**
  * 能力扩展段的取数与三态阶梯，供各段共用。
  *
+ * 分工：段壳三态（loading / error / ready）走本 hook，服务 tools / extra 这类卡片列表段；
+ * 页头单开关的三态（禁用 + 「状态未知」/ 错误 + 重试 / 可读写）由 section-switch.tsx 的
+ * SectionSwitch 自己承担——两者都只是 useSystemSettings 的薄封装，不各自再写一遍判定。
+ *
  * 判定只有两条：拿不到 settings 且没有失败原因就是加载中（刚挂载/补拉中），
  * 拿不到 settings 但有原因才是错误态；拿到 settings 一律 ready，此时的失败由卡片自己提示。
  * retry 先清掉旧错误再拉一次，避免错误态残留；补拉失败不抛给调用方，由下一次重渲染呈现。

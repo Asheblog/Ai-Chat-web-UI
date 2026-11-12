@@ -136,12 +136,13 @@ describe("PersonalSettings 个人设置分区", () => {
     expect(screen.queryByText("最近分享")).not.toBeInTheDocument()
   })
 
-  // MCP 页壳已收进能力扩展页的 MCP 段，副标题断言随组件一起搬过来。
-  test("MCP 段页头副标题可见（已有，保持不变）", async () => {
+  // MCP 页壳已收进能力扩展页的 MCP 段，副标题断言随组件一起搬过来；
+  // 段头文案现在唯一来源是 EXTENSION_SECTIONS，这里断言的正是段配置里那一句。
+  test("MCP 段页头副标题来自段配置", async () => {
     render(<McpSection segment="installations" onSegmentChange={() => {}} />)
     await flushAsync()
     await screen.findByRole("heading", { name: "MCP 服务" })
 
-    expect(screen.getByText(/连接外部工具与数据源/)).toBeInTheDocument()
+    expect(screen.getByText(/MCP 服务模板、连接、凭据、工具与绑定作用域/)).toBeInTheDocument()
   })
 })

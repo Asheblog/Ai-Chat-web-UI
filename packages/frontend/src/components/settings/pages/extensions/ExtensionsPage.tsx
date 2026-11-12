@@ -3,15 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Layers } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
 import { SectionRail } from "../../components/section-rail"
 import {
   EXTENSION_SECTIONS,
-  EXTENSION_SECTION_EVENT,
   routeForCard,
   type ExtensionCardRoute,
   type ExtensionSection,
-  type ExtensionSectionEventDetail,
 } from "./extensions-sections"
 import { ExtraSection } from "./sections/extra-section"
 import { McpSection, isMcpSegment, type McpSegment } from "./sections/mcp-section"
@@ -22,16 +19,20 @@ import { ToolsSection } from "./sections/tools-section"
 const DEFAULT_MCP_SEGMENT: McpSegment = "installations"
 const DEFAULT_SKILL_SEGMENT: SkillSegment = "install"
 
-function isExtensionSection(value: unknown): value is ExtensionSection {
-  return typeof value === "string" && EXTENSION_SECTIONS.some((item) => item.key === value)
-}
+/** 页面内容区 id：移动端段标签用 aria-controls 指向它，读屏能说出标签控制哪块内容。 */
+const SECTION_PANEL_ID = "extension-section-panel"
 
 /**
  * 能力扩展：MCP 服务 / Skill / 内置工具 / 对话增强的统一入口。
  *
- * 骨架只负责段路由与卡定位（flash-bus + 三个 window 事件），5 个段各自取数、
- * 各自保存；MCP / Skill 段的次级标签状态由本页持有，卡定位才能先切段再滚动。
+ * 骨架只负责段路由与卡定位（flash-bus + window 事件），5 个段各自取数、各自保存；
+ * MCP / Skill 段的次级标签状态由本页持有，卡定位才能先切段再滚动。
+ *
+ * 段级 keep-alive：访问过的段只增不减地留在 DOM 里，非当前段用原生 hidden 藏起来。
+ * 旧实现按段三元渲染、切段即卸载，Skill 绑定草稿、Python 卡参数与乱斗/标题总结的输入
+ * 会被回滚，Skill 段每次回来还要重发三路请求；改成常驻后切回来即原样恢复。
  */
+
 export function ExtensionsPage({
   hostId,
   initialCardKey,
@@ -53,11 +54,16 @@ export function ExtensionsPage({
       ? initialRoute.segment
       : DEFAULT_SKILL_SEGMENT,
   )
+  // 已访问过的段：总览随页面一起挂载，其余段第一次被路由到时加入，之后一直保持挂载。
+  const [visited, setVisited] = useState<ReadonlySet<ExtensionSection>>(
+    () => new Set<ExtensionSection>(["overview", initialRoute?.section ?? "overview"]),
+  )
 
-  /** 段路由的唯一入口：卡定位、select 事件与页头按钮都走这里。 */
+  /** 段路由的唯一入口：卡定位、页头按钮与段导航都走这里。 */
   const applyRoute = useCallback((route: ExtensionCardRoute | null) => {
     if (!route) return
     setSection(route.section)
+    setVisited((prev) => (prev.has(route.section) ? prev : new Set(prev).add(route.section)))
     const segment = route.segment
     if (!segment) return
     if (route.section === "mcp" && isMcpSegment(segment)) setMcpSegment(segment)
@@ -97,30 +103,23 @@ export function ExtensionsPage({
     return () => window.removeEventListener("aichat:settings-flash-card", handler as EventListener)
   }, [applyRoute, hostId])
 
-  // 3. 导航/搜索选中本叶时可附带目标段（旧宿主只发 key，保持当前段）。
-  useEffect(() => {
-    const handler = (event: Event) => {
-      const detail = (event as CustomEvent<{ key?: string; section?: string; segment?: string }>).detail
-      if (!detail || detail.key !== "extensions" || !isExtensionSection(detail.section)) return
-      applyRoute({ section: detail.section, segment: detail.segment })
-    }
-    window.addEventListener("aichat:system-settings-select", handler as EventListener)
-    return () => window.removeEventListener("aichat:system-settings-select", handler as EventListener)
-  }, [applyRoute])
-
-  // 4. 段内组件（总览入口等）请求切段。
-  useEffect(() => {
-    const handler = (event: Event) => {
-      const detail = (event as CustomEvent<ExtensionSectionEventDetail>).detail
-      if (!detail || !isExtensionSection(detail.section)) return
-      applyRoute({ section: detail.section, segment: detail.segment })
-    }
-    window.addEventListener(EXTENSION_SECTION_EVENT, handler as EventListener)
-    return () => window.removeEventListener(EXTENSION_SECTION_EVENT, handler as EventListener)
-  }, [applyRoute])
-
   const activeSegment =
     section === "mcp" ? mcpSegment : section === "skills" ? skillSegment : undefined
+
+  /** 段内容：key 决定组件，切换段时已挂载的段只是被 hidden 藏起来，不重建。 */
+  const renderSectionBody = (key: ExtensionSection): JSX.Element => {
+    if (key === "mcp") return <McpSection segment={mcpSegment} onSegmentChange={setMcpSegment} />
+    if (key === "skills") {
+      return <SkillSection segment={skillSegment} onSegmentChange={setSkillSegment} />
+    }
+    if (key === "tools") return <ToolsSection />
+    if (key === "extra") return <ExtraSection />
+    return (
+      <OverviewSection
+        onNavigate={(nextSection, segment) => applyRoute({ section: nextSection, segment })}
+      />
+    )
+  }
 
   return (
     <div className="space-y-5" data-section={section} data-segment={activeSegment}>
@@ -141,7 +140,7 @@ export function ExtensionsPage({
             size="sm"
             onClick={() => applyRoute({ section: "mcp", segment: DEFAULT_MCP_SEGMENT })}
           >
-            新增 MCP 服务
+            MCP 安装模板
           </Button>
           <Button
             type="button"
@@ -158,31 +157,32 @@ export function ExtensionsPage({
         <SectionRail
           items={EXTENSION_SECTIONS}
           active={section}
-          onChange={setSection}
+          onChange={(next) => applyRoute({ section: next })}
           ariaLabel="能力扩展分段导航"
+          panelId={SECTION_PANEL_ID}
         />
 
-        <div className="min-w-0 flex-1 space-y-3 mt-3 md:mt-0">
-          {/* MCP / Skill 段的次级标签随段组件一起渲染（页头在上、标签在下） */}
-          <div
-            data-section-panel={section}
-            // 总览是卡片堆叠，不需要占位面板的浅底色；其余段保持占位外观不动
-            className={cn(section !== "overview" && "v2-panel-soft p-4 space-y-1")}
-          >
-            {section === "overview" ? (
-              <OverviewSection
-                onNavigate={(nextSection, segment) => applyRoute({ section: nextSection, segment })}
-              />
-            ) : section === "mcp" ? (
-              <McpSection segment={mcpSegment} onSegmentChange={setMcpSegment} />
-            ) : section === "skills" ? (
-              <SkillSection segment={skillSegment} onSegmentChange={setSkillSegment} />
-            ) : section === "tools" ? (
-              <ToolsSection />
-            ) : (
-              <ExtraSection />
-            )}
-          </div>
+        <div
+          id={SECTION_PANEL_ID}
+          role="tabpanel"
+          aria-label="能力扩展内容"
+          className="min-w-0 flex-1 space-y-3 mt-3 md:mt-0"
+        >
+          {EXTENSION_SECTIONS.map((item) => {
+            // 未访问过的段不渲染：不提前发请求，也不占 DOM
+            if (!visited.has(item.key)) return null
+            const isActive = item.key === section
+            return (
+              <div
+                key={item.key}
+                data-section-panel={item.key}
+                hidden={!isActive}
+                className={isActive ? "space-y-3" : ""}
+              >
+                {renderSectionBody(item.key)}
+              </div>
+            )
+          })}
         </div>
       </div>
     </div>

@@ -334,7 +334,8 @@ describe("MCP 段：五标签与全局开关", () => {
     expect(screen.queryByRole("tab", { name: "总览" })).toBeNull()
 
     expect(screen.getByRole("heading", { name: "MCP 服务" })).toBeInTheDocument()
-    expect(screen.getByText("连接外部工具与数据源")).toBeInTheDocument()
+    // 段头说明的唯一来源是 EXTENSION_SECTIONS，不再由段组件各写一份
+    expect(screen.getByText("MCP 服务模板、连接、凭据、工具与绑定作用域")).toBeInTheDocument()
     expect(screen.getByText("安装模板面板")).toBeInTheDocument()
     expect(container.querySelector('[data-card-key="extensions:mcp-installations"]')).not.toBeNull()
   })
@@ -434,7 +435,7 @@ describe("内置工具段：两卡与唯一控制点", () => {
     const { container } = render(<ToolsSection />)
 
     expect(screen.getByRole("heading", { name: "内置工具" })).toBeInTheDocument()
-    expect(screen.getByText("让模型在沙箱里执行 Python 与受管依赖")).toBeInTheDocument()
+    expect(screen.getByText("Python 工具开关与运行时依赖管理")).toBeInTheDocument()
 
     expect(featureCardOf("Python 工具")).toHaveAttribute(
       "data-card-key",

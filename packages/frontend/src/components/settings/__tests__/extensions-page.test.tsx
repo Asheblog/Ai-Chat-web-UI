@@ -1,8 +1,8 @@
 import React from "react"
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { ExtensionsPage } from "../pages/extensions/ExtensionsPage"
-import { EXTENSION_CARD_ROUTES, EXTENSION_SECTION_EVENT, routeForCard } from "../pages/extensions/extensions-sections"
+import { EXTENSION_CARD_ROUTES, routeForCard } from "../pages/extensions/extensions-sections"
 import { consumeFlash, requestFlash } from "../settings-flash-bus"
 import { renderSystemLeaf, systemSettingsCards } from "../system-settings-registry"
 
@@ -70,6 +70,13 @@ function rootOf(container: HTMLElement): HTMLElement {
   return el
 }
 
+/** 段内容面板：keep-alive 后每个访问过的段各有一个容器，非当前段带原生 hidden。 */
+function panelOf(container: HTMLElement, key: string): HTMLElement {
+  const el = container.querySelector<HTMLElement>(`[data-section-panel="${key}"]`)
+  if (!el) throw new Error(`未找到段面板: ${key}`)
+  return el
+}
+
 /** 渲染页面并在 act 内冲掉总览段的三路数据 promise，避免异步 setState 警告。 */
 async function renderPage(node: React.ReactElement) {
   const view = render(node)
@@ -102,13 +109,18 @@ afterEach(() => {
 })
 
 describe("ExtensionsPage 段路由", () => {
-  test("默认渲染总览段，无次级标签", async () => {
+  test("默认渲染总览段，无次级标签，未访问的段不挂载", async () => {
     const { container } = await renderPage(<ExtensionsPage />)
 
     const root = rootOf(container)
     expect(root.dataset.section).toBe("overview")
     expect(root.dataset.segment).toBeUndefined()
-    expect(container.querySelector('[data-section-panel="overview"]')).not.toBeNull()
+    expect(panelOf(container, "overview")).not.toHaveAttribute("hidden")
+    // 没访问过的段连容器都不渲染：不提前发请求，也不占 DOM
+    expect(container.querySelector('[data-section-panel="mcp"]')).toBeNull()
+    expect(container.querySelector('[data-section-panel="skills"]')).toBeNull()
+    expect(container.querySelector('[data-section-panel="tools"]')).toBeNull()
+    expect(container.querySelector('[data-section-panel="extra"]')).toBeNull()
   })
 
   test("点击左栏「MCP 服务」切段并落到默认次级标签 installations", async () => {
@@ -122,44 +134,37 @@ describe("ExtensionsPage 段路由", () => {
     const root = rootOf(container)
     expect(root.dataset.section).toBe("mcp")
     expect(root.dataset.segment).toBe("installations")
-    expect(container.querySelector('[data-section-panel="mcp"]')).not.toBeNull()
+    expect(panelOf(container, "mcp")).not.toHaveAttribute("hidden")
+    // keep-alive：总览段不卸载，只是被藏起来
+    expect(panelOf(container, "overview")).toHaveAttribute("hidden")
     expect(screen.getByRole("tab", { name: "凭据" })).toBeInTheDocument()
   })
 
-  test("aichat:system-settings-select 携带合法 section 时切段", async () => {
+  test("段标签与段内容区靠 id/aria-controls 关联，移动端段导航指向页面内容区", async () => {
     const { container } = await renderPage(<ExtensionsPage />)
 
-    // Skill 段挂载后会拉 catalog / bindings / approvals，flush 掉这些 promise 再断言
     await act(async () => {
-      window.dispatchEvent(
-        new CustomEvent("aichat:system-settings-select", {
-          detail: { key: "extensions", section: "skills" },
-        }),
-      )
+      fireEvent.click(screen.getByRole("button", { name: "MCP 服务" }))
     })
 
-    const root = rootOf(container)
-    expect(root.dataset.section).toBe("skills")
-    expect(root.dataset.segment).toBe("install")
-  })
+    const tab = screen.getByRole("tab", { name: "安装模板" })
+    expect(tab).toHaveAttribute("id", "mcp-tab-installations")
+    expect(tab).toHaveAttribute("aria-controls", "mcp-tab-panel-installations")
 
-  test("select 事件里非法 section 或非本叶 key 不切段", async () => {
-    const { container } = await renderPage(<ExtensionsPage />)
+    // 页头按钮叫「MCP 安装模板」而不是「新增 MCP 服务」：它只切到安装模板标签，不打开表单
+    expect(screen.getByRole("button", { name: "MCP 安装模板" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "新增 MCP 服务" })).toBeNull()
 
-    act(() => {
-      window.dispatchEvent(
-        new CustomEvent("aichat:system-settings-select", {
-          detail: { key: "extensions", section: "not-a-section" },
-        }),
-      )
-      window.dispatchEvent(
-        new CustomEvent("aichat:system-settings-select", {
-          detail: { key: "models", section: "skills" },
-        }),
-      )
-    })
+    const contentPanel = container.querySelector<HTMLElement>('[data-section-panel="mcp"]')
+    const subPanel = contentPanel?.querySelector<HTMLElement>('[role="tabpanel"]')
+    expect(subPanel).toHaveAttribute("id", "mcp-tab-panel-installations")
+    expect(subPanel).toHaveAttribute("aria-labelledby", "mcp-tab-installations")
 
-    expect(rootOf(container).dataset.section).toBe("overview")
+    const railTablist = screen.getByRole("tablist", { name: "能力扩展分段导航" })
+    for (const railTab of within(railTablist).getAllByRole("tab")) {
+      expect(railTab).toHaveAttribute("aria-controls", "extension-section-panel")
+    }
+    expect(container.querySelector("#extension-section-panel")).toBeInTheDocument()
   })
 
   test("冷启动带 initialCardKey 时首帧就落在目标段与次级标签", async () => {
@@ -238,17 +243,6 @@ describe("ExtensionsPage 段路由", () => {
     expect(rootOf(container).dataset.section).toBe("overview")
   })
 
-  test("EXTENSION_SECTION_EVENT 供段内组件请求切段", async () => {
-    const { container } = await renderPage(<ExtensionsPage />)
-
-    act(() => {
-      window.dispatchEvent(new CustomEvent(EXTENSION_SECTION_EVENT, { detail: { section: "tools" } }))
-    })
-
-    expect(rootOf(container).dataset.section).toBe("tools")
-    expect(rootOf(container).dataset.segment).toBeUndefined()
-  })
-
   test("点击左栏「内置工具」切段后渲染段头与 tools 面板", async () => {
     const { container } = await renderPage(<ExtensionsPage />)
 
@@ -258,7 +252,8 @@ describe("ExtensionsPage 段路由", () => {
     })
 
     expect(screen.getByRole("heading", { name: "内置工具" })).toBeInTheDocument()
-    expect(container.querySelector('[data-section-panel="tools"]')).not.toBeNull()
+    expect(panelOf(container, "tools")).not.toHaveAttribute("hidden")
+    expect(panelOf(container, "overview")).toHaveAttribute("hidden")
   })
 
   test("点击左栏「对话增强」切段后渲染段头与 extra 面板", async () => {
@@ -269,10 +264,11 @@ describe("ExtensionsPage 段路由", () => {
     })
 
     expect(screen.getByRole("heading", { name: "对话增强" })).toBeInTheDocument()
-    expect(container.querySelector('[data-section-panel="extra"]')).not.toBeNull()
+    expect(panelOf(container, "extra")).not.toHaveAttribute("hidden")
+    expect(panelOf(container, "overview")).toHaveAttribute("hidden")
   })
 
-  test("页头两个按钮分别切到「新增 MCP 服务」与「从 GitHub 安装 Skill」的位置", async () => {
+  test("页头两个按钮分别切到「MCP 安装模板」与「从 GitHub 安装 Skill」的位置", async () => {
     const { container } = await renderPage(<ExtensionsPage />)
 
     await act(async () => {
@@ -282,10 +278,44 @@ describe("ExtensionsPage 段路由", () => {
     expect(rootOf(container).dataset.segment).toBe("install")
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "新增 MCP 服务" }))
+      fireEvent.click(screen.getByRole("button", { name: "MCP 安装模板" }))
     })
     expect(rootOf(container).dataset.section).toBe("mcp")
     expect(rootOf(container).dataset.segment).toBe("installations")
+  })
+
+  test("段级 keep-alive：切走再回来保留 Skill 安装输入，且不重发段内请求", async () => {
+    const { container } = await renderPage(<ExtensionsPage />)
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Skill" }))
+    })
+    const sourcePlaceholder = "owner/repo@ref[:subdir] 或 github.com/.../SKILL.md"
+    const requestCount = () =>
+      overviewDataMocks.listSkillCatalog.mock.calls.length +
+      overviewDataMocks.listSkillBindings.mock.calls.length +
+      overviewDataMocks.listSkillApprovals.mock.calls.length
+    const afterFirstMount = requestCount()
+
+    fireEvent.change(screen.getByPlaceholderText(sourcePlaceholder), {
+      target: { value: "anthropics/skills@main:skills/pptx" },
+    })
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "总览" }))
+    })
+    expect(panelOf(container, "skills")).toHaveAttribute("hidden")
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Skill" }))
+    })
+
+    expect(panelOf(container, "skills")).not.toHaveAttribute("hidden")
+    expect(screen.getByPlaceholderText(sourcePlaceholder)).toHaveValue(
+      "anthropics/skills@main:skills/pptx",
+    )
+    // 段常驻后切回来不重建组件，catalog / bindings / approvals 不会重发
+    expect(requestCount()).toBe(afterFirstMount)
   })
 })
 

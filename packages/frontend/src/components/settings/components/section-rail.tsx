@@ -16,6 +16,8 @@ export type SectionRailProps<K extends string = string> = {
   active: K
   onChange: (key: K) => void
   ariaLabel: string
+  /** 移动端 tablist 的 aria-controls 目标：页面内容区元素的 id（不传则不输出该属性） */
+  panelId?: string
 }
 
 const focusRing =
@@ -34,12 +36,14 @@ const mobileItemBase = cn(
 /**
  * 分段导航：桌面左侧竖排段列表，移动端折成一行可横向滚动的分段按钮。
  * 纯受控展示组件（无内部 state），样式沿用原 MCP 页导航的桌面/移动两分支。
+ * 移动端用 role=tab，故补 aria-controls 指向页面内容区，读屏能说出标签控制哪块内容。
  */
 export function SectionRail<K extends string>({
   items,
   active,
   onChange,
   ariaLabel,
+  panelId,
 }: SectionRailProps<K>): JSX.Element {
   return (
     <>
@@ -82,6 +86,7 @@ export function SectionRail<K extends string>({
               type="button"
               role="tab"
               aria-selected={isActive}
+              aria-controls={panelId}
               onClick={() => onChange(item.key)}
               className={cn(
                 mobileItemBase,

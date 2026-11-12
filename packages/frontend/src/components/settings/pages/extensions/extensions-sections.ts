@@ -3,8 +3,8 @@ import type { LucideIcon } from "lucide-react"
 
 /**
  * 能力扩展页的段模型：左侧段导航（SectionRail）与段内次级标签（SegmentedTabs）
- * 的配置、卡 key → 段/次级标签的路由，以及段切换事件协议。
- * 纯数据模块（除 lucide 图标外不依赖 React），供页面与后续段组件共用。
+ * 的配置、卡 key → 段/次级标签的路由。
+ * 纯数据模块（除 lucide 图标外不依赖 React），供页面与各段组件共用。
  */
 
 export type ExtensionSection = "overview" | "mcp" | "skills" | "tools" | "extra"
@@ -55,6 +55,16 @@ export const EXTENSION_SECTIONS: ExtensionSectionMeta[] = [
   },
 ]
 
+/**
+ * 按 key 取段配置：段标题/说明/图标的唯一来源。
+ * EXTENSION_SECTIONS 覆盖全部 key，取不到只可能是新增了 key 却漏了配置，直接报错而不是静默降级。
+ */
+export function sectionMeta(key: ExtensionSection): ExtensionSectionMeta {
+  const meta = EXTENSION_SECTIONS.find((item) => item.key === key)
+  if (!meta) throw new Error(`未注册的能力扩展段: ${key}`)
+  return meta
+}
+
 export type ExtensionSegment = { key: string; label: string }
 
 /** 只有 mcp / skills 两段有次级标签，其余段的 segment 恒为 undefined。 */
@@ -102,8 +112,3 @@ export function routeForCard(cardKey: string): ExtensionCardRoute | null {
     ? EXTENSION_CARD_ROUTES[cardKey]
     : null
 }
-
-/** 段内组件请求页面切段的 window 事件。 */
-export const EXTENSION_SECTION_EVENT = "aichat:extensions-section"
-
-export type ExtensionSectionEventDetail = { section: ExtensionSection; segment?: string }

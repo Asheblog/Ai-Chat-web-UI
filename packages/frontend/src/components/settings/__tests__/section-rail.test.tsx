@@ -115,6 +115,26 @@ describe("SectionRail", () => {
     }
   })
 
+  test("移动分支 tab 的 aria-controls 指向页面内容区，未传 panelId 时不输出该属性", () => {
+    const onChange = vi.fn()
+    const { rerender } = renderRail("mcp", onChange)
+    expect(within(mobileTablist()).getAllByRole("tab")[0]).not.toHaveAttribute("aria-controls")
+
+    rerender(
+      <SectionRail
+        items={items}
+        active="mcp"
+        onChange={onChange}
+        ariaLabel={ARIA_LABEL}
+        panelId="extension-section-panel"
+      />,
+    )
+
+    for (const tab of within(mobileTablist()).getAllByRole("tab")) {
+      expect(tab).toHaveAttribute("aria-controls", "extension-section-panel")
+    }
+  })
+
   test("description 作为桌面项的 title 悬停说明，未提供时不渲染该属性", () => {
     renderRail("overview")
     const nav = desktopNav()

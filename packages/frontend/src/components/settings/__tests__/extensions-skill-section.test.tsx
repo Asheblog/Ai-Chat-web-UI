@@ -141,7 +141,7 @@ describe("Skill 段：四标签与页头", () => {
       "绑定",
     ])
     expect(screen.getByRole("heading", { name: "Skill" })).toBeInTheDocument()
-    expect(screen.getByText("安装、审批与绑定第三方 Skill")).toBeInTheDocument()
+    expect(screen.getByText("Skill 安装、待审批调用、版本激活与绑定策略")).toBeInTheDocument()
     // 安装段直接渲染既有 SkillInstallSection（无 FeatureCard 外壳）
     expect(screen.getByRole("button", { name: "安装" })).toBeInTheDocument()
     expect(container.querySelector('[data-card-key="extensions:skill-install"]')).not.toBeNull()
@@ -171,7 +171,7 @@ describe("Skill 段：四标签与页头", () => {
     await renderSkill()
 
     expect(screen.getByText("运行时 状态未知")).toBeInTheDocument()
-    expect(screen.queryByText("运行时 未开启")).toBeNull()
+    expect(screen.queryByText("运行时 已关闭")).toBeNull()
     expect(screen.getByRole("switch", { name: "动态 Skill Runtime 开关" })).toBeDisabled()
     expect(screen.getByText("加载系统设置失败")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument()
@@ -180,7 +180,8 @@ describe("Skill 段：四标签与页头", () => {
   test("顶部开关走共享 store，只写一次 { chatDynamicSkillRuntimeEnabled: true }", async () => {
     await renderSkill()
 
-    expect(screen.getByText("运行时 未开启")).toBeInTheDocument()
+    // 开关文案与 MCP 段统一为「已开启 / 已关闭」，不再是「未开启」
+    expect(screen.getByText("运行时 已关闭")).toBeInTheDocument()
     await act(async () => {
       fireEvent.click(screen.getByRole("switch", { name: "动态 Skill Runtime 开关" }))
     })

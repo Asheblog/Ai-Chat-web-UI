@@ -2,7 +2,12 @@ import React from "react"
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, describe, expect, test, vi } from "vitest"
 import { Boxes, Link2, ShieldCheck } from "lucide-react"
-import { SegmentedTabs, type SegmentedTabItem } from "../components/segmented-tabs"
+import {
+  SegmentedTabs,
+  segmentPanelId,
+  segmentTabId,
+  type SegmentedTabItem,
+} from "../components/segmented-tabs"
 
 type SegmentKey = "install" | "approvals" | "versions" | "bindings"
 
@@ -102,6 +107,34 @@ describe("SegmentedTabs", () => {
 
     const iconTab = screen.getByRole("tab", { name: "绑定" })
     expect(iconTab.querySelector("svg")).not.toBeNull()
+  })
+
+  test("标签与面板靠 id/aria-controls 关联，idPrefix 默认为 tab", () => {
+    renderTabs("install")
+
+    const tabs = screen.getAllByRole("tab")
+    expect(tabs[0]).toHaveAttribute("id", "tab-install")
+    expect(tabs[0]).toHaveAttribute("aria-controls", "tab-panel-install")
+    expect(tabs[1]).toHaveAttribute("id", "tab-approvals")
+    expect(tabs[1]).toHaveAttribute("aria-controls", "tab-panel-approvals")
+  })
+
+  test("idPrefix 给段前缀时 id 与 aria-controls 一起换前缀，避免 keep-alive 下多组标签撞 id", () => {
+    render(
+      <SegmentedTabs
+        items={items}
+        active="install"
+        onChange={vi.fn()}
+        ariaLabel={ARIA_LABEL}
+        idPrefix="mcp-tab"
+      />,
+    )
+
+    const tab = screen.getByRole("tab", { name: "安装" })
+    expect(tab).toHaveAttribute("id", "mcp-tab-install")
+    expect(tab).toHaveAttribute("aria-controls", "mcp-tab-panel-install")
+    expect(segmentTabId("mcp-tab", "install")).toBe("mcp-tab-install")
+    expect(segmentPanelId("mcp-tab", "install")).toBe("mcp-tab-panel-install")
   })
 
   test("全部标签 type=button、可见焦点环，触控高度 ≥36px", () => {
