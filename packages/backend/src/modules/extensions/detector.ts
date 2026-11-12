@@ -221,6 +221,17 @@ function fromRemoteManifest(server: any): { url: string; transport: McpTransport
   return { url: String(remote.url), transport: mapTransport(remote.type) }
 }
 
+/** smithery.yaml 的 startCommand 可能是 http/sse 型，需要读成远程端点（规格 §4）。 */
+function fromSmitheryRemote(manifest: any): { url: string; transport: McpTransport } | null {
+  const start = manifest?.startCommand
+  if (!start || typeof start !== 'object') return null
+  const type = String(start.type || '').toLowerCase()
+  if (!type.includes('http') && type !== 'sse') return null
+  const url = typeof start.url === 'string' ? start.url : typeof start.endpoint === 'string' ? start.endpoint : ''
+  if (!url) return null
+  return { url, transport: mapTransport(type) }
+}
+
 function fromReadmeRemote(readme: string): { url: string; transport: McpTransport } | null {
   if (!readme) return null
   const bridge = readme.match(/mcp-remote\s+(https?:\/\/\S+)/)
@@ -269,9 +280,12 @@ function buildSkillPlan(
 
 function buildMcpPlan(
   source: ExtensionSourceRef,
-  parts: { server: any; mcpJson: any; packageJson: any; readme?: string },
+  parts: { server: any; mcpJson: any; packageJson: any; readme?: string; smithery?: any },
 ): InstallPlan | null {
-  const remote = fromRemoteManifest(parts.server) ?? fromReadmeRemote(parts.readme ?? '')
+  const remote =
+    fromRemoteManifest(parts.server) ??
+    fromSmitheryRemote(parts.smithery) ??
+    fromReadmeRemote(parts.readme ?? '')
   const local =
     fromServerJson(parts.server) ??
     fromMcpJson(parts.mcpJson) ??
@@ -357,9 +371,12 @@ export function detectExtensionPlan(input: {
 
   const mcpPlan = buildMcpPlan(source, {
     server,
-    mcpJson: mcpJson ?? (yamlManifest?.startCommand ? { mcpServers: { main: { command: yamlManifest.startCommand.command, args: yamlManifest.startCommand.args } } } : null),
+    mcpJson: mcpJson ?? (yamlManifest?.startCommand?.command
+      ? { mcpServers: { main: { command: yamlManifest.startCommand.command, args: yamlManifest.startCommand.args } } }
+      : null),
     packageJson,
     readme,
+    smithery: yamlManifest,
   })
 
   if (kindHint === 'mcp') {

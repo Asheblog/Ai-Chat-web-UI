@@ -88,6 +88,21 @@ describe('detectExtensionPlan', () => {
     expect(result.plan).toMatchObject({ sourceType: 'remote', transport: 'sse' })
   })
 
+  it('reads a Smithery http start command as a remote endpoint', () => {
+    const result = detectExtensionPlan({
+      source,
+      probe: probe({
+        'smithery.yaml': 'startCommand:\n  type: http\n  url: https://smithery.acme.dev/mcp\n',
+      }),
+    })
+    expect(result.plan).toMatchObject({
+      kind: 'mcp',
+      sourceType: 'remote',
+      transport: 'streamable_http',
+      endpoint: 'https://smithery.acme.dev/mcp',
+    })
+  })
+
   it('returns ambiguous when both skill and mcp are present', () => {
     const result = detectExtensionPlan({
       source,
