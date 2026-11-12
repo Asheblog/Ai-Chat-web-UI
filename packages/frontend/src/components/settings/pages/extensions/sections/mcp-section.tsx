@@ -55,10 +55,11 @@ export function McpSection({
 }): JSX.Element {
   // 全局开关走共享 settings store（不是裸 API）：同页总览与其他设置卡读同一份状态，
   // 切回总览不会看到过期值。
-  const { settings, update, refresh } = useSystemSettings()
+  const { settings, update, refresh, isLoading, error } = useSystemSettings()
   const [saving, setSaving] = useState(false)
   const switchId = useId()
-  const enabled = Boolean(settings?.mcpGlobalEnabled ?? true)
+  // 未取到设置时不能猜「已开启」：宁可显示状态未知并禁用，也不给一个假的确定值。
+  const enabled = settings ? Boolean(settings.mcpGlobalEnabled) : null
   const loading = settings === null
 
   useEffect(() => {
@@ -95,18 +96,27 @@ export function McpSection({
         <div className="flex shrink-0 items-center gap-2">
           <Switch
             id={switchId}
-            checked={enabled}
+            checked={enabled === true}
             onCheckedChange={handleToggle}
-            disabled={saving || loading}
+            disabled={saving || loading || isLoading}
             aria-label="全局 MCP 开关"
           />
           <label
             htmlFor={switchId}
             className="cursor-pointer select-none text-xs text-muted-foreground"
           >
-            全局 {enabled ? "已开启" : "已关闭"}
+            全局 {enabled === null ? "状态未知" : enabled ? "已开启" : "已关闭"}
           </label>
           {saving && <span className="text-xs text-muted-foreground/60">保存中...</span>}
+          {enabled === null && !isLoading ? (
+            <button
+              type="button"
+              onClick={() => void refresh().catch(() => {})}
+              className="text-xs text-primary underline-offset-2 hover:underline"
+            >
+              重试
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -117,9 +127,12 @@ export function McpSection({
         ariaLabel="MCP 服务次级标签"
       />
 
-      {!enabled && segment !== "installations" && (
+      {enabled === false && segment !== "installations" && (
         <p className="text-xs text-muted-foreground">{GLOBAL_OFF_HINT}</p>
       )}
+      {enabled === null && error ? (
+        <p className="text-xs text-destructive">{error}</p>
+      ) : null}
 
       <div data-card-key={`extensions:mcp-${segment}`}>
         <ActiveContent />

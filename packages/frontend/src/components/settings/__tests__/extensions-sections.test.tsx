@@ -311,6 +311,28 @@ describe("MCP 段：五标签与全局开关", () => {
     expect(screen.getByText(GLOBAL_OFF_HINT)).toBeInTheDocument()
   })
 
+  test("设置读取失败时开关显示「状态未知」而非「已开启」，禁用并给重试与错误文案", async () => {
+    useSystemSettingsMock.mockReturnValue({
+      settings: null,
+      isLoading: false,
+      error: "加载系统设置失败",
+      refresh: refreshSpy,
+      update: updateSpy,
+      clearError: vi.fn(),
+    })
+
+    await renderMcp()
+
+    expect(screen.getByText("全局 状态未知")).toBeInTheDocument()
+    expect(screen.queryByText("全局 已开启")).toBeNull()
+    expect(screen.getByRole("switch", { name: "全局 MCP 开关" })).toBeDisabled()
+    expect(screen.getByText("加载系统设置失败")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument()
+    // 状态未知时不得误报「全局已关闭」提示
+    fireEvent.click(screen.getByRole("tab", { name: "连接" }))
+    expect(screen.queryByText(GLOBAL_OFF_HINT)).toBeNull()
+  })
+
   test("切换全局开关走共享 store，只写一次 { mcpGlobalEnabled: false }", async () => {
     await renderMcp()
     const toggle = screen.getByRole("switch", { name: "全局 MCP 开关" })
