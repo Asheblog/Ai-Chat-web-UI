@@ -6,19 +6,6 @@ export type WizardMode = "create" | "edit"
 export type WizardStep = 1 | 2 | 3
 export type EditorFocus = "basic" | "advanced" | "keys" | "verify"
 
-export const STATUS_FILTERS = [
-  { value: "all", label: "全部状态" },
-  { value: "enabled", label: "启用" },
-  { value: "disabled", label: "禁用" },
-]
-
-export const HEALTH_FILTERS = [
-  { value: "all", label: "全部健康" },
-  { value: "healthy", label: "健康" },
-  { value: "warning", label: "警告" },
-  { value: "error", label: "异常" },
-]
-
 export const healthLabel: Record<HealthState, string> = {
   healthy: "健康",
   warning: "警告",
@@ -55,45 +42,6 @@ export function baseUrlPlaceholder(provider: string) {
   if (provider === "google_genai") return "https://generativelanguage.googleapis.com/v1beta"
   if (provider === "anthropic") return ANTHROPIC_BASE_URL
   return "https://api.openai.com/v1"
-}
-
-export function filterConnections({
-  connections,
-  healthFilter,
-  providerFilter,
-  query,
-  statusFilter,
-}: {
-  connections: SystemConnectionGroup[]
-  healthFilter: string
-  providerFilter: string
-  query: string
-  statusFilter: string
-}) {
-  const normalizedQuery = query.trim().toLowerCase()
-
-  return connections.filter((group) => {
-    if (providerFilter !== "all" && group.provider !== providerFilter) return false
-
-    const enabledCount = getEnabledKeyCount(group)
-    if (statusFilter === "enabled" && enabledCount === 0) return false
-    if (statusFilter === "disabled" && enabledCount > 0) return false
-
-    const health = getGroupHealth(group)
-    if (healthFilter !== "all" && health !== healthFilter) return false
-
-    if (!normalizedQuery) return true
-    const searchable = [
-      group.displayName,
-      providerLabel(group),
-      group.provider,
-      group.baseUrl,
-      group.prefixId ?? "",
-      ...group.tags.map((tag) => tag.name),
-      ...group.apiKeys.map((key) => key.apiKeyLabel || ""),
-    ]
-    return searchable.some((value) => value.toLowerCase().includes(normalizedQuery))
-  })
 }
 
 export function connectionSecondaryLine(group: SystemConnectionGroup) {

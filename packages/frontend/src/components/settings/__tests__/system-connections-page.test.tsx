@@ -166,22 +166,26 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
     expect(screen.queryByRole("button", { name: "配置Azure" })).not.toBeInTheDocument()
   })
 
-  test("高级管理默认收起（工具栏「连接管理」不可见）→ 点击展开可见", async () => {
+  test("高级管理为一行标题栏（标题 + 端点组数 + 导入/导出/刷新），列表直接可见", async () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
+    const section = screen.getByRole("region", { name: "高级管理" })
+    expect(within(section).getByRole("heading", { name: "高级管理" })).toBeInTheDocument()
+    expect(within(section).getByText("3 个端点组")).toBeInTheDocument()
+    expect(within(section).getByRole("button", { name: /导入/ })).toBeInTheDocument()
+    expect(within(section).getByRole("button", { name: /导出/ })).toBeInTheDocument()
+    expect(within(section).getByRole("button", { name: /刷新/ })).toBeInTheDocument()
+    // 列表无需展开即可见
+    expect(within(section).getByText("官方 OpenAI")).toBeInTheDocument()
+    // 旧卡片式区块（工具栏标题/说明/统计/筛选）已移除
     expect(screen.queryByText("连接管理")).not.toBeInTheDocument()
-
-    await userEvent.click(screen.getByRole("button", { name: /高级管理/ }))
-    expect(screen.getByText("连接管理")).toBeInTheDocument()
-    expect(screen.getByText("全部连接列表、导入导出与 API Key 池")).toBeInTheDocument()
+    expect(screen.queryByText("全部连接列表、导入导出与 API Key 池")).not.toBeInTheDocument()
   })
 
   test("列表主标题为 displayName，副标题为 provider · baseUrl", async () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
-
-    await userEvent.click(screen.getByRole("button", { name: /高级管理/ }))
 
     expect(screen.getByText("官方 OpenAI")).toBeInTheDocument()
     expect(screen.getByText("Responses 网关")).toBeInTheDocument()
@@ -382,7 +386,6 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
-    await userEvent.click(screen.getByRole("button", { name: /高级管理/ }))
     const editButtons = screen.getAllByRole("button", { name: /编辑/ })
     await userEvent.click(editButtons[2])
 
@@ -395,7 +398,6 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
-    await userEvent.click(screen.getByRole("button", { name: /高级管理/ }))
     const editButtons = screen.getAllByRole("button", { name: /编辑/ })
     await userEvent.click(editButtons[0])
 
@@ -440,11 +442,20 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
     expect(services.createSystemConnection.mock.calls[0][0]).not.toHaveProperty("vendor")
   })
 
+  test("空数据：标题栏显示 0 个端点组，列表显示空状态文案", async () => {
+    services.fetchSystemConnections.mockResolvedValue([])
+    render(<SystemConnectionsPage />)
+
+    const section = await screen.findByRole("region", { name: "高级管理" })
+    expect(await within(section).findByText("0 个端点组")).toBeInTheDocument()
+    expect(within(section).getByText(/暂无连接/)).toBeInTheDocument()
+    expect(within(section).getByRole("button", { name: /导入/ })).toBeEnabled()
+  })
+
   test("高级管理内列表可见连接行（displayName）", async () => {
     render(<SystemConnectionsPage />)
     await screen.findByText("OpenAI")
 
-    await userEvent.click(screen.getByRole("button", { name: /高级管理/ }))
     expect(screen.getByText("官方 OpenAI")).toBeInTheDocument()
     expect(screen.getByText("Responses 网关")).toBeInTheDocument()
   })

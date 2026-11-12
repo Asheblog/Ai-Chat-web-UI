@@ -1,7 +1,7 @@
 "use client"
 
-import { useDeferredValue, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react"
-import { LayoutGrid, PlugZap, Plus, Settings2 } from "lucide-react"
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react"
+import { LayoutGrid, PlugZap, Plus } from "lucide-react"
 import { AlertDialog } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { CardDescription, CardTitle } from "@/components/ui/card"
@@ -20,12 +20,8 @@ import {
   useSystemConnections,
 } from "@/components/settings/system-connections/use-system-connections"
 import { SystemConnectionEditor } from "@/components/settings/system-connections/SystemConnectionEditor"
-import { CollapsibleEditorSection } from "@/components/settings/system-connections/SystemConnectionEditorParts"
 import { SystemConnectionList } from "@/components/settings/system-connections/SystemConnectionList"
-import {
-  SystemConnectionsToolbar,
-  type ConnectionStats,
-} from "@/components/settings/system-connections/SystemConnectionsToolbar"
+import { SystemConnectionsHeader } from "@/components/settings/system-connections/SystemConnectionsHeader"
 import { ProviderTemplateCard } from "@/components/settings/system-connections/provider-template-card"
 import {
   getProviderCountProviders,
@@ -38,9 +34,6 @@ import {
   createEmptyKey,
 } from "@/components/settings/system-connections/form-state"
 import {
-  filterConnections,
-  getEnabledKeyCount,
-  getGroupHealth,
   providerLabel,
   type WizardMode,
   type WizardStep,
@@ -75,12 +68,6 @@ export function SystemConnectionsPage() {
     toggleCapability,
   } = useSystemConnections()
 
-  const [query, setQuery] = useState("")
-  const deferredQuery = useDeferredValue(query)
-  const [providerFilter, setProviderFilter] = useState("all")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [healthFilter, setHealthFilter] = useState("all")
-  const [advancedOpen, setAdvancedOpen] = useState(false)
   const [sheet, setSheet] = useState<SheetState>({ open: false })
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const [confirmExportOpen, setConfirmExportOpen] = useState(false)
@@ -91,30 +78,6 @@ export function SystemConnectionsPage() {
   const [pageError, setPageError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const stats = useMemo<ConnectionStats>(() => {
-    const totalKeys = connections.reduce((sum, group) => sum + group.apiKeys.length, 0)
-    const enabledKeys = connections.reduce((sum, group) => sum + getEnabledKeyCount(group), 0)
-    const healthy = connections.filter((group) => getGroupHealth(group) === "healthy").length
-    const warning = connections.filter((group) => getGroupHealth(group) === "warning").length
-    const errorCount = connections.filter((group) => getGroupHealth(group) === "error").length
-    return { totalGroups: connections.length, totalKeys, enabledKeys, healthy, warning, errorCount }
-  }, [connections])
-
-  const providerOptions = useMemo(() => {
-    const map = new Map<string, { key: string; label: string; count: number; keyCount: number }>()
-    connections.forEach((group) => {
-      const key = group.provider
-      const current = map.get(key)
-      map.set(key, {
-        key,
-        label: providerLabel(group),
-        count: (current?.count ?? 0) + 1,
-        keyCount: (current?.keyCount ?? 0) + group.apiKeys.length,
-      })
-    })
-    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label))
-  }, [connections])
 
   /** 模板卡数据：OpenAI 卡合并 openai + openai_responses 的连接数。 */
   const templateCards = useMemo(() => {
@@ -130,18 +93,6 @@ export function SystemConnectionsPage() {
       ),
     }))
   }, [connections])
-
-  const filteredConnections = useMemo(
-    () =>
-      filterConnections({
-        connections,
-        healthFilter,
-        providerFilter,
-        query: deferredQuery,
-        statusFilter,
-      }),
-    [connections, deferredQuery, healthFilter, providerFilter, statusFilter],
-  )
 
   useEffect(() => {
     if (!successMessage) return
@@ -420,45 +371,29 @@ export function SystemConnectionsPage() {
         )}
       </section>
 
-      {/* 高级管理折叠：列表、导入导出 */}
-      <div data-card-key="connections:advanced">
-        <CollapsibleEditorSection
-          icon={<Settings2 className="h-4 w-4" />}
-          title="高级管理"
-          summary="全部连接列表、导入导出与 API Key 池"
-          open={advancedOpen}
-          onToggle={() => setAdvancedOpen((prev) => !prev)}
-        >
-          <div className="space-y-4">
-            <SystemConnectionsToolbar
-              stats={stats}
-              providers={providerOptions}
-              loading={loading}
-              query={query}
-              providerFilter={providerFilter}
-              statusFilter={statusFilter}
-              healthFilter={healthFilter}
-              onQueryChange={setQuery}
-              onProviderFilterChange={setProviderFilter}
-              onStatusFilterChange={setStatusFilter}
-              onHealthFilterChange={setHealthFilter}
-              onRefresh={refresh}
-              onImport={handleImportClick}
-              onExport={handleExportRequest}
-              onCreate={openCreateWizard}
-              exporting={exporting}
-              importing={importing}
-            />
+      {/* 高级管理：一行标题栏 + 全部连接 */}
+      <section
+        aria-label="高级管理"
+        data-card-key="connections:advanced"
+        className="space-y-3 border-t border-border/60 pt-5"
+      >
+        <SystemConnectionsHeader
+          totalGroups={connections.length}
+          loading={loading}
+          importing={importing}
+          exporting={exporting}
+          onImport={handleImportClick}
+          onExport={handleExportRequest}
+          onRefresh={refresh}
+        />
 
-            <SystemConnectionList
-              connections={filteredConnections}
-              loading={loading}
-              onEdit={openEditWizard}
-              onDelete={setConfirmDeleteId}
-            />
-          </div>
-        </CollapsibleEditorSection>
-      </div>
+        <SystemConnectionList
+          connections={connections}
+          loading={loading}
+          onEdit={openEditWizard}
+          onDelete={setConfirmDeleteId}
+        />
+      </section>
 
       {/* 统一创建/编辑向导 Sheet */}
       <Sheet
