@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Layers } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -68,31 +68,38 @@ export function ExtensionsPage({
     if (route.section === "skills" && SEGMENT_KEYS.skills?.includes(segment)) setSkillSegment(segment)
   }, [])
 
+  // 冷启动目标卡冻结在首帧：wrapper 挂载时会消费 flash-bus，父级随后重渲染拿到的
+  // initialCardKey 会变 undefined，直接依赖该 prop 会让重播被 cleanup 提前清掉。
+  const initialCardKeyRef = useRef(initialCardKey)
+
   // 1. 冷启动：initialCardKey 已在首帧决定段，这里把定位请求重新广播一次，
   //    让 SystemLeafWrapper 在目标卡真正挂载后重开一轮重试（它早先那轮随首次提交已经耗尽）。
   useEffect(() => {
-    if (!initialCardKey) return
+    const cardKey = initialCardKeyRef.current
+    if (!cardKey || !routeForCard(cardKey)) return
     // 放到下一个宏任务：保证 SystemLeafWrapper 的事件监听已注册（子 effect 先于父 effect 执行）
     const timer = window.setTimeout(() => {
       window.dispatchEvent(
         new CustomEvent("aichat:settings-flash-card", {
-          detail: { leafKey: "extensions", cardKey: initialCardKey, hostId },
+          detail: { leafKey: "extensions", cardKey, hostId },
         }),
       )
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [initialCardKey, hostId])
+  }, [hostId])
 
-  // 2. 已挂载时宿主热更新定位请求。
+  // 2. 已挂载时宿主热更新定位请求。hostId 必须精确匹配：Dialog 与路由页可能同时挂载本页，
+  //    不过滤会让弹窗里的搜索切走背景页的段。
   useEffect(() => {
     const handler = (event: Event) => {
-      const detail = (event as CustomEvent<{ leafKey?: string; cardKey?: string }>).detail
+      const detail = (event as CustomEvent<{ leafKey?: string; cardKey?: string; hostId?: string }>).detail
       if (!detail || detail.leafKey !== "extensions" || !detail.cardKey) return
+      if (detail.hostId !== hostId) return
       applyRoute(routeForCard(detail.cardKey))
     }
     window.addEventListener("aichat:settings-flash-card", handler as EventListener)
     return () => window.removeEventListener("aichat:settings-flash-card", handler as EventListener)
-  }, [applyRoute])
+  }, [applyRoute, hostId])
 
   // 3. 导航/搜索选中本叶时可附带目标段（旧宿主只发 key，保持当前段）。
   useEffect(() => {

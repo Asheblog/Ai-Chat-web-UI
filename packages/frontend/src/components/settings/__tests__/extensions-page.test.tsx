@@ -180,6 +180,20 @@ describe("ExtensionsPage 段路由", () => {
     expect(root.dataset.segment).toBe("versions")
   })
 
+  test("其它宿主的 settings-flash-card 事件不切本宿主页面的段", async () => {
+    const { container } = await renderPage(<ExtensionsPage hostId="layout" />)
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("aichat:settings-flash-card", {
+          detail: { leafKey: "extensions", cardKey: "extensions:skill-versions", hostId: "dialog" },
+        }),
+      )
+    })
+
+    expect(rootOf(container).dataset.section).toBe("overview")
+  })
+
   test("EXTENSION_SECTION_EVENT 供段内组件请求切段", async () => {
     const { container } = await renderPage(<ExtensionsPage />)
 
@@ -205,12 +219,29 @@ describe("ExtensionsPage 段路由", () => {
 })
 
 describe("卡路由与注册表一致", () => {
-  test("13 条 extensions 卡全部可路由，未知卡返回 null", () => {
+  test("13 条 extensions 卡逐条映射到正确的段与次级标签", () => {
+    const expected: Record<string, { section: string; segment?: string }> = {
+      "extensions:mcp-installations": { section: "mcp", segment: "installations" },
+      "extensions:mcp-connections": { section: "mcp", segment: "connections" },
+      "extensions:mcp-secrets": { section: "mcp", segment: "secrets" },
+      "extensions:mcp-tools": { section: "mcp", segment: "tools" },
+      "extensions:mcp-bindings": { section: "mcp", segment: "bindings" },
+      "extensions:skill-install": { section: "skills", segment: "install" },
+      "extensions:skill-approvals": { section: "skills", segment: "approvals" },
+      "extensions:skill-versions": { section: "skills", segment: "versions" },
+      "extensions:skill-bindings": { section: "skills", segment: "bindings" },
+      "extensions:python-tools": { section: "tools" },
+      "extensions:python-runtime": { section: "tools" },
+      "extensions:battle": { section: "extra" },
+      "extensions:title-summary": { section: "extra" },
+    }
     const cards = systemSettingsCards.filter((card) => card.leafKey === "extensions")
 
     expect(cards).toHaveLength(13)
-    expect(cards.every((card) => routeForCard(card.key) !== null)).toBe(true)
-    expect(Object.keys(EXTENSION_CARD_ROUTES)).toHaveLength(13)
+    expect(Object.keys(EXTENSION_CARD_ROUTES).sort()).toEqual(Object.keys(expected).sort())
+    for (const [cardKey, route] of Object.entries(expected)) {
+      expect(routeForCard(cardKey)).toEqual(route)
+    }
     expect(routeForCard("extensions:unknown")).toBeNull()
   })
 })
