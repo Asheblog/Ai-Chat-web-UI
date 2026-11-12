@@ -48,6 +48,8 @@ import { TaskTraceConfigService } from '../services/task-trace/task-trace-config
 import { StreamSettingsService } from '../services/stream'
 import { ImageGenerationService } from '../services/image-generation'
 import { McpService } from '../services/mcp'
+import { HttpMcpRuntimeClient } from '../services/mcp/mcp-runtime-client'
+import { ExtensionInstallService } from '../modules/extensions/extension-install-service'
 import { SkillInstaller } from '../modules/skills/skill-installer'
 import { SkillApprovalService } from '../modules/skills/skill-approval-service'
 import { ProviderRequester } from '../agent-runtime/provider-requester'
@@ -135,6 +137,7 @@ export interface AppContainerDeps {
   streamSettingsService?: StreamSettingsService
   imageGenerationService?: ImageGenerationService
   mcpService?: McpService
+  extensionInstallService?: ExtensionInstallService
   skillInstaller?: SkillInstaller
   skillApprovalService?: SkillApprovalService
   providerRequester?: ProviderRequester
@@ -187,6 +190,7 @@ export class AppContainer {
   readonly streamSettingsService: StreamSettingsService
   readonly imageGenerationService: ImageGenerationService
   readonly mcpService: McpService
+  readonly extensionInstallService: ExtensionInstallService
   readonly skillInstaller: SkillInstaller
   readonly skillApprovalService: SkillApprovalService
   readonly providerRequester: ProviderRequester
@@ -330,6 +334,23 @@ export class AppContainer {
       deps.mcpService ??
       new McpService({
         prisma: this.context.prisma,
+        // MCP 运行层：远程走 HTTP/SSE，本地包交给容器网关（ADR-0015）
+        runtimeClient: new HttpMcpRuntimeClient({
+          resolveSecrets: async (connection) => {
+            if (!connection.secretVaultId) return {}
+            try {
+              const raw = await this.secretVault.decryptById(connection.secretVaultId)
+              const parsed = JSON.parse(raw)
+              if (!parsed || typeof parsed !== 'object') return {}
+              return {
+                env: parsed.env && typeof parsed.env === 'object' ? parsed.env : undefined,
+                headers: parsed.headers && typeof parsed.headers === 'object' ? parsed.headers : undefined,
+              }
+            } catch {
+              return {}
+            }
+          },
+        }),
         getSystemSetting: async (key: string) => {
           try {
             const setting = await this.context.prisma.systemSetting.findUnique({ where: { key } })
@@ -340,6 +361,15 @@ export class AppContainer {
         },
       })
     registry.register(SERVICE_KEYS.mcpService, this.mcpService)
+
+    this.extensionInstallService =
+      deps.extensionInstallService ??
+      new ExtensionInstallService({
+        prisma: this.context.prisma,
+        mcpService: this.mcpService,
+        skillInstaller: this.skillInstaller,
+      })
+    registry.register(SERVICE_KEYS.extensionInstallService, this.extensionInstallService)
 
     this.connectionService =
       deps.connectionService ??

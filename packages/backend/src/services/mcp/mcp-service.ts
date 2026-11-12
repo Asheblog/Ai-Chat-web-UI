@@ -33,11 +33,20 @@ export interface McpRuntimeClient {
     transport?: string
     endpoint?: string | null
     command?: string | null
+    args?: string[] | null
     configJson?: string
     secretVaultId?: number | null
   }): Promise<McpToolManifest[]>
   callTool(
-    connection: { id: number; transport?: string; endpoint?: string | null },
+    connection: {
+      id: number
+      transport?: string
+      endpoint?: string | null
+      command?: string | null
+      args?: string[] | null
+      configJson?: string
+      secretVaultId?: number | null
+    },
     toolName: string,
     args: Record<string, unknown>,
   ): Promise<{ content: Array<{ type: string; text?: string }>; isError?: boolean }>
@@ -154,6 +163,18 @@ export class McpService {
       envJson: data.envJson ?? '{}',
       status: 'active',
     })
+  }
+
+  async findInstallationByKey(namespaceKey: string) {
+    return this.repository.findInstallationByKey(namespaceKey)
+  }
+
+  async deleteInstallation(id: number) {
+    await this.repository.deleteInstallation(id)
+  }
+
+  async listToolCache(params: { connectionId?: number; pinned?: boolean }) {
+    return this.repository.listToolCache(params)
   }
 
   async listInstallations(params?: { sourceType?: string; status?: string }) {
@@ -283,21 +304,12 @@ export class McpService {
       throw new McpServiceError('MCP Runtime Client 未配置，无法刷新工具缓存', 500)
     }
 
-    // TODO: 待 MCP Gateway 实现后移除 local_package 阻断
-    // Check for local_package
-    if (conn.installation.sourceType === 'local_package') {
-      throw new McpServiceError(
-        '需要 MCP Gateway，当前未启用/未实现。' +
-          'local_package 类型的 MCP 服务需要通过 MCP Gateway 运行。',
-        501,
-      )
-    }
-
     const tools = await this.runtimeClient.listTools({
       id: conn.id,
       transport: conn.installation.transport,
       endpoint: conn.installation.endpoint,
       command: conn.installation.command,
+      args: this.parseArgs(conn.installation.argsJson),
       configJson: conn.configJson,
       secretVaultId: conn.secretVaultId,
     })
@@ -452,20 +464,30 @@ export class McpService {
     if (!conn) throw new McpServiceError(`MCP 连接 #${connectionId} 不存在`, 404)
     if (!conn.enabled) throw new McpServiceError('MCP 连接已禁用', 400)
 
-    // TODO: 待 MCP Gateway 实现后移除 local_package 阻断
-    if (conn.installation.sourceType === 'local_package') {
-      throw new McpServiceError(
-        '需要 MCP Gateway，当前未启用/未实现。' +
-          'local_package 类型的 MCP 服务需要通过 MCP Gateway 运行。',
-        501,
-      )
-    }
-
     return this.runtimeClient.callTool(
-      { id: conn.id, transport: conn.installation.transport, endpoint: conn.installation.endpoint },
+      {
+        id: conn.id,
+        transport: conn.installation.transport,
+        endpoint: conn.installation.endpoint,
+        command: conn.installation.command,
+        args: this.parseArgs(conn.installation.argsJson),
+        configJson: conn.configJson,
+        secretVaultId: conn.secretVaultId,
+      },
       originalName,
       args,
     )
+  }
+
+  private parseArgs(raw?: string | null): string[] | null {
+    if (!raw) return null
+    try {
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) return null
+      return parsed.map((item) => String(item))
+    } catch {
+      return null
+    }
   }
 
   private safeParseJson(raw: string): Record<string, unknown> {

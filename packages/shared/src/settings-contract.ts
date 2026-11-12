@@ -25,6 +25,7 @@ export const SYSTEM_SETTINGS_FIELD_MAP = {
   contextCompressionTailMessages: 'context_compression_tail_messages',
   contextCompressionThresholdRatio: 'context_compression_threshold_ratio',
   defaultUserDailyQuota: 'default_user_daily_quota',
+  extensionInstallToolEnable: 'extension_install_tool_enable',
   knowledgeBaseAllowAnonymous: 'knowledge_base_allow_anonymous',
   knowledgeBaseAllowUsers: 'knowledge_base_allow_users',
   knowledgeBaseEnabled: 'knowledge_base_enabled',

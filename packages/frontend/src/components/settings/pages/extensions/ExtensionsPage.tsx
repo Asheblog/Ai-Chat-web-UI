@@ -15,6 +15,7 @@ import { McpSection, isMcpSegment, type McpSegment } from "./sections/mcp-sectio
 import { OverviewSection } from "./sections/overview-section"
 import { SkillSection, isSkillSegment, type SkillSegment } from "./sections/skill-section"
 import { ToolsSection } from "./sections/tools-section"
+import { SectionSwitch } from "./sections/section-switch"
 
 const DEFAULT_MCP_SEGMENT: McpSegment = "installations"
 const DEFAULT_SKILL_SEGMENT: SkillSegment = "install"
@@ -133,7 +134,15 @@ export function ExtensionsPage({
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <SectionSwitch
+            settingsKey="extensionInstallToolEnable"
+            label="AI 自助安装"
+            onLabel="已开启"
+            offLabel="已关闭"
+            ariaLabel="允许模型在聊天里按仓库链接安装扩展"
+            hint="聊天里贴 GitHub 链接即可安装 MCP 服务或 Skill"
+          />
           <Button
             type="button"
             variant="outline"

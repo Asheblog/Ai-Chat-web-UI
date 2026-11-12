@@ -28,6 +28,7 @@ import {
 import { VisionProxyToolHandler } from './vision-proxy-handler'
 import { ExportPdfToolHandler } from './export-pdf-handler'
 import { ResearchPlanToolHandler } from './research-plan-handler'
+import { InstallExtensionToolHandler } from './install-extension-handler'
 import type { VisionProxyService } from '../services/vision-proxy-service'
 import { McpToolAdapter } from '../../../services/mcp/mcp-tool-adapter'
 
@@ -255,6 +256,11 @@ export function createToolHandlerRegistry(
   // 注册深度研究计划确认工具（仅深度研究且联网搜索可用时）
   if (params.deepResearchPlan?.enabled) {
     registry.register(new ResearchPlanToolHandler(params.deepResearchPlan))
+  }
+
+  // 注册扩展安装工具（AI 自助安装 MCP / Skill）
+  if (params.extensionInstall?.enabled) {
+    registry.register(new InstallExtensionToolHandler(params.extensionInstall))
   }
 
   return registry

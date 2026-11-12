@@ -47,6 +47,7 @@ export const SERVICE_KEYS = {
   streamSettingsService: 'streamSettingsService',
   imageGenerationService: 'imageGenerationService',
   mcpService: 'mcpService',
+  extensionInstallService: 'extensionInstallService',
   skillInstaller: 'skillInstaller',
   skillApprovalService: 'skillApprovalService',
 

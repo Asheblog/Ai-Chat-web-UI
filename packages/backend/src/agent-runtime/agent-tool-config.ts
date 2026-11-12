@@ -463,6 +463,28 @@ export function buildAgentVisionProxyConfig(sysMap: Record<string, string>): Age
   return loadVisionProxyConfig(sysMap)
 }
 
+/** 扩展安装工具开关：系统设置优先，其次环境变量，默认开启。 */
+export function isExtensionInstallToolEnabled(
+  sysMap: Record<string, string>,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  const configured = sysMap.extension_install_tool_enable ?? env.EXTENSION_INSTALL_TOOL_ENABLE
+  if (configured === undefined) return true
+  return String(configured).trim().toLowerCase() !== 'false'
+}
+
+/**
+ * 判断消息里是否出现可安装的扩展来源（GitHub 仓库链接或 owner/repo@ref 简写）。
+ * 只做激活信号，真正的识别交给 install_extension 工具。
+ */
+export function detectExtensionSourceInMessage(content: string): boolean {
+  const text = (content || '').trim()
+  if (!text) return false
+  if (/https?:\/\/(www\.)?github\.com\//i.test(text)) return true
+  if (/https?:\/\/raw\.githubusercontent\.com\//i.test(text)) return true
+  return false
+}
+
 export interface AgentToolFlags {
   webSearchSkillRequested: boolean
   pythonSkillRequested: boolean
@@ -480,6 +502,7 @@ export interface AgentToolFlags {
   dynamicSkillRequestedRaw: boolean
   dynamicSkillRuntimeEnabled: boolean
   dynamicSkillRequested: boolean
+  extensionInstallActive: boolean
   agentToolsActive: boolean
 }
 
@@ -491,6 +514,10 @@ export interface AgentToolFlagsInput {
   pythonToolConfig: AgentPythonToolConfig
   workspaceToolConfig: AgentWorkspaceToolConfig
   urlReaderConfig: AgentUrlReaderConfig
+  /** 用户消息里出现了 GitHub 仓库链接（扩展安装意图信号） */
+  extensionSourceDetected?: boolean
+  /** 系统设置是否允许模型自助安装扩展 */
+  extensionInstallEnabled?: boolean
 }
 
 /**
@@ -526,6 +553,11 @@ export function computeAgentToolFlags(input: AgentToolFlagsInput): AgentToolFlag
       .toString()
       .toLowerCase() === 'true'
   const dynamicSkillRequested = dynamicSkillRequestedRaw && dynamicSkillRuntimeEnabled
+  // 扩展安装工具：默认随设置开启，但只有消息里出现仓库链接时才激活，
+  // 避免普通聊天被打进工具循环（额外工具 schema 与多轮开销）
+  const extensionInstallActive = Boolean(
+    input.extensionInstallEnabled !== false && input.extensionSourceDetected,
+  )
   const agentToolsActive =
     agentWebSearchActive ||
     pythonToolActive ||
@@ -534,7 +566,8 @@ export function computeAgentToolFlags(input: AgentToolFlagsInput): AgentToolFlag
     documentToolsActive ||
     knowledgeBaseToolsActive ||
     pdfExportActive ||
-    dynamicSkillRequested
+    dynamicSkillRequested ||
+    extensionInstallActive
   return {
     webSearchSkillRequested,
     pythonSkillRequested,
@@ -552,6 +585,7 @@ export function computeAgentToolFlags(input: AgentToolFlagsInput): AgentToolFlag
     dynamicSkillRequestedRaw,
     dynamicSkillRuntimeEnabled,
     dynamicSkillRequested,
+    extensionInstallActive,
     agentToolsActive,
   }
 }

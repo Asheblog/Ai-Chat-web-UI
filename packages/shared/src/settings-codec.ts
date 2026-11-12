@@ -91,6 +91,7 @@ export interface SystemSettings {
   pythonToolMaxSourceChars?: number
   agentMaxToolIterations?: number
   mcpGlobalEnabled?: boolean
+  extensionInstallToolEnable?: boolean
   assistantAvatarUrl?: string | null
   chatSystemPrompt?: string
   webSearchApiKeyTavily?: string
@@ -441,6 +442,8 @@ export const parseSystemSettingsPayload = (
     return 4
   })()
   const mcpGlobalEnabled = (raw.mcp_global_enabled ?? true) as boolean
+  const extensionInstallToolEnable =
+    String(raw.extension_install_tool_enable ?? 'true').toLowerCase() !== 'false'
   const assistantAvatarUrl = (() => {
     const value = raw.assistant_avatar_url
     if (typeof value === 'string' && value.trim().length > 0) return value
@@ -599,6 +602,7 @@ export const parseSystemSettingsPayload = (
     pythonToolMaxSourceChars,
     agentMaxToolIterations,
     mcpGlobalEnabled,
+    extensionInstallToolEnable,
     assistantAvatarUrl,
     chatSystemPrompt,
     taskTraceEnabled,

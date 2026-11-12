@@ -71,7 +71,12 @@ import {
   parseStoredImageDescriptions,
   type VisionProxyService,
 } from '../services/vision-proxy-service';
-import { buildAgentVisionProxyConfig, computeAgentToolFlags } from '../../../agent-runtime/agent-tool-config';
+import {
+  buildAgentVisionProxyConfig,
+  computeAgentToolFlags,
+  detectExtensionSourceInMessage,
+  isExtensionInstallToolEnabled,
+} from '../../../agent-runtime/agent-tool-config';
 import type { ProviderRequester } from '../../../agent-runtime/provider-requester';
 import type { NonStreamFallbackService } from '../services/non-stream-fallback-service';
 import type { AssistantProgressService } from '../services/assistant-progress-service';
@@ -108,6 +113,8 @@ import { ProviderStreamEngine } from './stream/provider-stream-engine';
 import { StreamPersistenceSink } from './stream/persistence-sink';
 import { SSE_HEADERS } from '../../../http/sse';
 import type { SecretVaultService } from '../../../services/secret-vault';
+import type { McpService } from '../../../services/mcp/mcp-service';
+import type { ExtensionInstallService } from '../../extensions/extension-install-service';
 import { resolveDeepseekSearchSettings } from '../../../services/settings/deepseek-search-credentials';
 
 type SendMessagePayload = z.infer<typeof sendMessageSchema>
@@ -129,6 +136,8 @@ export interface ChatStreamRoutesDeps {
   streamSseService: StreamSseService
   conversationCompressionService: ConversationCompressionService
   visionProxyService: VisionProxyService
+  mcpService?: McpService
+  extensionInstallService?: ExtensionInstallService
 }
 
 export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
@@ -463,6 +472,10 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
       // ===== 图片转写代理（Vision Transcription Proxy）=====
       // 主模型无 vision 且有图时：工具流 → 注入视觉分析工具由主模型自主调用；
       // 标准流（无工具）→ 后端自动转写，描述注入用户消息前缀并持久化（转写一次）
+      // 扩展安装意图：消息里带 GitHub 链接时才激活工具流，避免普通聊天被拖进工具循环
+      const extensionInstallEnabledFlag = isExtensionInstallToolEnabled(turnContext.systemSettings)
+      const extensionSourceDetectedFlag = detectExtensionSourceInMessage(content || '')
+
       const visionProxyConfig = buildAgentVisionProxyConfig(turnContext.systemSettings)
       const hasImages = Array.isArray(images) && images.length > 0
       // F4: 仅在发图时才查询模型能力，避免每请求一次 catalog 查询；mainModelVision 语义不变
@@ -481,6 +494,8 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
             pythonToolConfig,
             workspaceToolConfig,
             urlReaderConfig,
+            extensionInstallEnabled: extensionInstallEnabledFlag,
+            extensionSourceDetected: extensionSourceDetectedFlag,
           })
         : null
       const visionProxyToolFlow = visionProxyRequested && Boolean(preAgentToolFlags?.agentToolsActive)
@@ -646,6 +661,8 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         pythonToolConfig,
         workspaceToolConfig,
         urlReaderConfig,
+        extensionInstallEnabled: extensionInstallEnabledFlag,
+        extensionSourceDetected: extensionSourceDetectedFlag,
       })
       const dynamicSkillDisabledMessage =
         '聊天侧第三方动态 Skill Runtime 当前关闭，请在系统设置中启用“聊天侧第三方动态 Skill Runtime”后重试。';
@@ -811,7 +828,10 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
             visionProxy: visionProxyToolFlow,
             pdfExport: agentToolFlags.pdfExportActive,
             deepResearch: agentToolFlags.deepResearchSkillRequested,
+            extensionInstall: agentToolFlags.extensionInstallActive,
           },
+          mcpService: deps.mcpService,
+          extensionInstallService: deps.extensionInstallService,
           allowDynamicRuntime: agentToolFlags.dynamicSkillRuntimeEnabled,
           visionProxyConfig: isVisionProxyReady(visionProxyConfig) ? visionProxyConfig : null,
           visionProxyService,

@@ -689,6 +689,7 @@ export class SettingsService {
       SYSTEM_SETTINGS_FIELD_MAP.pythonToolEnable,
       SYSTEM_SETTINGS_FIELD_MAP.chatDynamicSkillRuntimeEnabled,
       SYSTEM_SETTINGS_FIELD_MAP.mcpGlobalEnabled,
+      SYSTEM_SETTINGS_FIELD_MAP.extensionInstallToolEnable,
       SYSTEM_SETTINGS_FIELD_MAP.taskTraceEnabled,
       SYSTEM_SETTINGS_FIELD_MAP.taskTraceDefaultOn,
       SYSTEM_SETTINGS_FIELD_MAP.taskTraceAdminOnly,

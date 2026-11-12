@@ -188,3 +188,13 @@ _Avoid_：用最小 Key 行 ID 冒充连接组身份；用 channelName / prefixI
 - **MCP Secret Binding（MCP 密钥绑定）**：用户或管理员将私有凭据关联到已安装 MCP 服务的关系；凭据只用于对应 MCP 服务连接或调用
 - **MCP Registry Source（MCP 注册表来源）**：提供 MCP 服务发现、版本和安装元数据的外部来源，包括官方注册表、市场和组织自建目录
 - **Built-in MCP Market（内置 MCP 市场）**：系统内置的 MCP 服务发现目录，聚合远程 MCP 服务、仓库链接、主页和安装元数据；出现在市场中不代表已获准运行
+- **MCP Runtime Client（MCP 运行时客户端）**：后端连接 MCP 端点或网关容器、完成协议握手与工具发现/调用的运行时组件；不属于 MCP 安装元数据
+- **MCP Gateway Container（MCP 网关容器）**：承载本地包型 MCP 进程的受限容器，替代宿主机直接执行；容器退出即视为连接失效
+
+## Extension
+
+- **Extension Install Tool（扩展安装工具）**：模型可调用的安装入口（`install_extension`），按用户给出的仓库链接完成识别、安装与启用；不是设置页面的表单流程
+- **Extension Source（扩展来源）**：用户提供、以 GitHub 仓库地址表达的待安装能力来源；解析后得到 owner/repo/ref 与可选子目录
+- **Extension Install Plan（扩展安装计划）**：识别层对来源的判定结果，包含扩展类型、传输方式、启动命令或端点、环境变量需求与判定依据；安装器只消费这一份结构
+- **Extension Auto-detection（扩展自动识别）**：只读取仓库白名单清单文件来判定扩展类型与运行方式，不整包下载、不执行仓库代码
+- **Extension Install Intent（扩展安装意图）**：消息中出现 GitHub 仓库链接时触发的信号，用于决定是否把请求放进工具循环

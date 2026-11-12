@@ -4,6 +4,7 @@
 
 import type { WebSearchHit } from '../utils/web-search'
 import type { VisionProxyConfig } from '../services/vision/vision-proxy-service'
+import type { ExtensionInstallServiceLike } from '../modules/extensions/types'
 
 /**
  * 工具调用参数
@@ -132,7 +133,14 @@ export interface DeepResearchPlanHandlerConfig {
   resolveRevision?: () => number
 }
 
+/** 扩展安装工具配置：服务实例由容器注入，开关由系统设置决定。 */
+export interface ExtensionInstallHandlerConfig {
+  enabled: boolean
+  service: ExtensionInstallServiceLike
+}
+
 export interface ToolHandlerFactoryParams {
+  extensionInstall?: ExtensionInstallHandlerConfig | null
   webSearch?: WebSearchHandlerConfig | null
   python?: PythonHandlerConfig | null
   document?: DocumentHandlerConfig | null

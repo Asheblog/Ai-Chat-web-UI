@@ -12,6 +12,7 @@ import type { WebSearchHit } from '../../utils/web-search';
 import { serializeQuotaSnapshot } from '../../services/quota/legacy-utils';
 import { getFriendlyErrorMessage, parseApiError } from '../../utils/api-error-parser';
 import type { UsageQuotaSnapshot } from '../../types';
+import type { ExtensionInstallService } from '../extensions/extension-install-service';
 import { summarizeSsePayload } from '../../utils/task-trace';
 import type { TaskTraceRecorder, TaskTraceStatus } from '../../utils/task-trace';
 import { serializeToolLogsForPersistence, type ToolLogEntry } from './tool-logs';
@@ -123,6 +124,7 @@ export type AgentResponseParams = {
     visionProxy?: boolean;
     pdfExport?: boolean;
     deepResearch?: boolean;
+    extensionInstall?: boolean;
   };
   requestedSkills: RequestedSkillsPayload;
   knowledgeBaseIds?: number[];
@@ -148,6 +150,7 @@ export type AgentResponseParams = {
   concurrencyErrorMessage: string;
   ragService?: RAGService | null;
   mcpService?: McpService;
+  extensionInstallService?: ExtensionInstallService;
 };
 
 export const createAgentWebSearchResponse = async (params: AgentResponseParams): Promise<Response> => {
@@ -697,6 +700,9 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             ? pdfExportConfig
             : null,
           deepResearchPlan: deepResearchPlanConfig,
+          extensionInstall: toolFlags.extensionInstall && params.extensionInstallService
+            ? { enabled: true, service: params.extensionInstallService }
+            : null,
         },
         allowDynamicRuntime: allowDynamicRuntime === true,
         mcpService: params.mcpService,

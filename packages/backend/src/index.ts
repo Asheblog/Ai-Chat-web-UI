@@ -128,6 +128,8 @@ app.route('/api/chat', createChatApi({
     streamSseService: container.streamSseService,
     conversationCompressionService: container.conversationCompressionService,
     visionProxyService: container.visionProxyService,
+    mcpService: container.mcpService,
+    extensionInstallService: container.extensionInstallService,
   },
   completionRoutes: {
     prisma: appContext.prisma,

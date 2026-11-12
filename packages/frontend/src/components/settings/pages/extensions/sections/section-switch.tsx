@@ -4,8 +4,11 @@ import { useCallback, useEffect, useId, useState } from "react"
 import { Switch } from "@/components/ui/switch"
 import { useSystemSettings } from "@/hooks/use-system-settings"
 
-/** 页头单开关只服务这两个全局设置 key；其余设置项归段壳里的卡片。 */
-export type SectionSwitchKey = "mcpGlobalEnabled" | "chatDynamicSkillRuntimeEnabled"
+/** 页头单开关只服务全局能力开关；其余设置项归段壳里的卡片。 */
+export type SectionSwitchKey =
+  | "mcpGlobalEnabled"
+  | "chatDynamicSkillRuntimeEnabled"
+  | "extensionInstallToolEnable"
 
 export interface SectionSwitchProps {
   settingsKey: SectionSwitchKey
