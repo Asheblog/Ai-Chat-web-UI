@@ -97,14 +97,14 @@ export function BindingsTab() {
           }
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <McpField label="连接" required>
+            <McpField label="连接（connectionId）" required>
               <select className="h-9 w-full rounded-md border bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary" value={formConnId} onChange={(e) => setFormConnId(e.target.value)}>
                 <option value="">选择...</option>
                 {connections.map((c) => <option key={c.id} value={c.id}>{c.name} (ID:{c.id})</option>)}
               </select>
             </McpField>
-            <McpSelectField label="scopeType" value={formScopeType} onChange={(v) => setFormScopeType(v as any)} options={['system', 'user', 'session', 'battle_model']} />
-            <McpField label="scopeId" required><Input value={formScopeId} onChange={(e) => setFormScopeId(e.target.value)} placeholder="如 'system' 或用户ID" /></McpField>
+            <McpSelectField label="作用域类型" value={formScopeType} onChange={(v) => setFormScopeType(v as any)} options={['system', 'user', 'session', 'battle_model']} />
+            <McpField label="作用域 ID" required><Input value={formScopeId} onChange={(e) => setFormScopeId(e.target.value)} placeholder="如 'system' 或用户ID" /></McpField>
             <div className="flex items-center gap-2 pt-5">
               <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
               <span className="text-xs text-muted-foreground">启用</span>

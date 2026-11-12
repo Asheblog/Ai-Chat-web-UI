@@ -19,7 +19,7 @@ export type SegmentedTabsProps<K extends string = string> = {
 
 /**
  * 段内次级标签：单排 pill 按钮，窄屏换行而非再套一层横向滚动（避免双层滚动）。
- * 纯受控展示组件（无内部 state），pill 样式沿用 McpNavRail 的移动端分支。
+ * 纯受控展示组件（无内部 state），pill 样式沿用原 MCP 页导航的移动端分支。
  */
 export function SegmentedTabs<K extends string>({
   items,

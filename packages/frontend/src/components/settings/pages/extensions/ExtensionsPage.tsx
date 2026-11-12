@@ -15,16 +15,14 @@ import {
   type ExtensionSection,
   type ExtensionSectionEventDetail,
 } from "./extensions-sections"
+import { McpSection, isMcpSegment, type McpSegment } from "./sections/mcp-section"
 import { OverviewSection } from "./sections/overview-section"
 
-const DEFAULT_MCP_SEGMENT = "installations"
+const DEFAULT_MCP_SEGMENT: McpSegment = "installations"
 const DEFAULT_SKILL_SEGMENT = "install"
 
-/** 每段合法次级标签 key，用于丢弃事件里越界的 segment。 */
-const SEGMENT_KEYS: Partial<Record<ExtensionSection, readonly string[]>> = {
-  mcp: EXTENSION_SEGMENTS.mcp.map((item) => item.key),
-  skills: EXTENSION_SEGMENTS.skills.map((item) => item.key),
-}
+/** Skill 段合法次级标签 key，用于丢弃事件里越界的 segment（MCP 段由 McpSection 自校验）。 */
+const SKILL_SEGMENT_KEYS = EXTENSION_SEGMENTS.skills.map((item) => item.key)
 
 function isExtensionSection(value: unknown): value is ExtensionSection {
   return typeof value === "string" && EXTENSION_SECTIONS.some((item) => item.key === value)
@@ -33,8 +31,8 @@ function isExtensionSection(value: unknown): value is ExtensionSection {
 /**
  * 能力扩展：MCP 服务 / Skill / 内置工具 / 对话增强的统一入口。
  *
- * 本任务只落地骨架：段路由、卡定位（flash-bus + 三个 window 事件）与占位面板；
- * 各段真实内容由后续任务接入。
+ * 骨架负责段路由与卡定位（flash-bus + 三个 window 事件）；总览与 MCP 段已接入真实内容，
+ * Skill / 内置工具 / 对话增强段仍为占位，由后续任务填实。
  */
 export function ExtensionsPage({
   hostId,
@@ -47,9 +45,9 @@ export function ExtensionsPage({
   // 冷启动首次渲染就必须落在目标段/次级标签上，否则卡元素根本不会挂载，wrapper 的重试必然落空
   const initialRoute = initialCardKey ? routeForCard(initialCardKey) : null
   const [section, setSection] = useState<ExtensionSection>(initialRoute?.section ?? "overview")
-  const [mcpSegment, setMcpSegment] = useState(
-    initialRoute?.section === "mcp"
-      ? (initialRoute.segment ?? DEFAULT_MCP_SEGMENT)
+  const [mcpSegment, setMcpSegment] = useState<McpSegment>(
+    initialRoute?.section === "mcp" && isMcpSegment(initialRoute.segment)
+      ? initialRoute.segment
       : DEFAULT_MCP_SEGMENT,
   )
   const [skillSegment, setSkillSegment] = useState(
@@ -64,8 +62,8 @@ export function ExtensionsPage({
     setSection(route.section)
     const segment = route.segment
     if (!segment) return
-    if (route.section === "mcp" && SEGMENT_KEYS.mcp?.includes(segment)) setMcpSegment(segment)
-    if (route.section === "skills" && SEGMENT_KEYS.skills?.includes(segment)) setSkillSegment(segment)
+    if (route.section === "mcp" && isMcpSegment(segment)) setMcpSegment(segment)
+    if (route.section === "skills" && SKILL_SEGMENT_KEYS.includes(segment)) setSkillSegment(segment)
   }, [])
 
   // 冷启动目标卡冻结在首帧：wrapper 挂载时会消费 flash-bus，父级随后重渲染拿到的
@@ -124,8 +122,7 @@ export function ExtensionsPage({
   }, [applyRoute])
 
   const activeMeta = EXTENSION_SECTIONS.find((item) => item.key === section) ?? EXTENSION_SECTIONS[0]
-  const segments =
-    section === "mcp" ? EXTENSION_SEGMENTS.mcp : section === "skills" ? EXTENSION_SEGMENTS.skills : []
+  const segments = section === "skills" ? EXTENSION_SEGMENTS.skills : []
   const activeSegment =
     section === "mcp" ? mcpSegment : section === "skills" ? skillSegment : undefined
 
@@ -170,11 +167,12 @@ export function ExtensionsPage({
         />
 
         <div className="min-w-0 flex-1 space-y-3 mt-3 md:mt-0">
-          {activeSegment !== undefined && (
+          {/* MCP 段的次级标签随段组件一起渲染（页头在上、标签在下），这里只保留尚未接入的 Skill 段 */}
+          {section === "skills" && activeSegment !== undefined && (
             <SegmentedTabs
               items={segments}
               active={activeSegment}
-              onChange={section === "mcp" ? setMcpSegment : setSkillSegment}
+              onChange={setSkillSegment}
               ariaLabel={`${activeMeta.label}次级标签`}
             />
           )}
@@ -188,6 +186,8 @@ export function ExtensionsPage({
               <OverviewSection
                 onNavigate={(nextSection, segment) => applyRoute({ section: nextSection, segment })}
               />
+            ) : section === "mcp" ? (
+              <McpSection segment={mcpSegment} onSegmentChange={setMcpSegment} />
             ) : (
               <>
                 <p className="text-sm font-medium">{activeMeta.label}</p>

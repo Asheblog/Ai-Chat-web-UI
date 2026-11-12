@@ -33,7 +33,7 @@ const mobileItemBase = cn(
 
 /**
  * 分段导航：桌面左侧竖排段列表，移动端折成一行可横向滚动的分段按钮。
- * 纯受控展示组件（无内部 state），样式沿用 McpNavRail 的桌面/移动两分支。
+ * 纯受控展示组件（无内部 state），样式沿用原 MCP 页导航的桌面/移动两分支。
  */
 export function SectionRail<K extends string>({
   items,

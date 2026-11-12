@@ -23,10 +23,42 @@ vi.mock("@/features/skills/api", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   listSkillApprovals: overviewDataMocks.listSkillApprovals,
 }))
+
+/**
+ * MCP 段（Task 5）挂载后会直接渲染 5 个既有 tab，它们各自拉取安装模板 / 绑定 / 凭据列表，
+ * 页头开关还直接读写信箱设置接口。这里全部 mock，保持既有段路由断言不变。
+ */
+const mcpListMocks = vi.hoisted(() => ({
+  listInstallations: vi.fn(),
+  listBindings: vi.fn(),
+}))
 vi.mock("@/features/mcp/api", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   listConnections: overviewDataMocks.listConnections,
+  listInstallations: mcpListMocks.listInstallations,
+  listBindings: mcpListMocks.listBindings,
 }))
+
+const secretVaultMocks = vi.hoisted(() => ({ listSecrets: vi.fn() }))
+vi.mock("@/features/secret-vault/api", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  listSecrets: secretVaultMocks.listSecrets,
+}))
+
+const settingsApiMocks = vi.hoisted(() => ({
+  getSystemSettings: vi.fn(),
+  updateSystemSettings: vi.fn(),
+}))
+vi.mock("@/features/settings/api", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getSystemSettings: settingsApiMocks.getSystemSettings,
+  updateSystemSettings: settingsApiMocks.updateSystemSettings,
+}))
+
+// jsdom 未实现 scrollIntoView：MCP 段挂上 data-card-key 后，SystemLeafWrapper 会真的滚动到目标卡
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {}
+}
 
 /** 页面根容器（只有它带 data-section），段内容占位面板带 data-section-panel。 */
 function rootOf(container: HTMLElement): HTMLElement {
@@ -54,6 +86,11 @@ beforeEach(() => {
   })
   overviewDataMocks.listSkillApprovals.mockResolvedValue({ success: true, data: [] })
   overviewDataMocks.listConnections.mockResolvedValue({ success: true, data: [] })
+  settingsApiMocks.getSystemSettings.mockResolvedValue({ data: { mcpGlobalEnabled: true } })
+  settingsApiMocks.updateSystemSettings.mockResolvedValue({ data: {} })
+  mcpListMocks.listInstallations.mockResolvedValue({ success: true, data: [] })
+  mcpListMocks.listBindings.mockResolvedValue({ success: true, data: [] })
+  secretVaultMocks.listSecrets.mockResolvedValue({ success: true, data: [] })
 })
 
 afterEach(() => {
@@ -74,7 +111,10 @@ describe("ExtensionsPage 段路由", () => {
   test("点击左栏「MCP 服务」切段并落到默认次级标签 installations", async () => {
     const { container } = await renderPage(<ExtensionsPage />)
 
-    fireEvent.click(screen.getByRole("button", { name: "MCP 服务" }))
+    // MCP 段挂载后会拉设置与安装模板列表，flush 掉这些 promise 再断言
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "MCP 服务" }))
+    })
 
     const root = rootOf(container)
     expect(root.dataset.section).toBe("mcp")
@@ -212,7 +252,9 @@ describe("ExtensionsPage 段路由", () => {
     expect(rootOf(container).dataset.section).toBe("skills")
     expect(rootOf(container).dataset.segment).toBe("install")
 
-    fireEvent.click(screen.getByRole("button", { name: "新增 MCP 服务" }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "新增 MCP 服务" }))
+    })
     expect(rootOf(container).dataset.section).toBe("mcp")
     expect(rootOf(container).dataset.segment).toBe("installations")
   })

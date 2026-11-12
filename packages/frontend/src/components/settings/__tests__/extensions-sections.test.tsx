@@ -1,7 +1,8 @@
 import React from "react"
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { OverviewSection } from "../pages/extensions/sections/overview-section"
+import { McpSection, type McpSegment } from "../pages/extensions/sections/mcp-section"
 
 /**
  * 总览段单测：三路数据（系统设置 / Skill 待审批 / MCP 连接）全部 mock，
@@ -21,6 +22,36 @@ vi.mock("@/features/skills/api", () => ({
 const mcpApiMocks = vi.hoisted(() => ({ listConnections: vi.fn() }))
 vi.mock("@/features/mcp/api", () => ({
   listConnections: mcpApiMocks.listConnections,
+}))
+
+/** MCP 段页头的全局开关直接读写信箱设置接口，独立 mock 以便断言请求载荷。 */
+const settingsApiMocks = vi.hoisted(() => ({
+  getSystemSettings: vi.fn(),
+  updateSystemSettings: vi.fn(),
+}))
+vi.mock("@/features/settings/api", () => ({
+  getSystemSettings: settingsApiMocks.getSystemSettings,
+  updateSystemSettings: settingsApiMocks.updateSystemSettings,
+}))
+
+/**
+ * 5 个既有 tab 组件背后各是一整组 mcp / secret-vault 请求。
+ * 段级用例只关心标签、卡 key 与开关，用 stub 替换，避免连带 mock 三层 API。
+ */
+vi.mock("@/components/settings/system-mcp/installations-tab", () => ({
+  InstallationsTab: () => <p>安装模板面板</p>,
+}))
+vi.mock("@/components/settings/system-mcp/connections-tab", () => ({
+  ConnectionsTab: () => <p>连接面板</p>,
+}))
+vi.mock("@/components/settings/system-mcp/secrets-tab", () => ({
+  SecretsTab: () => <p>凭据面板</p>,
+}))
+vi.mock("@/components/settings/system-mcp/tools-tab", () => ({
+  ToolsTab: () => <p>工具面板</p>,
+}))
+vi.mock("@/components/settings/system-mcp/bindings-tab", () => ({
+  BindingsTab: () => <p>绑定面板</p>,
 }))
 
 const refreshSpy = vi.fn<() => Promise<void>>(() => Promise.resolve())
@@ -64,6 +95,8 @@ beforeEach(() => {
   mockSettings(allEnabled)
   skillsApiMocks.listSkillApprovals.mockResolvedValue({ success: true, data: [] })
   mcpApiMocks.listConnections.mockResolvedValue({ success: true, data: [] })
+  settingsApiMocks.getSystemSettings.mockResolvedValue({ data: { mcpGlobalEnabled: true } })
+  settingsApiMocks.updateSystemSettings.mockResolvedValue({ data: {} })
 })
 
 afterEach(() => {
@@ -226,5 +259,96 @@ describe("总览段：入口跳转", () => {
     fireEvent.click(screen.getByRole("button", { name: "标题智能总结" }))
     expect(onNavigate).toHaveBeenLastCalledWith("extra")
     await screen.findByText("0 个连接")
+  })
+})
+
+/** MCP 段由页面持有次级标签状态：这里包一层受控外壳模拟 ExtensionsPage。 */
+function McpHarness({ initialSegment }: { initialSegment?: McpSegment }) {
+  const [segment, setSegment] = React.useState<McpSegment>(initialSegment ?? "installations")
+  return <McpSection segment={segment} onSegmentChange={setSegment} />
+}
+
+/** 冲掉页头设置请求的 promise，避免异步 setState 脱离 act。 */
+async function renderMcp(initialSegment?: McpSegment) {
+  const view = render(<McpHarness initialSegment={initialSegment} />)
+  await act(async () => {})
+  return view
+}
+
+const GLOBAL_OFF_HINT = "MCP 全局已关闭，开启后才能连接与调用工具。"
+
+describe("MCP 段：五标签与全局开关", () => {
+  test("5 个次级标签顺序固定且不含「总览」，默认落安装模板并挂上卡 key", async () => {
+    const { container } = await renderMcp()
+
+    expect(screen.getAllByRole("tab").map((el) => el.textContent)).toEqual([
+      "安装模板",
+      "连接",
+      "凭据",
+      "工具",
+      "绑定",
+    ])
+    expect(screen.queryByRole("tab", { name: "总览" })).toBeNull()
+
+    expect(screen.getByRole("heading", { name: "MCP 服务" })).toBeInTheDocument()
+    expect(screen.getByText("连接外部工具与数据源")).toBeInTheDocument()
+    expect(screen.getByText("安装模板面板")).toBeInTheDocument()
+    expect(container.querySelector('[data-card-key="extensions:mcp-installations"]')).not.toBeNull()
+  })
+
+  test("点「凭据」渲染凭据内容，容器 data-card-key 切到 extensions:mcp-secrets", async () => {
+    const { container } = await renderMcp()
+
+    fireEvent.click(screen.getByRole("tab", { name: "凭据" }))
+
+    expect(screen.getByText("凭据面板")).toBeInTheDocument()
+    expect(screen.queryByText("安装模板面板")).toBeNull()
+    expect(container.querySelector('[data-card-key="extensions:mcp-secrets"]')).not.toBeNull()
+    expect(container.querySelector('[data-card-key="extensions:mcp-installations"]')).toBeNull()
+  })
+
+  test("全局关闭时安装模板不提示，切到「连接」显示全局关闭提示", async () => {
+    settingsApiMocks.getSystemSettings.mockResolvedValue({ data: { mcpGlobalEnabled: false } })
+
+    await renderMcp()
+
+    expect(screen.getByText("全局 已关闭")).toBeInTheDocument()
+    expect(screen.queryByText(GLOBAL_OFF_HINT)).toBeNull()
+
+    fireEvent.click(screen.getByRole("tab", { name: "连接" }))
+
+    expect(screen.getByText("连接面板")).toBeInTheDocument()
+    expect(screen.getByText(GLOBAL_OFF_HINT)).toBeInTheDocument()
+  })
+
+  test("切换全局开关调用一次 updateSystemSettings({ mcpGlobalEnabled: false })", async () => {
+    await renderMcp()
+    const toggle = screen.getByRole("switch", { name: "全局 MCP 开关" })
+    expect(toggle).toHaveAttribute("aria-checked", "true")
+
+    await act(async () => {
+      fireEvent.click(toggle)
+    })
+
+    expect(settingsApiMocks.updateSystemSettings).toHaveBeenCalledTimes(1)
+    expect(settingsApiMocks.updateSystemSettings).toHaveBeenCalledWith({ mcpGlobalEnabled: false })
+    expect(screen.getByText("全局 已关闭")).toBeInTheDocument()
+  })
+
+  test("保存失败时开关回滚到原状态", async () => {
+    settingsApiMocks.updateSystemSettings.mockRejectedValue(new Error("500"))
+    await renderMcp()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("switch", { name: "全局 MCP 开关" }))
+    })
+
+    await vi.waitFor(() => {
+      expect(screen.getByText("全局 已开启")).toBeInTheDocument()
+      expect(screen.getByRole("switch", { name: "全局 MCP 开关" })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      )
+    })
   })
 })
