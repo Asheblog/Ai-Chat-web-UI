@@ -467,7 +467,7 @@ export function PythonRuntimeCard() {
       more={content}
     >
       <p className="text-xs text-muted-foreground">
-        统一管理 `/app/data/python-runtime/venv` 中的依赖，并支持按激活 Skill 自动补装。
+        统一管理 /app/data/python-runtime/venv 中的依赖，并支持按激活 Skill 自动补装。
       </p>
     </FeatureCard>
   )
