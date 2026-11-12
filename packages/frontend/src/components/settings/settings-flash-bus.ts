@@ -49,6 +49,20 @@ export function consumeFlash(leafKey?: string, hostId?: string): FlashRequest | 
   return current
 }
 
+/**
+ * 只读当前匹配的定位请求（不清空 lastRequest）。
+ * 匹配规则与 `consumeFlash` 完全一致：leafKey 与 hostId 都须精确相等
+ * （hostId 为 undefined 时也精确匹配 undefined）。
+ * 供叶子页在挂载时读取定位目标：包装器仍按原语义消费与滚动，
+ * 页面另取到同一请求用于「先切段再定位」。
+ */
+export function peekFlash(leafKey: string, hostId?: string): FlashRequest | null {
+  if (!lastRequest) return null
+  if (lastRequest.leafKey !== leafKey) return null
+  if (lastRequest.hostId !== hostId) return null
+  return lastRequest
+}
+
 /** Dialog 宿主显隐标记：打开期间路由页布局应跳过 flash 处理。 */
 export function setDialogOpen(open: boolean): void {
   dialogOpen = open

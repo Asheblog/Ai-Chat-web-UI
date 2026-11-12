@@ -296,7 +296,8 @@ export function renderSystemLeaf(key: string, hostId?: string): ReactNode | null
   if (!Component) return null
   return (
     <SystemLeafWrapper leafKey={key} hostId={hostId}>
-      <Component />
+      {/* 能力扩展页需要宿主标识来精确匹配卡定位请求；其余叶子保持无 props 渲染 */}
+      {key === "extensions" ? <ExtensionsPage hostId={hostId} /> : <Component />}
     </SystemLeafWrapper>
   )
 }
