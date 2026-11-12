@@ -158,6 +158,25 @@ describe("Skill 段：四标签与页头", () => {
     expect(screen.getByText("web_search")).toBeInTheDocument()
   })
 
+  test("设置未取到时开关显示「状态未知」而非「未开启」，禁用并给重试与错误文案", async () => {
+    useSystemSettingsMock.mockReturnValue({
+      settings: null,
+      isLoading: false,
+      error: "加载系统设置失败",
+      refresh: refreshSpy,
+      update: updateSpy,
+      clearError: vi.fn(),
+    })
+
+    await renderSkill()
+
+    expect(screen.getByText("运行时 状态未知")).toBeInTheDocument()
+    expect(screen.queryByText("运行时 未开启")).toBeNull()
+    expect(screen.getByRole("switch", { name: "动态 Skill Runtime 开关" })).toBeDisabled()
+    expect(screen.getByText("加载系统设置失败")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument()
+  })
+
   test("顶部开关走共享 store，只写一次 { chatDynamicSkillRuntimeEnabled: true }", async () => {
     await renderSkill()
 

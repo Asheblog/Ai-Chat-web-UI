@@ -53,11 +53,11 @@ export function SkillSection({
   } = useSkillsGovernance()
 
   // 开关走共享 settings store（不是裸 API）：同页总览与 Python 卡读同一份状态，切段不会看到过期值。
-  const { settings, update, refresh } = useSystemSettings()
+  const { settings, update, refresh, isLoading, error } = useSystemSettings()
   const [saving, setSaving] = useState(false)
   const switchId = useId()
-  const enabled = Boolean(settings?.chatDynamicSkillRuntimeEnabled ?? false)
-  const settingsLoading = settings === null
+  // 未取到设置时不猜「未开启」：显示状态未知并提供重试，与 McpSection 保持同构。
+  const enabled = settings ? Boolean(settings.chatDynamicSkillRuntimeEnabled) : null
 
   useEffect(() => {
     if (settings) return
@@ -103,19 +103,31 @@ export function SkillSection({
           <div className="flex items-center gap-2">
             <Switch
               id={switchId}
-              checked={enabled}
+              checked={enabled === true}
               onCheckedChange={handleToggle}
-              disabled={saving || settingsLoading}
+              disabled={saving || settings === null || isLoading}
               aria-label="动态 Skill Runtime 开关"
             />
             <label
               htmlFor={switchId}
               className="cursor-pointer select-none text-xs text-muted-foreground"
             >
-              运行时 {enabled ? "已开启" : "未开启"}
+              运行时 {enabled === null ? "状态未知" : enabled ? "已开启" : "未开启"}
             </label>
             {saving && <span className="text-xs text-muted-foreground/60">保存中...</span>}
+            {enabled === null && !isLoading ? (
+              <button
+                type="button"
+                onClick={() => void refresh().catch(() => {})}
+                className="text-xs text-primary underline-offset-2 hover:underline"
+              >
+                重试
+              </button>
+            ) : null}
           </div>
+          {enabled === null && error ? (
+            <p className="text-micro text-destructive">{error}</p>
+          ) : null}
           <p className="text-micro text-muted-foreground/80">
             开启后聊天可直接调度已安装并绑定的第三方 Skill
           </p>
