@@ -1,10 +1,32 @@
 import React from "react"
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
-import { afterEach, beforeEach, describe, expect, test } from "vitest"
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { ExtensionsPage } from "../pages/extensions/ExtensionsPage"
 import { EXTENSION_CARD_ROUTES, EXTENSION_SECTION_EVENT, routeForCard } from "../pages/extensions/extensions-sections"
 import { consumeFlash, requestFlash } from "../settings-flash-bus"
 import { renderSystemLeaf, systemSettingsCards } from "../system-settings-registry"
+
+/**
+ * 总览段随页面一起挂载，会拉系统设置 / Skill 待审批 / MCP 连接三路数据。
+ * 页面用例只关心段路由，这里全部 mock，避免真实 XHR 与运行环境相关的时序抖动。
+ */
+const overviewDataMocks = vi.hoisted(() => ({
+  useSystemSettings: vi.fn(),
+  listSkillApprovals: vi.fn(),
+  listConnections: vi.fn(),
+}))
+
+vi.mock("@/hooks/use-system-settings", () => ({
+  useSystemSettings: overviewDataMocks.useSystemSettings,
+}))
+vi.mock("@/features/skills/api", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  listSkillApprovals: overviewDataMocks.listSkillApprovals,
+}))
+vi.mock("@/features/mcp/api", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  listConnections: overviewDataMocks.listConnections,
+}))
 
 /** 页面根容器（只有它带 data-section），段内容占位面板带 data-section-panel。 */
 function rootOf(container: HTMLElement): HTMLElement {
@@ -13,8 +35,25 @@ function rootOf(container: HTMLElement): HTMLElement {
   return el
 }
 
+/** 渲染页面并在 act 内冲掉总览段的三路数据 promise，避免异步 setState 警告。 */
+async function renderPage(node: React.ReactElement) {
+  const view = render(node)
+  await act(async () => {})
+  return view
+}
+
 beforeEach(() => {
   consumeFlash()
+  overviewDataMocks.useSystemSettings.mockReturnValue({
+    settings: { mcpGlobalEnabled: true },
+    isLoading: false,
+    error: null,
+    refresh: vi.fn(() => Promise.resolve()),
+    update: vi.fn(() => Promise.resolve()),
+    clearError: vi.fn(),
+  })
+  overviewDataMocks.listSkillApprovals.mockResolvedValue({ success: true, data: [] })
+  overviewDataMocks.listConnections.mockResolvedValue({ success: true, data: [] })
 })
 
 afterEach(() => {
@@ -23,8 +62,8 @@ afterEach(() => {
 })
 
 describe("ExtensionsPage 段路由", () => {
-  test("默认渲染总览段，无次级标签", () => {
-    const { container } = render(<ExtensionsPage />)
+  test("默认渲染总览段，无次级标签", async () => {
+    const { container } = await renderPage(<ExtensionsPage />)
 
     const root = rootOf(container)
     expect(root.dataset.section).toBe("overview")
@@ -32,8 +71,8 @@ describe("ExtensionsPage 段路由", () => {
     expect(container.querySelector('[data-section-panel="overview"]')).not.toBeNull()
   })
 
-  test("点击左栏「MCP 服务」切段并落到默认次级标签 installations", () => {
-    const { container } = render(<ExtensionsPage />)
+  test("点击左栏「MCP 服务」切段并落到默认次级标签 installations", async () => {
+    const { container } = await renderPage(<ExtensionsPage />)
 
     fireEvent.click(screen.getByRole("button", { name: "MCP 服务" }))
 
@@ -44,8 +83,8 @@ describe("ExtensionsPage 段路由", () => {
     expect(screen.getByRole("tab", { name: "凭据" })).toBeInTheDocument()
   })
 
-  test("aichat:system-settings-select 携带合法 section 时切段", () => {
-    const { container } = render(<ExtensionsPage />)
+  test("aichat:system-settings-select 携带合法 section 时切段", async () => {
+    const { container } = await renderPage(<ExtensionsPage />)
 
     act(() => {
       window.dispatchEvent(
@@ -60,8 +99,8 @@ describe("ExtensionsPage 段路由", () => {
     expect(root.dataset.segment).toBe("install")
   })
 
-  test("select 事件里非法 section 或非本叶 key 不切段", () => {
-    const { container } = render(<ExtensionsPage />)
+  test("select 事件里非法 section 或非本叶 key 不切段", async () => {
+    const { container } = await renderPage(<ExtensionsPage />)
 
     act(() => {
       window.dispatchEvent(
@@ -79,10 +118,10 @@ describe("ExtensionsPage 段路由", () => {
     expect(rootOf(container).dataset.section).toBe("overview")
   })
 
-  test("冷启动带 initialCardKey 时首帧就落在目标段与次级标签", () => {
+  test("冷启动带 initialCardKey 时首帧就落在目标段与次级标签", async () => {
     requestFlash({ leafKey: "extensions", cardKey: "extensions:mcp-secrets", hostId: "layout" })
 
-    const { container } = render(
+    const { container } = await renderPage(
       <ExtensionsPage hostId="layout" initialCardKey="extensions:mcp-secrets" />,
     )
 
@@ -98,7 +137,7 @@ describe("ExtensionsPage 段路由", () => {
     }
     window.addEventListener("aichat:settings-flash-card", listener)
 
-    render(<ExtensionsPage hostId="layout" initialCardKey="extensions:mcp-installations" />)
+    await renderPage(<ExtensionsPage hostId="layout" initialCardKey="extensions:mcp-installations" />)
 
     await act(async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 0))
@@ -112,10 +151,10 @@ describe("ExtensionsPage 段路由", () => {
     })
   })
 
-  test("其它宿主（dialog）的 flash 请求不参与本页定位且不被清空", () => {
+  test("其它宿主（dialog）的 flash 请求不参与本页定位且不被清空", async () => {
     requestFlash({ leafKey: "extensions", cardKey: "extensions:mcp-secrets", hostId: "dialog" })
 
-    const { container } = render(<ExtensionsPage hostId="layout" initialCardKey={undefined} />)
+    const { container } = await renderPage(<ExtensionsPage hostId="layout" initialCardKey={undefined} />)
 
     expect(rootOf(container).dataset.section).toBe("overview")
     expect(consumeFlash()).toEqual({
@@ -125,8 +164,8 @@ describe("ExtensionsPage 段路由", () => {
     })
   })
 
-  test("aichat:settings-flash-card 热更新定位", () => {
-    const { container } = render(<ExtensionsPage hostId="layout" />)
+  test("aichat:settings-flash-card 热更新定位", async () => {
+    const { container } = await renderPage(<ExtensionsPage hostId="layout" />)
 
     act(() => {
       window.dispatchEvent(
@@ -141,8 +180,8 @@ describe("ExtensionsPage 段路由", () => {
     expect(root.dataset.segment).toBe("versions")
   })
 
-  test("EXTENSION_SECTION_EVENT 供段内组件请求切段", () => {
-    const { container } = render(<ExtensionsPage />)
+  test("EXTENSION_SECTION_EVENT 供段内组件请求切段", async () => {
+    const { container } = await renderPage(<ExtensionsPage />)
 
     act(() => {
       window.dispatchEvent(new CustomEvent(EXTENSION_SECTION_EVENT, { detail: { section: "tools" } }))
@@ -152,8 +191,8 @@ describe("ExtensionsPage 段路由", () => {
     expect(rootOf(container).dataset.segment).toBeUndefined()
   })
 
-  test("页头两个按钮分别切到「新增 MCP 服务」与「从 GitHub 安装 Skill」的位置", () => {
-    const { container } = render(<ExtensionsPage />)
+  test("页头两个按钮分别切到「新增 MCP 服务」与「从 GitHub 安装 Skill」的位置", async () => {
+    const { container } = await renderPage(<ExtensionsPage />)
 
     fireEvent.click(screen.getByRole("button", { name: "从 GitHub 安装 Skill" }))
     expect(rootOf(container).dataset.section).toBe("skills")
@@ -178,7 +217,7 @@ describe("卡路由与注册表一致", () => {
 
 describe("注册表挂载路径", () => {
   test("renderSystemLeaf('extensions', 'layout') 渲染出能力扩展页", async () => {
-    render(<>{renderSystemLeaf("extensions", "layout")}</>)
+    await renderPage(<>{renderSystemLeaf("extensions", "layout")}</>)
 
     expect(await screen.findByText("能力扩展")).toBeInTheDocument()
   })
@@ -186,7 +225,7 @@ describe("注册表挂载路径", () => {
   test("冷启动搜索定位：renderSystemLeaf 渲染期读取 flash 请求并落到目标段（回归：曾落回总览）", async () => {
     requestFlash({ leafKey: "extensions", cardKey: "extensions:mcp-secrets", hostId: "layout" })
 
-    const { container } = render(<>{renderSystemLeaf("extensions", "layout")}</>)
+    const { container } = await renderPage(<>{renderSystemLeaf("extensions", "layout")}</>)
 
     const root = await screen.findByRole("heading", { name: "能力扩展" })
     expect(root).toBeInTheDocument()

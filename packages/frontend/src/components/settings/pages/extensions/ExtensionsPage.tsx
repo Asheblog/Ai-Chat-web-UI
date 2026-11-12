@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { Layers } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { SectionRail } from "../../components/section-rail"
 import { SegmentedTabs } from "../../components/segmented-tabs"
 import {
@@ -14,6 +15,7 @@ import {
   type ExtensionSection,
   type ExtensionSectionEventDetail,
 } from "./extensions-sections"
+import { OverviewSection } from "./sections/overview-section"
 
 const DEFAULT_MCP_SEGMENT = "installations"
 const DEFAULT_SKILL_SEGMENT = "install"
@@ -170,10 +172,22 @@ export function ExtensionsPage({
             />
           )}
 
-          <div data-section-panel={section} className="v2-panel-soft p-4 space-y-1">
-            <p className="text-sm font-medium">{activeMeta.label}</p>
-            <p className="text-sm text-muted-foreground">{activeMeta.description}</p>
-            <p className="text-xs text-muted-foreground">该段内容将在后续任务接入</p>
+          <div
+            data-section-panel={section}
+            // 总览是卡片堆叠，不需要占位面板的浅底色；其余段保持占位外观不动
+            className={cn(section !== "overview" && "v2-panel-soft p-4 space-y-1")}
+          >
+            {section === "overview" ? (
+              <OverviewSection
+                onNavigate={(nextSection, segment) => applyRoute({ section: nextSection, segment })}
+              />
+            ) : (
+              <>
+                <p className="text-sm font-medium">{activeMeta.label}</p>
+                <p className="text-sm text-muted-foreground">{activeMeta.description}</p>
+                <p className="text-xs text-muted-foreground">该段内容将在后续任务接入</p>
+              </>
+            )}
           </div>
         </div>
       </div>
