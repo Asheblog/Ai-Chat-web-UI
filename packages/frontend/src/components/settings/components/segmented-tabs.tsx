@@ -41,7 +41,7 @@ export function SegmentedTabs<K extends string>({
             onClick={() => onChange(item.key)}
             className={cn(
               "inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               isActive
                 ? "border-primary/70 bg-primary/10 text-primary"
                 : "border-border bg-background/70 text-muted-foreground hover:bg-accent hover:text-foreground",

@@ -112,6 +112,7 @@ describe("SegmentedTabs", () => {
       expect(tab.className).toContain("focus-visible:outline-none")
       expect(tab.className).toContain("focus-visible:ring-2")
       expect(tab.className).toContain("focus-visible:ring-primary")
+      expect(tab.className).toContain("focus-visible:ring-offset-background")
       expect(tab.className).toContain("min-h-9")
     }
   })

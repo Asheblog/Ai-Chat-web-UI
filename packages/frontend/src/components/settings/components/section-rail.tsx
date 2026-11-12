@@ -19,7 +19,7 @@ export type SectionRailProps<K extends string = string> = {
 }
 
 const focusRing =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
 
 const desktopItemBase = cn(
   "flex min-h-9 w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors",
@@ -72,7 +72,7 @@ export function SectionRail<K extends string>({
       </nav>
 
       {/* 移动端：横向滚动的分段按钮，文案用 shortLabel */}
-      <div className="flex md:hidden overflow-x-auto gap-1 pb-1" role="tablist" aria-label={ariaLabel}>
+      <div className="flex md:hidden overflow-x-auto gap-1 p-1 -mx-1" role="tablist" aria-label={ariaLabel}>
         {items.map((item) => {
           const Icon = item.icon
           const isActive = item.key === active

@@ -78,7 +78,9 @@ describe("SectionRail", () => {
     renderRail("mcp")
     const tablist = mobileTablist()
 
-    expect(tablist).toHaveClass("flex", "md:hidden", "overflow-x-auto")
+    // overflow-x-auto 会把 overflow-y 也算成 auto：容器必须自己留出左右与上下内边距，
+    // 否则按钮外扩 4px 的焦点环会在上缘与首尾被裁掉。
+    expect(tablist).toHaveClass("flex", "md:hidden", "overflow-x-auto", "p-1", "-mx-1")
 
     const tabs = within(tablist).getAllByRole("tab")
     expect(tabs.map((tab) => tab.textContent)).toEqual(["总览", "MCP", "内置工具"])
@@ -108,6 +110,7 @@ describe("SectionRail", () => {
       expect(button.className).toContain("focus-visible:outline-none")
       expect(button.className).toContain("focus-visible:ring-2")
       expect(button.className).toContain("focus-visible:ring-primary")
+      expect(button.className).toContain("focus-visible:ring-offset-background")
       expect(button.className).toContain("min-h-9")
     }
   })
