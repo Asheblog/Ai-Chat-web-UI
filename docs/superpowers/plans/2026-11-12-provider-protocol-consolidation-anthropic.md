@@ -126,4 +126,4 @@
 - [x] Step 1: 更新 Supported Provider Protocol 定义与变更日志。
 - [x] Step 2: 跑后端 Jest、前端 Vitest、后端/前端 type-check、architecture check。
 - [x] Step 3: `code-review` 双轴审查并修复。
-- [ ] Step 4: 合并 main、推送、监督 GitHub Actions。
+- [x] Step 4: 合并 main、推送、监督 GitHub Actions。
