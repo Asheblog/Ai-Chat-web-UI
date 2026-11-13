@@ -5,8 +5,84 @@ import {
   loadVisionProxyConfig,
   type VisionProxyService,
 } from '../vision/vision-proxy-service'
-import { parseImageRelevance, RELEVANCE_PROMPT } from '../../utils/web-image-evidence'
 import { BUILT_IN_PROBE_IMAGE_BASE64, BUILT_IN_PROBE_IMAGE_MIME } from './vision-probe-image'
+
+// 图片相关性解析：探针专用（原 utils/web-image-evidence 的唯一残留消费方）
+type ProbeImageRelevance = 'related' | 'weakly_related' | 'unrelated'
+
+const RELEVANCE_PROMPT = `判断这张图片与给定新闻/页面上下文是否相关。
+只输出一行 JSON，格式：{"relevance":"related|weakly_related|unrelated","description":"一句话描述图片内容"}
+规则：
+- related：图片直接表现新闻主体、现场、人物、图表结论
+- weakly_related：配图有一定关联（如数据图、城市远景）但非核心
+- unrelated：广告、站点 logo、社交分享按钮、无关行情图、装饰图
+上下文：`
+
+const parseImageRelevance = (
+  raw: string,
+): { relevance: ProbeImageRelevance; description: string } => {
+  const text = (raw || '').trim()
+  if (!text) {
+    return { relevance: 'unrelated', description: '' }
+  }
+
+  const jsonMatch = text.match(/\{[\s\S]*\}/)
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]) as {
+        relevance?: unknown
+        related?: unknown
+        description?: unknown
+        summary?: unknown
+      }
+      const description =
+        (typeof parsed.description === 'string' && parsed.description.trim()) ||
+        (typeof parsed.summary === 'string' && parsed.summary.trim()) ||
+        text
+      const relevanceRaw = String(parsed.relevance ?? parsed.related ?? '')
+        .trim()
+        .toLowerCase()
+      if (
+        relevanceRaw === 'related' ||
+        relevanceRaw === 'relevant' ||
+        relevanceRaw === '相关' ||
+        relevanceRaw === 'true'
+      ) {
+        return { relevance: 'related', description }
+      }
+      if (
+        relevanceRaw === 'weakly_related' ||
+        relevanceRaw === 'weak' ||
+        relevanceRaw === 'partial' ||
+        relevanceRaw === '弱相关'
+      ) {
+        return { relevance: 'weakly_related', description }
+      }
+      if (
+        relevanceRaw === 'unrelated' ||
+        relevanceRaw === 'irrelevant' ||
+        relevanceRaw === '无关' ||
+        relevanceRaw === 'false'
+      ) {
+        return { relevance: 'unrelated', description }
+      }
+    } catch {
+      // fall through to heuristic
+    }
+  }
+
+  const lower = text.toLowerCase()
+  if (/无关|不相关|irrelevant|unrelated|not related|no relation/.test(lower)) {
+    return { relevance: 'unrelated', description: text }
+  }
+  if (/弱相关|部分相关|weakly|partially related|somewhat related/.test(lower)) {
+    return { relevance: 'weakly_related', description: text }
+  }
+  if (/相关|relevant|related/.test(lower)) {
+    return { relevance: 'related', description: text }
+  }
+  return { relevance: 'unrelated', description: text }
+}
 
 export type ProbeStepName = 'transcribe' | 'relevance'
 

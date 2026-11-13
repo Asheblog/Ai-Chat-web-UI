@@ -199,22 +199,12 @@ export function createToolHandlerRegistry(
 
   // 注册 Web 搜索处理器
   if (params.webSearch?.enabled) {
-    registry.register(
-      new WebSearchToolHandler(params.webSearch, {
-        visionProxy: params.visionProxy,
-        visionProxyService: deps.visionProxyService,
-      }),
-    )
+    registry.register(new WebSearchToolHandler(params.webSearch))
   }
 
   // 注册 URL Reader 处理器
   if (params.urlReader) {
-    registry.register(
-      new UrlReaderToolHandler(params.urlReader, {
-        visionProxy: params.visionProxy,
-        visionProxyService: deps.visionProxyService,
-      }),
-    )
+    registry.register(new UrlReaderToolHandler(params.urlReader))
   }
 
   // 注册 Python 处理器

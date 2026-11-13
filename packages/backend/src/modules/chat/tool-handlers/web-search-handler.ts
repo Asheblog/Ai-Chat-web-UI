@@ -15,7 +15,6 @@ import {
 } from '../../../utils/web-search'
 import { truncateText } from '../../../utils/parsers'
 import { readUrlContent, type UrlReadErrorCode } from '../../../utils/url-reader'
-import { assessWebImageRelevance } from '../../../utils/web-image-evidence'
 import type {
   IToolHandler,
   ToolCall,
@@ -25,11 +24,6 @@ import type {
   ToolLogDetails,
   WebSearchHandlerConfig,
 } from '../../../agent-runtime/tool-handler-types'
-import {
-  isVisionProxyReady,
-  type VisionProxyConfig,
-  type VisionProxyService,
-} from '../services/vision-proxy-service'
 
 interface AutoReadEvidenceItem {
   url: string
@@ -41,8 +35,6 @@ interface AutoReadEvidenceItem {
   content?: string
   images?: Array<{
     url: string
-    description?: string
-    relevance?: string
   }>
   error?: string
   errorCode?: UrlReadErrorCode
@@ -532,34 +524,27 @@ const buildEscalationQueryPlans = (
   }))
 }
 
-export const formatAssessedImagesForModel = (
-  images: Array<{ url: string; description?: string; relevance?: string; sourceUrl?: string }>,
-): string => {
-  if (!Array.isArray(images) || images.length === 0) return ''
-  return [
-    '识图筛选图片证据（相关/弱相关）：',
-    ...images.slice(0, 8).map((img, idx) => {
-      const relevance = img.relevance || 'related'
-      const description = img.description || '相关图片'
-      const source = img.sourceUrl ? ` | source: ${img.sourceUrl}` : ''
-      return `${idx + 1}. [${relevance}] ${description} | ${img.url}${source}`
-    }),
-  ].join('\n')
-}
+const collectReadImageUrls = (result: {
+  leadImageUrl?: string
+  images?: Array<{ url: string }>
+}): string[] =>
+  Array.from(
+    new Set(
+      [
+        ...(result.leadImageUrl ? [result.leadImageUrl] : []),
+        ...(result.images || []).map((image) => image.url),
+      ].filter((url) => url.length > 0),
+    ),
+  )
 
 const buildSummaryForModel = (
   query: string,
   hits: Array<{ title: string; url: string; snippet?: string; content?: string }>,
   autoReadEvidence: AutoReadEvidenceItem[],
-  assessedImages: Array<{ url: string; description?: string; relevance?: string; sourceUrl?: string }> = [],
 ): string => {
   const base = formatHitsForModel(query, hits)
-  const assessedBlock = formatAssessedImagesForModel(assessedImages)
   if (autoReadEvidence.length === 0) {
-    const note = assessedBlock
-      ? '注：本轮未读取网页正文；以下为经识图筛选的配图证据。'
-      : '注：本轮未读取网页正文，仅基于搜索摘要。'
-    return assessedBlock ? `${base}\n\n${note}\n\n${assessedBlock}` : `${base}\n\n${note}`
+    return `${base}\n\n注：本轮未读取网页正文，仅基于搜索摘要。`
   }
 
   const successItems = autoReadEvidence.filter((item) => !item.error)
@@ -591,16 +576,11 @@ const buildSummaryForModel = (
       lines.push(`   正文摘录: ${truncateText(item.content, DEFAULT_MODEL_EVIDENCE_CHARS)}`)
     }
     if (item.images?.length) {
-      lines.push(
-        `   图片证据: ${item.images
-          .map((img) => `${img.description || '相关图片'} ${img.url}`)
-          .join(' | ')}`,
-      )
+      lines.push(`   图片证据: ${item.images.slice(0, 4).map((img) => img.url).join(' | ')}`)
     }
   }
 
-  const body = `${base}\n\n${lines.join('\n')}\n\n统计：自动读取成功 ${successItems.length} 条，失败 ${failedItems.length} 条。`
-  return assessedBlock ? `${body}\n\n${assessedBlock}` : body
+  return `${base}\n\n${lines.join('\n')}\n\n统计：自动读取成功 ${successItems.length} 条，失败 ${failedItems.length} 条。`
 }
 
 const slimHitsForModel = (hits: Array<{ title: string; url: string; snippet?: string; content?: string; imageUrl?: string; thumbnailUrl?: string; engine?: string; rank?: number; sourceEngines?: string[] }>) =>
@@ -668,16 +648,9 @@ async function mapWithConcurrency<TItem, TResult>(
 export class WebSearchToolHandler implements IToolHandler {
   readonly toolName = 'web_search'
   private config: WebSearchHandlerConfig
-  private visionProxy: VisionProxyConfig | null
-  private visionProxyService?: VisionProxyService
 
-  constructor(
-    config: WebSearchHandlerConfig,
-    deps: { visionProxy?: VisionProxyConfig | null; visionProxyService?: VisionProxyService } = {},
-  ) {
+  constructor(config: WebSearchHandlerConfig) {
     this.config = config
-    this.visionProxy = deps.visionProxy ?? null
-    this.visionProxyService = deps.visionProxyService
   }
 
   get toolDefinition(): ToolDefinition {
@@ -697,7 +670,7 @@ export class WebSearchToolHandler implements IToolHandler {
             scope: {
               type: 'string',
               enum: ['webpage', 'image', 'document', 'paper', 'scholar', 'video', 'podcast'],
-              description: 'Optional search scope/type. Use "image" only when the research needs news/evidence images; the backend will run image-capable engines and run the existing vision relevance filter.',
+              description: 'Optional search scope/type. Use "image" only when the research needs news/evidence images; the backend will run image-capable engines and return their raw image urls.',
             },
           },
           required: ['query'],
@@ -1123,59 +1096,6 @@ export class WebSearchToolHandler implements IToolHandler {
             return evidenceItem
           }
 
-          const assessedImages =
-            this.visionProxyService && this.visionProxy && isVisionProxyReady(this.visionProxy)
-              ? await assessWebImageRelevance({
-                  candidates: [
-                    ...(readResult.leadImageUrl
-                      ? [
-                          {
-                            url: readResult.leadImageUrl,
-                            sourceUrl: targetUrl,
-                            title: readResult.title || undefined,
-                          },
-                        ]
-                      : []),
-                    ...((readResult.images || []).map((image) => ({
-                      url: image.url,
-                      alt: image.alt,
-                      width: image.width,
-                      height: image.height,
-                      source: image.source,
-                      sourceUrl: targetUrl,
-                      title: readResult.title || undefined,
-                    })) || []),
-                    ...(hits.find((hit) => hit.url === targetUrl)?.imageUrl
-                      ? [
-                          {
-                            url: hits.find((hit) => hit.url === targetUrl)!.imageUrl!,
-                            sourceUrl: targetUrl,
-                            title: hits.find((hit) => hit.url === targetUrl)?.title,
-                          },
-                        ]
-                      : []),
-                  ],
-                  contextText: [
-                    query,
-                    readResult.title,
-                    readResult.excerpt,
-                    readResult.textContent?.slice(0, 800),
-                  ]
-                    .filter(Boolean)
-                    .join('\n'),
-                  visionProxy: this.visionProxyService,
-                  visionConfig: this.visionProxy,
-                })
-              : []
-          const assessedForDetails = assessedImages.map((item) => ({
-            url: item.url,
-            title: item.title || item.alt,
-            alt: item.alt,
-            sourceUrl: item.sourceUrl || targetUrl,
-            confidence: item.confidence,
-            description: item.description,
-            relevance: item.relevance,
-          }))
           const evidenceItem: AutoReadEvidenceItem = {
             url: targetUrl,
             title: readResult.title || undefined,
@@ -1183,27 +1103,8 @@ export class WebSearchToolHandler implements IToolHandler {
             siteName: readResult.siteName || undefined,
             byline: readResult.byline || undefined,
             wordCount: readResult.wordCount,
-            content: truncateText(
-              [
-                readResult.textContent || '',
-                assessedForDetails.length > 0
-                  ? [
-                      '',
-                      '【图片证据（已识图筛选）】',
-                      ...assessedForDetails.map(
-                        (item, index) =>
-                          `[图${index + 1}] ${item.description || item.title || item.url}（${item.relevance}） ${item.url}`,
-                      ),
-                    ].join('\n')
-                  : '',
-              ].join('\n'),
-              DEFAULT_MODEL_EVIDENCE_CHARS,
-            ),
-            images: assessedForDetails.map((item) => ({
-              url: item.url,
-              description: item.description || item.title || undefined,
-              relevance: item.relevance,
-            })),
+            content: truncateText(readResult.textContent || '', DEFAULT_MODEL_EVIDENCE_CHARS),
+            images: collectReadImageUrls(readResult).map((url) => ({ url })),
             fallbackUsed:
               readResult.fallbackUsed === 'crawler' ||
               readResult.fallbackUsed === 'browser' ||
@@ -1251,7 +1152,6 @@ export class WebSearchToolHandler implements IToolHandler {
               contentFormat: readResult.contentFormat,
               leadImageUrl: readResult.leadImageUrl,
               images: readResult.images,
-              assessedImages: assessedForDetails,
             },
           })
           return evidenceItem
@@ -1263,48 +1163,7 @@ export class WebSearchToolHandler implements IToolHandler {
       const taskSucceeded = searchResult.tasks.filter((item) => item.status === 'success').length
       const taskFailed = searchResult.tasks.length - taskSucceeded
 
-      const hitImageCandidates = hits.flatMap((hit) => {
-        const urls = [hit.imageUrl, hit.thumbnailUrl].filter(
-          (value): value is string => typeof value === 'string' && value.trim().length > 0,
-        )
-        const unique = Array.from(new Set(urls.map((value) => value.trim())))
-        return unique.map((url) => ({
-          url,
-          sourceUrl: hit.url,
-          title: hit.title,
-        }))
-      })
-      const assessedHitImages =
-        this.visionProxyService &&
-        this.visionProxy &&
-        isVisionProxyReady(this.visionProxy) &&
-        hitImageCandidates.length > 0
-          ? await assessWebImageRelevance({
-              candidates: hitImageCandidates,
-              contextText: [query, ...hits.slice(0, 5).map((hit) => `${hit.title}\n${hit.snippet || ''}`)].join(
-                '\n',
-              ),
-              visionProxy: this.visionProxyService,
-              visionConfig: this.visionProxy,
-              maxCount: 4,
-            })
-          : []
-      const assessedHitImagesForDetails = assessedHitImages.map((item) => ({
-        url: item.url,
-        title: item.title || item.alt,
-        alt: item.alt,
-        sourceUrl: item.sourceUrl,
-        confidence: item.confidence,
-        description: item.description,
-        relevance: item.relevance,
-      }))
-      const assessedImagesForModel = assessedHitImagesForDetails.slice(0, 8).map((item) => ({
-        url: item.url,
-        description: item.description,
-        relevance: item.relevance,
-        sourceUrl: item.sourceUrl,
-      }))
-      const summary = buildSummaryForModel(query, hits, autoReadEvidence, assessedImagesForModel)
+      const summary = buildSummaryForModel(query, hits, autoReadEvidence)
 
       context.sendToolEvent({
         id: callId,
@@ -1336,7 +1195,6 @@ export class WebSearchToolHandler implements IToolHandler {
           escalationReason: escalationInfo.reason,
           escalationEngine: escalationInfo.engine,
           overlapRatio: escalationInfo.overlapRatio,
-          assessedImages: assessedHitImagesForDetails,
         },
       })
 
@@ -1353,7 +1211,6 @@ export class WebSearchToolHandler implements IToolHandler {
             engines: activeEngines,
             scope: effectiveScope,
             hits: slimHitsForModel(hits),
-            assessedImages: assessedImagesForModel,
             taskResults: slimTaskResultsForModel(searchResult.tasks),
             summary: truncateText(summary, DEFAULT_MODEL_SUMMARY_CHARS),
             autoReadEvidence: slimEvidenceForModel(autoReadEvidence),

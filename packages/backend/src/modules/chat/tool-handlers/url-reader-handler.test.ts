@@ -152,4 +152,67 @@ describe('UrlReaderToolHandler', () => {
     )
     expect(result.message.content).toContain('DeepSeek')
   })
+
+  it('keeps raw image urls as evidence instead of assessing relevance', async () => {
+    jest.spyOn(urlReaderModule, 'readUrlContent').mockResolvedValue({
+      title: '带图片的新闻页',
+      url: 'https://example.com/a',
+      content: '',
+      textContent: '正文内容',
+      resourceType: 'page',
+      wordCount: 10,
+      fallbackUsed: 'none',
+      leadImageUrl: 'https://cdn.example.com/lead.png',
+      images: [
+        { url: 'https://cdn.example.com/lead.png', source: 'meta' },
+        { url: 'https://cdn.example.com/second.png', alt: '第二张', source: 'article' },
+      ],
+    })
+
+    const handler = new UrlReaderToolHandler({ enabled: true })
+    const context = createContext({ modelCapabilities: { vision: false } })
+    const result = await handler.handle(
+      { id: 'call_raw_images', function: { name: 'read_url', arguments: '{}' } },
+      { url: 'https://example.com/a' },
+      context,
+    )
+
+    const content = String(result.message.content)
+    expect(content).toContain('## 图片证据')
+    expect(content).toContain('https://cdn.example.com/lead.png')
+    expect(content).toContain('https://cdn.example.com/second.png')
+    expect(content).not.toContain('图片证据（已识图筛选）')
+
+    const resultEvents = (context.sendToolEvent as any).mock.calls
+      .map(([payload]: any[]) => payload)
+      .filter((payload: any) => payload.stage === 'result')
+    expect(resultEvents).toHaveLength(1)
+    expect(resultEvents[0].details).not.toHaveProperty('assessedImages')
+  })
+
+  it('leaves no image evidence section when the page has no images', async () => {
+    jest.spyOn(urlReaderModule, 'readUrlContent').mockResolvedValue({
+      title: '纯文本页',
+      url: 'https://example.com/plain',
+      content: '',
+      textContent: '只有正文，没有任何配图。',
+      resourceType: 'page',
+      wordCount: 8,
+      fallbackUsed: 'none',
+    })
+
+    const handler = new UrlReaderToolHandler({ enabled: true })
+    const context = createContext({ modelCapabilities: { vision: false } })
+    const result = await handler.handle(
+      { id: 'call_plain_text', function: { name: 'read_url', arguments: '{}' } },
+      { url: 'https://example.com/plain' },
+      context,
+    )
+
+    const content = String(result.message.content)
+    expect(content).not.toContain('## 图片证据')
+    expect(content).not.toContain('\n\n\n')
+    expect(content).toContain('## 正文内容')
+    expect(content.endsWith('只有正文，没有任何配图。')).toBe(true)
+  })
 })

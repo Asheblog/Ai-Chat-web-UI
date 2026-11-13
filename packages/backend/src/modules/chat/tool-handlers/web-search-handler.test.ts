@@ -4,29 +4,7 @@ import { WebSearchToolHandler } from './web-search-handler'
 import {
   buildLanguageAwareSearchPlan,
   evaluateSearchEscalation,
-  formatAssessedImagesForModel,
 } from './web-search-handler'
-
-describe('formatAssessedImagesForModel', () => {
-  it('formats vision-filtered images for the model summary', () => {
-    const text = formatAssessedImagesForModel([
-      {
-        url: 'https://cdn.example.com/a.jpg',
-        description: '新闻现场',
-        relevance: 'related',
-        sourceUrl: 'https://news.example.com/a',
-      },
-    ])
-    expect(text).toContain('识图筛选图片证据')
-    expect(text).toContain('[related] 新闻现场')
-    expect(text).toContain('https://cdn.example.com/a.jpg')
-    expect(text).toContain('source: https://news.example.com/a')
-  })
-
-  it('returns empty string when no images', () => {
-    expect(formatAssessedImagesForModel([])).toBe('')
-  })
-})
 
 describe('WebSearchToolHandler DeepSeek integration', () => {
   const originalFetch = global.fetch
@@ -134,6 +112,55 @@ describe('WebSearchToolHandler DeepSeek integration', () => {
         deepseekApiKey: 'ds-key',
       }),
     )
+  })
+
+  it('carries raw auto-read image urls without relevance assessment', async () => {
+    const urlReaderModule = require('../../../utils/url-reader')
+    jest.spyOn(urlReaderModule, 'readUrlContent').mockResolvedValue({
+      title: '带图片的页面',
+      url: 'https://example.com/illustrated',
+      content: '',
+      textContent: '正文',
+      resourceType: 'page',
+      fallbackUsed: 'none',
+      leadImageUrl: 'https://cdn.example.com/lead.png',
+      images: [
+        { url: 'https://cdn.example.com/lead.png', source: 'meta' },
+        { url: 'https://cdn.example.com/second.png', alt: '第二张', source: 'article' },
+      ],
+      attempts: [],
+    })
+    global.fetch = jest.fn(async () =>
+      new Response(
+        JSON.stringify({
+          results: [
+            {
+              title: 'Illustrated',
+              url: 'https://example.com/illustrated',
+              snippet: 's',
+              summary: '',
+              content: '',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    ) as typeof fetch
+
+    const handler = new WebSearchToolHandler(createConfig() as any)
+    const result = await handler.handle(
+      { id: 'call_raw_evidence', function: { name: 'web_search', arguments: '{}' } },
+      { query: '带图新闻' },
+      createContext() as any,
+    )
+
+    const payload = JSON.parse(String(result.message.content))
+    expect(payload).not.toHaveProperty('assessedImages')
+    expect(payload.autoReadEvidence[0].images).toEqual([
+      { url: 'https://cdn.example.com/lead.png' },
+      { url: 'https://cdn.example.com/second.png' },
+    ])
+    expect(payload.summary).toContain('图片证据: https://cdn.example.com/lead.png')
   })
 
   it('does not call upstream when the request signal is already aborted', async () => {
