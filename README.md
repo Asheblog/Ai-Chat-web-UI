@@ -10,7 +10,6 @@
 
 - **多模型统一接入**：OpenAI 兼容、OpenAI Responses、Google Gemini 三种协议，DeepSeek / GLM / Qwen / GPT 等模型一次配置、随时切换，上下文窗口与能力自动识别
 - **原生工具链**：联网搜索（Tavily / Brave / Exa / Metaso / DeepSeek，并行多引擎）、网页读取（本地多引擎 + 浏览器渲染 + 可选 DeepSeek Fetch 回退）、Python 沙箱执行、深度研究（计划确认 → 举证 → `export_pdf`）、RAG 知识库与文档解析
-- **图片转写代理（Vision Transcription Proxy）**：DeepSeek、GLM 等纯文本模型也能「看图」——发送图片时自动转交管理员指定的识图模型转写为文字描述并注入主模型；工具流 / 自动转写两种模式自动判定，转写结果持久化复用
 - **Skill 插件系统**：内置 Skill + GitHub 第三方 Skill 的安装、审批、激活、会话绑定与审计；可执行型第三方 Skill 强制沙箱隔离、能力按声明授权
 - **AI 自助安装扩展**：聊天里贴一条 GitHub 链接，模型调用 `install_extension` 自行判断这是远程 MCP、本地包 MCP 还是 Skill，完成安装、绑定与工具清单验证；本地包在容器网关内运行，密钥只回填名称、不经过模型
 - **Workspace Agent**：会话级 Docker 隔离沙箱，内置受管 Python 运行时（缺库自动安装）、文件读写、Git 克隆；并发槽位排队、超时自动杀容器回收
@@ -140,7 +139,7 @@ DeepSeek 支持网页检索；图片检索会跳过该引擎。开启「返回�
 
 - 完整部署指南（环境变量、资源配置、安全清单、升级与迁移）：[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 - 架构说明：[docs/Architecture.md](docs/Architecture.md)
-- 领域词汇表（Skill / MCP / 图片转写 / 搜索等术语定义）：[CONTEXT.md](CONTEXT.md)
+- 领域词汇表（Skill / MCP / 搜索等术语定义）：[CONTEXT.md](CONTEXT.md)
 - 变更日志（含 BREAKING 变更与迁移说明）：[CHANGELOG.md](CHANGELOG.md)
 - 架构决策记录：[docs/adr](docs/adr)（扩展安装与 MCP 运行层见 ADR-0037 / ADR-0038）
 
