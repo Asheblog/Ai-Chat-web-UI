@@ -163,6 +163,50 @@ describe('WebSearchToolHandler DeepSeek integration', () => {
     expect(payload.summary).toContain('图片证据: https://cdn.example.com/lead.png')
   })
 
+  it('falls back to the matching hit image url when the page itself yields no images', async () => {
+    const urlReaderModule = require('../../../utils/url-reader')
+    jest.spyOn(urlReaderModule, 'readUrlContent').mockResolvedValue({
+      title: 'JS 重页面',
+      url: 'https://example.com/app-shell',
+      content: '',
+      textContent: '正文',
+      resourceType: 'page',
+      fallbackUsed: 'none',
+      attempts: [],
+    })
+    const webSearchModule = require('../../../utils/web-search')
+    jest.spyOn(webSearchModule, 'runWebSearchParallel').mockResolvedValue({
+      hits: [
+        {
+          title: 'JS 重页面',
+          url: 'https://example.com/app-shell',
+          snippet: 's',
+          imageUrl: 'https://cdn.example.com/hit-cover.png',
+        },
+      ],
+      tasks: [
+        {
+          task: { engine: 'deepseek', query: 'JS 重页面', queryLanguage: 'zh' },
+          status: 'success',
+          hits: [],
+        },
+      ],
+    })
+
+    const handler = new WebSearchToolHandler(createConfig() as any)
+    const result = await handler.handle(
+      { id: 'call_hit_cover', function: { name: 'web_search', arguments: '{}' } },
+      { query: 'JS 重页面' },
+      createContext() as any,
+    )
+
+    const payload = JSON.parse(String(result.message.content))
+    expect(payload.autoReadEvidence[0].images).toEqual([
+      { url: 'https://cdn.example.com/hit-cover.png' },
+    ])
+    expect(payload.summary).toContain('图片证据: https://cdn.example.com/hit-cover.png')
+  })
+
   it('does not call upstream when the request signal is already aborted', async () => {
     const fetchMock = jest.fn() as jest.MockedFunction<typeof fetch>
     global.fetch = fetchMock

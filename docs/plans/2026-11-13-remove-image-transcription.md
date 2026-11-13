@@ -8,7 +8,7 @@
 
 ## 决策
 
-- **D1 联网证据图回到原始 URL**：`read_url` / `web_search` 的图片相关性判定整条删除，两处回退到「未配置转写代理」时的既有分支——`includeRawImageEvidence: true` 输出原始图片 URL 列表，不再下载图片、不再产出 `relevance` / `confidence` / `description` 字段。保留 `utils/remote-image-reader.ts`（`export-pdf-handler.ts` 与 `read_url` 的 vision followup 仍在用）。
+- **D1 联网证据图回到原始 URL**：`read_url` / `web_search` 的图片相关性判定整条删除，两处回退到「未配置转写代理」时的既有分支——`includeRawImageEvidence: true` 输出原始图片 URL 列表，不再下载图片、不再产出 `relevance` / `confidence` / `description` 字段。`web_search` 自动读取的证据图候选沿用判定时的来源（页面主图、正文图、命中项 `imageUrl`），只去掉识图判断：页面抽不到图（JS 重页面、文档页）时改用命中项自带的封面图，去重与 4 条上限逻辑不变，证据图不再整段为空。保留 `utils/remote-image-reader.ts`（`export-pdf-handler.ts` 与 `read_url` 的 vision followup 仍在用）。
 - **D2 历史数据**：迁移 `20261113120000_remove_image_transcription` 执行 `DROP COLUMN messages.image_descriptions_json` 与 `DELETE FROM system_settings WHERE key GLOB 'image_transcription_*'`。用 `GLOB` 而非 `LIKE`：SQLite 的 `LIKE` 里 `_` 是单字符通配且不区分 ASCII 大小写，会误伤 `image-transcription_*` 与 `IMAGE_TRANSCRIPTION_*`。历史消息丢失「图片描述由 X 转写」文本，图片附件本身不动。
 - **D3 `mainModelVision` 参数一并删除**：它唯一的存在理由是配合转写（决定「无 vision 主模型不吃图」）。删除后图片一律透传，等同转写功能上线前行为。
 - **D4 `resolveModelCapabilitiesForSession` 保留**：`agent-web-search-response.ts` 仍用它给工具上下文注入 `modelCapabilities`（`read_url` 直接把网页图附给主模型的路径），与转写无关。
@@ -30,7 +30,7 @@
 
 ## 影响面
 
-- **后端**：本支路删除 17 个文件，其中 14 个属后端（转写服务、两个模块 shim、`vision-proxy-handler`、探针服务与探针图、`web-image-evidence` 及各自测试）；`ToolHandlerFactoryParams` / `ToolCallContext` 去掉 `visionProxy?`，`agent-tool-config` 不再导出 `AgentVisionProxyConfig` / `buildAgentVisionProxyConfig`。
+- **后端**：本支路删除 17 个文件，其中 14 个属后端（转写服务、两个模块 shim、`vision-proxy-handler`、探针服务与探针图、`web-image-evidence` 及各自测试）；`ToolHandlerFactoryParams` 去掉 `visionProxy?`（`ToolCallContext` 从未带该字段），`agent-tool-config` 不再导出 `AgentVisionProxyConfig` / `buildAgentVisionProxyConfig`。
 - **共享契约**：`SystemSettings` 去掉 5 个 `imageTranscription*` 字段与对应 patch 分支；`RichMessageImagePart` 去掉 `confidence` 字段，`RichMessageEvidenceConfidence` 随之删除。
 - **前端**：删除设置页「图片转写」叶子、`ImageTranscriptionCard` 与探针结果组件（含测试）；`ToolEventDetails.images[].title` 删除（无生产方）。
 - **配置与文档**：`.env.example` 删 8 行（注释块 + 5 个变量 + 尾随空行）；CONTEXT / README / settings README 同步术语与叶子计数（11 → 10）。
@@ -44,4 +44,5 @@
 - 架构检查：`node scripts/check-architecture.mjs` → `[architecture] OK: 4 package sources, no cycles, api layer db-free`。
 - 行数门禁：`pnpm lint:lines` 在 merge-base（`d7697ba4`）与本支路末端同为 59 个文件超 300 行，无新增、无移除；本支路改过的 10 个超限文件中 9 个净减少（合计 −69 行），`hooks/__tests__/use-send-command.test.ts` 由 320 增至 336（+16），因其在 Task 7 新增了「退役 `visionProxyEnabled` 被忽略」护栏用例，且该文件在 merge-base 时已超限。
 - 残留检查：生产代码 `grep -rnE "visionProxy|imageTranscription|image_transcription|analyze_visual_media|imageDescriptions"` 零输出；测试内退役名字命中 5 个文件共 8 行（5 条护栏用例），均为刻意保留。
+- 修复波（最终审查 5 项）：新增 1 条 `web_search` 证据图用例（页面无图、命中项带 `imageUrl`），因此上方「后端全量」的 906 个用例为修复波前的记录，修复波只改了 2 处模型侧文案、1 处证据图候选、CHANGELOG 与本文档；聚焦套件与 `pnpm --filter backend type-check` 结果见 `.superpowers/sdd/2026-11-13-remove-image-transcription/task-9-fix-report.md`。
 - 迁移演练（先备份 `app.db.bak-before-drop-image-descriptions`）：`pnpm --filter backend exec prisma migrate deploy` 以 58 个迁移应用 `20261113000000_user_context_enabled` 与 `20261113120000_remove_image_transcription`（退出码 0）；`pragma_table_info('messages')` 不再含 `image_descriptions_json`，`system_settings` 中 `image_transcription_*` 为 0 行（`GLOB` 与 `LIKE` 两种探针都为 0），`PRAGMA integrity_check` = ok，28 条历史消息保留。

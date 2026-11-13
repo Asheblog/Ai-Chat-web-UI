@@ -524,15 +524,21 @@ const buildEscalationQueryPlans = (
   }))
 }
 
-const collectReadImageUrls = (result: {
-  leadImageUrl?: string
-  images?: Array<{ url: string }>
-}): string[] =>
+const collectReadImageUrls = (
+  result: {
+    leadImageUrl?: string
+    images?: Array<{ url: string }>
+  },
+  extraUrls: Array<string | undefined> = [],
+): string[] =>
   Array.from(
     new Set(
       [
         ...(result.leadImageUrl ? [result.leadImageUrl] : []),
         ...(result.images || []).map((image) => image.url),
+        ...extraUrls
+          .filter((url): url is string => typeof url === 'string')
+          .map((url) => url.trim()),
       ].filter((url) => url.length > 0),
     ),
   )
@@ -1104,7 +1110,10 @@ export class WebSearchToolHandler implements IToolHandler {
             byline: readResult.byline || undefined,
             wordCount: readResult.wordCount,
             content: truncateText(readResult.textContent || '', DEFAULT_MODEL_EVIDENCE_CHARS),
-            images: collectReadImageUrls(readResult).map((url) => ({ url })),
+            // 页面本体抽不到图（JS 重页面/文档页）时保留命中项自带封面图，避免证据图整段为空
+            images: collectReadImageUrls(readResult, [
+              hits.find((hit) => hit.url === targetUrl)?.imageUrl,
+            ]).map((url) => ({ url })),
             fallbackUsed:
               readResult.fallbackUsed === 'crawler' ||
               readResult.fallbackUsed === 'browser' ||
