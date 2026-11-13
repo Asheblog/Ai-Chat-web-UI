@@ -63,7 +63,6 @@ export const SERVICE_KEYS = {
   reasoningCompatibilityService: 'reasoningCompatibilityService',
   conversationCompressionService: 'conversationCompressionService',
   titleSummaryService: 'titleSummaryService',
-  visionProxyService: 'visionProxyService',
 
   // Stream Module
   streamMetaStore: 'streamMetaStore',

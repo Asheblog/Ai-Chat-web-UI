@@ -474,18 +474,6 @@ export class SettingsService {
       title_summary_model_source: (settingsObj.title_summary_model_source || process.env.TITLE_SUMMARY_MODEL_SOURCE || 'current') as 'current' | 'specified',
       title_summary_connection_id: settingsObj.title_summary_connection_id ? Number(settingsObj.title_summary_connection_id) : null,
       title_summary_model_id: settingsObj.title_summary_model_id || null,
-      // 图片转写代理设置
-      image_transcription_enabled: this.parseBoolean(settingsObj.image_transcription_enabled, process.env.IMAGE_TRANSCRIPTION_ENABLED || 'false'),
-      image_transcription_connection_id: settingsObj.image_transcription_connection_id ? Number(settingsObj.image_transcription_connection_id) : null,
-      image_transcription_model_id: settingsObj.image_transcription_model_id || null,
-      image_transcription_reasoning_enabled: this.parseBoolean(
-        settingsObj.image_transcription_reasoning_enabled,
-        process.env.IMAGE_TRANSCRIPTION_REASONING_ENABLED || 'false',
-      ),
-      image_transcription_reasoning_effort:
-        settingsObj.image_transcription_reasoning_effort ||
-        process.env.IMAGE_TRANSCRIPTION_REASONING_EFFORT ||
-        'unset',
       temperature_default: this.parseFloat(settingsObj.temperature_default, 0.7),
       // RAG 文档解析设置
       rag_enabled: this.parseBoolean(settingsObj.rag_enabled, 'false'),
@@ -569,12 +557,6 @@ export class SettingsService {
         title_summary_model_source: formatted.title_summary_model_source,
         title_summary_connection_id: formatted.title_summary_connection_id,
         title_summary_model_id: formatted.title_summary_model_id,
-        // 图片转写代理设置（所有用户可见，前端据此解锁加图）
-        image_transcription_enabled: formatted.image_transcription_enabled,
-        image_transcription_connection_id: formatted.image_transcription_connection_id,
-        image_transcription_model_id: formatted.image_transcription_model_id,
-        image_transcription_reasoning_enabled: formatted.image_transcription_reasoning_enabled,
-        image_transcription_reasoning_effort: formatted.image_transcription_reasoning_effort,
       }
     }
     return formatted
@@ -659,7 +641,6 @@ export class SettingsService {
     assignIfNumber('chat_max_concurrent_streams', payload.chat_max_concurrent_streams)
     assignIfNumber('title_summary_max_length', payload.title_summary_max_length)
     assignIfNumber('title_summary_connection_id', payload.title_summary_connection_id)
-    assignIfNumber('image_transcription_connection_id', payload.image_transcription_connection_id)
     assignIfNumber('battle_retention_days', payload.battle_retention_days)
     // RAG 数字字段
     assignIfNumber('rag_top_k', payload.rag_top_k)
@@ -694,8 +675,6 @@ export class SettingsService {
       SYSTEM_SETTINGS_FIELD_MAP.taskTraceDefaultOn,
       SYSTEM_SETTINGS_FIELD_MAP.taskTraceAdminOnly,
       SYSTEM_SETTINGS_FIELD_MAP.titleSummaryEnabled,
-      'image_transcription_enabled',
-      'image_transcription_reasoning_enabled',
       SYSTEM_SETTINGS_FIELD_MAP.ragEnabled,
       SYSTEM_SETTINGS_FIELD_MAP.knowledgeBaseEnabled,
       SYSTEM_SETTINGS_FIELD_MAP.knowledgeBaseAllowAnonymous,
@@ -743,8 +722,6 @@ export class SettingsService {
       { key: 'task_trace_env', value: payload.task_trace_env },
       { key: 'title_summary_model_source', value: payload.title_summary_model_source },
       { key: 'title_summary_model_id', value: payload.title_summary_model_id },
-      { key: 'image_transcription_model_id', value: payload.image_transcription_model_id },
-      { key: 'image_transcription_reasoning_effort', value: payload.image_transcription_reasoning_effort },
       { key: 'rag_embedding_model_id', value: payload.rag_embedding_model_id },
     ]
     stringFields.forEach(({ key, value }) => {
