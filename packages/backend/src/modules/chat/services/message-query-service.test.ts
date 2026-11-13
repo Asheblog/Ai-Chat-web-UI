@@ -478,7 +478,7 @@ describe('ChatMessageQueryService', () => {
     expect(result.messages[0]?.id).toBe(10)
   })
 
-  it('normalizes imageDescriptionsJson into imageDescriptions', async () => {
+  it('does not expose imageDescriptions on messages', async () => {
     const { prisma, service, actor, request } = buildService()
     prisma.message.count.mockResolvedValue(1)
     prisma.messageGroup.findMany.mockResolvedValue([])
@@ -497,6 +497,7 @@ describe('ChatMessageQueryService', () => {
         reasoning: null,
         reasoningDurationSeconds: null,
         toolLogsJson: null,
+        // 历史行携带已删除列的数据：消息投影不得再暴露转写描述
         imageDescriptionsJson: JSON.stringify([{ description: '图', modelRawId: 'm' }]),
         createdAt: new Date('2024-01-01T00:00:00Z'),
         updatedAt: new Date('2024-01-01T00:00:00Z'),
@@ -517,6 +518,6 @@ describe('ChatMessageQueryService', () => {
       request,
     })
 
-    expect(result.messages[0].imageDescriptions).toEqual([{ description: '图', modelRawId: 'm' }])
+    expect(result.messages[0]).not.toHaveProperty('imageDescriptions')
   })
 })
