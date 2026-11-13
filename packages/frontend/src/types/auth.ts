@@ -9,6 +9,7 @@ export interface User {
   status: 'PENDING' | 'ACTIVE' | 'DISABLED';
   avatarUrl?: string | null;
   personalPrompt?: string | null;
+  contextEnabled?: boolean;
 }
 
 export type AnonymousActorProfile = {
@@ -28,6 +29,7 @@ export type UserActorProfile = {
   preferredModel?: ModelPreferenceDTO | null;
   avatarUrl?: string | null;
   personalPrompt?: string | null;
+  contextEnabled?: boolean;
 };
 
 export type ActorProfile = AnonymousActorProfile | UserActorProfile;

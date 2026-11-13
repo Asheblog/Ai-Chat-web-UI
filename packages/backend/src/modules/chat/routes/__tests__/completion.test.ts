@@ -86,5 +86,9 @@ describe('completion route factory', () => {
 
     expect(res.status).toBe(200)
     expect(nonStreamService.execute).toHaveBeenCalled()
+    // actor 与 payload 都没给 contextEnabled → 解析为 true
+    expect(nonStreamService.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ contextEnabled: true }),
+    )
   })
 })

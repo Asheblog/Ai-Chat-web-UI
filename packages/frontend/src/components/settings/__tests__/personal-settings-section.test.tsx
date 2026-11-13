@@ -13,18 +13,13 @@ vi.mock('next-themes', () => ({
   useTheme: () => ({ theme: 'light', resolvedTheme: 'light', setTheme: vi.fn() }),
 }))
 
-const settingsStoreMock = vi.hoisted(() => ({
-  contextEnabled: true,
-  newConversationContextEnabled: false,
-  setContextEnabled: vi.fn(),
-  setNewConversationContextEnabled: vi.fn(),
-}))
+const settingsStoreMock = vi.hoisted(() => ({}))
 vi.mock('@/store/settings-store', () => ({
   useSettingsStore: () => settingsStoreMock,
 }))
 
 const authState = vi.hoisted(() => ({
-  user: { username: 'tester', avatarUrl: null, personalPrompt: null },
+  user: { username: 'tester', avatarUrl: null, personalPrompt: null, contextEnabled: true },
   actorState: 'authenticated',
   fetchActor: vi.fn(),
 }))
@@ -32,9 +27,16 @@ vi.mock('@/store/auth-store', () => ({
   useAuthStore: (selector: any) => (typeof selector === 'function' ? selector(authState) : authState),
 }))
 
-const settingsApiMocks = vi.hoisted(() => ({ updatePersonalSettings: vi.fn() }))
+const settingsApiMocks = vi.hoisted(() => ({
+  updatePersonalSettings: vi.fn(),
+  // 提示词上限来自 app-info；测试里必须 mock，避免真实网络请求
+  getAppInfo: vi.fn().mockResolvedValue({
+    limits: { system_prompt_max_length: 12000 },
+  }),
+}))
 vi.mock('@/features/settings/api', () => ({
   updatePersonalSettings: settingsApiMocks.updatePersonalSettings,
+  getAppInfo: settingsApiMocks.getAppInfo,
 }))
 
 const shareApiMocks = vi.hoisted(() => ({

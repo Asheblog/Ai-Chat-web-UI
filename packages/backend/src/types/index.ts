@@ -11,6 +11,7 @@ export interface User {
   preferredModel?: ModelPreference | null;
   avatarUrl?: string | null;
   personalPrompt?: string | null;
+  contextEnabled?: boolean;
 }
 
 export type Actor = UserActor | AnonymousActor;
@@ -26,6 +27,7 @@ export interface UserActor {
   avatarPath?: string | null;
   avatarUrl?: string | null;
   personalPrompt?: string | null;
+  contextEnabled?: boolean;
 }
 
 export interface AnonymousActor {
@@ -159,6 +161,7 @@ export interface ActorContext {
     createdAt: Date;
     avatarUrl?: string | null;
     personalPrompt?: string | null;
+    contextEnabled?: boolean;
   } | null;
   preferredModel?: ModelPreference | null;
   assistantAvatarUrl?: string | null;

@@ -30,6 +30,7 @@ model User {
   preferredModelRawId   String?
   avatarPath            String?   @map("avatar_path")
   personalPrompt        String?
+  contextEnabled        Boolean   @default(true)
 
   chatSessions          ChatSession[]
   connectionGroups      ConnectionGroup[]

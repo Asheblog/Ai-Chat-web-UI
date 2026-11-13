@@ -24,8 +24,6 @@ interface SettingsStore extends SettingsState {
   updateSystemSettings: (settings: SystemSettingsUpdatePayload) => Promise<void>
   fetchPublicBranding: () => Promise<boolean>
   bootstrapBrandText: (brandText?: string | null) => void
-  setContextEnabled: (enabled: boolean) => void
-  setNewConversationContextEnabled: (enabled: boolean) => void
   // UI：侧边栏折叠
   sidebarCollapsed: boolean
   setSidebarCollapsed: (v: boolean) => void
@@ -131,8 +129,6 @@ export const useSettingsStore = create<SettingsStore>()(
       let publicBrandingInFlight: Promise<boolean> | null = null
 
       return {
-        contextEnabled: true,
-        newConversationContextEnabled: false,
         sidebarCollapsed: false,
         systemSettings: null,
         isLoading: false,
@@ -245,14 +241,6 @@ export const useSettingsStore = create<SettingsStore>()(
         }))
       },
 
-      setContextEnabled: (enabled: boolean) => {
-        set({ contextEnabled: !!enabled })
-      },
-
-      setNewConversationContextEnabled: (enabled: boolean) => {
-        set({ newConversationContextEnabled: !!enabled })
-      },
-
       setSidebarCollapsed: (v: boolean) => { set({ sidebarCollapsed: !!v }) },
 
         clearError: () => {
@@ -262,9 +250,16 @@ export const useSettingsStore = create<SettingsStore>()(
     },
     {
       name: 'settings-storage',
+      // 上下文开关已迁到 users.contextEnabled（账号级单一真源）。
+      // zustand 会把持久化值 merge 回 state，所以必须显式剥掉旧键，
+      // 否则 localStorage 里的历史值会作为没人读的脏字段长期留在内存里。
+      version: 1,
+      migrate: (persisted: any) => {
+        if (!persisted || typeof persisted !== 'object') return persisted
+        const { contextEnabled: _c, newConversationContextEnabled: _n, ...rest } = persisted
+        return rest
+      },
       partialize: (state) => ({
-        contextEnabled: state.contextEnabled,
-        newConversationContextEnabled: state.newConversationContextEnabled,
         sidebarCollapsed: state.sidebarCollapsed,
       }),
     }

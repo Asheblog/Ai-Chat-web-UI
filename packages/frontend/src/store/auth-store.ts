@@ -147,6 +147,9 @@ export const useAuthStore = create<AuthStore>()(
               createdAt,
               avatarUrl: profile?.avatarUrl ?? actorAvatar ?? null,
               personalPrompt: resolvedPersonalPrompt,
+              contextEnabled:
+                profile?.contextEnabled ??
+                (context.actor.type === 'user' ? context.actor.contextEnabled ?? true : true),
             }
           }
           set({

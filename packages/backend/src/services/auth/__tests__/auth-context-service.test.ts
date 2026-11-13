@@ -48,6 +48,7 @@ describe('AuthContextService', () => {
       preferredModelRawId: 'raw',
       avatarPath: 'avatar.png',
       personalPrompt: 'stay sharp',
+      contextEnabled: false,
     })
     const service = createService(prisma)
 
@@ -56,6 +57,7 @@ describe('AuthContextService', () => {
     expect(result.actor?.type).toBe('user')
     expect(result.actor && result.actor.preferredModel?.modelId).toBe('m1')
     expect(result.actor && result.actor.personalPrompt).toBe('stay sharp')
+    expect(result.actor && result.actor.contextEnabled).toBe(false)
     expect(mockAuthUtils.verifyToken).toHaveBeenCalled()
   })
 

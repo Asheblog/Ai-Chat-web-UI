@@ -1,4 +1,5 @@
-const DEFAULT_MAX_SYSTEM_PROMPT_LENGTH = 12000
+import { DEFAULT_MAX_SYSTEM_PROMPT_LENGTH } from '@aichat/shared/api-contract'
+
 const MAX_SYSTEM_PROMPT_LENGTH_CAP = 100000
 
 const parseEnvLength = (value?: string | null) => {

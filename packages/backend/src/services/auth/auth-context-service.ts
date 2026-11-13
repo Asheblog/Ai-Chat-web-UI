@@ -81,6 +81,7 @@ export class AuthContextService {
           preferredModelRawId: true,
           avatarPath: true,
           personalPrompt: true,
+          contextEnabled: true,
         },
       })
       if (!user) {
@@ -103,6 +104,7 @@ export class AuthContextService {
           },
           avatarPath: user.avatarPath ?? null,
           personalPrompt: user.personalPrompt ?? null,
+          contextEnabled: user.contextEnabled ?? true,
         }),
         authCookie: this.renewAuthCookie(payload, {
           id: user.id,
@@ -156,6 +158,7 @@ export class AuthContextService {
     preferredModel?: { modelId: string | null; connectionId: number | null; rawId: string | null } | null
     avatarPath?: string | null
     personalPrompt?: string | null
+    contextEnabled?: boolean
   }): UserActor {
     return {
       type: 'user',
@@ -167,6 +170,7 @@ export class AuthContextService {
       preferredModel: payload.preferredModel ?? null,
       avatarPath: payload.avatarPath ?? null,
       personalPrompt: payload.personalPrompt ?? null,
+      contextEnabled: payload.contextEnabled ?? true,
     }
   }
 

@@ -27,6 +27,9 @@ export interface ModelPreference {
 
 export type ModelPreferenceDTO = ModelPreference
 
+/** 系统提示词长度默认上限；后端可用环境变量覆盖。 */
+export const DEFAULT_MAX_SYSTEM_PROMPT_LENGTH = 12000
+
 export interface AuthUser {
   id: number
   username: string
@@ -35,6 +38,7 @@ export interface AuthUser {
   createdAt?: string | Date
   avatarUrl?: string | null
   personalPrompt?: string | null
+  contextEnabled?: boolean
   preferredModel?: ModelPreference | null
 }
 

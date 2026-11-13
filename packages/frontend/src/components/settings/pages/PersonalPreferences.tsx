@@ -2,23 +2,15 @@
 import { useEffect, useState } from "react"
 import { useTheme } from "next-themes"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Switch } from "@/components/ui/switch"
-import { useSettingsStore } from "@/store/settings-store"
 import { Edit3, Moon, Monitor, Sun } from "lucide-react"
 import { AvatarUploadField, type AvatarUploadResult } from "../components/avatar-upload-field"
 import { useAuthStore } from "@/store/auth-store"
 import { useToast } from "@/components/ui/use-toast"
 import { updatePersonalSettings } from '@/features/settings/api'
+import { ConversationContextCard } from "./personal-preferences/conversation-context-card"
 
 export function PersonalPreferencesPage(){
   const { theme, setTheme } = useTheme()
-  const {
-    contextEnabled,
-    setContextEnabled,
-    newConversationContextEnabled,
-    setNewConversationContextEnabled,
-  } = useSettingsStore()
   const { toast } = useToast()
   const { user, fetchActor } = useAuthStore((state) => ({ user: state.user, fetchActor: state.fetchActor }))
   const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatarUrl ?? null)
@@ -26,9 +18,6 @@ export function PersonalPreferencesPage(){
   const [username, setUsername] = useState(user?.username ?? "")
   const [usernameSaving, setUsernameSaving] = useState(false)
   const [usernameError, setUsernameError] = useState<string | null>(null)
-  const [personalPromptDraft, setPersonalPromptDraft] = useState(user?.personalPrompt ?? "")
-  const [personalPromptSaving, setPersonalPromptSaving] = useState(false)
-  const [personalPromptError, setPersonalPromptError] = useState<string | null>(null)
 
   useEffect(() => {
     setAvatarPreview(user?.avatarUrl ?? null)
@@ -37,10 +26,6 @@ export function PersonalPreferencesPage(){
   useEffect(() => {
     setUsername(user?.username ?? "")
   }, [user?.username])
-
-  useEffect(() => {
-    setPersonalPromptDraft(user?.personalPrompt ?? "")
-  }, [user?.personalPrompt])
 
   const validateUsername = (value: string) => {
     if (!value.trim()) return "用户名不能为空"
@@ -76,33 +61,6 @@ export function PersonalPreferencesPage(){
       return false
     } finally {
       setUsernameSaving(false)
-    }
-  }
-
-  const handlePersonalPromptSave = async (options?: { silent?: boolean }): Promise<boolean> => {
-    if (!user || personalPromptSaving) return false
-    const normalized = personalPromptDraft.trim()
-    const nextPayload = normalized ? normalized : null
-    const current = user.personalPrompt ?? null
-    if (current === nextPayload) {
-      setPersonalPromptError(null)
-      return true
-    }
-    setPersonalPromptSaving(true)
-    setPersonalPromptError(null)
-    try {
-      await updatePersonalSettings({ personalPrompt: nextPayload })
-      await fetchActor()
-      if (!options?.silent) {
-        toast({ title: '个人提示词已更新' })
-      }
-      return true
-    } catch (error: any) {
-      const message = error?.response?.data?.error || error?.message || '更新提示词失败'
-      setPersonalPromptError(message)
-      return false
-    } finally {
-      setPersonalPromptSaving(false)
     }
   }
 
@@ -219,51 +177,7 @@ export function PersonalPreferencesPage(){
           </div>
         </section>
 
-        <section className="v2-panel p-5 md:p-6">
-          <h3 className="v2-section-title">对话与上下文</h3>
-          <p className="mt-1 text-sm text-muted-foreground">设置 AI 是否记住对话上下文，以及你的个人系统提示词</p>
-          <div className="mt-5 space-y-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium text-foreground">记住对话上下文</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {contextEnabled ? 'AI 将记住所有对话中的上下文信息' : '仅发送当前消息'}
-                </p>
-              </div>
-              <Switch checked={contextEnabled} onCheckedChange={(v)=>setContextEnabled(!!v)} />
-            </div>
-            <div className="flex items-center justify-between gap-4 border-b border-border pb-4">
-              <div>
-                <p className="text-sm font-medium text-foreground">新对话继承上下文</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  开启后，新对话将基于最近的上下文
-                </p>
-              </div>
-              <Switch
-                checked={newConversationContextEnabled}
-                onCheckedChange={(v)=>setNewConversationContextEnabled(!!v)}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground/80">个人系统提示词</label>
-              <Textarea
-                value={personalPromptDraft}
-                onChange={(event) => {
-                  setPersonalPromptDraft(event.target.value)
-                  if (personalPromptError) {
-                    setPersonalPromptError(null)
-                  }
-                }}
-                onBlur={() => handlePersonalPromptSave()}
-                placeholder="你是一个专业、友善且高效的 AI 助手。"
-                className="min-h-[82px] resize-none bg-surface"
-                disabled={!user || personalPromptSaving}
-              />
-              {personalPromptError && <p className="text-sm text-destructive">{personalPromptError}</p>}
-              <p className="text-right text-xs text-muted-foreground">{personalPromptDraft.length}/500</p>
-            </div>
-          </div>
-        </section>
+        <ConversationContextCard />
       </div>
     </div>
   )

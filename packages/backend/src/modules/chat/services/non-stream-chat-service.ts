@@ -34,6 +34,8 @@ interface NonStreamChatRequest {
   quotaSnapshot: UsageQuotaSnapshot | null
   traceRecorder?: TaskTraceRecorder | null
   personalPrompt?: string | null
+  /** 上下文开关的解析结果（由调用方用 resolveContextEnabled 解析） */
+  contextEnabled?: boolean
   historyUpperBound?: Date | null
   systemSettings?: SystemSettingsMap | null
   historySnapshot?: PreStreamHistorySnapshot | null
@@ -90,6 +92,7 @@ export class NonStreamChatService {
       quotaSnapshot,
       traceRecorder,
       personalPrompt,
+      contextEnabled,
       historyUpperBound,
       systemSettings,
       historySnapshot,
@@ -101,6 +104,7 @@ export class NonStreamChatService {
       images,
       mode: 'completion',
       personalPrompt,
+      contextEnabled,
       historyUpperBound: historyUpperBound ?? null,
       systemSettings,
       historySnapshot,

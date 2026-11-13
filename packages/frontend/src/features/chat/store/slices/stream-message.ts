@@ -1,4 +1,5 @@
 import { streamChat } from '@/features/chat/api'
+import { useAuthStore } from '@/store/auth-store'
 import { useSettingsStore } from '@/store/settings-store'
 import type { Message } from '@/types'
 import type {
@@ -91,7 +92,8 @@ export const createStreamMessageAction = (
       }
 
   const settingsSnapshot = useSettingsStore.getState()
-  const { contextEnabled } = settingsSnapshot
+  // 上下文开关是账号偏好，唯一真源在 users.contextEnabled；未登录（匿名）按开启处理。
+  const contextEnabled = useAuthStore.getState().user?.contextEnabled ?? true
   const maxConcurrentStreams = Math.max(1, settingsSnapshot.systemSettings?.chatMaxConcurrentStreams ?? 1)
   const activeCountSnapshot = get().activeStreamCount ?? 0
   if (activeCountSnapshot >= maxConcurrentStreams) {

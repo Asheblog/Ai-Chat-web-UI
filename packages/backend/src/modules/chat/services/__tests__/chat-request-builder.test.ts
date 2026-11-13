@@ -12,6 +12,7 @@ jest.mock('../../../../db', () => ({
 }))
 
 import { ChatRequestBuilder } from '../../../../agent-runtime/chat-request-builder'
+import { resolveContextEnabled } from '../../../../agent-runtime/request-options'
 import { ConnectionServiceError } from '../../../../services/connections/connection-service'
 
 const baseSession = {
@@ -227,7 +228,7 @@ describe('ChatRequestBuilder', () => {
     expect(prepared.providerRequest.body.stream).toBe(false)
   })
 
-  it('prefers session prompt over personal and system prompts', async () => {
+  it('uses session prompt as role layer and appends personal preference as second system message', async () => {
     const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
     prisma.message.findMany.mockResolvedValue([])
     prisma.systemSetting.findMany.mockResolvedValue([
@@ -247,13 +248,19 @@ describe('ChatRequestBuilder', () => {
       personalPrompt: 'personal prompt',
     })
 
-    expect(prepared.messagesPayload[0]).toMatchObject({
+    const systemMessages = prepared.messagesPayload.filter((msg: any) => msg.role === 'system')
+    expect(systemMessages[0]).toMatchObject({
       role: 'system',
       content: 'session prompt',
     })
+    expect(systemMessages[1]).toMatchObject({
+      role: 'system',
+      content: '[用户个人偏好]\npersonal prompt',
+    })
+    expect(JSON.stringify(prepared.messagesPayload)).not.toContain('global prompt')
   })
 
-  it('uses personal prompt when session prompt missing but global exists', async () => {
+  it('keeps global prompt as role layer and appends personal preference after it', async () => {
     const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
     prisma.message.findMany.mockResolvedValue([])
     prisma.systemSetting.findMany.mockResolvedValue([
@@ -273,10 +280,74 @@ describe('ChatRequestBuilder', () => {
       personalPrompt: 'personal prompt',
     })
 
-    expect(prepared.messagesPayload[0]).toMatchObject({
+    const systemMessages = prepared.messagesPayload.filter((msg: any) => msg.role === 'system')
+    expect(systemMessages[0]).toMatchObject({
       role: 'system',
-      content: 'personal prompt',
+      content: 'global prompt',
     })
+    expect(systemMessages[1]).toMatchObject({
+      role: 'system',
+      content: '[用户个人偏好]\npersonal prompt',
+    })
+  })
+
+  it('does not create a preference layer when personal prompt is absent', async () => {
+    const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
+    prisma.message.findMany.mockResolvedValue([])
+    prisma.systemSetting.findMany.mockResolvedValue([
+      { key: 'chat_system_prompt', value: 'global prompt' },
+    ])
+    prisma.modelCatalog.findMany.mockResolvedValue([])
+    tokenizer.truncateMessages.mockResolvedValue([{ role: 'user', content: 'hi' }])
+    tokenizer.countConversationTokens.mockResolvedValue(10)
+    resolveContextLimit.mockResolvedValue(1000)
+    resolveCompletionLimit.mockResolvedValue(500)
+
+    const prepared = await builder.prepare({
+      session: baseSession as any,
+      payload: { sessionId: 1, content: 'hi' } as any,
+      content: 'hi',
+      mode: 'stream',
+    })
+
+    const preferenceMessages = prepared.messagesPayload.filter((msg: any) =>
+      typeof msg.content === 'string' && msg.content.startsWith('[用户个人偏好]'),
+    )
+    expect(preferenceMessages).toHaveLength(0)
+  })
+
+  it('keeps all system messages and drops history when context is disabled', async () => {
+    const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
+    prisma.systemSetting.findMany.mockResolvedValue([
+      { key: 'chat_system_prompt', value: 'global prompt' },
+    ])
+    prisma.modelCatalog.findMany.mockResolvedValue([])
+    tokenizer.truncateMessages.mockResolvedValue([{ role: 'user', content: 'hi' }])
+    tokenizer.countConversationTokens.mockResolvedValue(10)
+    resolveContextLimit.mockResolvedValue(1000)
+    resolveCompletionLimit.mockResolvedValue(500)
+
+    const prepared = await builder.prepare({
+      session: baseSession as any,
+      payload: { sessionId: 1, content: 'hi' } as any,
+      content: 'hi',
+      mode: 'stream',
+      personalPrompt: 'personal prompt',
+      contextEnabled: false,
+    })
+
+    expect(prisma.message.findMany).not.toHaveBeenCalled()
+    expect(prepared.contextEnabled).toBe(false)
+    const systemMessages = prepared.messagesPayload.filter((msg: any) => msg.role === 'system')
+    expect(systemMessages[0]).toMatchObject({ role: 'system', content: 'global prompt' })
+    expect(systemMessages[1]).toMatchObject({
+      role: 'system',
+      content: '[用户个人偏好]\npersonal prompt',
+    })
+    const conversationMessages = prepared.messagesPayload.filter((msg: any) => msg.role !== 'system')
+    expect(conversationMessages).toHaveLength(1)
+    expect(conversationMessages[0].role).toBe('user')
+    expect(JSON.stringify(conversationMessages[0].content)).toContain('hi')
   })
 
   it('prefers model-specific temperature over system default', async () => {
@@ -565,5 +636,22 @@ describe('ChatRequestBuilder.prepare vision proxy', () => {
     })
     const messages: any[] = prepared.baseRequestBody.messages
     expect(JSON.stringify(messages)).toContain('历史上的图：一只狗')
+  })
+})
+
+describe('resolveContextEnabled', () => {
+  it('falls back to actor preference when payload omits the flag', () => {
+    expect(resolveContextEnabled({ actorContextEnabled: false })).toBe(false)
+    expect(resolveContextEnabled({ actorContextEnabled: true })).toBe(true)
+  })
+
+  it('lets an explicit payload value override the actor preference', () => {
+    expect(resolveContextEnabled({ payloadContextEnabled: true, actorContextEnabled: false })).toBe(true)
+    expect(resolveContextEnabled({ payloadContextEnabled: false, actorContextEnabled: true })).toBe(false)
+  })
+
+  it('defaults to true when neither source provides a value', () => {
+    expect(resolveContextEnabled({})).toBe(true)
+    expect(resolveContextEnabled({ actorContextEnabled: null })).toBe(true)
   })
 })

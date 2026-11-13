@@ -242,6 +242,7 @@ export const updatePersonalSettings = async (
     avatar?: ImageUploadPayload | null
     username?: string
     personalPrompt?: string | null
+    contextEnabled?: boolean
   },
   signal?: AbortSignal,
 ) => {
@@ -266,7 +267,25 @@ export const updatePersonalSettings = async (
     payload.personal_prompt =
       typeof settings.personalPrompt === 'string' ? settings.personalPrompt : null
   }
+  if (typeof settings.contextEnabled === 'boolean') {
+    payload.context_enabled = settings.contextEnabled
+  }
   const response = await client.put<ApiResponse<any>>('/settings/personal', payload, { signal })
+  return response.data?.data
+}
+
+export type AppInfoResponse = {
+  name: string
+  version: string
+  mode: string
+  features: Record<string, boolean>
+  limits: {
+    system_prompt_max_length: number
+  }
+}
+
+export const getAppInfo = async () => {
+  const response = await client.get<ApiResponse<AppInfoResponse>>('/settings/app-info')
   return response.data?.data
 }
 

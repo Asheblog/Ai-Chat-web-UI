@@ -26,7 +26,6 @@ const {
   mockWebPreferenceState,
 } = vi.hoisted(() => ({
   mockSettingsState: {
-    contextEnabled: true,
     systemSettings: {
       chatMaxConcurrentStreams: 2,
       reasoningEnabled: true,
@@ -35,7 +34,7 @@ const {
   mockAuthState: {
     updateQuota: vi.fn(),
     actorState: 'authenticated' as const,
-    user: { id: 1, role: 'ADMIN' },
+    user: { id: 1, role: 'ADMIN', contextEnabled: false },
   },
   mockModelsState: {
     models: [] as any[],
@@ -130,6 +129,10 @@ describe('stream slice', () => {
     await flushMicrotasks()
 
     expect(chatApi.streamChat).toHaveBeenCalledTimes(1)
+    // contextEnabled 已迁到账号（users.contextEnabled），payload 必须来自 auth store
+    expect(vi.mocked(chatApi.streamChat).mock.calls[0][3]).toEqual(
+      expect.objectContaining({ contextEnabled: false }),
+    )
     // stream 已带 usage 时不再二次 getUsage，只刷新侧栏 sessions usage
     expect(chatApi.getUsage).not.toHaveBeenCalled()
     expect(chatApi.getSessionsUsage).toHaveBeenCalledTimes(1)

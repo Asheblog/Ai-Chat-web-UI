@@ -154,7 +154,6 @@ export function ChatScreen({ apiClient, onBack, session, theme }: ChatScreenProp
           sessionId: session.id,
           content,
           clientMessageId,
-          contextEnabled: true,
           reasoningEnabled: true,
         },
         signal: controller.signal,

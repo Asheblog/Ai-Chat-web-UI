@@ -147,7 +147,7 @@ import { computeAgentToolFlags } from '../../../../agent-runtime/agent-tool-conf
 // visionProxyService 实例：deps 构造与用例断言共用同一 mock
 const visionProxyService = { transcribeImages: jest.fn() }
 
-const createMockContext = () => {
+const createMockContext = (actorOverrides: Record<string, unknown> = {}) => {
   const jsonMock = jest.fn()
   const req: any = {
     valid: jest.fn(() => ({
@@ -162,7 +162,7 @@ const createMockContext = () => {
   const c: any = {
     get: jest.fn((key: string) => {
       if (key === 'actor') {
-        return { identifier: 'test-actor', type: 'user', id: 1, personalPrompt: null }
+        return { identifier: 'test-actor', type: 'user', id: 1, personalPrompt: null, ...actorOverrides }
       }
       return undefined
     }),
@@ -269,6 +269,31 @@ describe('createChatStreamHandler error handling', () => {
     expect(jsonCallArgs[0]).toMatchObject({ success: false, error: '连接缺少 secretVaultId，无法获取 API Key' })
     expect(jsonCallArgs[1]).toBe(400)
     expect(response).toBe(jsonMock.mock.results[0]?.value ?? response)
+  })
+
+  it('resolves context preference from the actor once and reuses it for the compression gate and request build', async () => {
+    const mockPrepare = jest.fn().mockRejectedValue(new Error('stop after wiring check'))
+    const deps = createMinimalDeps({ mockPrepare })
+    const { c } = createMockContext({ contextEnabled: false })
+
+    const handler = createChatStreamHandler(deps)
+    await handler(c)
+
+    expect(deps.conversationCompressionService.compressIfNeeded).not.toHaveBeenCalled()
+    expect(mockPrepare.mock.calls[0][0].contextEnabled).toBe(false)
+  })
+
+  it('keeps the compression gate on when the account preference is enabled', async () => {
+    const mockPrepare = jest.fn().mockRejectedValue(new Error('stop after wiring check'))
+    const deps = createMinimalDeps({ mockPrepare })
+    // 默认 actor 不含 contextEnabled：解析应回落到 true，压缩门保持开启
+    const { c } = createMockContext()
+
+    const handler = createChatStreamHandler(deps)
+    await handler(c)
+
+    expect(deps.conversationCompressionService.compressIfNeeded).toHaveBeenCalled()
+    expect(mockPrepare.mock.calls[0][0].contextEnabled).toBe(true)
   })
 
   it('returns 500 JSON for plain Error (no statusCode)', async () => {

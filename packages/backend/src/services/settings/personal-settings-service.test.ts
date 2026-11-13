@@ -119,6 +119,95 @@ describe('PersonalSettingsService', () => {
     expect(result.personal_prompt).toBe('stay friendly')
   })
 
+  it('defaults context_enabled to true when the column has no value', async () => {
+    const { prisma, service } = buildService()
+    prisma.user.findUnique.mockResolvedValueOnce({
+      username: 'admin',
+      preferredModelId: null,
+      preferredConnectionId: null,
+      preferredModelRawId: null,
+      avatarPath: null,
+      personalPrompt: null,
+    })
+    prisma.user.findUnique.mockResolvedValueOnce({
+      id: 9,
+      username: 'admin',
+      preferredModelId: null,
+      preferredConnectionId: null,
+      preferredModelRawId: null,
+      avatarPath: null,
+      personalPrompt: null,
+      contextEnabled: null,
+    })
+
+    const settings = await service.getPersonalSettings({ userId: 9, request: buildRequest() })
+    expect(settings.context_enabled).toBe(true)
+
+    const updated = await service.updatePersonalSettings({
+      userId: 9,
+      request: buildRequest(),
+      payload: {},
+    })
+    expect(prisma.user.update).not.toHaveBeenCalled()
+    expect(updated.context_enabled).toBe(true)
+  })
+
+  it('persists an explicit context_enabled false', async () => {
+    const { prisma, service } = buildService()
+    prisma.user.findUnique.mockResolvedValueOnce({
+      id: 10,
+      username: 'quiet_user',
+      preferredModelId: null,
+      preferredConnectionId: null,
+      preferredModelRawId: null,
+      avatarPath: null,
+      personalPrompt: null,
+      contextEnabled: true,
+    })
+    prisma.user.update.mockResolvedValueOnce({})
+
+    const result = await service.updatePersonalSettings({
+      userId: 10,
+      request: buildRequest(),
+      payload: { context_enabled: false },
+    })
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 10 },
+      data: { contextEnabled: false },
+    })
+    expect(result.context_enabled).toBe(false)
+  })
+
+  it('reads back the persisted context_enabled value', async () => {
+    const { prisma, service } = buildService()
+    prisma.user.findUnique.mockResolvedValue({
+      id: 11,
+      username: 'quiet_user',
+      preferredModelId: null,
+      preferredConnectionId: null,
+      preferredModelRawId: null,
+      avatarPath: null,
+      personalPrompt: null,
+      contextEnabled: false,
+    })
+    prisma.user.update.mockResolvedValueOnce({})
+
+    const settings = await service.getPersonalSettings({ userId: 11, request: buildRequest() })
+    expect(settings.context_enabled).toBe(false)
+
+    const updated = await service.updatePersonalSettings({
+      userId: 11,
+      request: buildRequest(),
+      payload: { personal_prompt: 'be brief' },
+    })
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 11 },
+      data: { personalPrompt: 'be brief' },
+    })
+    expect(updated.context_enabled).toBe(false)
+  })
+
   it('rejects duplicate usernames', async () => {
     const { prisma, service } = buildService()
     prisma.user.findUnique.mockResolvedValueOnce({

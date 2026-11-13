@@ -35,6 +35,7 @@ import {
   deletePendingStreamCancelKey,
 } from '../../chat/stream-state';
 import type { ChatRequestBuilder } from '../../../agent-runtime/chat-request-builder';
+import { resolveContextEnabledForActor } from '../../../agent-runtime/request-options';
 import {
   resolveMaxToolIterations,
   sanitizeScope,
@@ -173,6 +174,11 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         actorIdentifier: actor.identifier,
       })
       const payload = (c.req as ValidatedJsonRequest<SendMessagePayload>).valid('json') as ChatStreamPayload;
+      // 压缩门与请求构建共用同一解析结果，避免两处各自判断
+      const resolvedContextEnabled = resolveContextEnabledForActor({
+        actor,
+        payloadContextEnabled: payload?.contextEnabled,
+      });
       const normalizedPayload = normalizeChatStreamPayload(payload)
       const {
         sessionId,
@@ -420,7 +426,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
 
       let compressionAppliedPayload: import('../services/conversation-compression-service').CompressionAppliedPayload | null = null;
       try {
-        if (payload?.contextEnabled !== false) {
+        if (resolvedContextEnabled) {
           const compressionResult = await conversationCompressionService.compressIfNeeded({
             session,
             actorContent: content,
@@ -558,6 +564,7 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         mode: 'stream',
         historyUpperBound,
         personalPrompt: actor.type === 'user' ? actor.personalPrompt ?? null : null,
+        contextEnabled: resolvedContextEnabled,
         requestedSkills,
         deepResearchWebSearchActive: deepResearchSearchActive,
         ragContext,

@@ -492,6 +492,7 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
     avatar: z.union([imagePayloadSchema, z.null()]).optional(),
     username: z.string().regex(/^[a-zA-Z0-9_]{3,20}$/).optional(),
     personal_prompt: z.string().max(MAX_SYSTEM_PROMPT_LENGTH).nullable().optional(),
+    context_enabled: z.boolean().optional(),
   })), async (c) => {
     try {
       const user = c.get('user');
@@ -519,6 +520,7 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
           avatar_url: updated.avatar_url,
           username: updated.username,
           personal_prompt: updated.personal_prompt,
+          context_enabled: updated.context_enabled,
         },
         message: 'Personal settings updated successfully',
       });

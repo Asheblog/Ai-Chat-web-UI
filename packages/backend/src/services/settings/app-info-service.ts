@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client'
 import { prisma as defaultPrisma } from '../../db'
+import { MAX_SYSTEM_PROMPT_LENGTH } from '../../constants/prompt'
 
 export interface AppInfoServiceDeps {
   prisma?: PrismaClient
@@ -30,6 +31,9 @@ export class AppInfoService {
         streaming: true,
         file_upload: false,
         long_term_memory: false,
+      },
+      limits: {
+        system_prompt_max_length: MAX_SYSTEM_PROMPT_LENGTH,
       },
     }
   }

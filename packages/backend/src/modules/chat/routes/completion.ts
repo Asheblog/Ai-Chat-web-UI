@@ -28,6 +28,7 @@ import {
   loadPreStreamHistorySnapshot,
   ungroupedMessagesFromSnapshot,
 } from '../../../services/chat/request-context';
+import { resolveContextEnabledForActor } from '../../../agent-runtime/request-options';
 
 export interface ChatCompletionRoutesDeps {
   prisma: PrismaClient
@@ -50,6 +51,11 @@ export const registerChatCompletionRoutes = (
       const payload = c.req.valid('json') as any;
       const { sessionId, content, images } = payload;
       const traceToggle = typeof payload?.traceEnabled === 'boolean' ? payload.traceEnabled : undefined;
+      // 压缩门与请求构建共用同一解析结果，避免两处各自判断
+      const resolvedContextEnabled = resolveContextEnabledForActor({
+        actor,
+        payloadContextEnabled: payload?.contextEnabled,
+      });
 
       const session = await prisma.chatSession.findFirst({
         where: {
@@ -163,7 +169,7 @@ export const registerChatCompletionRoutes = (
       });
 
       try {
-        if (payload?.contextEnabled !== false) {
+        if (resolvedContextEnabled) {
           const compressionResult = await conversationCompressionService.compressIfNeeded({
             session: session as any,
             actorContent: content,
@@ -199,6 +205,7 @@ export const registerChatCompletionRoutes = (
           quotaSnapshot,
           traceRecorder,
           personalPrompt: actor.type === 'user' ? actor.personalPrompt ?? null : null,
+          contextEnabled: resolvedContextEnabled,
           historyUpperBound,
           systemSettings: turnContext.systemSettings,
           historySnapshot: turnContext.history,

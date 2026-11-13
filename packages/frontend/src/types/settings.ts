@@ -69,8 +69,6 @@ export interface PythonRuntimeStatus {
 }
 
 export interface SettingsState {
-  contextEnabled: boolean;
-  newConversationContextEnabled: boolean;
   systemSettings: SystemSettings | null;
   isLoading: boolean;
   error: string | null;

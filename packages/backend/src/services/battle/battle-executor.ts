@@ -198,7 +198,6 @@ export class BattleExecutor {
     const payload: RequestGenerationOptions = {
       reasoningEnabled: modelConfig.reasoningEnabled,
       reasoningEffort: modelConfig.reasoningEffort,
-      contextEnabled: false,
       skills: effectiveSkills,
       custom_body: modelConfig.custom_body,
       custom_headers: modelConfig.custom_headers,
@@ -213,6 +212,8 @@ export class BattleExecutor {
       images: promptImages || [],
       mode: emitDelta ? 'stream' : 'completion',
       personalPrompt: null,
+      // 对战必须不带历史：builder 只认入参，不再读 payload
+      contextEnabled: false,
       extraSystemPrompts: extraPrompt ? [extraPrompt] : [],
     })
     this.normalizePreparedRequest(prepared)
@@ -268,7 +269,6 @@ export class BattleExecutor {
     const judgePrompt = this.buildJudgePrompt(prompt, expectedAnswer, answer, questionImageCount, expectedImageCount)
     const session = this.buildVirtualSession(judgeModel.connection, judgeModel.rawModelId)
     const payload: RequestGenerationOptions = {
-      contextEnabled: false,
       custom_body: { temperature: 0 },
     }
 
@@ -279,6 +279,8 @@ export class BattleExecutor {
       images: [...(promptImages || []), ...(expectedAnswerImages || [])],
       mode: 'completion',
       personalPrompt: null,
+      // 判题同样不带历史
+      contextEnabled: false,
     })
     this.normalizePreparedRequest(prepared)
 

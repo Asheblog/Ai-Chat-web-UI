@@ -1,5 +1,5 @@
 import React from "react"
-import { act, cleanup, render, screen } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { PersonalSettings } from "@/components/personal-settings"
 import { McpSection } from "@/components/settings/pages/extensions/sections/mcp-section"
@@ -25,10 +25,6 @@ vi.mock("next-themes", () => ({
 }))
 
 const settingsStoreMock = vi.hoisted(() => ({
-  contextEnabled: true,
-  newConversationContextEnabled: false,
-  setContextEnabled: vi.fn(),
-  setNewConversationContextEnabled: vi.fn(),
   // McpSection 的全局开关走 useSystemSettings（共享 store）
   systemSettings: null,
   isLoading: false,
@@ -42,7 +38,7 @@ vi.mock("@/store/settings-store", () => ({
 }))
 
 const authState = vi.hoisted(() => ({
-  user: { username: "tester", avatarUrl: null, personalPrompt: null },
+  user: { username: "tester", avatarUrl: null, personalPrompt: null, contextEnabled: true },
   actorState: "authenticated",
   fetchActor: vi.fn(),
 }))
@@ -55,11 +51,13 @@ const settingsApiMocks = vi.hoisted(() => ({
   getSystemSettings: vi.fn(),
   updateSystemSettings: vi.fn(),
   updatePersonalSettings: vi.fn(),
+  getAppInfo: vi.fn(),
 }))
 vi.mock("@/features/settings/api", () => ({
   getSystemSettings: settingsApiMocks.getSystemSettings,
   updateSystemSettings: settingsApiMocks.updateSystemSettings,
   updatePersonalSettings: settingsApiMocks.updatePersonalSettings,
+  getAppInfo: settingsApiMocks.getAppInfo,
 }))
 
 /**
@@ -105,9 +103,13 @@ vi.mock("@/features/skills/api", () => ({
 beforeEach(() => {
   vi.clearAllMocks()
   toastSpy.mockClear()
+  authState.user.contextEnabled = true
   settingsApiMocks.getSystemSettings.mockResolvedValue({ data: { mcpGlobalEnabled: true } })
   settingsApiMocks.updateSystemSettings.mockResolvedValue({ success: true })
   settingsApiMocks.updatePersonalSettings.mockResolvedValue({ success: true })
+  settingsApiMocks.getAppInfo.mockResolvedValue({
+    limits: { system_prompt_max_length: 12000 },
+  })
   shareApiMocks.listChatShares.mockResolvedValue({ success: true, data: { shares: [] } })
   skillsApiMocks.listSkillStore.mockResolvedValue({ success: true, data: { items: [], sources: [] } })
   skillsApiMocks.listSkillCatalog.mockResolvedValue({ success: true, data: [] })
@@ -144,5 +146,37 @@ describe("PersonalSettings 个人设置分区", () => {
     await screen.findByRole("heading", { name: "MCP 服务" })
 
     expect(screen.getByText(/MCP 服务模板、连接、凭据、工具与绑定作用域/)).toBeInTheDocument()
+  })
+})
+
+describe("对话与上下文卡片", () => {
+  test("开关反映账号 contextEnabled，点击后按账号偏好写入", async () => {
+    authState.user.contextEnabled = false
+    render(<PersonalSettings />)
+    await screen.findByText("管理你的头像、用户名与界面主题")
+
+    const toggle = await screen.findByRole("switch", { name: "记住对话上下文" })
+    expect(toggle).toHaveAttribute("aria-checked", "false")
+
+    fireEvent.click(toggle)
+
+    await waitFor(() => {
+      expect(settingsApiMocks.updatePersonalSettings).toHaveBeenCalledWith({ contextEnabled: true })
+    })
+    expect(authState.fetchActor).toHaveBeenCalled()
+  })
+
+  test("提示词上限取自 app-info，不是写死的 500", async () => {
+    settingsApiMocks.getAppInfo.mockResolvedValue({
+      limits: { system_prompt_max_length: 8000 },
+    })
+    render(<PersonalSettings />)
+    await screen.findByText("管理你的头像、用户名与界面主题")
+
+    const textarea = screen.getByPlaceholderText("你是一个专业、友善且高效的 AI 助手。")
+    await waitFor(() => {
+      expect(textarea).toHaveAttribute("maxlength", "8000")
+    })
+    expect(await screen.findByText("0/8000")).toBeInTheDocument()
   })
 })

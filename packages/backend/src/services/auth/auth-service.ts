@@ -48,6 +48,7 @@ type SimpleUser = {
   preferredConnectionId?: number | null
   preferredModelRawId?: string | null
   personalPrompt?: string | null
+  contextEnabled?: boolean
 }
 
 export interface RegisterResult {
@@ -132,6 +133,7 @@ export class AuthService {
         status: true,
         avatarPath: true,
         personalPrompt: true,
+        contextEnabled: true,
       },
     })
 
@@ -152,6 +154,7 @@ export class AuthService {
         status: user.status as 'PENDING' | 'ACTIVE' | 'DISABLED',
         avatarPath: user.avatarPath ?? null,
         personalPrompt: user.personalPrompt ?? null,
+        contextEnabled: user.contextEnabled ?? true,
       },
       token,
     }
@@ -173,6 +176,7 @@ export class AuthService {
         preferredConnectionId: true,
         preferredModelRawId: true,
         personalPrompt: true,
+        contextEnabled: true,
       },
     })
 
@@ -213,6 +217,7 @@ export class AuthService {
       preferredConnectionId: user.preferredConnectionId ?? null,
       preferredModelRawId: user.preferredModelRawId ?? null,
       personalPrompt: user.personalPrompt ?? null,
+      contextEnabled: user.contextEnabled ?? true,
     }
 
     const quota = await this.inspectActorQuota({
@@ -257,6 +262,7 @@ export class AuthService {
           preferredModelRawId: true,
           avatarPath: true,
           personalPrompt: true,
+          contextEnabled: true,
         },
       })
       if (user) {
@@ -270,6 +276,7 @@ export class AuthService {
           preferredConnectionId: user.preferredConnectionId ?? null,
           preferredModelRawId: user.preferredModelRawId ?? null,
           personalPrompt: user.personalPrompt ?? null,
+          contextEnabled: user.contextEnabled ?? true,
         }
         preferredModel = {
           modelId: user.preferredModelId ?? null,
@@ -291,6 +298,7 @@ export class AuthService {
             createdAt: await this.resolveUserCreatedAt(profile.id),
             avatarUrl: profile.avatarUrl ?? null,
             personalPrompt: profile.personalPrompt ?? null,
+            contextEnabled: profile.contextEnabled ?? true,
           }
         : null,
       preferredModel,

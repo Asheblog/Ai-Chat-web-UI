@@ -121,11 +121,12 @@ describe('NonStreamChatService', () => {
       images: [],
       quotaSnapshot: null,
       personalPrompt: 'stay polite',
+      contextEnabled: false,
     })
 
     expect(requestBuilder.prepare).toHaveBeenCalled()
     expect(requestBuilder.prepare).toHaveBeenCalledWith(
-      expect.objectContaining({ personalPrompt: 'stay polite' }),
+      expect.objectContaining({ personalPrompt: 'stay polite', contextEnabled: false }),
     )
     expect(prisma.message.create).toHaveBeenCalledWith(
       expect.objectContaining({

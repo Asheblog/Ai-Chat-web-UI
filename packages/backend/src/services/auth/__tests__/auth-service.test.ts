@@ -122,6 +122,7 @@ describe('AuthService', () => {
       preferredConnectionId: 9,
       preferredModelRawId: 'gpt-4o',
       personalPrompt: 'play nice',
+      contextEnabled: false,
     })
     const service = createService(prisma)
 
@@ -130,6 +131,7 @@ describe('AuthService', () => {
     expect(result.token).toBe('jwt-token')
     expect(result.user.avatarUrl).toBe('http://example.com/avatar.png')
     expect(result.user.personalPrompt).toBe('play nice')
+    expect(result.user.contextEnabled).toBe(false)
     expect(result.quota).toBeTruthy()
   })
 
@@ -173,6 +175,7 @@ describe('AuthService', () => {
         preferredModelRawId: 'raw',
         avatarPath: 'icon.png',
         personalPrompt: null,
+        contextEnabled: false,
       })
       .mockResolvedValueOnce({ createdAt })
     const service = createService(prisma)
@@ -191,6 +194,7 @@ describe('AuthService', () => {
     expect(result.actor).toMatchObject({ id: 5 })
     expect(result.user?.avatarUrl).toBe('http://example.com/icon.png')
     expect(result.user?.personalPrompt).toBeNull()
+    expect(result.user?.contextEnabled).toBe(false)
     expect(result.preferredModel?.modelId).toBe('m1')
     expect(result.quota).toBeTruthy()
   })

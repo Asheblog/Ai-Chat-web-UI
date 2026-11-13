@@ -66,6 +66,8 @@ export interface PrepareChatRequestParams {
   historyUpperBound?: Date | null
   mode: 'stream' | 'completion'
   personalPrompt?: string | null
+  /** 会话上下文开关的解析结果，由调用方用 resolveContextEnabled 解析后传入 */
+  contextEnabled?: boolean
   extraSystemPrompts?: string[]
   requestedSkills?: RequestedSkillsPayload
   /** 深度研究 + 联网搜索是否同时可用；决定是否注入计划确认工具流程 */
@@ -133,7 +135,7 @@ export class ChatRequestBuilder {
       throw new Error('Chat session connection is not ready')
     }
     assertSupportedProvider(params.session.connection.provider)
-    const contextEnabled = params.payload?.contextEnabled !== false
+    const contextEnabled = params.contextEnabled ?? true
     const mainModelVision = params.mainModelVision !== false
     const visionTranscriptionPrefix = params.visionTranscriptionPrefix || ''
     const visionAttachmentHint = buildVisionAttachmentHint(params.visionAttachmentImageCount ?? 0)
@@ -147,13 +149,20 @@ export class ChatRequestBuilder {
     const personalPrompt = (params.personalPrompt || '').toString().trim()
     const sessionPrompt = (params.session as any).systemPrompt
     const sessionPromptNormalized = typeof sessionPrompt === 'string' ? sessionPrompt.trim() : ''
+    // 角色层：会话自定义 → 全局 chat_system_prompt → 内置默认
     const primaryPrompt =
       this.applyPromptTemplate(sessionPromptNormalized, templateVariables) ||
-      this.applyPromptTemplate(personalPrompt, templateVariables) ||
       this.applyPromptTemplate(globalPrompt, templateVariables) ||
       this.applyPromptTemplate(this.defaultSessionPromptTemplate, templateVariables)
     if (primaryPrompt) {
       systemPrompts.push({ role: 'system', content: primaryPrompt })
+    }
+    // 偏好层：个人提示词是追加层，不再顶掉角色层
+    if (personalPrompt) {
+      const templatedPersonal = this.applyPromptTemplate(personalPrompt, templateVariables)
+      if (templatedPersonal) {
+        systemPrompts.push({ role: 'system', content: `[用户个人偏好]\n${templatedPersonal}` })
+      }
     }
     const extraPrompts = Array.isArray(params.extraSystemPrompts) ? params.extraSystemPrompts : []
     for (const item of extraPrompts) {

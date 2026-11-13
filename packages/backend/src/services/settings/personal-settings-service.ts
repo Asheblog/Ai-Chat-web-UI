@@ -20,6 +20,7 @@ export interface PersonalSettingsPayload {
   avatar?: Nullable<{ data: string; mime: string }>
   username?: string
   personal_prompt?: string | null
+  context_enabled?: boolean
 }
 
 export interface PersonalSettingsResult {
@@ -31,6 +32,7 @@ export interface PersonalSettingsResult {
   avatar_url: string | null
   username?: string
   personal_prompt: string | null
+  context_enabled: boolean
 }
 
 export class PersonalSettingsError extends Error {
@@ -73,6 +75,7 @@ export class PersonalSettingsService {
         preferredModelRawId: true,
         avatarPath: true,
         personalPrompt: true,
+        contextEnabled: true,
       },
     })
     const baseUrl = this.determineProfileImageBaseUrl({ request: params.request })
@@ -85,6 +88,7 @@ export class PersonalSettingsService {
       avatar_url: this.resolveProfileImageUrl(record?.avatarPath ?? null, baseUrl),
       username: record?.username,
       personal_prompt: record?.personalPrompt ?? null,
+      context_enabled: record?.contextEnabled ?? true,
     }
   }
 
@@ -103,6 +107,7 @@ export class PersonalSettingsService {
         preferredModelRawId: true,
         avatarPath: true,
         personalPrompt: true,
+        contextEnabled: true,
       },
     })
 
@@ -151,6 +156,10 @@ export class PersonalSettingsService {
       updates.personalPrompt = nextPersonalPrompt
     }
 
+    if (typeof params.payload.context_enabled === 'boolean') {
+      updates.contextEnabled = params.payload.context_enabled
+    }
+
     if (Object.keys(updates).length > 0) {
       await this.prisma.user.update({ where: { id: params.userId }, data: updates })
     }
@@ -166,6 +175,7 @@ export class PersonalSettingsService {
       avatar_url: this.resolveProfileImageUrl(avatarPathResult, baseUrl),
       username: updatedUsername ?? currentProfile.username,
       personal_prompt: nextPersonalPrompt,
+      context_enabled: updates.contextEnabled ?? currentProfile.contextEnabled ?? true,
     }
   }
 }

@@ -9,6 +9,13 @@
 - **Markdown Render Snapshot（格式渲染快照）**：Worker 按消息身份、正文版本和来源正文生成 HTML；每条消息最多一个进行中任务与一个最新待处理快照。流式同源追加期间可沿用最近 HTML 并显示未渲染尾段；编辑、版本回退、身份变化必须失效。Worker 不可用时保留完整纯文本，不在主线程同步解析长文。同一快照失败后按客户端给出的重试间隔（默认 10 秒）最多恢复重试两次，成功后清零；Worker 迟到 ready 时立即重置重试预算并重新渲染已降级快照；身份/正文替换和卸载清理恢复计时器，避免迟到结果覆盖新内容。
 - **Markdown Worker Lifecycle（格式渲染服务生命周期）**：客户端等待 ready 握手（默认 15 秒，`effectiveType` 为 2g/3g 或下行低于 1.5Mbps 时 30 秒）；软超时只结算等待中的任务并降级纯文本，不终止 Worker，迟到的 ready 会广播给订阅者自愈；Worker 60 秒（弱网 120 秒）仍未 ready 才回收。单任务截止 15 秒，连续两次超时才重启 Worker。失败后按 10s→20s→40s→60s 指数冷却，不永久停用；`online` 事件、ready 握手和成功渲染都会清零预算。Worker 首包不包含 KaTeX，仅在正文命中公式时按需加载；KaTeX 样式与字体随应用本地打包，不依赖第三方 CDN。shutdown 清理任务和计时器并重置本地预算，重新加载可重新建立服务。
 
+## 对话上下文与提示词
+
+- **Conversation Context Toggle（会话上下文开关）**：账号级设置 `users.contextEnabled`，控制**当前会话**的历史消息是否随请求发送；不改变消息入库，也不跨会话（跨会话长期记忆由 `app-info.features.long_term_memory` 单独表达，当前为 false）。服务端解析顺序固定为「请求显式值 → 账号偏好 → true」，收敛在 `resolveContextEnabled`，压缩门与请求构建共用同一结果；Battle 恒定关闭
+- **Prompt Role Layer（角色层提示词）**：定义这段对话的身份与职责，三选一互斥：会话自定义 > 全局 `chat_system_prompt` > 内置默认
+- **Prompt Preference Layer（偏好层提示词）**：用户的 `users.personalPrompt`，以 `[用户个人偏好]` 前缀作为独立 system 消息追加在角色层之后；不被角色层替代，也不替代角色层（见 ADR-0039）
+- **Prompt Length Limit（提示词长度上限）**：由后端 `MAX_SYSTEM_PROMPT_LENGTH` 决定（默认 12000，环境变量可覆盖，硬顶 100000），经 `GET /api/settings/app-info` 的 `limits.system_prompt_max_length` 暴露；前端计数器与 `maxLength` 必须读同一个值，不得写死
+
 ## 文件上传
 
 - **Drag Upload Surface（拖拽上传面）**：用户将本地文件拖入聊天输入区域时触发上传意图的交互区域；它只表达上传意图，具体归类由文件类型与当前能力决定
