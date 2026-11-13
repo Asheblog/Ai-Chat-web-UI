@@ -502,14 +502,14 @@ describe('ChatRequestBuilder', () => {
   })
 })
 
-describe('ChatRequestBuilder.prepare vision proxy', () => {
-  // tokenizer.truncateMessages 透传输入，确保注入到历史消息的描述能流入最终 payload
+describe('ChatRequestBuilder.prepare images', () => {
+  // tokenizer.truncateMessages 透传输入，确保历史消息与用户内容都会进入最终 payload
   const passthroughTokenizer = (tokenizer: any) => {
     tokenizer.truncateMessages.mockImplementation(async (messages: any[]) => messages)
     tokenizer.countConversationTokens.mockResolvedValue(10)
   }
 
-  it('injects visionTranscriptionPrefix into current user message and strips images', async () => {
+  it('passes images straight through without any transcription prefix', async () => {
     const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
     prisma.message.findMany.mockResolvedValue([])
     prisma.systemSetting.findMany.mockResolvedValue([])
@@ -524,118 +524,15 @@ describe('ChatRequestBuilder.prepare vision proxy', () => {
       content: '看看这张图',
       images: [{ data: 'aGk=', mime: 'image/png' }],
       mode: 'stream',
-      mainModelVision: false,
-      visionTranscriptionPrefix: '图片里有一只猫',
-      historyImageDescriptions: null,
-    })
-    const messages: any[] = prepared.baseRequestBody.messages
-    const last = messages[messages.length - 1]
-    expect(JSON.stringify(last.content)).toContain('图片里有一只猫')
-    expect(JSON.stringify(last.content)).not.toContain('image_url')
-    expect(JSON.stringify(last.content)).toContain('看看这张图')
-  })
-
-  it('injects vision attachment hint with image count for tool-flow non-vision models', async () => {
-    const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
-    prisma.message.findMany.mockResolvedValue([])
-    prisma.systemSetting.findMany.mockResolvedValue([])
-    prisma.modelCatalog.findMany.mockResolvedValue([])
-    passthroughTokenizer(tokenizer)
-    resolveContextLimit.mockResolvedValue(1000)
-    resolveCompletionLimit.mockResolvedValue(500)
-
-    const prepared = await builder.prepare({
-      session: baseSession as any,
-      payload: { sessionId: 1, content: '不对啊' } as any,
-      content: '不对啊',
-      images: [],
-      mode: 'stream',
-      mainModelVision: false,
-      visionAttachmentImageCount: 2,
     })
     const messages: any[] = prepared.baseRequestBody.messages
     const last = messages[messages.length - 1]
     const serialized = JSON.stringify(last.content)
-    expect(serialized).toContain('[用户附件]')
-    expect(serialized).toContain('本消息含 2 张图片')
-    expect(serialized).toContain('analyze_visual_media')
-    expect(serialized).toContain('不对啊')
-  })
-
-  it('does not inject vision attachment hint when count is absent or zero', async () => {
-    const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
-    prisma.message.findMany.mockResolvedValue([])
-    prisma.systemSetting.findMany.mockResolvedValue([])
-    prisma.modelCatalog.findMany.mockResolvedValue([])
-    passthroughTokenizer(tokenizer)
-    resolveContextLimit.mockResolvedValue(1000)
-    resolveCompletionLimit.mockResolvedValue(500)
-
-    const prepared = await builder.prepare({
-      session: baseSession as any,
-      payload: { sessionId: 1, content: '纯文字' } as any,
-      content: '纯文字',
-      mode: 'stream',
-      mainModelVision: false,
-      visionAttachmentImageCount: 0,
-    })
-    const messages: any[] = prepared.baseRequestBody.messages
-    const last = messages[messages.length - 1]
-    expect(JSON.stringify(last.content)).not.toContain('[用户附件]')
-    expect(JSON.stringify(last.content)).not.toContain('analyze_visual_media')
-  })
-
-  it('keeps images for vision main model', async () => {
-    const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
-    prisma.message.findMany.mockResolvedValue([])
-    prisma.systemSetting.findMany.mockResolvedValue([])
-    prisma.modelCatalog.findMany.mockResolvedValue([])
-    passthroughTokenizer(tokenizer)
-    resolveContextLimit.mockResolvedValue(1000)
-    resolveCompletionLimit.mockResolvedValue(500)
-
-    const prepared = await builder.prepare({
-      session: baseSession as any,
-      payload: { sessionId: 1, content: '看看这张图' } as any,
-      content: '看看这张图',
-      images: [{ data: 'aGk=', mime: 'image/png' }],
-      mode: 'stream',
-      mainModelVision: true,
-    })
-    const messages: any[] = prepared.baseRequestBody.messages
-    const last = messages[messages.length - 1]
-    expect(JSON.stringify(last.content)).toContain('image_url')
-    expect(JSON.stringify(last.content)).not.toContain('图片里有一只猫')
-  })
-
-  it('injects history descriptions into historical user messages', async () => {
-    const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
-    prisma.message.findMany.mockResolvedValue([])
-    prisma.systemSetting.findMany.mockResolvedValue([])
-    prisma.modelCatalog.findMany.mockResolvedValue([])
-    passthroughTokenizer(tokenizer)
-    resolveContextLimit.mockResolvedValue(1000)
-    resolveCompletionLimit.mockResolvedValue(500)
-
-    const historyImageDescriptions = new Map<number, any[]>(
-      [[100, [{ description: '历史上的图：一只狗', modelRawId: 'm' }]]],
-    )
-    const prepared = await builder.prepare({
-      session: baseSession as any,
-      payload: { sessionId: 1, content: '继续' } as any,
-      content: '继续',
-      mode: 'stream',
-      mainModelVision: false,
-      historyImageDescriptions,
-      historySnapshot: {
-        messages: [
-          { id: 100, role: 'user', content: '看这张', createdAt: new Date(), messageGroupId: null },
-        ],
-        groups: [],
-      },
-    })
-    const messages: any[] = prepared.baseRequestBody.messages
-    expect(JSON.stringify(messages)).toContain('历史上的图：一只狗')
+    // 图片一律透传，用户消息前缀不再注入转写描述或工具流附件提示
+    expect(serialized).toContain('image_url')
+    expect(serialized).not.toContain('[图片转写描述]')
+    expect(serialized).not.toContain('[用户附件]')
+    expect(serialized).toContain('看看这张图')
   })
 })
 

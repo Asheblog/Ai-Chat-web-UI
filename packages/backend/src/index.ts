@@ -127,7 +127,6 @@ app.route('/api/chat', createChatApi({
     streamTraceService: container.streamTraceService,
     streamSseService: container.streamSseService,
     conversationCompressionService: container.conversationCompressionService,
-    visionProxyService: container.visionProxyService,
     mcpService: container.mcpService,
     extensionInstallService: container.extensionInstallService,
   },
