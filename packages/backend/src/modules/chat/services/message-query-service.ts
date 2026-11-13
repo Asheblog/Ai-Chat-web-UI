@@ -490,19 +490,7 @@ export class ChatMessageQueryService {
     baseUrl: string,
     options?: { toolLogsMode?: 'full' | 'history-list' },
   ): NormalizedMessage {
-    const { attachments, toolLogsJson, usageMetrics } = raw as RawMessage & {
-      attachments?: Array<{ relativePath: string }>
-      generatedImages?: GeneratedImageRecord[]
-      toolLogsJson?: string | null
-      usageMetrics?: Array<{
-        promptTokens: number
-        completionTokens: number
-        totalTokens: number
-        firstTokenLatencyMs: number | null
-        responseTimeMs: number | null
-        tokensPerSecond: number | null
-      }>
-    }
+    const { attachments, toolLogsJson, usageMetrics } = raw
     const usage = Array.isArray(usageMetrics) && usageMetrics.length > 0 ? usageMetrics[0] : null
     const rel = Array.isArray(attachments) ? attachments.map((att) => att.relativePath) : []
     const toolEvents = this.parseToolLogsJson(toolLogsJson, {
