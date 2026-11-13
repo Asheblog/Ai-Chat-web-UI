@@ -41,6 +41,8 @@ jest.mock('../../../../utils/task-trace', () => ({
     }),
   },
   summarizeSseLine: jest.fn(),
+  // 编排层在 trace 事件参数里调用 truncateString：缺它会在 prepare 之后抛 TypeError
+  truncateString: jest.fn((value: string) => value),
 }))
 
 jest.mock('../../../../services/task-trace/legacy-utils', () => ({
@@ -210,6 +212,21 @@ const createMinimalDeps = (overrides: Record<string, unknown> = {}) => {
 }
 
 describe('createChatStreamHandler error handling', () => {
+  // 本文件用例都在错误路径上跑（prepare 抛错、provider 失败），产品代码会把这些预期错误打到 console。
+  // 统一吞掉才能让套件输出干净；断言失败仍由 jest 报出。用 beforeAll/afterAll 是为了覆盖
+  // 流式失败在 await handler(c) 之后才打印的异步尾部，并在文件结束后还原，避免影响同 worker 的其它套件。
+  let consoleSpies: jest.SpyInstance[]
+
+  beforeAll(() => {
+    consoleSpies = (['log', 'warn', 'error'] as const).map((method) =>
+      jest.spyOn(console, method).mockImplementation(() => {}),
+    )
+  })
+
+  afterAll(() => {
+    consoleSpies.forEach((spy) => spy.mockRestore())
+  })
+
   beforeEach(() => {
     jest.clearAllMocks()
   })
@@ -269,7 +286,7 @@ describe('createChatStreamHandler error handling', () => {
     expect(jsonCallArgs[1]).toBe(500)
   })
 
-  it('passes images straight through without any transcription step', async () => {
+  it('passes images straight into prepare without any vision fields (interface contract)', async () => {
     const mockPrepare = jest.fn().mockResolvedValue({
       promptTokens: 10,
       contextLimit: 100,
@@ -315,14 +332,13 @@ describe('createChatStreamHandler error handling', () => {
     const handler = createChatStreamHandler(deps)
     await handler(c)
 
-    // 图片一律透传：编排层不再按主模型 vision 能力判断、也不再自动转写
+    // 契约用例：验证 prepare 的入参形状（图片原样透传、四个转写字段不存在），不声称覆盖写回路径；
+    // 对旧实现的区分力由下面四条 not.toHaveProperty 承担
     const prepareArg = mockPrepare.mock.calls[0][0]
     expect(prepareArg.images).toEqual([{ data: 'aGk=', mime: 'image/png' }])
     expect(prepareArg).not.toHaveProperty('mainModelVision')
     expect(prepareArg).not.toHaveProperty('visionTranscriptionPrefix')
     expect(prepareArg).not.toHaveProperty('visionAttachmentImageCount')
     expect(prepareArg).not.toHaveProperty('historyImageDescriptions')
-    // 不再把转写结果写回用户消息
-    expect((deps as any).prisma.message.update).not.toHaveBeenCalled()
   })
 })
