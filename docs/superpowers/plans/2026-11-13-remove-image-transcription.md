@@ -262,11 +262,12 @@ git commit -m "refactor(settings): 移除图片转写代理设置项与管理员
 `agent-tool-config.test.ts`：删 `buildAgentVisionProxyConfig` 用例，新增：
 
 ```ts
-it('no longer exports vision proxy config builder', () => {
-  const mod = require('../../agent-runtime/agent-tool-config')
+it('no longer exports vision proxy config builder', async () => {
+  const mod = await import('../../../../agent-runtime/agent-tool-config')
   expect(mod.buildAgentVisionProxyConfig).toBeUndefined()
 })
 ```
+（测试跑在 ts-jest ESM 下，没有 `require`；从 `src/modules/chat/__tests__/` 出发是四级相对路径。）
 
 - [ ] **Step 2: 跑测试确认失败**
 
@@ -279,7 +280,7 @@ registry：删 `VisionProxyToolHandler` import、`VisionProxyService` 类型 imp
 
 agent-tool-config：删 import 与两个导出。
 
-tool-handler-types：删 `VisionProxyConfig` import 与 `ToolCallContext.visionProxy`。
+tool-handler-types：删 `VisionProxyConfig` import 与 `ToolHandlerFactoryParams.visionProxy`（该字段只存在于工厂参数，`ToolCallContext` 从未有过它）。
 
 skill-registry：删 import、`visionProxyService?` 字段、`createToolHandlerRegistry` 第二参。
 
