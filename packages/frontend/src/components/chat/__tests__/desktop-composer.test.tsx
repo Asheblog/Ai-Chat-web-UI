@@ -50,7 +50,6 @@ const createProps = (overrides: Partial<React.ComponentProps<typeof DesktopCompo
   onStop: vi.fn(),
   desktopSendDisabled: false,
   sendLockedReason: null,
-  isVisionEnabled: true,
   onOpenKnowledgeBase: vi.fn(),
   knowledgeBaseEnabled: true,
   knowledgeBaseCount: 0,

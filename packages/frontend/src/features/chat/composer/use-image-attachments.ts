@@ -3,19 +3,17 @@ import type { ChangeEvent, ClipboardEvent } from 'react'
 import type { ComposerImage, ImageLimits, ToastHandler } from './types'
 
 interface UseImageAttachmentsOptions {
+  /** 模型是否支持图片输入——图片附件的唯一门禁 */
   isVisionEnabled: boolean
-  visionProxyEnabled?: boolean
   limits: ImageLimits
   toast: ToastHandler
   visionDisabledMessage?: string
 }
 
 export const DEFAULT_VISION_DISABLED_MESSAGE = '当前模型不支持图片输入'
-export const DEFAULT_VISION_PROXY_MESSAGE = '当前模型不支持识图，图片将由转写代理处理'
 
 export const useImageAttachments = ({
   isVisionEnabled,
-  visionProxyEnabled = false,
   limits,
   toast,
   visionDisabledMessage = DEFAULT_VISION_DISABLED_MESSAGE,
@@ -23,11 +21,8 @@ export const useImageAttachments = ({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [selectedImages, setSelectedImages] = useState<ComposerImage[]>([])
 
-  // 转写代理开启时，非 vision 模型也允许附加图片
-  const canAttachImages = isVisionEnabled || visionProxyEnabled
-
   useEffect(() => {
-    if (canAttachImages || selectedImages.length === 0) {
+    if (isVisionEnabled || selectedImages.length === 0) {
       return
     }
     setSelectedImages([])
@@ -36,7 +31,7 @@ export const useImageAttachments = ({
       description: visionDisabledMessage,
       variant: 'destructive',
     })
-  }, [canAttachImages, selectedImages.length, toast, visionDisabledMessage])
+  }, [isVisionEnabled, selectedImages.length, toast, visionDisabledMessage])
 
   const validateImage = useCallback(
     (file: File): Promise<{ ok: boolean; reason?: string; dataUrl?: string; mime?: string; size?: number }> => {
@@ -74,7 +69,7 @@ export const useImageAttachments = ({
   )
 
   const pickImages = useCallback(() => {
-    if (!canAttachImages) {
+    if (!isVisionEnabled) {
       toast({
         title: '当前模型不支持图片',
         description: visionDisabledMessage,
@@ -82,15 +77,8 @@ export const useImageAttachments = ({
       })
       return
     }
-    if (!isVisionEnabled) {
-      // 转写代理模式：提示性文案，不阻止
-      toast({
-        title: '图片将自动转写',
-        description: DEFAULT_VISION_PROXY_MESSAGE,
-      })
-    }
     fileInputRef.current?.click()
-  }, [canAttachImages, isVisionEnabled, toast, visionDisabledMessage])
+  }, [isVisionEnabled, toast, visionDisabledMessage])
 
   const onFilesSelected = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -153,26 +141,16 @@ export const useImageAttachments = ({
         }
       }
 
-      // 如果剪贴板包含图片但模型不支持 Vision 且转写代理未开启，弹出提示
-      if (hasImage && !canAttachImages) {
-        toast({
-          title: '当前模型不支持图片',
-          description: visionDisabledMessage,
-          variant: 'destructive',
-        })
+      // 非 vision 模型：阻止粘贴图片并给出破坏性提示
+      if (!isVisionEnabled) {
+        if (hasImage) {
+          toast({
+            title: '当前模型不支持图片',
+            description: visionDisabledMessage,
+            variant: 'destructive',
+          })
+        }
         return
-      }
-
-      if (!canAttachImages) {
-        return
-      }
-
-      if (hasImage && !isVisionEnabled) {
-        // 转写代理模式：提示性文案，不阻止
-        toast({
-          title: '图片将自动转写',
-          description: DEFAULT_VISION_PROXY_MESSAGE,
-        })
       }
 
       const imageFiles: File[] = []
@@ -227,7 +205,7 @@ export const useImageAttachments = ({
         }
       }
     },
-    [canAttachImages, isVisionEnabled, limits.maxCount, limits.maxTotalMb, selectedImages, toast, validateImage, visionDisabledMessage],
+    [isVisionEnabled, limits.maxCount, limits.maxTotalMb, selectedImages, toast, validateImage, visionDisabledMessage],
   )
 
   const exposedLimits = useMemo(() => ({ ...limits }), [limits])

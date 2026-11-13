@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useImageAttachments } from '../use-image-attachments'
 import type { ComposerImage } from '../types'
-import type { ChangeEvent } from 'react'
+import type { ClipboardEvent } from 'react'
 
 const limits = {
   maxCount: 5,
@@ -60,91 +60,66 @@ describe('useImageAttachments', () => {
     )
   })
 
-  it('allows adding images when vision disabled but vision proxy enabled', async () => {
+  it('rejects images when the model does not support vision', () => {
     const toast = vi.fn()
     const { result } = renderHook(() =>
       useImageAttachments({
         isVisionEnabled: false,
-        visionProxyEnabled: true,
         limits,
         toast,
       }),
     )
 
-    // jsdom 不解析真实图片，mock FileReader 与 Image 使校验同步完成
-    class MockFileReader {
-      result: string | null = null
-      onload: (() => void) | null = null
-      onerror: (() => void) | null = null
-      readAsDataURL() {
-        this.result = 'data:image/png;base64,AAAA'
-        this.onload?.()
-      }
-    }
-    class MockImage {
-      naturalWidth = 800
-      naturalHeight = 600
-      onload: (() => void) | null = null
-      onerror: (() => void) | null = null
-      set src(_value: string) {
-        this.onload?.()
-      }
-    }
-    vi.stubGlobal('FileReader', MockFileReader)
-    vi.stubGlobal('Image', MockImage)
+    act(() => {
+      result.current.pickImages()
+    })
 
-    try {
-      const file = new File(['fake-png'], 'test.png', { type: 'image/png' })
-      const event = { target: { files: [file] } } as unknown as ChangeEvent<HTMLInputElement>
-
-      await act(async () => {
-        await result.current.onFilesSelected(event)
-      })
-
-      expect(result.current.selectedImages).toHaveLength(1)
-
-      // 转写代理模式下 pickImages 弹出提示性 toast 且不阻止
-      act(() => {
-        result.current.pickImages()
-      })
-      expect(toast).toHaveBeenCalledWith(
-        expect.objectContaining({ title: '图片将自动转写' }),
-      )
-      expect(toast).not.toHaveBeenCalledWith(expect.objectContaining({ variant: 'destructive' }))
-    } finally {
-      vi.unstubAllGlobals()
-    }
+    expect(result.current.selectedImages).toEqual([])
+    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ variant: 'destructive' }))
   })
 
-  it('clears images only when both vision and proxy disabled', () => {
+  it('blocks pasted images when the model does not support vision', async () => {
     const toast = vi.fn()
-    const { result, rerender } = renderHook(
-      ({ isVisionEnabled, visionProxyEnabled }) =>
-        useImageAttachments({
-          isVisionEnabled,
-          visionProxyEnabled,
-          limits,
-          toast,
-        }),
-      { initialProps: { isVisionEnabled: true, visionProxyEnabled: false } },
+    const { result } = renderHook(() =>
+      useImageAttachments({
+        isVisionEnabled: false,
+        limits,
+        toast,
+      }),
     )
 
-    const mockImage: ComposerImage = {
-      dataUrl: 'data:image/png;base64,AAAA',
-      mime: 'image/png',
-      size: 128,
-    }
+    const preventDefault = vi.fn()
+    const file = new File(['fake-png'], 'paste.png', { type: 'image/png' })
+    const event = {
+      clipboardData: { items: [{ type: 'image/png', getAsFile: () => file }] },
+      preventDefault,
+    } as unknown as ClipboardEvent<HTMLTextAreaElement>
+
+    await act(async () => {
+      await result.current.handlePaste(event)
+    })
+
+    expect(result.current.selectedImages).toEqual([])
+    expect(preventDefault).not.toHaveBeenCalled()
+    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ variant: 'destructive' }))
+  })
+
+  it('ignores the retired vision proxy option instead of granting attachments', () => {
+    const toast = vi.fn()
+    const legacyOptions = {
+      isVisionEnabled: false,
+      visionProxyEnabled: true,
+      limits,
+      toast,
+    } as Parameters<typeof useImageAttachments>[0]
+    const { result } = renderHook(() => useImageAttachments(legacyOptions))
 
     act(() => {
-      result.current.setSelectedImages([mockImage])
+      result.current.pickImages()
     })
-    rerender({ isVisionEnabled: false, visionProxyEnabled: true })
-    expect(result.current.selectedImages).toHaveLength(1)
 
-    rerender({ isVisionEnabled: false, visionProxyEnabled: false })
-    expect(result.current.selectedImages).toHaveLength(0)
-    expect(toast).toHaveBeenCalledWith(
-      expect.objectContaining({ title: '已清空图片' }),
-    )
+    expect(result.current.selectedImages).toEqual([])
+    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ variant: 'destructive' }))
+    expect(toast).not.toHaveBeenCalledWith(expect.objectContaining({ title: '图片将自动转写' }))
   })
 })

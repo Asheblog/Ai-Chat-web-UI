@@ -43,7 +43,6 @@ const createProps = (
   onToggleDeepResearch: vi.fn(),
   skillOptions: [],
   onToggleSkillOption: vi.fn(),
-  isVisionEnabled: true,
   placeholder: '继续输入...',
   traceEnabled: false,
   canUseTrace: true,
