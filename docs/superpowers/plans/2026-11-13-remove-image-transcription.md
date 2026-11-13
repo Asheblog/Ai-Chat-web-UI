@@ -534,6 +534,7 @@ git commit -m "refactor(chat-ui): 消息层不再携带图片转写描述"
 
 **Files:**
 - Modify: `CONTEXT.md`（63/116/119-121）、`README.md`（13/143）、`CHANGELOG.md`（未发布段）、`.env.example`（196-202）、`packages/frontend/src/features/settings/README.md`
+- Modify（shared 契约层死类型，Task 8 审查移交）：`packages/shared/src/rich-payload.ts`（`RichMessageImagePart.confidence` 与随之失去引用的 `RichMessageEvidenceConfidence`）、`packages/frontend/src/types/index.ts:26`、`packages/backend/src/types/index.ts:88`（两处再导出）、`packages/frontend/src/components/message-content/__tests__/rich-message-renderer.test.tsx:33,70`、`packages/frontend/src/components/**/__tests__/share-viewer.test.tsx:186`（三处 `confidence: 'high'` fixture）；以及 `packages/frontend/src/types/tool-events.ts` 的 `images[].title?`（无生产方）
 - Create: `docs/plans/2026-11-13-remove-image-transcription.md`
 
 **Interfaces:**
@@ -556,11 +557,19 @@ CHANGELOG 未发布段新增一条 BREAKING：说明删除范围、行为变化�
 
 - [ ] **Step 2: 残留检查**
 
-Run:
+Run（生产代码必须零残留）：
 ```bash
-grep -rnE "visionProxy|imageTranscription|image_transcription|analyze_visual_media|imageDescriptions" packages --include=*.ts --include=*.tsx --include=*.prisma
+grep -rnE "visionProxy|imageTranscription|image_transcription|analyze_visual_media|imageDescriptions" packages \
+  --include=*.ts --include=*.tsx --include=*.prisma \
+  --exclude-dir=__tests__ | grep -v "\.test\."
 ```
-Expected: 无输出（`packages/backend/logs`、`packages/*/output`、`.next` 已在忽略范围内；若命中历史日志文件属预期，用 `--include=*.ts` 已排除）
+Expected: **无输出**。
+
+Run（测试里的退役名字负例，允许保留但必须逐条可解释）：
+```bash
+grep -rnE "visionProxy|canAttachImages|图片将自动转写" packages/frontend/src --include=*.test.ts --include=*.test.tsx
+```
+Expected: 只命中 Task 7 刻意留下的 5 条"退役能力被忽略"负例（`use-send-command.test.ts`、`chat-composer-panel.test.tsx`、`composer-attachment-list.test.tsx`、`use-image-attachments.test.tsx`、`classify-files.test.ts`）。这些是护栏，不是残留；**不要删**。
 
 - [ ] **Step 3: 全量验证**
 
@@ -576,10 +585,14 @@ pnpm lint:lines
 ```
 Expected: 全绿。任何失败都必须修到通过，或在该任务报告里给出「与本次改动无关」的证据（失败用例名 + 改动前同样失败的复现），不得以「先跳过」收尾。
 
-- [ ] **Step 4: 迁移演练**
+- [ ] **Step 4: 迁移演练（先备份再应用）**
 
+Run（先备份开发库，破坏性操作可回滚）：
+```bash
+cp packages/backend/prisma/data/app.db packages/backend/prisma/data/app.db.bak-before-drop-image-descriptions
+```
 Run: `pnpm --filter backend exec prisma migrate deploy`
-Expected: 迁移 `20261113120000_remove_image_transcription` 应用成功；`SELECT name FROM pragma_table_info('messages')` 不再含 `image_descriptions_json`。
+Expected: 迁移 `20261113120000_remove_image_transcription` 应用成功；`SELECT name FROM pragma_table_info('messages')` 不再含 `image_descriptions_json`；`system_settings` 里 `image_transcription_*` 为 0 行。备份文件保留到用户确认后再删。
 
 - [ ] **Step 5: Commit**
 
