@@ -5,6 +5,7 @@ import {
   getAllSystemLeafKeys,
   getWorkspaceForLeaf,
   renderSystemLeaf,
+  systemSettingsCards,
   systemSettingsTree,
   type SystemLeafMeta,
   type SystemSettingsEntry,
@@ -25,12 +26,11 @@ const findLeaf = (key: string): SystemLeafMeta | undefined => {
   return undefined
 }
 
-/** 11 个叶子，按导航树渲染顺序。 */
+/** 10 个叶子，按导航树渲染顺序。 */
 const EXPECTED_LEAF_KEYS = [
   "overview",
   "connections",
   "models",
-  "image-transcription",
   "search-knowledge",
   "extensions",
   "users-registration",
@@ -96,8 +96,8 @@ describe("system-settings-registry", () => {
       expect(groups.map((group) => group.label)).toEqual(["模型与连接", "功能与工具", "系统与数据", "高级设置"])
     })
 
-    test("每个分组 children 数量正确（3/2/3/1）", () => {
-      expect(childrenOf(systemSettingsTree[1])).toHaveLength(3)
+    test("每个分组 children 数量正确（2/2/3/1）", () => {
+      expect(childrenOf(systemSettingsTree[1])).toHaveLength(2)
       expect(childrenOf(systemSettingsTree[2])).toHaveLength(2)
       expect(childrenOf(systemSettingsTree[4])).toHaveLength(3)
       expect(childrenOf(systemSettingsTree[5])).toHaveLength(1)
@@ -143,18 +143,18 @@ describe("system-settings-registry", () => {
       ])
     })
 
-    test("11 个叶子 key 全局唯一且顺序稳定", () => {
+    test("10 个叶子 key 全局唯一且顺序稳定", () => {
       const all = systemSettingsTree.flatMap((node) =>
         "children" in node ? node.children.map((child) => child.key) : [node.key],
       )
       expect(all).toEqual(EXPECTED_LEAF_KEYS)
-      expect(new Set(all).size).toBe(11)
+      expect(new Set(all).size).toBe(10)
     })
 
-    test("getAllSystemLeafKeys() 恰好 11 个且不含旧三叶", () => {
+    test("getAllSystemLeafKeys() 恰好 10 个且不含旧三叶", () => {
       const keys = getAllSystemLeafKeys()
       expect(keys).toEqual(EXPECTED_LEAF_KEYS)
-      expect(new Set(keys).size).toBe(11)
+      expect(new Set(keys).size).toBe(10)
       for (const removed of REMOVED_LEAF_KEYS) {
         expect(keys).not.toContain(removed)
       }
@@ -177,6 +177,11 @@ describe("system-settings-registry", () => {
     test("renderSystemLeaf('unknown-key') 应返回 null", () => {
       expect(renderSystemLeaf("unknown-key")).toBeNull()
     })
+
+    test("退役的图片转写叶子不破坏旧深链（renderSystemLeaf 返回 null、卡片同步下线）", () => {
+      expect(renderSystemLeaf("image-transcription")).toBeNull()
+      expect(systemSettingsCards.some((card) => card.leafKey === "image-transcription")).toBe(false)
+    })
   })
 
   describe("默认 leaf", () => {
@@ -198,7 +203,7 @@ describe("system-settings-registry", () => {
       expect(getWorkspaceForLeaf("extensions")).toBe("features-tools")
     })
 
-    test.each(["connections", "models", "image-transcription"])("%s 属于 model-connections", (key) => {
+    test.each(["connections", "models"])("%s 属于 model-connections", (key) => {
       expect(getWorkspaceForLeaf(key)).toBe("model-connections")
     })
 

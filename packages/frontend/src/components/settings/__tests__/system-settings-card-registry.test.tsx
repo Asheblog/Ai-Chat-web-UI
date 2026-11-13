@@ -26,7 +26,6 @@ const EXTENSION_CARD_KEYS = [
 const EXPECTED_CARDS: Record<string, string[]> = {
   connections: ["quick-connect", "advanced"],
   models: ["catalog", "access"],
-  "image-transcription": ["image-transcription"],
   "search-knowledge": ["web-search", "rag", "knowledge-base"],
   extensions: EXTENSION_CARD_KEYS.map((key) => key.slice("extensions:".length)),
   "users-registration": ["policy", "users"],
