@@ -13,7 +13,7 @@
 ## Decisions（执行者不得自行更改，改动需回报）
 
 - **D1 联网证据图**：`read_url` / `web_search` 的图片相关性判定整条删除，两处回退到「未配置转写代理」时的既有分支 —— `includeRawImageEvidence: true` 输出原始图片 URL 列表，不再下载图片、不再产出 `relevance` / `confidence` / `description` 字段。保留 `utils/remote-image-reader.ts`（`export-pdf-handler.ts` 与 `read_url` 的 vision followup 仍在用）。
-- **D2 历史数据**：新迁移 `DROP COLUMN messages.image_descriptions_json` 并 `DELETE FROM system_settings WHERE key LIKE 'image_transcription_%'`。历史消息丢失「图片描述由 X 转写」文本，图片附件本身不动。
+- **D2 历史数据**：新迁移 `DROP COLUMN messages.image_descriptions_json` 并 `DELETE FROM system_settings WHERE key GLOB 'image_transcription_*'`（用 `GLOB` 而非 `LIKE`：SQLite 的 `LIKE` 里 `_` 是单字符通配且不分大小写，会误伤 `image-transcription_*` 与 `IMAGE_TRANSCRIPTION_*`）。历史消息丢失「图片描述由 X 转写」文本，图片附件本身不动。
 - **D3 `mainModelVision` 参数一并删除**：它唯一的存在理由是配合转写（决定「无 vision 主模型不吃图」）。删除后图片一律透传，等同转写功能上线前行为。
 - **D4 `resolveModelCapabilitiesForSession` 保留**：`agent-web-search-response.ts:610` 仍用它给工具上下文注入 `modelCapabilities`（`read_url` 直接把网页图附给主模型的路径），与转写无关。
 - **D5 历史 plan 文档保留**：`docs/superpowers/plans/2026-08-04-vision-transcription-proxy.md`、`docs/plans/2026-08-17-image-transcription-probe*.md` 作为开发历史不动，另在 `docs/plans/` 新增本次移除记录。
@@ -321,7 +321,8 @@ git commit -m "refactor(chat): 删除图片转写服务与 analyze_visual_media 
 
 ```ts
 it('does not expose imageDescriptions on messages', async () => {
-  const [message] = await service.getMessages(/* 现有 fixture */)
+  const result = await service.listMessages(/* 现有 fixture */)
+  const message = result.messages[0]
   expect(message).not.toHaveProperty('imageDescriptions')
 })
 ```
@@ -340,7 +341,7 @@ message-query-service 删 select 字段、`RawMessage` 可选字段、返回类�
 ```sql
 ALTER TABLE "messages" DROP COLUMN "image_descriptions_json";
 
-DELETE FROM "system_settings" WHERE "key" LIKE 'image_transcription_%';
+DELETE FROM "system_settings" WHERE "key" GLOB 'image_transcription_*';
 ```
 
 - [ ] **Step 4: 生成客户端并跑测试**
