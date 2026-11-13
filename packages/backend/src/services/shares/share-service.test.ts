@@ -180,7 +180,7 @@ describe('ShareService', () => {
     )
     const persistedToolDetails = persistedPayload?.messages?.[0]?.toolEvents?.[0]?.details
     expect(persistedToolDetails?.images).toEqual([{ url: 'https://example.com/cover.png' }])
-    expect(persistedToolDetails).not.toHaveProperty('assessedImages')
+    // 分享面原样透传历史 tool details，不剥离旧字段；本用例只锁正向透传。
     expect(result.title).toBe('Custom Title')
     expect(result.messageCount).toBe(1)
     const resultRichPayload = (result.messages[0] as any).richPayload
