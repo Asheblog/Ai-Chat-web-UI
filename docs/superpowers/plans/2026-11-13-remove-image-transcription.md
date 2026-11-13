@@ -374,19 +374,18 @@ git commit -m "refactor(db): 删除 messages.image_descriptions_json 与转写�
 
 - [ ] **Step 1: 补深链回退用例（红）**
 
-在 `packages/frontend/src/components/settings/__tests__/system-settings-registry.test.ts`（新建）断言：
+沿用既有 `packages/frontend/src/components/settings/__tests__/system-settings-registry.test.tsx`（**不新建文件**），在已退役叶子的断言旁边加：
 
 ```ts
-it('falls back to overview when an unknown leaf is requested', () => {
-  const leaf = resolveLeafComponent('image-transcription')
-  expect(leaf).toBe(resolveLeafComponent('overview'))
-})
-it('has ten leaves in the settings tree', () => {
-  expect(countLeaves(systemSettingsTree)).toBe(10)
+it('retires the image-transcription leaf without breaking old deep links', () => {
+  expect(renderSystemLeaf('image-transcription')).toBeNull()
+  expect(systemSettingsCards.some((c) => c.leafKey === 'image-transcription')).toBe(false)
 })
 ```
 
-（`resolveLeafComponent` 若不存在，就地在 registry 导出 `resolveLeafComponent(leafKey: string)`，内部对未知 key 返回 `overview`——这是 Review Focus 第 4 条要求的兜底。）
+再补一条叶子总数断言（10）。
+
+说明：`renderSystemLeaf` 对未知 key **本来就返回 null**，`system-settings.tsx:40/:47` 与 `settings-dialog.tsx` 都以 `!== null` 判定后才采用，旧书签/旧深链会自然回落到默认叶子。**不要**新造 `resolveLeafComponent`——那是重复既有 API。（R8）
 
 - [ ] **Step 2: 跑测试确认失败**
 
@@ -395,7 +394,7 @@ Expected: FAIL —— 叶子仍是 11 个，未知 key 返回 `undefined`。
 
 - [ ] **Step 3: 删实现**
 
-registry 删动态导入、导航子项、卡片注册、leaf 映射；注释「11 leaves in total」改 10；新增并导出 `resolveLeafComponent` 兜底。
+registry 删动态导入、导航子项、卡片注册、`leafComponentMap` 里的 `image-transcription`；注释「11 leaves in total」改 10。不新增任何 API。
 
 `api/settings.ts` 删 5 个 patch 分支、3 个 probe 类型、`IMAGE_TRANSCRIPTION_PROBE_TIMEOUT_MS` 与 `probeImageTranscription`。
 
@@ -429,14 +428,13 @@ git commit -m "refactor(settings-ui): 下线图片转写设置页"
 - Modify: `packages/frontend/src/components/chat/composer-attachment-list.tsx`（20-49）
 - Modify: `packages/frontend/src/components/chat/{desktop-composer,mobile-composer,chat-composer-panel}.tsx`
 - Modify: `packages/frontend/src/hooks/use-chat-interface-viewmodel.ts`（38-39/211-212）
-- Modify: `packages/frontend/src/api/settings.ts`（194-208 五个 patch 分支，从 Task 6 移到本任务，见 R2）
 - Modify: `packages/shared/src/settings-codec.ts`（114-119/517-530/621-626）
 - Modify: `packages/shared/src/settings-contract.ts`（82-86）
 - Test: `use-send-command.test.ts`、`use-image-attachments.test.tsx`、`chat-composer-panel.test.tsx`、`composer-attachment-list.test.tsx`
 
 **Interfaces:**
 - Consumes: Task 6 已删 `SystemSettings.imageTranscription*`。
-- Produces: `canAttachImages` 从全链路删除，门禁唯一事实源是 `isVisionEnabled`；`useImageAttachments` 只接受 `isVisionEnabled`；`ComposerAttachmentList` 无 `visionProxyHint`；`SystemSettings` 不再有 5 个 `imageTranscription*` 字段；前端 `api/settings` 不再转发这 5 个 patch 键。
+- Produces: `canAttachImages` 从全链路删除，门禁唯一事实源是 `isVisionEnabled`；`useImageAttachments` 只接受 `isVisionEnabled`；`ComposerAttachmentList` 无 `visionProxyHint`；`SystemSettings` 不再有 5 个 `imageTranscription*` 字段。
 
 - [ ] **Step 1: 改写失败用例（红）**
 
@@ -462,7 +460,7 @@ Expected: FAIL
 
 按 Files 逐个删 `visionProxyEnabled` / `visionProxyModelId` / `visionProxyReady` / `visionProxyHint` / `canAttachImages` 参数与分支；`use-chat-composer` 的 `useImageAttachments` 只传 `isVisionEnabled`；`classifyFiles(files, { isVisionEnabled })`；`use-send-command` 的发送条件回到 `isVisionEnabled && prevSelectedImages.length`。
 
-shared：`settings-codec.ts` 删类型 5 字段、反序列化 5 行、返回对象 5 行；`settings-contract.ts` 删 5 条映射；`frontend/src/api/settings.ts` 删 5 个 patch 分支（`imageTranscriptionEnabled` / `ConnectionId` / `ModelId` / `ReasoningEnabled` / `ReasoningEffort`）。
+shared：`settings-codec.ts` 删类型 5 字段、反序列化 5 行、返回对象 5 行；`settings-contract.ts` 删 5 条映射。（`frontend/src/api/settings.ts` 的 5 个 patch 分支归 Task 6，本任务不碰该文件。）
 
 - [ ] **Step 4: 跑测试与类型检查**
 
@@ -475,7 +473,7 @@ Expected: PASS（多余 props 会在此暴露）
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -A packages/frontend/src/hooks packages/frontend/src/features/chat packages/frontend/src/components/chat packages/frontend/src/api/settings.ts packages/shared/src
+git add -A packages/frontend/src/hooks packages/frontend/src/features/chat packages/frontend/src/components/chat packages/shared/src
 git commit -m "refactor(chat-ui): 图片门禁收敛回模型 vision 能力"
 ```
 
