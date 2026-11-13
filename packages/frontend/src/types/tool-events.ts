@@ -28,7 +28,6 @@ export interface ToolEventDetails {
     source?: string;
     width?: number;
     height?: number;
-    title?: string;
   }>;
   requestedLimit?: number | null;
   appliedLimit?: number | null;
