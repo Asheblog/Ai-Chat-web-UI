@@ -30,21 +30,19 @@ describe('MessageHeader metrics', () => {
   })
 })
 
-describe('MessageHeader user branch image description note', () => {
-  it('renders transcription note when imageDescriptions present', () => {
-    render(
-      <MessageHeader
-        {...baseProps}
-        isUser
-        timestamp="2026-08-04"
-        imageDescriptionNote="图片描述由 qwen-vl-max 转写"
-      />,
-    )
-    expect(screen.getByText(/图片描述由 qwen-vl-max 转写/)).toBeInTheDocument()
-  })
+describe('MessageHeader — retired image transcription note', () => {
+  it('never renders the transcription note, even when the legacy prop is wired', () => {
+    // 退役的 imageDescriptionNote 仍可能被旧调用方传入；渲染层必须完全忽略。
+    const legacyProps = {
+      ...baseProps,
+      isUser: true,
+      timestamp: '2026-08-04',
+      imageDescriptionNote: '图片描述由 qwen-vl-max 转写',
+    } as unknown as React.ComponentProps<typeof MessageHeader>
 
-  it('renders nothing when note absent', () => {
-    render(<MessageHeader {...baseProps} isUser timestamp="2026-08-04" />)
-    expect(screen.queryByText(/图片描述由/)).not.toBeInTheDocument()
+    render(<MessageHeader {...legacyProps} />)
+
+    expect(screen.queryByText(/转写/)).toBeNull()
+    expect(screen.queryByTitle('图片由转写模型识别后供当前模型理解')).toBeNull()
   })
 })

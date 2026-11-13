@@ -3,9 +3,6 @@ import type {
   ResearchPlanPayload,
 } from '@aichat/shared/chat-stream-contract'
 import type {
-  RichMessageEvidenceConfidence,
-} from '@aichat/shared/rich-payload'
-import type {
   ToolCallPhase,
   ToolCallSource,
   ToolInterventionState,
@@ -31,18 +28,7 @@ export interface ToolEventDetails {
     source?: string;
     width?: number;
     height?: number;
-    confidence?: RichMessageEvidenceConfidence;
-    description?: string;
     title?: string;
-  }>;
-  assessedImages?: Array<{
-    url: string;
-    title?: string;
-    alt?: string;
-    sourceUrl?: string;
-    confidence?: RichMessageEvidenceConfidence;
-    description?: string;
-    relevance?: string;
   }>;
   requestedLimit?: number | null;
   appliedLimit?: number | null;
