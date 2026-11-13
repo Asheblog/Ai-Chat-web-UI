@@ -255,7 +255,7 @@ git commit -m "refactor(settings): 移除图片转写代理设置项与管理员
 
 **Interfaces:**
 - Consumes: Task 1/2/3 已无任何调用方。
-- Produces: `createToolHandlerRegistry(params)` 单参；`ToolHandlerFactoryParams` 无 `visionProxy?`；`ToolCallContext` 无 `visionProxy?`；`agent-tool-config` 不再导出 `AgentVisionProxyConfig` / `buildAgentVisionProxyConfig`。
+- Produces: `createToolHandlerRegistry(params)` 单参；`ToolHandlerFactoryParams` 无 `visionProxy?`；`agent-tool-config` 不再导出 `AgentVisionProxyConfig` / `buildAgentVisionProxyConfig`。（`ToolCallContext` 从未有过该字段，别照抄成两处。）
 
 - [ ] **Step 1: 改写失败用例（红）**
 
@@ -539,7 +539,7 @@ git commit -m "refactor(chat-ui): 消息层不再携带图片转写描述"
 
 **Interfaces:**
 - Consumes: 前 8 个任务的最终状态。
-- Produces: 仓库内除历史 CHANGELOG/plan 外，无 `image_transcription` / `imageTranscription` / `visionProxy` / `analyze_visual_media` 命中。
+- Produces: 生产代码无 `image_transcription` / `imageTranscription` / `visionProxy` / `analyze_visual_media` / `assessedImages` 命中；测试里允许保留 Task 7 的 5 条退役名字护栏用例（见 R9），它们不是残留。
 
 - [ ] **Step 1: 写文档**
 
@@ -559,7 +559,7 @@ CHANGELOG 未发布段新增一条 BREAKING：说明删除范围、行为变化�
 
 Run（生产代码必须零残留）：
 ```bash
-grep -rnE "visionProxy|imageTranscription|image_transcription|analyze_visual_media|imageDescriptions" packages \
+grep -rnE "visionProxy|imageTranscription|image_transcription|analyze_visual_media|imageDescriptions|assessedImages|识图相关性筛选" packages \
   --include=*.ts --include=*.tsx --include=*.prisma \
   --exclude-dir=__tests__ | grep -v "\.test\."
 ```
