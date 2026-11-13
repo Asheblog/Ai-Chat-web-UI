@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/use-toast'
 import { McpListHeader, McpEmptyState, McpFormPanel, McpField, McpSelectField, McpInlineWarning } from './mcp-ui'
+import { InstallationRequiredEnv } from './installation-required-env'
 import * as mcpApi from '@/features/mcp/api'
 import type { McpInstallation } from '@/types'
 import { Package, Pencil } from 'lucide-react'
@@ -119,6 +120,12 @@ export function InstallationsTab() {
             <McpSelectField label="来源类型" value={form.sourceType} onChange={(v) => setForm({ ...form, sourceType: v as any })} options={['remote', 'local_package']} />
             <McpSelectField label="传输方式" value={form.transport} onChange={(v) => setForm({ ...form, transport: v as any })} options={['streamable_http', 'sse', 'stdio']} />
             <McpField label="服务端点"><Input value={form.endpoint} onChange={(e) => setForm({ ...form, endpoint: e.target.value })} /></McpField>
+            <div className="md:col-span-2">
+              <InstallationRequiredEnv
+                value={form.envJson}
+                onChange={(nextEnvJson) => setForm((prev) => ({ ...prev, envJson: nextEnvJson }))}
+              />
+            </div>
             {/* 原样字段：字段名与值保持原样，只默认折叠起来，避免模板表单第一屏被 JSON 淹没 */}
             <details className="md:col-span-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2">
               <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground">高级（原样字段）</summary>
