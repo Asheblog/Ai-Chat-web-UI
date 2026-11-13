@@ -1,4 +1,4 @@
-import { buildAgentVisionProxyConfig, computeAgentToolFlags } from '../../../agent-runtime/agent-tool-config'
+import { computeAgentToolFlags } from '../../../agent-runtime/agent-tool-config'
 import type { AgentWebSearchConfig, AgentPythonToolConfig, AgentWorkspaceToolConfig, AgentUrlReaderConfig } from '../../../agent-runtime/agent-tool-config'
 import { BUILTIN_SKILL_SLUGS } from '../../skills/types'
 
@@ -12,23 +12,10 @@ const pythonToolConfig: AgentPythonToolConfig = { enabled: true, timeoutMs: 6000
 const workspaceToolConfig: AgentWorkspaceToolConfig = { enabled: true, listMaxEntries: 50, readMaxChars: 20000, gitCloneTimeoutMs: 60000 }
 const urlReaderConfig = { enabled: true, timeout: 30000 } as unknown as AgentUrlReaderConfig
 
-describe('buildAgentVisionProxyConfig', () => {
-  it('parses sysMap', () => {
-    const cfg = buildAgentVisionProxyConfig({
-      image_transcription_enabled: 'true',
-      image_transcription_connection_id: '2',
-      image_transcription_model_id: 'gemini-2.5-flash',
-    })
-    expect(cfg).toEqual({
-      enabled: true,
-      connectionId: 2,
-      modelId: 'gemini-2.5-flash',
-      reasoningEnabled: false,
-      reasoningEffort: '',
-    })
-  })
-  it('disabled when absent', () => {
-    expect(buildAgentVisionProxyConfig({}).enabled).toBe(false)
+describe('vision proxy removal', () => {
+  it('no longer exports vision proxy config builder', async () => {
+    const mod = await import('../../../agent-runtime/agent-tool-config')
+    expect((mod as Record<string, unknown>).buildAgentVisionProxyConfig).toBeUndefined()
   })
 })
 

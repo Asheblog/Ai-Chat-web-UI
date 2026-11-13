@@ -3,7 +3,6 @@
  */
 
 import type { WebSearchHit } from '../utils/web-search'
-import type { VisionProxyConfig } from '../services/vision/vision-proxy-service'
 import type { ExtensionInstallServiceLike } from '../modules/extensions/types'
 
 /**
@@ -147,7 +146,6 @@ export interface ToolHandlerFactoryParams {
   knowledgeBase?: KnowledgeBaseHandlerConfig | null
   urlReader?: UrlReaderHandlerConfig | null
   workspace?: WorkspaceHandlerConfig | null
-  visionProxy?: VisionProxyConfig | null
   pdfExport?: PdfExportHandlerConfig | null
   deepResearchPlan?: DeepResearchPlanHandlerConfig | null
 }

@@ -108,13 +108,6 @@ jest.mock('../../../chat/image-generation-response', () => ({
   checkImageGenerationCapability: jest.fn().mockResolvedValue(false),
 }))
 
-// Mock vision-proxy-service：编排层已不再调用转写，但 agent-tool-config 仍导入其配置加载器，
-// 屏蔽掉以避免本单测加载视觉服务的原生依赖
-jest.mock('../../../../services/vision/vision-proxy-service', () => ({
-  __esModule: true,
-  loadVisionProxyConfig: jest.fn(),
-}))
-
 import { createChatStreamHandler } from '../chat-stream-use-case'
 import { ConnectionServiceError } from '../../../../services/connections/connection-service'
 

@@ -8,7 +8,6 @@ import { executeSkillRuntime } from './runtime-adapters'
 import { normalizeRequestedSkills, type RequestedSkillsPayload, type SkillManifest, type SkillRiskLevel } from './types'
 import { McpToolAdapter } from '../../services/mcp/mcp-tool-adapter'
 import type { McpService } from '../../services/mcp/mcp-service'
-import type { VisionProxyService } from '../../services/vision/vision-proxy-service'
 
 interface InstalledSkillHandlerOptions {
   prisma: typeof defaultPrisma
@@ -534,13 +533,12 @@ export interface CreateSkillRegistryParams {
   battleRunId?: number | null
   allowDynamicRuntime?: boolean
   mcpService?: McpService
-  visionProxyService?: VisionProxyService
 }
 
 export async function createSkillRegistry(params: CreateSkillRegistryParams): Promise<ToolHandlerRegistry> {
   const prisma = params.prisma ?? defaultPrisma
   const requested = normalizeRequestedSkills(params.requestedSkills)
-  const registry = createToolHandlerRegistry(params.builtins, { visionProxyService: params.visionProxyService })
+  const registry = createToolHandlerRegistry(params.builtins)
   const allowDynamicRuntime = params.allowDynamicRuntime !== false
 
   // Register MCP adapter if available
