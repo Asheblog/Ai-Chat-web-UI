@@ -184,7 +184,7 @@ source ──parse──▶ {owner, repo, ref, subdir?}
 9. **仅 ACTIVE 用户可安装**：`PENDING` 状态账号直接拒绝，避免待审批账号通过工具绕过注册审批。
 10. **额外识别 `docker run`**：README 里以 `docker run` 声明启动方式时也能识别为本地包（§4 判定表未列，属扩展）；镜像引用必须是 `registry/namespace/name[:tag]` 形式，宿主路径一律拒绝。
 11. **密钥传递**：容器凭据走 0600 临时 env-file 注入，不用 `-e KEY=VALUE`（避免留在宿主进程列表）。
-12. **envJson 语义**：安装模板的 `envJson` 在自动安装时只登记 `{ requiredEnv: [...] }`，不写密钥值；值由用户在 Secret Vault 中维护。
+12. **envJson 语义与凭据录入**：安装模板的 `envJson` 在自动安装时只登记 `{ requiredEnv: [...] }`，不写密钥值；连接页按这份名单生成输入框，保存时经 `POST /api/mcp/connections/:id/credentials` 写入 Secret Vault（`{ env, headers }` 形状），运行层只读解密结果。
 
 ### 使用示例
 

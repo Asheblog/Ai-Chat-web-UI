@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
 import type { Actor, ApiResponse } from '../types'
 import { McpService, McpServiceError } from '../services/mcp'
+import type { SecretVaultService } from '../services/secret-vault'
 
 const handleServiceError = (c: any, error: unknown, fallback: string, label: string) => {
   if (error instanceof McpServiceError) {
@@ -111,12 +112,21 @@ const toolSearchSchema = z.object({
   q: z.string().min(1).max(256),
 })
 
+/** MCP 凭据载荷：运行层只认 { env, headers }，这里就按这个形状收，避免用户手写 JSON。 */
+const connectionCredentialsSchema = z.object({
+  env: z.record(z.string().min(1).max(128), z.string().max(4096)).optional(),
+  headers: z.record(z.string().min(1).max(128), z.string().max(4096)).optional(),
+  label: z.string().min(1).max(120).optional(),
+})
+
 export interface McpApiDeps {
   mcpService: McpService
+  secretVault: SecretVaultService
 }
 
 export const createMcpApi = (deps: McpApiDeps) => {
   const svc = deps.mcpService
+  const secretVault = deps.secretVault
   const router = new Hono()
 
   // --- Installations (admin only) ---
@@ -492,6 +502,77 @@ export const createMcpApi = (deps: McpApiDeps) => {
         return c.json({ success: true, data: { toolSetRevision: revision } } satisfies ApiResponse)
       } catch (error) {
         return handleServiceError(c, error, '刷新 MCP 工具缓存失败', 'MCP:POST:/connections/:id/refresh-tools')
+      }
+    },
+  )
+
+  // --- Connection Credentials ---
+
+  router.post(
+    '/connections/:id/credentials',
+    actorMiddleware,
+    requireUserActor,
+    zValidator('json', connectionCredentialsSchema),
+    async (c) => {
+      try {
+        const actor = c.get('actor') as Actor
+        const id = Number(c.req.param('id'))
+        if (!Number.isFinite(id) || id <= 0) {
+          return c.json({ success: false, error: '无效的连接 ID' }, 400)
+        }
+
+        const visibleIds = await getActorVisibleConnectionIds(svc, actor)
+        if (!visibleIds.has(id)) {
+          return c.json({ success: false, error: '无权访问此 MCP 连接' }, 403)
+        }
+
+        const conn = await svc.getConnection(id)
+        const { env = {}, headers = {}, label } = c.req.valid('json')
+        if (Object.keys(env).length === 0 && Object.keys(headers).length === 0) {
+          return c.json({ success: false, error: '至少填写一项凭据' }, 400)
+        }
+
+        const scope = conn.ownerUserId ? 'user' : 'system'
+        if (scope === 'system' && !isAdmin(actor)) {
+          return c.json({ success: false, error: '系统共享连接的凭据只能由管理员配置' }, 403)
+        }
+
+        const value = JSON.stringify({ env, headers })
+        let secretVaultId = conn.secretVaultId ?? null
+
+        if (secretVaultId) {
+          const view = await secretVault.getSecretView(secretVaultId)
+          const actorUserId = actor.type === 'user' ? String(actor.id) : null
+          const owned = view.scope === 'system' ? isAdmin(actor) : view.scopeId === actorUserId
+          if (!owned) {
+            return c.json({ success: false, error: '无权修改该凭据' }, 403)
+          }
+          await secretVault.updateSecretValue(secretVaultId, value)
+        } else {
+          const created = await secretVault.createSecret({
+            scope,
+            scopeId: scope === 'system' ? 'system' : String(conn.ownerUserId),
+            kind: 'mcp_credential',
+            label: label ?? `MCP 连接 #${id} 凭据`,
+            value,
+            refId: String(id),
+            refType: 'mcp_connection',
+            createdBy: actor.type === 'user' ? actor.id : null,
+          })
+          secretVaultId = created.id
+          await svc.updateConnection(id, { secretVaultId })
+        }
+
+        return c.json({
+          success: true,
+          data: { secretVaultId, envKeys: Object.keys(env), headerKeys: Object.keys(headers) },
+        } satisfies ApiResponse)
+      } catch (error) {
+        const statusCode = (error as { statusCode?: number })?.statusCode
+        if (typeof statusCode === 'number' && statusCode >= 400 && statusCode < 600) {
+          return c.json({ success: false, error: (error as Error).message }, statusCode as 400)
+        }
+        return handleServiceError(c, error, '保存 MCP 凭据失败', 'MCP:POST:/connections/:id/credentials')
       }
     },
   )

@@ -12,6 +12,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { McpListHeader, McpEmptyState, McpFormPanel, McpField } from './mcp-ui'
+import { ConnectionCredentialBadge, ConnectionCredentials, parseRequiredEnv } from './connection-credentials'
 import * as mcpApi from '@/features/mcp/api'
 import * as secretVaultApi from '@/features/secret-vault/api'
 import type { McpInstallation, McpConnection, SecretView } from '@/types'
@@ -40,6 +41,7 @@ export function ConnectionsTab() {
   const [formConfig, setFormConfig] = useState('')
   const [formSecretVaultId, setFormSecretVaultId] = useState('')
   const [formEnabled, setFormEnabled] = useState(true)
+  const [credentialValues, setCredentialValues] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
@@ -61,7 +63,8 @@ export function ConnectionsTab() {
   useEffect(() => { load() }, [load])
 
   const openCreate = () => {
-    setEditId(null); setFormInstId(''); setFormName(''); setFormConfig(''); setFormSecretVaultId(''); setFormEnabled(true); setShowForm(true)
+    setEditId(null); setFormInstId(''); setFormName(''); setFormConfig(''); setFormSecretVaultId(''); setFormEnabled(true)
+    setCredentialValues({}); setShowForm(true)
   }
 
   const openEdit = (conn: McpConnection) => {
@@ -71,6 +74,7 @@ export function ConnectionsTab() {
     setFormConfig(conn.configJson ?? '')
     setFormSecretVaultId(conn.secretVaultId ? String(conn.secretVaultId) : '')
     setFormEnabled(conn.enabled)
+    setCredentialValues({})
     setShowForm(true)
   }
 
@@ -98,6 +102,7 @@ export function ConnectionsTab() {
         configJson: formConfig || undefined,
         secretVaultId: formSecretVaultId ? Number(formSecretVaultId) : undefined,
       }
+      let targetId = editId
       if (editId) {
         const updatePayload: any = { name: formName, enabled: formEnabled, configJson: formConfig || undefined }
         if (formSecretVaultId) updatePayload.secretVaultId = Number(formSecretVaultId)
@@ -105,9 +110,28 @@ export function ConnectionsTab() {
         await mcpApi.updateConnection(editId, updatePayload)
         toast({ title: '连接已更新' })
       } else {
-        await mcpApi.createSystemConnection(payload)
+        const created = await mcpApi.createSystemConnection(payload)
+        targetId = created.data?.id ?? null
         toast({ title: '连接已创建' })
       }
+
+      // 填了凭据才写密钥库；写完后顺手刷新一次工具清单，让用户马上知道能不能用
+      const envEntries = Object.entries(credentialValues).filter(([, value]) => value.trim().length > 0)
+      if (targetId && envEntries.length > 0) {
+        await mcpApi.saveConnectionCredentials(targetId, { env: Object.fromEntries(envEntries) })
+        toast({ title: '凭据已保存', description: `已写入 ${envEntries.length} 项，正在刷新工具` })
+        try {
+          await mcpApi.refreshConnectionTools(targetId)
+          toast({ title: '工具清单已刷新' })
+        } catch (refreshError: any) {
+          toast({
+            title: '工具清单暂未刷新',
+            description: refreshError?.response?.data?.error || refreshError?.message,
+            variant: 'destructive',
+          })
+        }
+      }
+      setCredentialValues({})
       setShowForm(false); load()
     } catch (err: any) {
       toast({ title: editId ? '更新失败' : '创建失败', description: err?.response?.data?.error || err.message, variant: 'destructive' })
@@ -177,7 +201,13 @@ export function ConnectionsTab() {
             </McpField>
             <McpField label="名称" required><Input value={formName} onChange={(e) => setFormName(e.target.value)} /></McpField>
             <McpField label="连接配置 JSON（configJson）"><Input value={formConfig} onChange={(e) => setFormConfig(e.target.value)} placeholder='{"key": "val"}' /></McpField>
-            <McpField label="凭据（secretVaultId）">
+            <ConnectionCredentials
+              requiredEnv={parseRequiredEnv(installations.find((item) => String(item.id) === formInstId)?.envJson)}
+              values={credentialValues}
+              onChange={(name, value) => setCredentialValues((prev) => ({ ...prev, [name]: value }))}
+              configured={Boolean(items.find((item) => item.id === editId)?.secretVaultId)}
+            />
+            <McpField label="关联已有凭据（secretVaultId）">
               <div className="flex gap-1">
                 <select className="h-9 flex-1 rounded-md border bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary" value={formSecretVaultId} onChange={(e) => setFormSecretVaultId(e.target.value)}>
                   <option value="">无（不关联凭据）</option>
@@ -219,6 +249,7 @@ export function ConnectionsTab() {
                 <th className="py-2 pr-3">名称</th>
                 <th className="py-2 pr-3">安装</th>
                 <th className="py-2 pr-3">启用</th>
+                <th className="py-2 pr-3">凭据</th>
                 <th className="py-2 pr-3">状态</th>
                 <th className="py-2 pr-3">操作</th>
               </tr>
@@ -229,6 +260,12 @@ export function ConnectionsTab() {
                   <td className="py-2 pr-3">{conn.name}</td>
                   <td className="py-2 pr-3 font-mono text-micro">{instMap.get(conn.installationId)?.namespaceKey ?? conn.installationId}</td>
                   <td className="py-2 pr-3"><Switch checked={conn.enabled} onCheckedChange={(v) => handleToggle(conn.id, v)} /></td>
+                  <td className="py-2 pr-3">
+                    <ConnectionCredentialBadge
+                      configured={Boolean(conn.secretVaultId)}
+                      requiredEnv={parseRequiredEnv(instMap.get(conn.installationId)?.envJson)}
+                    />
+                  </td>
                   <td className="py-2 pr-3"><Badge variant={conn.status === 'active' ? 'default' : conn.status === 'error' ? 'destructive' : 'secondary'} className="text-micro">{conn.status || 'unknown'}</Badge></td>
                   <td className="py-2 pr-3">
                     <div className="flex items-center gap-1">

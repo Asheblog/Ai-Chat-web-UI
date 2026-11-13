@@ -95,6 +95,17 @@ export const deleteConnection = async (id: number) => {
   return response.data
 }
 
+export const saveConnectionCredentials = async (
+  id: number,
+  payload: { env?: Record<string, string>; headers?: Record<string, string>; label?: string },
+) => {
+  const response = await client.post<ApiResponse<{ secretVaultId: number; envKeys: string[] }>>(
+    `/mcp/connections/${id}/credentials`,
+    payload,
+  )
+  return response.data
+}
+
 export const refreshConnectionTools = async (id: number) => {
   const response = await client.post<ApiResponse<{ toolSetRevision: number }>>(`/mcp/connections/${id}/refresh-tools`)
   return response.data

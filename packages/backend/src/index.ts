@@ -198,7 +198,10 @@ app.route('/api/skills', createSkillsApi({
   pythonRuntimeService: container.pythonRuntimeService,
 }));
 
-app.route('/api/mcp', createMcpApi({ mcpService: container.mcpService }));
+app.route('/api/mcp', createMcpApi({
+  mcpService: container.mcpService,
+  secretVault: container.secretVault,
+}));
 app.route('/api/secrets', createSecretVaultApi(secretVault));
 
 app.route('/api/artifacts', createArtifactsApi({ artifactService: container.artifactService }));

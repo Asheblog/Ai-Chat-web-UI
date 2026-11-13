@@ -354,7 +354,7 @@ export class ExtensionInstaller {
         installed: { installationId, connectionId },
         requiredSecrets: envKeys,
         nextSteps: envKeys.length > 0
-          ? [`在「凭据」里填入 ${envKeys.map((item) => item.name).join('、')} 后刷新工具`]
+          ? [`在「MCP 服务 → 连接」编辑该连接并填入 ${envKeys.map((item) => item.name).join('、')}，保存后会写入凭据库并自动刷新工具`]
           : ['连接已建立但拉取工具清单失败，可在「工具」里手动刷新'],
         warnings: [`工具清单未验证：${message}`],
       }
