@@ -150,7 +150,7 @@ it('keeps raw image urls as evidence instead of assessing relevance', async () =
 })
 ```
 
-`share-service.test.ts`：把 `assessedImages` fixture 删除，改为断言分享 payload 的 tool details 不含该键。
+`share-service.test.ts`：删掉 `assessedImages` fixture 与那条「details 不含 `assessedImages`」的负向断言——**该断言恒真，属假保证（见 ledger R6）**；保留原始 `images` 正向透传断言，并在原处留一行注释说明分享面原样透传历史 tool details。「分享面剥离历史字段」是范围外的新契约，不在本计划内。
 
 - [ ] **Step 2: 跑测试确认失败**
 
