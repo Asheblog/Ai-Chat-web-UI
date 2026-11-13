@@ -35,7 +35,7 @@
 2. **纯文本模型直连发图**：`isVisionEnabled` 只在 UI 层拦；API 直连仍可带图，此时上游报错应原样透传，不应由本地返回 500 或静默丢图。
 3. **无图网页**：`read_url` 读纯文本页时，「图片证据」段与空行都不应出现（原来 `assessedImages` 为空时靠 `length > 0` 兜住，回退后要保住这个判断）。
 4. **设置页深链**：删除「图片转写」叶子后，`/settings?leaf=image-transcription`（旧书签/旧前端缓存）应回退到默认叶子，不白屏、不抛 `leafComponentMap` undefined。
-5. **旧客户端写设置**：旧前端仍可能 POST `imageTranscriptionEnabled`，`serializeSystemSettingsPatch` 必须忽略未知键并返回 200，不能 400 或写脏键。
+5. **旧客户端写设置**：旧前端仍可能向 `PUT /api/settings/system` 提交 `image_transcription_*`（前端 camelCase → `serializeSystemSettingsPatch` → snake_case），服务端必须忽略未知键并返回 200，不能 400 或写脏键。
 
 ---
 
