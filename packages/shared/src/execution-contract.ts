@@ -64,8 +64,18 @@ export interface ExecutionStepArtifactPayload {
   data?: Record<string, unknown>
 }
 
+/** 运行被提前收尾的原因：停止后续工具 / 工具轮次预算耗尽 */
+export type ExecutionRunStopReason = 'stop_tools' | 'budget_exhausted'
+
+/** step_complete.result 的已知字段；保留索引签名以兼容既有自由字段用法。 */
+export interface ExecutionStepCompleteResult {
+  stopReason?: ExecutionRunStopReason
+  finalAnswerGenerated?: boolean
+  [key: string]: unknown
+}
+
 export interface ExecutionStepCompletePayload {
-  result?: Record<string, unknown>
+  result?: ExecutionStepCompleteResult
   error?: string | null
   durationMs?: number | null
 }
@@ -80,8 +90,16 @@ export interface ExecutionRunMetricsPayload {
   completedSteps?: number
 }
 
+/** run_complete.summary 的已知字段；保留索引签名以兼容既有自由字段用法。 */
+export interface ExecutionRunCompleteSummary {
+  streamStatus?: 'done' | 'cancelled' | 'error'
+  stopReason?: ExecutionRunStopReason
+  finalAnswerGenerated?: boolean
+  [key: string]: unknown
+}
+
 export interface ExecutionRunCompletePayload {
-  summary?: Record<string, unknown>
+  summary?: ExecutionRunCompleteSummary
   output?: Record<string, unknown>
 }
 

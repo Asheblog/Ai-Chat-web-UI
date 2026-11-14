@@ -1,5 +1,6 @@
 'use client'
 
+import { useProcessWorkspaceOpen } from '@/features/chat/process-workspace'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MutableRefObject } from 'react'
 import { shallow } from 'zustand/shallow'
@@ -45,6 +46,7 @@ function ChatMessageViewportComponent({
   sessionId,
   sessionTitle,
 }: ChatMessageViewportProps) {
+  const processWorkspaceOpen = useProcessWorkspaceOpen()
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false)
   const messageListApiRef = useRef<MessageListHandle | null>(null)
   // 只摘取轮次标题所需的正文文本；流式 chunk 改的是助手正文，不会改变这份摘要。
@@ -169,7 +171,7 @@ function ChatMessageViewportComponent({
           onShareCompleted={handleExitShareMode}
         />
       </ScrollArea>
-      {visible && !shareModeActive ? (
+      {visible && !shareModeActive && !processWorkspaceOpen ? (
         <ChatTurnToc entries={entries} activeKey={activeKey} onJump={handleJump} />
       ) : null}
     </div>

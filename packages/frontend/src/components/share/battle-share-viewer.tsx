@@ -22,6 +22,8 @@ import {
 import { buildModelKey } from '@/features/battle/utils/model-key'
 import { getBattleShare } from '@/features/battle/api'
 import { DEFAULT_API_BASE_URL } from '@/lib/http/client'
+import { getOutputSummary } from '@/features/battle/utils/output-summary'
+import { selectUniqueAttemptCoverage } from '@/features/battle/utils/attempt-coverage'
 
 interface BattleShareViewerProps {
   share: BattleShare
@@ -50,14 +52,6 @@ const getRankDisplay = (rank: number) => ({
   icon: <span aria-label={`第 ${rank} 名`} className="text-sm font-semibold tabular-nums text-foreground">{String(rank).padStart(2, '0')}</span>,
   bg: 'border-border bg-surface',
 })
-
-// 截取输出内容摘要
-const getOutputSummary = (output: string | null | undefined, maxLen = 100): string => {
-  if (!output) return ''
-  const cleaned = output.replace(/\n+/g, ' ').trim()
-  if (cleaned.length <= maxLen) return cleaned
-  return cleaned.slice(0, maxLen) + '...'
-}
 
 export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareViewerProps) {
   const [shareState, setShareState] = useState(share)
@@ -824,6 +818,8 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
           open={drawerOpen}
           onOpenChange={setDrawerOpen}
           detail={selectedDetail}
+          runKey={shareState.battleRunId}
+          toolLogCoverage={selectedDetail?.isLive ? selectUniqueAttemptCoverage(payload.live?.attempts, selectedDetail.modelKey, selectedDetail.attemptIndex) : undefined}
           isRunning={isLive}
         />
 

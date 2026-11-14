@@ -64,4 +64,53 @@ describe('StreamMetaStore', () => {
     })
     expect(allowed).toBeTruthy()
   })
+
+  test('accepts stop tools only for a live run on the owning actor', () => {
+    const store = new MemoryStreamMetaStore()
+    expect(store.requestStopTools(null)).toEqual({ accepted: false, reason: 'no_active_run' })
+
+    const meta = store.registerStreamMeta({
+      sessionId: 3,
+      actorIdentifier: 'user:3',
+      clientMessageId: 'stop-1',
+      assistantMessageId: 30,
+    })
+    expect(meta).toBeTruthy()
+    expect(store.shouldStopTools(meta)).toBe(false)
+
+    expect(store.requestStopTools(meta)).toEqual({ accepted: true, reason: 'stop_tools' })
+    expect(store.shouldStopTools(meta)).toBe(true)
+    expect(store.requestStopTools(meta)).toEqual({ accepted: true, reason: 'already_requested' })
+    expect(meta?.cancelled).toBe(false)
+  })
+
+  test('stop tools state dies with the run and never leaks into the next run', () => {
+    const store = new MemoryStreamMetaStore()
+    const first = store.registerStreamMeta({
+      sessionId: 4,
+      actorIdentifier: 'user:4',
+      clientMessageId: 'stop-2',
+      assistantMessageId: 40,
+    })
+    store.requestStopTools(first)
+    store.releaseStreamMeta(first)
+
+    expect(store.requestStopTools(first)).toEqual({ accepted: false, reason: 'no_active_run' })
+
+    const next = store.registerStreamMeta({
+      sessionId: 4,
+      actorIdentifier: 'user:4',
+      clientMessageId: 'stop-3',
+      assistantMessageId: 41,
+    })
+    expect(store.shouldStopTools(next)).toBe(false)
+
+    const unrelated = store.registerStreamMeta({
+      sessionId: 5,
+      actorIdentifier: 'user:5',
+      clientMessageId: 'stop-4',
+    })
+    store.requestStopTools(next)
+    expect(store.shouldStopTools(unrelated)).toBe(false)
+  })
 })

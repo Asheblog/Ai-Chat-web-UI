@@ -67,6 +67,8 @@ export const finalizeStream = (deps: {
         reasoning: finalStream.reasoning,
         usage: finalStream.lastUsage,
         toolEvents: snapshotToolEvents,
+        stopReason: finalStream.stopReason,
+        finalAnswerGenerated: finalStream.finalAnswerGenerated,
         sessionId,
         metrics: computedMetrics,
       }
@@ -93,6 +95,8 @@ export const finalizeStream = (deps: {
       usage: completedSnapshot.usage,
       toolEvents: completedSnapshot.toolEvents,
       streamStatus: terminalStreamStatus,
+      stopReason: completedSnapshot.stopReason,
+      finalAnswerGenerated: completedSnapshot.finalAnswerGenerated,
       reasoningStatus: 'done',
       completedAt: completedAtMs,
       metrics: computedMetrics,
@@ -108,8 +112,8 @@ export const finalizeStream = (deps: {
     runtime.updateMetaStreamStatus(completedAssistantId, terminalStreamStatus)
   }
   runtime.clearActiveStream(finalStream)
+  // 同一会话可能有并发 run：标记由全部活跃流/消息状态推导，不能用“本次结束”强行清空。
   runtime.recomputeStreamingState()
-  set((state) => runtime.streamingFlagUpdate(state, sessionId, false))
   // 侧栏总量刷新一次即可；当前会话 usage 已尽量由 stream complete 写入
   get().fetchSessionsUsage().catch(() => {})
   if (!completedSnapshot?.usage) {

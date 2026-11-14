@@ -6,9 +6,13 @@ import {
   resolveChatImageUrls as defaultResolveChatImageUrls,
 } from '../../../utils/chat-images'
 import {
-  parseToolLogsJson as defaultParseToolLogsJson,
+  parseToolLogsPayloadJson as defaultParseToolLogsPayloadJson,
   projectToolEventsForHistoryList,
+  resolveMessageToolLogCoverage,
+  resolveToolLogTerminalOutcome,
+  type ToolLogCoverage,
   type ToolLogEntry,
+  type ToolRunStopReason,
 } from '../tool-logs'
 import { buildRichMessagePayload, type GeneratedImageRecord } from '../../../services/chat/rich-payload-builder'
 import { sessionOwnershipClause } from '../chat-common'
@@ -140,6 +144,11 @@ export interface NormalizedMessage {
   images: string[]
   richPayload?: RichMessagePayload | null
   toolEvents?: ToolLogEntry[]
+  /** 三层覆盖（trace/persisted/projection）；无内容且无缺口时不下发。 */
+  toolLogCoverage?: ToolLogCoverage
+  /** 运行由停止工具/预算收尾结束时的真实结果；未记录时保持缺失，不猜 false。 */
+  stopReason?: ToolRunStopReason
+  finalAnswerGenerated?: boolean
   metrics?: {
     promptTokens?: number | null
     completionTokens?: number | null
@@ -169,7 +178,7 @@ export interface ChatMessageQueryServiceDeps {
   prisma?: PrismaClient
   determineChatImageBaseUrl?: typeof defaultDetermineChatImageBaseUrl
   resolveChatImageUrls?: typeof defaultResolveChatImageUrls
-  parseToolLogsJson?: typeof defaultParseToolLogsJson
+  parseToolLogsPayload?: typeof defaultParseToolLogsPayloadJson
 }
 
 type MessageGroupRecord = {
@@ -188,14 +197,14 @@ export class ChatMessageQueryService {
   private prisma: PrismaClient
   private determineChatImageBaseUrl: typeof defaultDetermineChatImageBaseUrl
   private resolveChatImageUrls: typeof defaultResolveChatImageUrls
-  private parseToolLogsJson: typeof defaultParseToolLogsJson
+  private parseToolLogsPayload: typeof defaultParseToolLogsPayloadJson
 
   constructor(deps: ChatMessageQueryServiceDeps = {}) {
     this.prisma = deps.prisma ?? defaultPrisma
     this.determineChatImageBaseUrl =
       deps.determineChatImageBaseUrl ?? defaultDetermineChatImageBaseUrl
     this.resolveChatImageUrls = deps.resolveChatImageUrls ?? defaultResolveChatImageUrls
-    this.parseToolLogsJson = deps.parseToolLogsJson ?? defaultParseToolLogsJson
+    this.parseToolLogsPayload = deps.parseToolLogsPayload ?? defaultParseToolLogsPayloadJson
   }
 
   async listMessages(params: {
@@ -493,9 +502,12 @@ export class ChatMessageQueryService {
     const { attachments, toolLogsJson, usageMetrics } = raw
     const usage = Array.isArray(usageMetrics) && usageMetrics.length > 0 ? usageMetrics[0] : null
     const rel = Array.isArray(attachments) ? attachments.map((att) => att.relativePath) : []
-    const toolEvents = this.parseToolLogsJson(toolLogsJson, {
+    const parsedToolLogs = this.parseToolLogsPayload(toolLogsJson, {
       mode: options?.toolLogsMode === 'history-list' ? 'history-list' : 'full',
     })
+    const toolEvents = parsedToolLogs.entries
+    const toolLogCoverage = resolveMessageToolLogCoverage(parsedToolLogs)
+    const terminalOutcome = resolveToolLogTerminalOutcome(parsedToolLogs.runResult)
     const richPayload = buildRichMessagePayload({
       content: raw.content,
       attachmentRelativePaths: rel,
@@ -522,6 +534,8 @@ export class ChatMessageQueryService {
       images: this.resolveChatImageUrls(rel, baseUrl),
       richPayload,
       toolEvents,
+      ...(toolLogCoverage ? { toolLogCoverage } : {}),
+      ...terminalOutcome,
       metrics: usage
         ? {
             promptTokens: usage.promptTokens,

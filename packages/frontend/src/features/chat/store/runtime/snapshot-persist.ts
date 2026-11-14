@@ -55,6 +55,9 @@ export const createSnapshotPersistRuntime = (get: ChatStoreGetState) => {
       reasoningPlayedLength:
         typeof reasoningPlayedLength === 'number' ? reasoningPlayedLength : undefined,
       toolEvents: toolEventsForMessage,
+      toolLogCoverage: body?.toolLogCoverage ?? meta?.toolLogCoverage,
+      stopReason: body?.stopReason ?? meta?.stopReason,
+      finalAnswerGenerated: body?.finalAnswerGenerated ?? meta?.finalAnswerGenerated,
       reasoningStatus: resolvedReasoningStatus,
       streamStatus: resolvedStreamStatus,
       completedAt: Date.now(),

@@ -103,6 +103,16 @@ export const cancelStreamSchema = z.object({
   messageId: z.number().int().positive().optional(),
 });
 
+export const stopToolsSchema = z.object({
+  sessionId: z.number().int().positive(),
+  clientMessageId: z.string().min(1).max(128).optional(),
+  // 前端可能以字符串传入消息 id（来自 DOM 数据集），统一归一化为数字
+  messageId: z
+    .union([z.number().int().positive(), z.string().regex(/^\d+$/, 'messageId 必须为正整数')])
+    .transform((value) => (typeof value === 'number' ? value : Number(value)))
+    .optional(),
+});
+
 export const sessionOwnershipClause = (actor: Actor) =>
   actor.type === 'user'
     ? { userId: actor.id }

@@ -1,176 +1,237 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { CotTimeline } from '../cot-timeline'
-import type { MessageMeta, ToolEvent } from '@/types'
+import {
+  completeCoverage,
+  createMeta,
+  numberedEvent,
+  numberedEvents,
+  processList,
+  processRows,
+  summaryBar,
+  workspace,
+} from './process-fixtures'
 
-const meta: MessageMeta = {
-  id: 'redesign', sessionId: 1, stableKey: 'redesign', role: 'assistant',
-  createdAt: '2026-11-14T00:00:00Z', reasoningStatus: 'done', reasoningDurationSeconds: 87,
-}
-const event = (index: number, override: Partial<ToolEvent> = {}): ToolEvent => ({
-  id: 'step-' + index, callId: 'call-' + index, sessionId: 1, messageId: 1,
-  tool: 'operation-' + index, stage: 'result', status: 'success', createdAt: index,
-  resultText: '详情-' + index, ...override,
+/**
+ * 旧「按需查看过程」的产品意图在新工作区里的落点：
+ * - 完成态一行：状态 + 真实耗时 + 打开入口，不铺步骤、不铺详情
+ * - 首屏分批：父调用超过一屏时只渲染首批，其余按原顺序用"显示其余"补充，键盘焦点交给首个新增行
+ * - 无假进度：流式只写真实当前活动
+ * - 失败直接定位：异常分组按钮一键筛到该类记录，原始错误可展开，成功记录不被删除
+ * - 未获许可 / 中止与失败分开，不合并成"出错"
+ * - 旧披露偏好（scopeKey 级）继续生效
+ */
+const meta = createMeta({
+  id: 'redesign',
+  stableKey: 'redesign',
+  createdAt: '2026-11-14T00:00:00Z',
+  reasoningDurationSeconds: 87,
 })
 
-beforeEach(() => { localStorage.clear(); sessionStorage.clear() })
+const revealButton = () => screen.getByRole('button', { name: /显示其余 \d+ 个父调用/ })
+const reasoningToggle = () => within(workspace()).getByRole('button', { name: /深度思考/ })
 
-describe('CoT 按需查看过程', () => {
+beforeEach(() => {
+  localStorage.clear()
+  sessionStorage.clear()
+})
+
+describe('CoT 按需查看过程（工作区语义）', () => {
   it('完成态只显示状态、真实耗时和查看入口', () => {
-    render(<CotTimeline meta={meta} reasoningRaw="历史思考内容" toolEvents={[event(1)]} />)
+    render(<CotTimeline meta={meta} reasoningRaw="历史思考内容" toolEvents={[numberedEvent(1)]} coverage={completeCoverage} />)
+
     expect(screen.getByText('已完成')).toBeInTheDocument()
     expect(screen.getByText('1 分 27 秒')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /查看过程/ })).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByRole('list')).not.toBeInTheDocument()
-    expect(screen.queryByText('历史思考内容')).not.toBeInTheDocument()
-    expect(screen.queryByText('详情-1')).not.toBeInTheDocument()
+    expect(summaryBar()).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.queryByRole('list')).toBeNull()
+    expect(screen.queryByText('历史思考内容')).toBeNull()
+    expect(screen.queryByText('详情-1')).toBeNull()
   })
 
-  it('先呈现七步，再按原顺序查看其余，不自动展开详情', () => {
-    render(<CotTimeline meta={meta} reasoningRaw="" toolEvents={Array.from({ length: 10 }, (_, i) => event(i + 1))} />)
-    fireEvent.click(screen.getByRole('button', { name: /查看过程/ }))
-    const list = screen.getByRole('list', { name: '过程步骤' })
-    expect(within(list).getAllByRole('listitem')).toHaveLength(7)
-    expect(screen.queryByText('operation-8')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '查看其余 3 步' }))
-    const items = within(list).getAllByRole('listitem')
-    expect(items).toHaveLength(10)
-    expect(items.map(item => within(item).getByRole('button').textContent)).toEqual(
-      Array.from({ length: 10 }, (_, i) => expect.stringContaining('operation-' + (i + 1))),
+  it('首屏只铺开首批父调用，其余标注精确数量并按原顺序补充', () => {
+    render(<CotTimeline meta={meta} reasoningRaw="" toolEvents={numberedEvents(60)} coverage={completeCoverage} />)
+    fireEvent.click(summaryBar())
+
+    const firstScreen = processRows()
+    expect(firstScreen.length).toBeGreaterThan(0)
+    expect(firstScreen.length).toBeLessThan(60)
+    expect(firstScreen[0]).toHaveTextContent('operation-1')
+    expect(firstScreen[firstScreen.length - 1]).toHaveTextContent(`operation-${firstScreen.length}`)
+    expect(screen.queryByText('详情-1')).toBeNull()
+
+    expect(revealButton()).toHaveTextContent(`显示其余 ${60 - firstScreen.length} 个父调用`)
+    fireEvent.click(revealButton())
+
+    const expanded = processRows()
+    expect(expanded).toHaveLength(60)
+    expect(expanded.map((row) => row.textContent)).toEqual(
+      Array.from({ length: 60 }, (_, index) => expect.stringContaining('operation-' + (index + 1))),
     )
-    expect(screen.queryByText('详情-10')).not.toBeInTheDocument()
-    fireEvent.click(within(items[9]).getByRole('button'))
-    expect(screen.getByText('详情-10')).toBeInTheDocument()
-    expect(screen.queryByText('详情-1')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /显示其余/ })).toBeNull()
+    expect(screen.getByText(/已展示 60 \/ 60 条记录/)).toBeInTheDocument()
+    expect(screen.queryByText('详情-1')).toBeNull()
   })
 
-  it('流式摘要展示第七步以外的真实当前活动，不制造进度百分比', () => {
-    const events = Array.from({ length: 8 }, (_, i) => event(i + 1))
-    events[7] = event(8, { tool: 'read_url', query: '官方定价页', stage: 'start', status: 'running' })
-    render(<CotTimeline meta={meta} reasoningRaw="" toolEvents={events} isStreaming />)
-    expect(screen.getByRole('status')).toHaveTextContent('官方定价页')
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
-    expect(screen.getAllByRole('listitem')).toHaveLength(7)
-    fireEvent.click(screen.getByRole('button', { name: '查看其余 1 步' }))
-    expect(screen.getByRole('button', { name: /网页读取：官方定价页/ })).toBeInTheDocument()
+  it('流式摘要展示真实当前活动，不制造进度百分比', () => {
+    const events = numberedEvents(8)
+    events[7] = numberedEvent(8, {
+      tool: 'read_url',
+      query: '官方定价页',
+      stage: 'start',
+      status: 'running',
+      resultText: undefined,
+    })
+    render(<CotTimeline meta={meta} reasoningRaw="" toolEvents={events} isStreaming coverage={completeCoverage} />)
+
+    expect(screen.getByRole('status')).toHaveTextContent('网页读取：官方定价页')
+    expect(screen.queryByRole('progressbar')).toBeNull()
+    expect(screen.getByText('进行中')).toBeInTheDocument()
   })
 
-  it('用户展开单步后，流式结束仍保留过程和详情', () => {
-    const { rerender } = render(<CotTimeline meta={{ ...meta, reasoningStatus: 'streaming' }} reasoningRaw="原始思考" toolEvents={[]} isStreaming />)
-    fireEvent.click(screen.getByRole('button', { name: /深度思考/ }))
-    rerender(<CotTimeline meta={meta} reasoningRaw="原始思考" toolEvents={[]} />)
-    expect(screen.getByRole('list', { name: '过程步骤' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /深度思考/ })).toHaveAttribute('aria-expanded', 'true')
+  it('用户展开后流式结束仍保留过程与详情', () => {
+    const { rerender } = render(
+      <CotTimeline meta={{ ...meta, reasoningStatus: 'streaming' }} reasoningRaw="原始思考" toolEvents={[]} isStreaming coverage={completeCoverage} />,
+    )
+    fireEvent.click(summaryBar())
+    fireEvent.click(reasoningToggle())
+    expect(screen.getByText('原始思考')).toBeInTheDocument()
+
+    rerender(<CotTimeline meta={meta} reasoningRaw="原始思考" toolEvents={[]} coverage={completeCoverage} />)
+
+    expect(workspace()).toBeInTheDocument()
+    expect(reasoningToggle()).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByText('原始思考')).toBeInTheDocument()
   })
 
-  it('失败状态可追溯原始错误，也保留成功结果', () => {
-    render(<CotTimeline meta={meta} reasoningRaw="" toolEvents={[event(1), event(2, { status: 'error', stage: 'error', error: '网页读取超时', resultText: undefined })]} />)
-    expect(screen.getByText(/1 个步骤失败/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /查看失败步骤/ }))
-    expect(screen.getByRole('button', { name: /operation-2/ })).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByText('网页读取超时')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /operation-1/ }))
-    expect(screen.getByText('详情-1')).toBeInTheDocument()
-  })
+  it('失败通过异常分组直接定位，原始错误可追溯，成功记录不被删除', () => {
+    const events = numberedEvents(12)
+    events[8] = numberedEvent(9, { status: 'error', stage: 'error', error: '第九步失败原因', resultText: undefined })
+    render(<CotTimeline meta={meta} reasoningRaw="" toolEvents={events} coverage={completeCoverage} />)
 
-  it('长推理和工具详情跟随页面展开，不引入内部滚动视口', () => {
-    const { container } = render(<CotTimeline meta={meta} reasoningRaw={'长推理内容'.repeat(300)} toolEvents={[event(1, { resultText: '长工具结果'.repeat(300) })]} />)
-    fireEvent.click(screen.getByRole('button', { name: /查看过程/ }))
-    fireEvent.click(screen.getByRole('button', { name: /深度思考/ }))
-    fireEvent.click(screen.getByRole('button', { name: /operation-1/ }))
-    expect(container.querySelector('[class*="overflow-y-auto"], [class*="overflow-auto"], [class*="max-h-"]')).toBeNull()
-    expect(screen.queryByRole('button', { name: '全部展开' })).not.toBeInTheDocument()
-  })
-  it('旧 outline 偏好继续生效，切换另一消息仍默认折叠', () => {
-    sessionStorage.setItem('aichat.cot_timeline_level:redesign', JSON.stringify({ level: 'outline', updatedAt: 1 }))
-    const { rerender } = render(<CotTimeline meta={meta} reasoningRaw="旧消息" toolEvents={[]} />)
-    expect(screen.getByRole('list', { name: '过程步骤' })).toBeInTheDocument()
-    rerender(<CotTimeline meta={{ ...meta, stableKey: 'another' }} reasoningRaw="另一消息" toolEvents={[]} />)
-    expect(screen.queryByRole('list')).not.toBeInTheDocument()
-  })
+    expect(summaryBar()).toHaveAccessibleName(/1 处异常/)
+    fireEvent.click(summaryBar())
 
-  it('Battle 显式全展保留所有步骤和工具详情', () => {
-    render(<CotTimeline meta={meta} reasoningRaw="Battle推理" toolEvents={Array.from({ length: 9 }, (_, i) => event(i + 1))} defaultExpanded />)
-    expect(screen.getAllByRole('listitem')).toHaveLength(10)
-    expect(screen.getByText('Battle推理')).toBeInTheDocument()
-    expect(screen.getByText('详情-9')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /查看其余/ })).not.toBeInTheDocument()
-  })
+    const failedChip = screen.getByRole('button', { name: '只看失败（1 条）' })
+    expect(failedChip).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.click(failedChip)
+    expect(failedChip).toHaveAttribute('aria-pressed', 'true')
 
-  it('展开后的推理和工具仍使用原始交错顺序', () => {
-    render(<CotTimeline meta={meta} reasoningRaw="前段后段" toolEvents={[event(1, { details: { reasoningOffsetStart: 2 } })]} />)
-    fireEvent.click(screen.getByRole('button', { name: /查看过程/ }))
-    const steps = screen.getAllByRole('listitem')
-    expect(steps).toHaveLength(3)
-    expect(within(steps[0]).getByRole('button')).toHaveTextContent('深度思考')
-    expect(within(steps[1]).getByRole('button')).toHaveTextContent('operation-1')
-    expect(within(steps[2]).getByRole('button')).toHaveTextContent('深度思考')
-    steps.forEach(step => fireEvent.click(within(step).getByRole('button')))
-    expect(screen.getByText('前段')).toBeInTheDocument()
-    expect(screen.getByText('后段')).toBeInTheDocument()
-    expect(screen.getByText('详情-1')).toBeInTheDocument()
-  })
+    const failedRows = processRows()
+    expect(failedRows).toHaveLength(1)
+    expect(within(failedRows[0]).getByRole('button')).toHaveTextContent('operation-9')
+    expect(within(failedRows[0]).getByText('失败')).toBeInTheDocument()
+    expect(screen.getByText(/已展示 1 \/ 12 条记录/)).toBeInTheDocument()
 
-  it('失败入口只补充展示到首个失败步骤，并直接展开原始错误', () => {
-    const events = Array.from({ length: 12 }, (_, i) => event(i + 1))
-    events[8] = event(9, { status: 'error', stage: 'error', error: '第九步失败原因', resultText: undefined })
-    render(<CotTimeline meta={meta} reasoningRaw="" toolEvents={events} />)
-    fireEvent.click(screen.getByRole('button', { name: /查看失败步骤/ }))
-    expect(screen.getAllByRole('listitem')).toHaveLength(9)
-    expect(screen.getByRole('button', { name: /operation-9/ })).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.click(within(failedRows[0]).getByRole('button'))
     expect(screen.getByText('第九步失败原因')).toBeInTheDocument()
-    expect(screen.getAllByRole('listitem')[8]).toHaveFocus()
-    expect(screen.getByRole('button', { name: '查看其余 3 步' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /operation-10/ })).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByRole('combobox', { name: '按状态筛选' }), { target: { value: 'all' } })
+    const allRows = processRows()
+    expect(allRows).toHaveLength(12)
+    fireEvent.click(within(allRows[0]).getByRole('button'))
+    expect(screen.getByText('详情-1')).toBeInTheDocument()
   })
 
-  it('失败的读取组摘要明确失败数量，失败入口展开组内错误', () => {
-    render(<CotTimeline meta={meta} reasoningRaw="" toolEvents={[
-      event(1, { tool: 'read_url', query: '来源一', details: { reasoningOffsetStart: 0 } }),
-      event(2, { tool: 'read_url', query: '来源二', status: 'error', stage: 'error', error: '来源二读取超时', resultText: undefined, details: { reasoningOffsetStart: 0 } }),
-    ]} />)
-    fireEvent.click(screen.getByRole('button', { name: /查看失败步骤/ }))
-    expect(screen.getByRole('button', { name: /网页读取.*1.*失败/ })).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('button', { name: /网页读取：来源二/ })).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByText('来源二读取超时')).toBeInTheDocument()
-  })
+  it.each([
+    ['rejected', '未获许可'],
+    ['aborted', '中止'],
+  ] as const)('%s 终止态与失败分开，也能直接定位原始详情', (status, label) => {
+    render(
+      <CotTimeline
+        meta={meta}
+        reasoningRaw=""
+        toolEvents={[numberedEvent(1, { status, stage: 'error', error: '调用被终止', resultText: undefined })]}
+        coverage={completeCoverage}
+      />,
+    )
 
-  it('查看更多从键盘触发后将焦点移至首个新增步骤', async () => {
-    const user = userEvent.setup()
-    render(<CotTimeline meta={meta} reasoningRaw="" toolEvents={Array.from({ length: 10 }, (_, i) => event(i + 1))} />)
-    fireEvent.click(screen.getByRole('button', { name: /查看过程/ }))
-    const more = screen.getByRole('button', { name: '查看其余 3 步' })
-    more.focus()
-    await act(async () => { await user.keyboard('{Enter}') })
-    expect(screen.getAllByRole('listitem')[7]).toHaveFocus()
+    fireEvent.click(summaryBar())
+    expect(screen.getByText(new RegExp(`${label} 1 次`))).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /只看失败/ })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: `只看${label}（1 条）` }))
+    const rows = processRows()
+    expect(rows).toHaveLength(1)
+    expect(within(rows[0]).getByText(label)).toBeInTheDocument()
+
+    fireEvent.click(within(rows[0]).getByRole('button'))
+    expect(screen.getByText('调用被终止')).toBeInTheDocument()
   })
 
   it('折叠摘要的 accessible name 包含真实耗时', () => {
-    render(<CotTimeline meta={meta} reasoningRaw="思考" toolEvents={[]} />)
-    expect(screen.getByRole('button', { name: /已完成.*1 分 27 秒.*查看过程/ })).toBeInTheDocument()
+    render(<CotTimeline meta={meta} reasoningRaw="思考" toolEvents={[]} coverage={completeCoverage} />)
+    expect(summaryBar()).toHaveAccessibleName(/已完成.*1 分 27 秒/)
   })
 
-  it.each(['rejected', 'aborted'] as const)('%s 终止态也能从失败入口定位原始详情', status => {
-    render(<CotTimeline meta={meta} reasoningRaw="" toolEvents={[event(1, { status, stage: 'error', error: '调用被终止', resultText: undefined })]} />)
-    fireEvent.click(screen.getByRole('button', { name: /查看失败步骤/ }))
-    expect(screen.getByRole('button', { name: /operation-1/ })).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByText('调用被终止')).toBeInTheDocument()
-    expect(screen.getAllByRole('listitem')[0]).toHaveFocus()
+  it('旧 outline 偏好继续生效，切换另一消息仍默认折叠', async () => {
+    sessionStorage.setItem('aichat.cot_timeline_level:redesign', JSON.stringify({ level: 'outline', updatedAt: 1 }))
+    const { rerender } = render(<CotTimeline meta={meta} reasoningRaw="旧消息" toolEvents={[]} coverage={completeCoverage} />)
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeNull()
+    })
+
+    rerender(<CotTimeline meta={{ ...meta, stableKey: 'another' }} reasoningRaw="另一消息" toolEvents={[]} coverage={completeCoverage} />)
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull()
+    })
+    expect(screen.queryByRole('list')).toBeNull()
   })
 
-  it('查看更多和后续步骤详情在虚拟卸载重挂载后继续可见', () => {
-    const props = { meta, reasoningRaw: '', toolEvents: Array.from({ length: 10 }, (_, i) => event(i + 1)) }
-    const first = render(<CotTimeline {...props} />)
-    fireEvent.click(screen.getByRole('button', { name: /查看过程/ }))
-    fireEvent.click(screen.getByRole('button', { name: '查看其余 3 步' }))
-    fireEvent.click(screen.getByRole('button', { name: /operation-9/ }))
-    first.unmount()
-    render(<CotTimeline {...props} />)
-    expect(screen.getAllByRole('listitem')).toHaveLength(10)
-    expect(screen.getByRole('button', { name: /operation-9/ })).toHaveAttribute('aria-expanded', 'true')
+  it('Battle 显式全展保留所有步骤和工具详情，且不提供可执行命令', () => {
+    render(
+      <CotTimeline
+        meta={{ ...meta, sessionId: 0, stableKey: 'battle-run' }}
+        reasoningRaw="Battle推理"
+        toolEvents={numberedEvents(9)}
+        defaultExpanded
+        coverage={completeCoverage}
+      />,
+    )
+
+    expect(workspace()).toBeInTheDocument()
+    expect(processRows()).toHaveLength(9)
+    expect(screen.getByText('Battle推理')).toBeInTheDocument()
     expect(screen.getByText('详情-9')).toBeInTheDocument()
+    expect(screen.getByText('Battle 只读')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /显示其余/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: '重新生成整轮' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '取消本轮' })).toBeNull()
   })
 
+  it('“显示其余”从键盘触发后把焦点交给首个新增父行', async () => {
+    const user = userEvent.setup()
+    render(<CotTimeline meta={meta} reasoningRaw="" toolEvents={numberedEvents(60)} coverage={completeCoverage} />)
+    fireEvent.click(summaryBar())
+
+    const firstScreenCount = processRows().length
+    const reveal = revealButton()
+    reveal.focus()
+    await user.keyboard('{Enter}')
+
+    const buttons = within(processList()).getAllByRole('button')
+    expect(buttons).toHaveLength(60)
+    expect(buttons[firstScreenCount]).toHaveFocus()
+  })
+
+  it('查看更多与行详情在虚拟卸载重挂载后继续可见', async () => {
+    const props = { meta, reasoningRaw: '', toolEvents: numberedEvents(10), coverage: completeCoverage }
+    const first = render(<CotTimeline {...props} />)
+    fireEvent.click(summaryBar())
+    fireEvent.click(within(processRows()[1]).getByRole('button'))
+    expect(screen.getByText('详情-2')).toBeInTheDocument()
+    first.unmount()
+
+    render(<CotTimeline {...props} />)
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeNull()
+    })
+    await waitFor(() => {
+      expect(within(processRows()[1]).getByRole('button')).toHaveAttribute('aria-expanded', 'true')
+    })
+    expect(screen.getByText('详情-2')).toBeInTheDocument()
+  })
 })

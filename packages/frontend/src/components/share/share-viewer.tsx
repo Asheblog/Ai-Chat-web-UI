@@ -65,7 +65,7 @@ function ShareMessageItem({
     if (!toolEvents || toolEvents.length === 0) return []
     return mergeAndSortToolEvents(toolEvents)
   }, [toolEvents])
-  const hasProcess = Boolean(reasoningRaw.trim()) || normalizedToolEvents.length > 0
+  const hasProcess = Boolean(reasoningRaw.trim()) || normalizedToolEvents.length > 0 || Boolean(msg.artifacts?.length) || msg.finalAnswerGenerated === false || Boolean(msg.stopReason)
   const meta = useMemo<MessageMeta>(() => ({
     id: msg.id,
     sessionId,
@@ -104,15 +104,6 @@ function ShareMessageItem({
           <span className="text-muted-foreground/80">{formatDate(msg.createdAt)}</span>
         </div>
 
-        {!isUser && hasProcess && (
-          <CotTimeline
-            meta={meta}
-            reasoningRaw={reasoningRaw}
-            toolEvents={normalizedToolEvents}
-            defaultExpanded={defaultReasoningExpanded}
-          />
-        )}
-
         <div
           className={cn(
             'max-w-none break-words text-sm leading-7 [overflow-wrap:anywhere]',
@@ -128,6 +119,13 @@ function ShareMessageItem({
             </div>
           )}
         </div>
+
+        {!isUser && hasProcess && (
+          <CotTimeline meta={meta} reasoningRaw={reasoningRaw} toolEvents={normalizedToolEvents}
+            defaultExpanded={defaultReasoningExpanded} content={msg.content} artifacts={msg.artifacts}
+            coverage={msg.toolLogCoverage} readOnly
+            runTerminal={{ stopReason: msg.stopReason ?? undefined, finalAnswerGenerated: msg.finalAnswerGenerated ?? undefined }} />
+        )}
 
         {!richPayload && msg.images && msg.images.length > 0 && (
           <div className="grid grid-cols-2 gap-3">

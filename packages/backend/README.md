@@ -112,7 +112,9 @@ npm run dev
 
 - `POST /api/chat/stream` - 发送消息 (流式响应)
 - `POST /api/chat/completion` - 发送消息 (非流式响应)
-- `POST /api/chat/stop` - 停止生成
+- `POST /api/chat/stream/cancel` - 取消整轮生成
+- `POST /api/chat/stream/stop-tools` - 停止后续工具并继续作答（不中断在途工具，不取消整轮）
+- `POST /api/chat/stream/research-plan/respond` - 研究计划审批响应
 - `POST /api/chat/regenerate` - 重新生成回复
 
 #### 用量聚合查询

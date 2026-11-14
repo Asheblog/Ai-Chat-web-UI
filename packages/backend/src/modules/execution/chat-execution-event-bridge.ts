@@ -291,13 +291,26 @@ export const createChatExecutionEventBridge = (options: ChatExecutionEventBridge
           : null
       const status: ExecutionStatus = streamStatus ?? 'completed'
       const content = asString(legacyEvent.content)
+      // 停止工具 / 预算收尾的运行结果必须透传：调用方据此区分「有回答」与「未生成最终回答」
+      const stopReason =
+        legacyEvent.stopReason === 'stop_tools' || legacyEvent.stopReason === 'budget_exhausted'
+          ? legacyEvent.stopReason
+          : null
+      const finalAnswerGenerated =
+        typeof legacyEvent.finalAnswerGenerated === 'boolean'
+          ? legacyEvent.finalAnswerGenerated
+          : null
+      const stopFields = {
+        ...(stopReason ? { stopReason } : {}),
+        ...(finalAnswerGenerated != null ? { finalAnswerGenerated } : {}),
+      }
       events.push(...ensureBootEvents())
       events.push(
         nextEvent(
           'step_complete',
           status,
           {
-            result: {},
+            result: { ...stopFields },
             error: null,
             durationMs: null,
           },
@@ -306,7 +319,10 @@ export const createChatExecutionEventBridge = (options: ChatExecutionEventBridge
       )
       events.push(
         nextEvent('run_complete', status, {
-          summary: streamStatus ? { streamStatus } : {},
+          summary: {
+            ...(streamStatus ? { streamStatus } : {}),
+            ...stopFields,
+          },
           output: content ? { content } : {},
         }),
       )

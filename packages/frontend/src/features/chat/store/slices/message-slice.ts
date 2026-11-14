@@ -13,6 +13,7 @@ import {
   shouldEnablePythonToolForSession,
   shouldEnableWebSearchForSession,
 } from '../utils'
+import { resolveOutcomeFields } from '../utils/outcome-fields'
 
 // 用于取消消息加载请求的 AbortController
 let messagesAbortController: AbortController | null = null
@@ -230,6 +231,11 @@ export const createMessageSlice: ChatSliceCreator<
             if (!body.richPayload && prevBody.richPayload) {
               body.richPayload = prevBody.richPayload
             }
+            // 服务端历史缺少终态/覆盖字段时保留已知值，缺失不等于“完整/未生成”
+            const mergedOutcome = resolveOutcomeFields(body, prevBody)
+            body.stopReason = mergedOutcome.stopReason
+            body.finalAnswerGenerated = mergedOutcome.finalAnswerGenerated
+            body.toolLogCoverage = mergedOutcome.toolLogCoverage
           }
           nextSessionBodyEntries.push([messageKey(body.id), body])
           if (msg.role === 'assistant' && msg.metrics) {

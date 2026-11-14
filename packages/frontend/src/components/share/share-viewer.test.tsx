@@ -143,7 +143,7 @@ describe("ShareViewer", () => {
     const toolButton = screen.getByRole('button', { name: /联网搜索/ })
     expect(toolButton).toBeInTheDocument()
     expect(toolButton).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.getByText('完成')).toBeInTheDocument()
+    expect(screen.getAllByText('已完成').length).toBeGreaterThan(0)
     fireEvent.click(toolButton)
     expect(screen.getByText('保留搜索结果详情')).toBeInTheDocument()
   })

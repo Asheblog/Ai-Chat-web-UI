@@ -1,0 +1,102 @@
+{
+  "label": "Trace97 脱敏历史摘录（仅含导出保留的10条明细）",
+  "startedAt": "2026-11-14T11:11:56.126Z",
+  "endedAt": "2026-11-14T11:15:52.837Z",
+  "durationMs": 236712,
+  "reportedFinalRecordCount": 454,
+  "lifecycleUpdateCount": 378,
+  "traceWindowEndedAt": "2026-11-14T11:13:23.894Z",
+  "records": [
+    {
+      "id": "call_jc0vlr6u",
+      "tool": "web_search",
+      "stage": "result",
+      "status": "success",
+      "query": "中国新闻 2026年11月14日",
+      "summary": "搜索完成，自动读取正文 2/2 条",
+      "createdAt": "2026-11-14T11:11:57.836Z"
+    },
+    {
+      "id": "call_jc0vlr6u:search:initial:1",
+      "tool": "web_search",
+      "stage": "result",
+      "status": "success",
+      "query": "中国新闻 2026年11月14日",
+      "summary": "并行搜索完成：tavily 命中 10 条",
+      "createdAt": "2026-11-14T11:11:57.837Z"
+    },
+    {
+      "id": "call_jc0vlr6u:search:initial:2",
+      "tool": "web_search",
+      "stage": "result",
+      "status": "success",
+      "query": "中国新闻 2026年11月14日",
+      "summary": "并行搜索完成：exa 命中 10 条",
+      "createdAt": "2026-11-14T11:11:57.838Z"
+    },
+    {
+      "id": "call_dnfg5dox",
+      "tool": "web_search",
+      "stage": "result",
+      "status": "success",
+      "query": "China news November 14 2026",
+      "summary": "搜索完成，自动读取正文 1/2 条",
+      "createdAt": "2026-11-14T11:11:57.842Z"
+    },
+    {
+      "id": "call_dnfg5dox:search:initial:1",
+      "tool": "web_search",
+      "stage": "result",
+      "status": "success",
+      "query": "China news November 14 2026",
+      "summary": "并行搜索完成：tavily 命中 10 条",
+      "createdAt": "2026-11-14T11:11:57.842Z"
+    },
+    {
+      "id": "call_dnfg5dox:search:initial:2",
+      "tool": "web_search",
+      "stage": "result",
+      "status": "success",
+      "query": "China news November 14 2026",
+      "summary": "并行搜索完成：exa 命中 10 条",
+      "createdAt": "2026-11-14T11:11:57.842Z"
+    },
+    {
+      "id": "call_jc0vlr6u:read:1",
+      "tool": "read_url",
+      "stage": "result",
+      "status": "success",
+      "query": "http://www.gz.chinanews.com.cn/qt/2026-11-14/doc-ihfmxyez7339035.shtml",
+      "summary": "已读取：11月14日新闻早餐丨贵阳最高温超20℃-中国新闻网—贵州新闻",
+      "createdAt": "2026-11-14T11:12:00.446Z"
+    },
+    {
+      "id": "call_jc0vlr6u:read:2",
+      "tool": "read_url",
+      "stage": "result",
+      "status": "success",
+      "query": "https://www.voachinese.com/z/1739",
+      "summary": "已读取：美国之音中文网新闻",
+      "createdAt": "2026-11-14T11:12:00.449Z"
+    },
+    {
+      "id": "call_dnfg5dox:read:1",
+      "tool": "read_url",
+      "stage": "error",
+      "status": "error",
+      "query": "https://www.miamiherald.com/news/business/article318075650.html",
+      "summary": "网页读取失败，已回退到搜索摘要",
+      "error": "Request was cancelled",
+      "createdAt": "2026-11-14T11:12:01.476Z"
+    },
+    {
+      "id": "call_dnfg5dox:read:2",
+      "tool": "read_url",
+      "stage": "result",
+      "status": "success",
+      "query": "https://www.cgtn.com",
+      "summary": "已读取：CGTN | Breaking News, China News, World News and Video",
+      "createdAt": "2026-11-14T11:12:01.495Z"
+    }
+  ]
+}

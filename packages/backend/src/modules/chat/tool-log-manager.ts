@@ -5,7 +5,14 @@
 
 import { enrichToolEventReasoningOffsets } from '@aichat/shared/tool-events';
 import type { WebSearchHit } from '../../utils/web-search';
-import { serializeToolLogsForPersistence, type ToolLogEntry, type ToolLogDetails, type ToolLogStage } from './tool-logs';
+import { serializeToolLogsForPersistence, type ToolLogPersistenceOptions } from '../../services/chat/tool-log-persistence';
+import {
+  isToolLogStatus,
+  readOptionalString,
+  type ToolLogDetails,
+  type ToolLogEntry,
+  type ToolLogStage,
+} from '../../services/chat/tool-log-model';
 
 export interface ToolLogManagerOptions {
   sessionId: number;
@@ -49,10 +56,10 @@ export class ToolLogManager {
   }
 
   /**
-   * 序列化日志为 JSON
+   * 序列化日志为 v2 信封 JSON
    */
-  toJson(): string | null {
-    return serializeToolLogsForPersistence(this.logs);
+  toJson(options?: ToolLogPersistenceOptions): string | null {
+    return serializeToolLogsForPersistence(this.logs, options);
   }
 
   /**
@@ -93,7 +100,7 @@ export class ToolLogManager {
   }
 
   /**
-   * 记录工具日志
+   * 记录工具日志：身份、父子、状态、来源与时间字段全部落库，不以 stage 反推 status。
    */
   record(payload: Record<string, unknown>, reasoningBufferLength?: number): void {
     const stage = payload.stage as ToolLogStage;
@@ -110,13 +117,27 @@ export class ToolLogManager {
         ? enrichToolEventReasoningOffsets(payload, reasoningBufferLength, isFirstSight)
         : payload;
 
+    const now = Date.now();
     const entry: ToolLogEntry = {
       id: this.ensureToolLogId(toRecord),
       tool,
       stage,
-      query: typeof toRecord.query === 'string' ? toRecord.query : undefined,
-      createdAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
     };
+
+    if (isToolLogStatus(toRecord.status)) entry.status = toRecord.status;
+    const phase = readOptionalString(toRecord.phase);
+    if (phase) entry.phase = phase;
+    const callId = readOptionalString(toRecord.callId);
+    if (callId) entry.callId = callId;
+    const source = readOptionalString(toRecord.source);
+    if (source) entry.source = source;
+    const identifier = readOptionalString(toRecord.identifier);
+    if (identifier) entry.identifier = identifier;
+    const apiName = readOptionalString(toRecord.apiName);
+    if (apiName) entry.apiName = apiName;
+    if (typeof toRecord.query === 'string') entry.query = toRecord.query;
 
     if (Array.isArray(toRecord.hits)) {
       entry.hits = (toRecord.hits as WebSearchHit[]).slice(0, 10);
@@ -130,6 +151,7 @@ export class ToolLogManager {
     if (toRecord.details && typeof toRecord.details === 'object') {
       entry.details = toRecord.details as ToolLogDetails;
     }
+    if (stage === 'result' || stage === 'error') entry.endedAt = now;
 
     const resolvedExistingIndex = this.logs.findIndex((log) => log.id === entry.id);
     if (resolvedExistingIndex === -1) {
@@ -139,11 +161,19 @@ export class ToolLogManager {
       this.logs[resolvedExistingIndex] = {
         ...existing,
         stage: entry.stage,
+        status: entry.status ?? existing.status,
+        phase: entry.phase ?? existing.phase,
+        callId: entry.callId ?? existing.callId,
+        source: entry.source ?? existing.source,
+        identifier: entry.identifier ?? existing.identifier,
+        apiName: entry.apiName ?? existing.apiName,
         query: entry.query ?? existing.query,
         hits: entry.hits ?? existing.hits,
         error: entry.error ?? existing.error,
         summary: entry.summary ?? existing.summary,
         createdAt: existing.createdAt,
+        updatedAt: entry.updatedAt,
+        endedAt: entry.endedAt ?? existing.endedAt,
         details: this.mergeDetails(existing.details, entry.details),
       };
     }

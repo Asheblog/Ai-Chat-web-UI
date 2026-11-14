@@ -111,6 +111,19 @@ export interface ResearchPlanApprovalState {
   expiresAt?: string | number
 }
 
+/**
+ * 单次尝试证据（read_url 等工具自己记录）。
+ * 只有工具真的写下 attempts 数组时，台账才展示尝试次数。
+ */
+export interface ToolAttemptEvidence {
+  engine?: string
+  status?: string
+  durationMs?: number
+  error?: string
+  errorCode?: string
+  httpStatus?: number
+}
+
 export interface ToolEventDetails {
   // 通用工具调用字段（ToolCall V2）
   argumentsText?: string
@@ -154,6 +167,8 @@ export interface ToolEventDetails {
   errorCode?: string
   httpStatus?: number
   fallbackUsed?: string
+  /** 工具自己记录的尝试链；无数组即无尝试次数证据 */
+  attempts?: ToolAttemptEvidence[]
   autoTriggered?: boolean
   parentTool?: string
   parentCallId?: string
@@ -196,6 +211,17 @@ export interface ChatStreamChunk {
   content?: string
   /** complete 事件的最终消息状态；plan cancel/expiry 时下发 cancelled */
   streamStatus?: 'done' | 'cancelled' | 'error'
+  /**
+   * 本轮终止原因（只表示原因，不表示成功）：
+   * - stop_tools：用户停止继续调用工具，随后仍可产出最终回答
+   * - budget_exhausted：工具轮次预算耗尽
+   */
+  stopReason?: 'stop_tools' | 'budget_exhausted'
+  /**
+   * 本轮是否已产出最终回答。false 表示“未生成最终回答”，
+   * 不得当作 done / 成功处理（即使流已结束）。
+   */
+  finalAnswerGenerated?: boolean
   /** research_plan 审批负载（tool_call 事件 details 内使用） */
   plan?: ResearchPlanPayload
   approval?: ResearchPlanApprovalState

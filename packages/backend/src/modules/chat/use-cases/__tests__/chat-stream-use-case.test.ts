@@ -74,8 +74,14 @@ jest.mock('../../../chat/stream-state', () => ({
     typeof value === 'string' && value.trim().length > 0 ? value.trim() : 'assistant-client-id',
   ),
   hasPendingStreamCancelKey: jest.fn().mockReturnValue(false),
-  registerStreamMeta: jest.fn().mockReturnValue({ streamKey: 'test', cancelled: false }),
+  registerStreamMeta: jest.fn().mockReturnValue({
+    streamKey: 'test',
+    cancelled: false,
+    stopToolsRequested: false,
+  }),
   releaseStreamMeta: jest.fn(),
+  // 编排器的 shouldStopTools 轮询入口：缺失会在工具轮次后抛 TypeError
+  shouldStopTools: jest.fn().mockReturnValue(false),
   updateStreamMetaController: jest.fn(),
   deletePendingStreamCancelKey: jest.fn(),
 }))

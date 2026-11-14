@@ -11,6 +11,7 @@ import {
   persistCompletionSnapshot,
   removeCompletionSnapshot,
 } from './snapshot-store'
+import { outcomeFieldsChanged, resolveOutcomeFields } from '../utils/outcome-fields'
 import type { ChatStoreGetState, ChatStoreSetState } from '../types'
 
 export const createServerMessageApplier = (
@@ -25,6 +26,12 @@ export const createServerMessageApplier = (
     const hasReasoningPayload = typeof reasoningPayload === 'string' && reasoningPayload.length > 0
     let resolvedContent = serverContentPayload
     let resolvedReasoning = reasoningPayload
+    const incomingOutcome = {
+      stopReason: message.stopReason,
+      finalAnswerGenerated: message.finalAnswerGenerated,
+      toolLogCoverage: message.toolLogCoverage,
+    }
+    let resolvedOutcome = resolveOutcomeFields(incomingOutcome, {})
     set((state) => {
       const serverMeta = createMeta(message)
       const key = messageKey(message.id)
@@ -69,6 +76,10 @@ export const createServerMessageApplier = (
       const playedChanged = nextPlayedLength !== prevPlayedLength
       const hasToolUpdates = normalizedToolEvents.length > 0
       const hasArtifactUpdates = normalizedArtifacts.length > 0
+      // 终态与覆盖：服务端缺失时保留已知值，缺失本身不等于“完整/未生成”
+      const bodyOutcome = resolveOutcomeFields(resolvedOutcome, prevBody)
+      const terminalChanged = outcomeFieldsChanged(bodyOutcome, prevBody)
+      resolvedOutcome = bodyOutcome
 
       let nextBodies = state.messageBodies
       let nextRenderCache = state.messageRenderCache
@@ -110,7 +121,14 @@ export const createServerMessageApplier = (
         return nextMetrics
       }
 
-      if (contentChanged || reasoningChanged || playedChanged || hasToolUpdates || hasArtifactUpdates) {
+      if (
+        contentChanged ||
+        reasoningChanged ||
+        playedChanged ||
+        terminalChanged ||
+        hasToolUpdates ||
+        hasArtifactUpdates
+      ) {
         const bodies = ensureBodies()
         bodies[key] = {
           ...prevBody,
@@ -123,6 +141,7 @@ export const createServerMessageApplier = (
           reasoningVersion: prevBody.reasoningVersion + (reasoningChanged ? 1 : 0),
           toolEvents: hasToolUpdates ? normalizedToolEvents : prevBody.toolEvents,
           artifacts: hasArtifactUpdates ? normalizedArtifacts : prevBody.artifacts,
+          ...bodyOutcome,
         }
         // 正文增长时必须失效旧 HTML（与 live SSE flushStreamBuffer 对称）。
         // 刷新后走 progress 轮询时若保留缓存，MessageBubble 宽松匹配会继续展示截断正文。
@@ -174,6 +193,7 @@ export const createServerMessageApplier = (
         const nextReasoningUnavailableSuggestion =
           serverMeta.reasoningUnavailableSuggestion ?? prevMeta.reasoningUnavailableSuggestion
         const nextStableKey = prevMeta.stableKey || serverMeta.stableKey
+        const nextOutcome = resolveOutcomeFields(resolvedOutcome, prevMeta)
         const metaNeedsUpdate =
           nextStreamStatus !== prevMeta.streamStatus ||
           nextStreamError !== prevMeta.streamError ||
@@ -183,6 +203,7 @@ export const createServerMessageApplier = (
           nextReasoningUnavailableCode !== prevMeta.reasoningUnavailableCode ||
           nextReasoningUnavailableReason !== prevMeta.reasoningUnavailableReason ||
           nextReasoningUnavailableSuggestion !== prevMeta.reasoningUnavailableSuggestion ||
+          outcomeFieldsChanged(nextOutcome, prevMeta) ||
           (hasArtifactUpdates &&
             JSON.stringify(prevMeta.artifacts || []) !== JSON.stringify(normalizedArtifacts)) ||
           nextStableKey !== prevMeta.stableKey ||
@@ -200,6 +221,7 @@ export const createServerMessageApplier = (
             reasoningUnavailableCode: nextReasoningUnavailableCode,
             reasoningUnavailableReason: nextReasoningUnavailableReason,
             reasoningUnavailableSuggestion: nextReasoningUnavailableSuggestion,
+            ...nextOutcome,
             artifacts: hasArtifactUpdates ? normalizedArtifacts : prevMeta.artifacts,
             stableKey: nextStableKey,
             isPlaceholder: false,
@@ -275,6 +297,7 @@ export const createServerMessageApplier = (
           reasoning: actualReasoning,
           reasoningPlayedLength: actualReasoning.length,
           toolEvents: normalizedToolEvents.length > 0 ? normalizedToolEvents : undefined,
+          ...resolvedOutcome,
           reasoningStatus: message.reasoningStatus,
           streamStatus: message.streamStatus,
           completedAt: Date.now(),

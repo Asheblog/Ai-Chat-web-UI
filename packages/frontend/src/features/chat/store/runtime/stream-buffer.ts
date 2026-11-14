@@ -90,6 +90,14 @@ export const createStreamBufferRuntime = (deps: {
       if (Object.prototype.hasOwnProperty.call(metaPatch, 'reasoningUnavailableSuggestion')) {
         applyMetaField('reasoningUnavailableSuggestion', metaPatch.reasoningUnavailableSuggestion ?? null)
       }
+      const hasStopReasonPatch = Object.prototype.hasOwnProperty.call(metaPatch, 'stopReason')
+      if (hasStopReasonPatch) {
+        applyMetaField('stopReason', metaPatch.stopReason)
+      }
+      const hasFinalAnswerPatch = Object.prototype.hasOwnProperty.call(metaPatch, 'finalAnswerGenerated')
+      if (hasFinalAnswerPatch) {
+        applyMetaField('finalAnswerGenerated', metaPatch.finalAnswerGenerated)
+      }
 
       const contentChanged = prevBody.content !== active.content
       const reasoningChanged = prevBody.reasoning !== active.reasoning
@@ -100,8 +108,18 @@ export const createStreamBufferRuntime = (deps: {
           : prevReasoningText.length
       const nextPlayedLength = active.reasoningPlayedLength
       const playedChanged = nextPlayedLength !== prevPlayedLength
+      const stopReasonChanged = hasStopReasonPatch && nextMeta.stopReason !== prevBody.stopReason
+      const finalAnswerChanged =
+        hasFinalAnswerPatch && nextMeta.finalAnswerGenerated !== prevBody.finalAnswerGenerated
 
-      if (!contentChanged && !reasoningChanged && !metaChanged && !playedChanged) {
+      if (
+        !contentChanged &&
+        !reasoningChanged &&
+        !metaChanged &&
+        !playedChanged &&
+        !stopReasonChanged &&
+        !finalAnswerChanged
+      ) {
         return state
       }
 
@@ -114,6 +132,8 @@ export const createStreamBufferRuntime = (deps: {
         reasoningPlayedLength: nextPlayedLength,
         version: prevBody.version + (contentChanged ? 1 : 0),
         reasoningVersion: prevBody.reasoningVersion + (reasoningChanged ? 1 : 0),
+        ...(hasStopReasonPatch ? { stopReason: nextMeta.stopReason } : {}),
+        ...(hasFinalAnswerPatch ? { finalAnswerGenerated: nextMeta.finalAnswerGenerated } : {}),
       }
 
       const nextBodies = { ...state.messageBodies, [assistantKey]: nextBody }

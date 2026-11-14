@@ -1,9 +1,11 @@
+import { buildToolLogCoverage } from '@aichat/shared/tool-operations'
 import type {
   BattleContent,
   BattleMode,
   BattleRunStatus,
   BattleToolCallEvent,
 } from '@aichat/shared/battle-contract'
+import type { ToolLogRunResult } from '../chat/tool-log-model'
 import type {
   BattleResultRecord,
   BattleRunConfigModel,
@@ -142,6 +144,22 @@ export class BattleShareProjector {
     }
   }
 
+  /**
+   * 单次尝试的调用记录覆盖。
+   * trace 恒为 unknown：Battle 不保留 run 级 trace，不得从内存事件反推 trace 完整；
+   * 尝试仍在进行时 persisted=partial（该次记录还会增长），结束后 complete（快照本身无丢弃）。
+   */
+  buildLiveToolEventsCoverage(
+    attempt: Pick<BattleShareLiveAttempt, 'status'>,
+  ) {
+    const finished = attempt.status === 'success' || attempt.status === 'error'
+    return buildToolLogCoverage({
+      trace: 'unknown',
+      persisted: finished ? 'complete' : 'partial',
+      projection: 'complete',
+    })
+  }
+
   buildSharePayload(params: {
     run: BattleRunRecord
     summary: BattleRunSummary
@@ -150,6 +168,8 @@ export class BattleShareProjector {
     connectionMap: Map<number, BattleShareLabelConnection>
     judgeConnection: BattleShareLabelConnection | null
     liveAttempts: BattleShareLiveAttempt[] | null
+    /** 仅在运行由「停止工具 / 预算收尾」结束且调用方确证时传入。 */
+    runResult?: ToolLogRunResult
   }): BattleSharePayload {
     const rawConfig = this.deps.parseRunConfigPayload(params.run.configJson)
     const mode = this.deps.normalizeMode(rawConfig.mode ?? params.run.mode)
@@ -220,7 +240,12 @@ export class BattleShareProjector {
           reasoning: attempt.reasoning,
           durationMs: attempt.durationMs,
           error: attempt.error,
-          ...(attempt.toolEvents.length > 0 ? { toolEvents: attempt.toolEvents } : {}),
+          ...(attempt.toolEvents.length > 0
+            ? {
+              toolEvents: attempt.toolEvents,
+              toolEventsCoverage: this.buildLiveToolEventsCoverage(attempt),
+            }
+            : {}),
         })),
       }
       : undefined
@@ -261,6 +286,7 @@ export class BattleShareProjector {
         judgeFallbackUsed: item.judgeFallbackUsed,
       })),
       ...(live ? { live } : {}),
+      ...(params.runResult ? { runResult: params.runResult } : {}),
       createdAt: params.run.createdAt.toISOString(),
     }
   }

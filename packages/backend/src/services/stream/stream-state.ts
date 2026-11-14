@@ -56,6 +56,12 @@ export const cancelAllStreamsForSession = (...args: Parameters<StreamMetaStore['
 export const getStreamMetaByKey = (...args: Parameters<StreamMetaStore['getStreamMetaByKey']>) =>
   streamMetaStore.getStreamMetaByKey(...args)
 
+export const requestStopTools = (...args: Parameters<StreamMetaStore['requestStopTools']>) =>
+  streamMetaStore.requestStopTools(...args)
+
+export const shouldStopTools = (...args: Parameters<StreamMetaStore['shouldStopTools']>) =>
+  streamMetaStore.shouldStopTools(...args)
+
 export const buildPendingCancelKeyByClientId = (...args: Parameters<StreamMetaStore['buildPendingCancelKeyByClientId']>) =>
   streamMetaStore.buildPendingCancelKeyByClientId(...args)
 

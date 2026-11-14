@@ -7,6 +7,9 @@ export interface ChatStreamEvent {
   delta?: string
   toolEvent?: Record<string, unknown>
   error?: string
+  /** 停止工具 / 预算收尾的运行结果（仅 message_complete 且确有值时出现） */
+  stopReason?: 'stop_tools' | 'budget_exhausted'
+  finalAnswerGenerated?: boolean
   ts: number
 }
 

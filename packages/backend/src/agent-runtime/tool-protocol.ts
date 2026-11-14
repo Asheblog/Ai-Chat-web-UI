@@ -42,6 +42,8 @@ type ToolParseResult = {
 }
 
 const TEXT_PROTOCOL_PROMPT_PREFIX = '工具调用协议(XML):'
+const TEXT_PROTOCOL_NO_TOOLS_PROMPT =
+  '本轮没有可用工具：不要输出任何工具调用协议或 XML 工具块，直接用已有信息给出最终回答。'
 const TEXT_PROTOCOL_RESULT_PREFIX = '工具结果'
 
 export function resolveToolSchema(params: {
@@ -97,15 +99,18 @@ export function buildToolRequest(params: {
   delete base.tool_schema
   delete base.toolSchema
 
-  if (params.schema === 'functions') {
-    base.functions = params.toolDefinitions.map((tool) => tool.function)
-    base.function_call = 'auto'
-  } else if (params.schema === 'tools') {
-    const adapter = resolveToolProviderAdapter(params.provider)
-    const toolPayload = adapter(params.toolDefinitions)
-    Object.assign(base, toolPayload)
-    if (base.tools && typeof base.tool_choice === 'undefined') {
-      base.tool_choice = 'auto'
+  // 无工具定义时不得下发空 tools/functions：停止工具与预算收尾轮走这条路径
+  if (params.toolDefinitions.length > 0) {
+    if (params.schema === 'functions') {
+      base.functions = params.toolDefinitions.map((tool) => tool.function)
+      base.function_call = 'auto'
+    } else if (params.schema === 'tools') {
+      const adapter = resolveToolProviderAdapter(params.provider)
+      const toolPayload = adapter(params.toolDefinitions)
+      Object.assign(base, toolPayload)
+      if (base.tools && typeof base.tool_choice === 'undefined') {
+        base.tool_choice = 'auto'
+      }
     }
   }
 
@@ -332,6 +337,50 @@ export function buildUnsupportedToolResult(toolCallId: string | undefined, toolN
   }
 }
 
+/**
+ * 「已宣告但不会执行」的调用文案：停止工具与预算耗尽是两件事，预算不是"被停止"。
+ * 台账摘要与配对 tool 结果共用，避免两处口径漂移。
+ */
+export function buildSkippedToolSummary(reason: string): string {
+  return reason === 'budget_exhausted'
+    ? '工具预算已用尽，未执行该调用'
+    : '已停止后续工具，未执行'
+}
+
+/**
+ * 为「已宣告但不会执行」的 tool_calls 生成配对结果消息。
+ * 停止工具 / 预算收尾时使用：消息历史不留未配对的 tool_calls，也不是成功结果。
+ */
+export function buildAbortedToolResultMessages(params: {
+  schema: ToolSchema
+  toolCalls: ToolCall[]
+  reason: string
+}): any[] {
+  const messages: any[] = []
+  params.toolCalls.forEach((toolCall, index) => {
+    const toolName = toolCall?.function?.name || 'unknown'
+    const content = JSON.stringify({
+      status: 'aborted',
+      reason: params.reason,
+      error: buildSkippedToolSummary(params.reason),
+    })
+    if (params.schema === 'functions') {
+      messages.push({ role: 'function', name: toolName, content })
+      return
+    }
+    if (params.schema === 'text') {
+      messages.push(buildTextToolResultMessage({ toolName, content }))
+      return
+    }
+    messages.push({
+      role: 'tool',
+      tool_call_id: toolCall?.id || `call_${index}`,
+      content,
+    })
+  })
+  return messages
+}
+
 export function normalizeToolCalls(toolCalls: ToolCall[]): ToolCall[] {
   if (!Array.isArray(toolCalls) || toolCalls.length === 0) return []
   const usedIds = new Set<string>()
@@ -496,11 +545,23 @@ function buildToolParamMap(toolDefinitions: ToolDefinition[]): Map<string, Set<s
 }
 
 function injectTextProtocolPrompt(messages: any[], toolDefinitions: ToolDefinition[]): { messages: any[]; textPromptAdded: boolean } {
-  if (!toolDefinitions.length) return { messages, textPromptAdded: false }
-  const hasPrompt = messages.some(
-    (msg) => msg?.role === 'system' && typeof msg?.content === 'string' && msg.content.includes(TEXT_PROTOCOL_PROMPT_PREFIX),
+  const promptIndex = messages.findIndex(
+    (msg) =>
+      msg?.role === 'system' &&
+      typeof msg?.content === 'string' &&
+      msg.content.includes(TEXT_PROTOCOL_PROMPT_PREFIX),
   )
-  if (hasPrompt) return { messages, textPromptAdded: false }
+
+  // 无工具轮（停止工具 / 预算收尾）：不能把首轮注入的工具协议留在上下文里，
+  // 否则模型仍以为有工具、按 XML 协议作答，收尾轮"不带 tools"就名存实亡。
+  if (!toolDefinitions.length) {
+    if (promptIndex === -1) return { messages, textPromptAdded: false }
+    const nextMessages = messages.slice()
+    nextMessages[promptIndex] = { role: 'system', content: TEXT_PROTOCOL_NO_TOOLS_PROMPT }
+    return { messages: nextMessages, textPromptAdded: true }
+  }
+
+  if (promptIndex !== -1) return { messages, textPromptAdded: false }
 
   const toolLines = toolDefinitions.map((tool) => {
     const name = tool.function.name

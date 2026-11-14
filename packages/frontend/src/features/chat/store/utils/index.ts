@@ -190,6 +190,12 @@ export const createMeta = (message: Message, overrides: Partial<MessageMeta> = {
     compressedMessages: Array.isArray(message.compressedMessages) ? message.compressedMessages : [],
     lastMessageId: typeof message.lastMessageId === 'number' ? message.lastMessageId : null,
     expanded: typeof message.expanded === 'boolean' ? message.expanded : false,
+    // 服务端未提供时保持 key 缺席，避免 merge 时用 undefined 清掉已知值
+    ...(message.stopReason ? { stopReason: message.stopReason } : {}),
+    ...(typeof message.finalAnswerGenerated === 'boolean'
+      ? { finalAnswerGenerated: message.finalAnswerGenerated }
+      : {}),
+    ...(message.toolLogCoverage ? { toolLogCoverage: message.toolLogCoverage } : {}),
     metadata: message.metadata ?? null,
     ...overrides,
     stableKey: overrides.stableKey ?? stableKey,
@@ -217,6 +223,11 @@ export const createBody = (message: Message, stableKeyOverride?: string | null):
     artifacts: message.artifacts,
     compressedMessages: Array.isArray(message.compressedMessages) ? message.compressedMessages : [],
     expanded: typeof message.expanded === 'boolean' ? message.expanded : false,
+    ...(message.stopReason ? { stopReason: message.stopReason } : {}),
+    ...(typeof message.finalAnswerGenerated === 'boolean'
+      ? { finalAnswerGenerated: message.finalAnswerGenerated }
+      : {}),
+    ...(message.toolLogCoverage ? { toolLogCoverage: message.toolLogCoverage } : {}),
     metadata: message.metadata ?? null,
   }
 }

@@ -1,4 +1,5 @@
 import type { UsageStats } from '@aichat/shared/api-contract'
+import type { ToolLogCoverage } from '@aichat/shared/tool-operations'
 import type { ToolEvent } from './tool-events'
 import type { MessageStreamMetrics, UsageTotals } from './usage'
 
@@ -27,6 +28,9 @@ export interface CreateSessionRequest {
   modelId: string;
   title?: string;
 }
+
+/** 服务端下发的本轮终止原因；不新增 streamStatus 枚举。 */
+export type ChatStopReason = 'stop_tools' | 'budget_exhausted'
 
 export interface CompressedGroupMessage {
   id: number;
@@ -63,6 +67,12 @@ export interface Message {
   richPayload?: import('@aichat/shared/rich-payload').RichMessagePayload | null;
   artifacts?: import('@aichat/shared/api-contract').WorkspaceArtifact[];
   toolEvents?: ToolEvent[];
+  /** 工具调用台账三层覆盖（服务端透出，缺失表示未知） */
+  toolLogCoverage?: ToolLogCoverage;
+  /** 本轮终止原因（服务端 run summary 透出，缺失表示未知） */
+  stopReason?: ChatStopReason;
+  /** 服务端是否产出了最终回答；false 表示本轮已结束但没有最终回答，缺失表示未知 */
+  finalAnswerGenerated?: boolean;
   metrics?: MessageStreamMetrics | null;
   messageGroupId?: number | null;
   compressedMessages?: CompressedGroupMessage[];
@@ -93,6 +103,9 @@ export interface MessageMeta {
   isPlaceholder?: boolean;
   streamStatus?: 'pending' | 'streaming' | 'done' | 'error' | 'cancelled';
   streamError?: string | null;
+  toolLogCoverage?: ToolLogCoverage;
+  stopReason?: ChatStopReason;
+  finalAnswerGenerated?: boolean;
   pendingSync?: boolean;
   messageGroupId?: number | null;
   compressedMessages?: CompressedGroupMessage[];
@@ -110,6 +123,9 @@ export interface MessageBody {
   version: number;
   reasoningVersion: number;
   toolEvents?: ToolEvent[];
+  toolLogCoverage?: ToolLogCoverage;
+  stopReason?: ChatStopReason;
+  finalAnswerGenerated?: boolean;
   generatedImages?: import('@aichat/shared/api-contract').GeneratedImage[];
   richPayload?: import('@aichat/shared/rich-payload').RichMessagePayload | null;
   artifacts?: import('@aichat/shared/api-contract').WorkspaceArtifact[];
@@ -144,7 +160,11 @@ export interface ShareMessage {
   createdAt: string;
   images?: string[];
   richPayload?: import('@aichat/shared/rich-payload').RichMessagePayload | null;
+  artifacts?: import('@aichat/shared/api-contract').WorkspaceArtifact[];
   toolEvents?: ToolEvent[];
+  toolLogCoverage?: ToolLogCoverage;
+  stopReason?: ChatStopReason;
+  finalAnswerGenerated?: boolean;
 }
 
 export interface ChatShare {

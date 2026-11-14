@@ -146,4 +146,48 @@ describe('chat execution event bridge', () => {
       },
     })
   })
+
+  it('carries the stop-tools run result through step_complete and run_complete', () => {
+    const bridge = createChatExecutionEventBridge({
+      runKey: 'chat-run-stop',
+      sessionId: 9,
+      clock: () => 1,
+    })
+
+    const events = bridge.consume({
+      type: 'complete',
+      content: '',
+      stopReason: 'stop_tools',
+      finalAnswerGenerated: false,
+    })
+
+    const stepComplete = events.find((event) => event.type === 'step_complete')
+    expect(stepComplete).toMatchObject({
+      status: 'completed',
+      payload: { result: { stopReason: 'stop_tools', finalAnswerGenerated: false } },
+    })
+
+    const runComplete = events.find((event) => event.type === 'run_complete')
+    expect(runComplete).toMatchObject({
+      status: 'completed',
+      payload: { summary: { stopReason: 'stop_tools', finalAnswerGenerated: false } },
+    })
+    expect((runComplete?.payload as { output?: unknown }).output).toEqual({})
+  })
+
+  it('keeps normal completions free of stop fields', () => {
+    const bridge = createChatExecutionEventBridge({
+      runKey: 'chat-run-normal',
+      sessionId: 9,
+      clock: () => 1,
+    })
+
+    const events = bridge.consume({ type: 'complete', content: 'done' })
+
+    const runComplete = events.find((event) => event.type === 'run_complete')
+    expect(runComplete?.payload).toEqual({ summary: {}, output: { content: 'done' } })
+
+    const stepComplete = events.find((event) => event.type === 'step_complete')
+    expect((stepComplete?.payload as { result?: unknown }).result).toEqual({})
+  })
 })

@@ -132,20 +132,39 @@ export const enrichToolEventReasoningOffsets = (
   return { ...payload, details }
 }
 
+/**
+ * 时间线比较器。旧残片可能没有 id / createdAt（只有 callId），
+ * 所有比较都必须 null-safe：缺失值按 0 / 空串参与比较，绝不抛异常。
+ */
 export const compareToolEvents = (a: ToolEvent, b: ToolEvent) => {
   const aOffset = resolveReasoningOffsetStart(a)
   const bOffset = resolveReasoningOffsetStart(b)
   if (aOffset != null && bOffset != null && aOffset !== bOffset) {
     return aOffset - bOffset
   }
-  if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt
-  const aUpdatedAt = typeof a.updatedAt === 'number' ? a.updatedAt : a.createdAt
-  const bUpdatedAt = typeof b.updatedAt === 'number' ? b.updatedAt : b.createdAt
+  const aCreatedAt = Number.isFinite(a.createdAt) ? a.createdAt : 0
+  const bCreatedAt = Number.isFinite(b.createdAt) ? b.createdAt : 0
+  if (aCreatedAt !== bCreatedAt) return aCreatedAt - bCreatedAt
+  const aUpdatedAt = typeof a.updatedAt === 'number' && Number.isFinite(a.updatedAt) ? a.updatedAt : aCreatedAt
+  const bUpdatedAt = typeof b.updatedAt === 'number' && Number.isFinite(b.updatedAt) ? b.updatedAt : bCreatedAt
   if (aUpdatedAt !== bUpdatedAt) return aUpdatedAt - bUpdatedAt
-  return a.id.localeCompare(b.id)
+  const aId = typeof a.id === 'string' ? a.id : ''
+  const bId = typeof b.id === 'string' ? b.id : ''
+  return aId.localeCompare(bId)
 }
 
-export const resolveEventStatus = (event: ToolEvent): ToolEvent['status'] => {
+/**
+ * 状态推断只需要 status/stage/phase 三个字段。
+ * 用结构类型而不是 ToolEvent，旧 ToolLogEntry、Battle 事件等没有 session/message
+ * 字段、phase 为宽松 string 的读取侧可直接调用，保持「ToolEvent 状态推断单一实现」。
+ */
+export type ResolvableToolEvent = {
+  status?: ToolCallStatus
+  stage?: ToolEventStage
+  phase?: ToolCallPhase | string
+}
+
+export const resolveEventStatus = (event: ResolvableToolEvent): ToolCallStatus => {
   if (
     event.status === 'running' ||
     event.status === 'success' ||
@@ -190,27 +209,49 @@ export const mergeToolEvents = (previous: ToolEvent, incoming: ToolEvent): ToolE
     updatedAt: nextUpdatedAt,
     details: mergedDetails,
   }
-  const status = resolveEventStatus(merged)
+  const previousStatus = resolveEventStatus(previous)
+  const incomingStatus = resolveEventStatus(incoming)
+  // 终态状态不被迟到的 running/pending 覆盖
+  const status =
+    TERMINAL_EVENT_STATUSES.includes(previousStatus) && !TERMINAL_EVENT_STATUSES.includes(incomingStatus)
+      ? previousStatus
+      : incomingStatus
   merged.status = status
-  if (
-    merged.stage !== 'start' &&
-    merged.stage !== 'result' &&
-    merged.stage !== 'error'
-  ) {
-    merged.stage =
-      status === 'success' ? 'result' : status === 'running' || status === 'pending' ? 'start' : 'error'
-  }
+  merged.stage = mergeEventStage(previous.stage, incoming.stage, status)
   return merged
 }
 
+/**
+ * 去重键：唯一主键是 id。
+ * 不同 id 即使共享 callId 也不能合并（禁止用 callId 合并子记录）；
+ * id 缺失时才退到 callId，最后才用位置兜底。
+ */
 export const buildEventKey = (event: ToolEvent, fallbackIndex: number) => {
-  if (typeof event.callId === 'string' && event.callId.trim().length > 0) return `call:${event.callId}`
-  if (typeof event.id === 'string' && event.id.trim().length > 0) return `id:${event.id}`
+  if (typeof event.id === 'string' && event.id.trim().length > 0) return `id:${event.id.trim()}`
+  if (typeof event.callId === 'string' && event.callId.trim().length > 0) return `call:${event.callId.trim()}`
   return `fallback:${fallbackIndex}`
 }
 
+const TERMINAL_EVENT_STATUSES: readonly ToolCallStatus[] = ['success', 'error', 'rejected', 'aborted']
+
+const isTerminalToolStage = (stage: ToolEventStage) => stage === 'result' || stage === 'error'
+
+/** 同 id 合并 stage：终态阶段不会被迟到的 start 覆盖（乱序事件保护）。 */
+const mergeEventStage = (
+  previous: ToolEventStage,
+  incoming: ToolEventStage,
+  status: ToolCallStatus,
+): ToolEventStage => {
+  const stage: ToolEventStage =
+    isTerminalToolStage(previous) && !isTerminalToolStage(incoming) ? previous : incoming
+  if (stage !== 'start' && stage !== 'result' && stage !== 'error') {
+    return status === 'success' ? 'result' : status === 'running' || status === 'pending' ? 'start' : 'error'
+  }
+  return stage
+}
+
 /**
- * 列表级合并 + 排序：按 callId/id 去重合并，返回按 reasoningOffset/createdAt 排序的时间轴。
+ * 列表级合并 + 排序：显式 id 优先，同 id 合并；无 id 才按 callId 分组。返回按 reasoningOffset/createdAt 排序的时间轴。
  */
 export const mergeAndSortToolEvents = (events: ToolEvent[]): ToolEvent[] => {
   if (!Array.isArray(events) || events.length === 0) return []

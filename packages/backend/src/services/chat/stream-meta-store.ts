@@ -10,6 +10,14 @@ export type AgentStreamMeta = {
   assistantClientMessageId: string | null
   assistantMessageId: number | string | null
   streamKey: string
+  /** 已受理的「停止后续工具」请求：只影响本 run，不设置 cancelled、不 abort 整轮 */
+  stopToolsRequested: boolean
+}
+
+/** 停止工具请求的受理结果；no_active_run 表示目标 run 已结束或不存在 */
+export type StopToolsRequestOutcome = {
+  accepted: boolean
+  reason: 'stop_tools' | 'already_requested' | 'no_active_run'
 }
 
 export type StreamMetaRegistrationParams = {
@@ -36,6 +44,8 @@ export interface StreamMetaStore {
   findAllStreamMetaBySessionId(sessionId: number): AgentStreamMeta[]
   cancelAllStreamsForSession(sessionId: number): number
   getStreamMetaByKey(key: string | null | undefined): AgentStreamMeta | null
+  requestStopTools(meta: AgentStreamMeta | null): StopToolsRequestOutcome
+  shouldStopTools(meta: AgentStreamMeta | null): boolean
   buildPendingCancelKeyByClientId(sessionId: number, clientMessageId?: string | null): string | null
   buildPendingCancelKeyByMessageId(sessionId: number, messageId?: number | string | null): string | null
   registerPendingCancelMarker(params: {
@@ -116,6 +126,7 @@ export class MemoryStreamMetaStore implements StreamMetaStore {
       assistantClientMessageId: assistantClientMessageId ?? null,
       assistantMessageId: assistantMessageId ?? null,
       streamKey: key,
+      stopToolsRequested: false,
     }
     this.agentStreamControllers.set(key, meta)
     const actorSet = this.activeStreamsByActor.get(actorIdentifier) ?? new Set<string>()
@@ -214,6 +225,26 @@ export class MemoryStreamMetaStore implements StreamMetaStore {
   getStreamMetaByKey(key: string | null | undefined): AgentStreamMeta | null {
     if (!key) return null
     return this.agentStreamControllers.get(key) ?? null
+  }
+
+  requestStopTools(meta: AgentStreamMeta | null): StopToolsRequestOutcome {
+    if (!meta) {
+      return { accepted: false, reason: 'no_active_run' }
+    }
+    // 只受理仍在活动表中的 run：已释放的 meta 不得被重新置位，避免影响后续 run
+    if (this.agentStreamControllers.get(meta.streamKey) !== meta) {
+      return { accepted: false, reason: 'no_active_run' }
+    }
+    if (meta.stopToolsRequested) {
+      return { accepted: true, reason: 'already_requested' }
+    }
+    meta.stopToolsRequested = true
+    this.agentStreamControllers.set(meta.streamKey, meta)
+    return { accepted: true, reason: 'stop_tools' }
+  }
+
+  shouldStopTools(meta: AgentStreamMeta | null): boolean {
+    return meta?.stopToolsRequested === true
   }
 
   buildPendingCancelKeyByClientId(sessionId: number, clientMessageId?: string | null) {

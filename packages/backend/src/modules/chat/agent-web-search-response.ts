@@ -8,14 +8,13 @@ import { buildChatProviderRequest } from '../../utils/chat-provider';
 import { adaptProviderResponse } from '../../utils/anthropic';
 import { supportsSseStreaming } from '../../utils/providers';
 import { Tokenizer } from '../../services/tokenizer/legacy-utils';
-import type { WebSearchHit } from '../../utils/web-search';
 import { serializeQuotaSnapshot } from '../../services/quota/legacy-utils';
 import { getFriendlyErrorMessage, parseApiError } from '../../utils/api-error-parser';
 import type { UsageQuotaSnapshot } from '../../types';
 import type { ExtensionInstallServiceLike } from '../extensions/types';
 import { summarizeSsePayload } from '../../utils/task-trace';
 import type { TaskTraceRecorder, TaskTraceStatus } from '../../utils/task-trace';
-import { serializeToolLogsForPersistence, type ToolLogEntry } from './tool-logs';
+import { ToolLogManager } from './tool-log-manager';
 import { persistAssistantFinalResponse, upsertAssistantMessageByClientId } from './assistant-message-service';
 import {
   buildAgentStreamKey,
@@ -28,6 +27,7 @@ import {
   buildPendingCancelKeyByClientId,
   hasPendingStreamCancelKey,
   deletePendingStreamCancelKey,
+  shouldStopTools,
 } from './stream-state';
 import type { RAGService } from '../../services/document/rag-service';
 import { enrichToolEventReasoningOffsets } from '@aichat/shared/tool-events';
@@ -57,9 +57,13 @@ import {
 } from './research-plan-flow';
 import {
   type ToolSchema,
+  buildSkippedToolSummary,
   buildToolRequest,
 } from '../../agent-runtime/tool-protocol';
-import { runToolOrchestration } from '../../agent-runtime/tool-orchestrator';
+import {
+  runToolOrchestration,
+  type ToolOrchestrationStopReason,
+} from '../../agent-runtime/tool-orchestrator';
 import { guardToolLoopMessages } from './services/tool-loop-context-guard';
 import {
   extractMissingFunctionCallOutputId,
@@ -81,6 +85,12 @@ import { createSkillRegistry } from '../skills/skill-registry';
 import type { RequestedSkillsPayload } from '../skills/types';
 import type { McpService } from '../../services/mcp/mcp-service';
 import type { ResolvedConnection } from '../../repositories/model-resolver-repository';
+/** 本次运行的收尾结果；只有停止工具 / 预算收尾才存在 */
+type PersistedRunResult = {
+  stopReason: ToolOrchestrationStopReason;
+  finalAnswerGenerated: boolean;
+};
+
 // Re-export for backwards compatibility
 export {
   AgentWebSearchConfig,
@@ -267,19 +277,32 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       const startedAt = Date.now();
       let firstChunkAt: number | null = null;
 
-      const toolLogs: ToolLogEntry[] = [];
-      let toolLogSequence = 0;
-      let toolLogsDirty = false;
+      // 工具台账唯一写入点：身份 / 来源 / 父子 / 时间字段的映射与合并由 manager 负责，
+      // 本文件只负责把已归一化的工具事件送进去（SSE 载荷保持不变）。
+      const toolLogManager = new ToolLogManager({
+        sessionId,
+        onLogDirty: () => {
+          // 立即异步持久化工具事件，刷新页面也能看到最新工具日志
+          persistAssistantProgress({ includeReasoning: false }).catch(() => { });
+        },
+      });
 
       const persistAssistantProgress = async (
-        options: { force?: boolean; includeReasoning?: boolean; status?: 'streaming' | 'done' | 'error' | 'cancelled'; errorMessage?: string | null } = {},
+        options: {
+          force?: boolean
+          includeReasoning?: boolean
+          status?: 'streaming' | 'done' | 'error' | 'cancelled'
+          errorMessage?: string | null
+          /** 只在最终持久化时传入，保证 runResult 不会被后续进度写覆盖 */
+          runResult?: PersistedRunResult
+        } = {},
       ) => {
         if (!activeAssistantMessageId) return;
         const force = options.force === true;
         const includeReasoning = options.includeReasoning !== false;
         const currentReasoning =
           includeReasoning && reasoningBuffer.trim().length ? reasoningBuffer : null;
-        const hasToolLogDelta = toolLogsDirty;
+        const hasToolLogDelta = toolLogManager.isDirty();
         if (!aiResponseContent && !currentReasoning && !force && !hasToolLogDelta) return;
         const now = Date.now();
         const deltaLength = aiResponseContent.length - assistantProgressLastPersistedLength;
@@ -303,11 +326,9 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         const streamStatus = options.status ?? (streamMeta?.cancelled ? 'cancelled' : 'streaming');
         const reasoningPayload =
           currentReasoning && currentReasoning.trim().length ? currentReasoning : null;
-        const shouldPersistToolLogs = toolLogsDirty || force;
+        const shouldPersistToolLogs = toolLogManager.isDirty() || force;
         const toolLogsJson = shouldPersistToolLogs
-          ? toolLogs.length > 0
-            ? serializeToolLogsForPersistence(toolLogs)
-            : null
+          ? toolLogManager.toJson(options.runResult ? { runResult: options.runResult } : undefined)
           : undefined;
         const updateData: Prisma.MessageUpdateInput = {
           content: aiResponseContent,
@@ -318,12 +339,12 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         if (toolLogsJson !== undefined) {
           updateData.toolLogsJson = toolLogsJson;
           // 同步清脏，避免 fire-and-forget 期间新工具事件被旧写回覆盖清脏
-          toolLogsDirty = false;
+          toolLogManager.markClean();
         }
         const messageIdForPersist = activeAssistantMessageId;
         const contentLength = aiResponseContent.length;
         const reasoningLength = reasoningPayload?.length ?? 0;
-        const toolLogsCount = toolLogsJson ? toolLogs.length : 0;
+        const toolLogsCount = toolLogsJson ? toolLogManager.getLogs().length : 0;
         const runPersist = async () => {
           await prisma.message.update({
             where: { id: messageIdForPersist },
@@ -373,7 +394,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                 persistStreamMeta(streamMeta);
               }
               if (toolLogsJson !== undefined) {
-                toolLogsDirty = false;
+                toolLogManager.markClean();
               }
               log.warn('Assistant progress target missing, upserted placeholder record', {
                 sessionId,
@@ -385,7 +406,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                 reasoningLength: reasoningPayload?.length ?? 0,
                 force,
                 recovered: true,
-                toolLogsPersisted: toolLogsJson ? toolLogs.length : 0,
+                toolLogsPersisted: toolLogsJson ? toolLogManager.getLogs().length : 0,
               });
               return;
             }
@@ -434,30 +455,6 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         return false;
       };
 
-      const ensureToolLogId = (payload: Record<string, unknown>) => {
-        if (typeof payload.id === 'string' && payload.id.trim()) {
-          return (payload.id as string).trim();
-        }
-        if (typeof payload.callId === 'string' && payload.callId.trim()) {
-          return (payload.callId as string).trim();
-        }
-        toolLogSequence += 1;
-        return `session:${sessionId}:tool:${toolLogSequence}`;
-      };
-
-      const mergeToolLogDetails = (
-        previous?: ToolLogEntry['details'],
-        next?: ToolLogEntry['details'],
-      ): ToolLogEntry['details'] | undefined => {
-        if (!previous && !next) return undefined;
-        if (!previous) return next;
-        if (!next) return previous;
-        return {
-          ...previous,
-          ...next,
-        };
-      };
-
       const resolveToolLogLookupId = (payload: Record<string, unknown>) => {
         if (typeof payload.id === 'string' && payload.id.trim()) {
           return (payload.id as string).trim();
@@ -469,71 +466,20 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       };
 
       const recordToolLog = (payload: Record<string, unknown>) => {
-        const stage = payload.stage;
-        if (stage !== 'start' && stage !== 'result' && stage !== 'error') return;
-        const tool = typeof payload.tool === 'string' && payload.tool.trim() ? payload.tool : null;
-        if (!tool) return;
-        const VALID_STATUSES = new Set(['running', 'success', 'error', 'pending', 'rejected', 'aborted']);
-        const entry: ToolLogEntry = {
-          id: ensureToolLogId(payload),
-          tool,
-          stage,
-          status:
-            typeof payload.status === 'string' && VALID_STATUSES.has(payload.status)
-              ? (payload.status as ToolLogEntry['status'])
-              : undefined,
-          phase: typeof payload.phase === 'string' ? payload.phase : undefined,
-          callId: typeof payload.callId === 'string' ? payload.callId : undefined,
-          query: typeof payload.query === 'string' ? payload.query : undefined,
-          createdAt: Date.now(),
-        };
-        if (Array.isArray(payload.hits)) {
-          entry.hits = (payload.hits as WebSearchHit[]).slice(0, 10);
-        }
-        if (typeof payload.summary === 'string' && payload.summary.trim()) {
-          entry.summary = payload.summary.trim();
-        }
-        if (typeof payload.error === 'string' && payload.error.trim()) {
-          entry.error = payload.error;
-        }
-        if (payload.details && typeof payload.details === 'object') {
-          entry.details = payload.details as ToolLogEntry['details'];
-        }
-        const existingIndex = toolLogs.findIndex((log) => log.id === entry.id);
-        if (existingIndex === -1) {
-          toolLogs.push(entry);
-        } else {
-          const existing = toolLogs[existingIndex];
-          toolLogs[existingIndex] = {
-            ...existing,
-            stage: entry.stage,
-            status: entry.status ?? existing.status,
-            phase: entry.phase ?? existing.phase,
-            callId: entry.callId ?? existing.callId,
-            query: entry.query ?? existing.query,
-            hits: entry.hits ?? existing.hits,
-            error: entry.error ?? existing.error,
-            summary: entry.summary ?? existing.summary,
-            createdAt: existing.createdAt,
-            details: mergeToolLogDetails(existing.details, entry.details),
-          };
-        }
-        toolLogsDirty = true;
+        toolLogManager.record(payload);
         traceRecorder.log('tool:event_buffer', {
           messageId: activeAssistantMessageId ?? null,
-          tool,
-          stage,
-          totalBuffered: toolLogs.length,
+          tool: typeof payload.tool === 'string' ? payload.tool : null,
+          stage: typeof payload.stage === 'string' ? payload.stage : null,
+          totalBuffered: toolLogManager.getLogs().length,
         });
-        // 立即异步持久化工具事件，刷新页面也能看到最新工具日志
-        persistAssistantProgress({ includeReasoning: false }).catch(() => { });
       };
 
       const sendToolEvent = (payload: Record<string, unknown>) => {
         const normalized = normalizeToolCallEventPayload(payload);
         const lookupId = resolveToolLogLookupId(normalized);
         const isFirstSight = lookupId
-          ? toolLogs.findIndex((log) => log.id === lookupId) === -1
+          ? toolLogManager.getLogs().findIndex((log) => log.id === lookupId) === -1
           : true;
         const enriched = enrichToolEventReasoningOffsets(
           normalized,
@@ -712,11 +658,16 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       let currentProviderController: AbortController | null = null;
       const streamEnabled = supportsSseStreaming(provider);
 
-      const callProvider = async (messages: any[], schema: ToolSchema, iteration: number) => {
+      const callProvider = async (
+        messages: any[],
+        schema: ToolSchema,
+        iteration: number,
+        toolsEnabled = true,
+      ) => {
         const { body: chatBody, messages: preparedMessages, textPromptAdded } = buildToolRequest({
           requestData,
           messages,
-          toolDefinitions,
+          toolDefinitions: toolsEnabled ? toolDefinitions : [],
           schema,
           provider,
           stream: streamEnabled,
@@ -754,6 +705,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                 : [],
           toolSchema: schema,
           iteration,
+          toolsEnabled,
         });
 
         currentProviderController = new AbortController();
@@ -799,6 +751,35 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         await persistAssistantProgress({ force: true, status: 'cancelled' });
         traceStatus = 'cancelled';
         traceRecorder.log('deep_research:plan_terminated', { code, sessionId });
+      };
+
+      /**
+       * 停止工具 / 预算收尾后没有正文：保留已产出的内容与终态，
+       * 明确反馈「未生成最终回答」，绝不伪造模型回答，也不写 error 状态。
+       */
+      const finishWithoutFinalAnswer = async (
+        runResult: PersistedRunResult | null,
+      ): Promise<void> => {
+        const partialContent = aiResponseContent;
+        await persistAssistantProgress({
+          force: true,
+          status: 'done',
+          runResult: runResult ?? undefined,
+        });
+        safeEnqueue({
+          type: 'complete',
+          content: partialContent,
+          ...(runResult ? { stopReason: runResult.stopReason } : {}),
+          finalAnswerGenerated: false,
+        });
+        traceStatus = 'completed';
+        traceMetadataExtras.stopReason = runResult?.stopReason ?? null;
+        traceMetadataExtras.finalAnswerGenerated = false;
+        traceRecorder.log('agent:stopped_without_answer', {
+          sessionId,
+          stopReason: runResult?.stopReason ?? null,
+          contentLength: partialContent.length,
+        });
       };
 
       const waitForNoSearchChoice = async (
@@ -881,6 +862,9 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           stream: streamEnabled,
           includeReasoningInToolMessage: true,
           emptyContentErrorMessage: 'Model finished without producing a final answer',
+          // 停止工具 / 预算耗尽后最多一轮无工具收尾，让模型基于已有结果作答
+          onBudgetExhausted: 'finish',
+          shouldStopTools: () => shouldStopTools(streamMeta),
           checkAbort: () => {
             if (checkCancelled()) {
               throw new Error('Agent stream cancelled by client');
@@ -918,7 +902,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             providerUsageSeen = true;
             safeEnqueue({ type: 'usage', usage });
           },
-          requestTurn: async ({ schema, messages, iteration }) => {
+          requestTurn: async ({ schema, messages, iteration, toolsEnabled }) => {
             const guardResult = await guardToolLoopMessages({
               messages,
               contextLimit,
@@ -935,7 +919,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                 messageCount: messages.length,
               });
             }
-            const response = await callProvider(messages, schema, iteration);
+            const response = await callProvider(messages, schema, iteration, toolsEnabled);
             return {
               response,
               onDone: () => {
@@ -1041,6 +1025,25 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           onUnsupportedTool: (toolName, toolCallId) => {
             sendUnsupportedToolError(toolName || 'unknown', toolCallId, sendToolEvent);
           },
+          onToolCallSkipped: ({ toolCall, toolName, reason }) => {
+            const callId =
+              (toolCall?.id && toolCall.id.trim()) ||
+              `session:${sessionId}:tool:skipped:${Date.now().toString(36)}:${Math.random()
+                .toString(36)
+                .slice(2, 8)}`;
+            // 已宣告但未执行：补一条 result/aborted 记录，不伪造成功
+            // 文案按原因区分：预算耗尽不是"被停止"
+            sendToolEvent({
+              id: callId,
+              callId,
+              tool: toolName || 'unknown',
+              stage: 'result',
+              status: 'aborted',
+              phase: 'aborted',
+              summary: buildSkippedToolSummary(reason),
+              details: { stopReason: reason, skipped: true },
+            });
+          },
         });
 
         if (orchestration.status === 'terminated') {
@@ -1061,6 +1064,19 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             : '无限制';
           throw new Error(`工具调用次数已达上限（${iterationLabel}），未生成最终答案`);
         }
+
+        const runResult: PersistedRunResult | null = orchestration.stopReason
+          ? {
+              stopReason: orchestration.stopReason,
+              finalAnswerGenerated: orchestration.finalAnswerGenerated,
+            }
+          : null;
+
+        if (orchestration.status === 'stopped_without_answer') {
+          await finishWithoutFinalAnswer(runResult);
+          return;
+        }
+
         if (orchestration.status !== 'completed') {
           throw new Error('AI provider did not return a response');
         }
@@ -1152,7 +1168,15 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         if (!providerUsageSeen || !providerUsageValid) {
           safeEnqueue({ type: 'usage', usage: finalUsagePayload });
         }
-        safeEnqueue({ type: 'complete', content: finalContent, usage: finalUsagePayload });
+        safeEnqueue({
+          type: 'complete',
+          content: finalContent,
+          usage: finalUsagePayload,
+          ...(runResult ? { stopReason: runResult.stopReason } : {}),
+          ...(runResult ? { finalAnswerGenerated: runResult.finalAnswerGenerated } : {}),
+        });
+        traceMetadataExtras.stopReason = runResult?.stopReason ?? null;
+        traceMetadataExtras.finalAnswerGenerated = runResult?.finalAnswerGenerated ?? true;
         traceMetadataExtras.finalUsage = finalUsagePayload;
         traceMetadataExtras.providerUsageSource = providerUsageValid ? 'provider' : 'fallback';
 
@@ -1192,7 +1216,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                 return null;
               }
             })();
-            const finalToolLogsJson = serializeToolLogsForPersistence(toolLogs);
+            const finalToolLogsJson = toolLogManager.toJson(runResult ? { runResult } : undefined);
             const persistedId = await persistAssistantFinalResponse({
               sessionId,
               existingMessageId: activeAssistantMessageId,
@@ -1225,7 +1249,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             if (persistedId) {
               persistedAssistantMessageId = persistedId;
               activeAssistantMessageId = persistedId;
-              toolLogsDirty = false;
+              toolLogManager.markClean();
               if (streamMeta) {
                 streamMeta.assistantMessageId = persistedId;
                 persistStreamMeta(streamMeta);
@@ -1245,7 +1269,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             log.debug('Session missing when persisting agent response, skip insert', { sessionId });
           }
           traceStatus = 'completed';
-          traceMetadataExtras.toolEvents = toolLogs.length;
+          traceMetadataExtras.toolEvents = toolLogManager.getLogs().length;
           traceMetadataExtras.reasoningDurationSeconds = reasoningDurationSeconds;
         } catch (persistErr) {
           console.warn('Persist agent response failed', persistErr);
@@ -1344,16 +1368,7 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         }
         setStreamController(null);
         releaseStreamMetaHandle();
-        const toolLogSummary = toolLogs.slice(0, 50).map((item) => ({
-          id: item.id,
-          tool: item.tool,
-          stage: item.stage,
-          query: item.query,
-          hits: Array.isArray(item.hits) ? item.hits.length : undefined,
-          summary: item.summary,
-          error: item.error,
-          createdAt: new Date(item.createdAt).toISOString(),
-        }));
+        const toolLogSummary = toolLogManager.getSummary(50);
         const finalMetadata = {
           ...traceMetadataExtras,
           toolLogs: toolLogSummary,

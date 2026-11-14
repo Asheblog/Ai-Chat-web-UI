@@ -1,4 +1,5 @@
 import type { MessageMeta, MessageStreamMetrics, ToolEvent } from '@/types'
+import type { ToolLogCoverage } from '@aichat/shared/tool-operations'
 import {
   STREAM_SNAPSHOT_PERSIST_INTERVAL,
   STREAM_SNAPSHOT_STORAGE_KEY,
@@ -72,6 +73,19 @@ const sanitizeCompletionSnapshots = (parsed: any[]): StreamCompletionSnapshot[] 
         const hasMetricValue = metrics
           ? Object.values(metrics).some((value) => typeof value === 'number')
           : false
+        const stopReasonRaw = (item as any).stopReason
+        const stopReason =
+          stopReasonRaw === 'stop_tools' || stopReasonRaw === 'budget_exhausted'
+            ? stopReasonRaw
+            : undefined
+        const finalAnswerGeneratedRaw = (item as any).finalAnswerGenerated
+        const finalAnswerGenerated =
+          typeof finalAnswerGeneratedRaw === 'boolean' ? finalAnswerGeneratedRaw : undefined
+        const toolLogCoverageRaw = (item as any).toolLogCoverage
+        const toolLogCoverage =
+          toolLogCoverageRaw && typeof toolLogCoverageRaw === 'object' && !Array.isArray(toolLogCoverageRaw)
+            ? (toolLogCoverageRaw as ToolLogCoverage)
+            : undefined
         return {
           sessionId,
           messageId:
@@ -92,6 +106,9 @@ const sanitizeCompletionSnapshots = (parsed: any[]): StreamCompletionSnapshot[] 
           toolEvents: Array.isArray((item as any).toolEvents)
             ? ((item as any).toolEvents as ToolEvent[])
             : undefined,
+          stopReason,
+          finalAnswerGenerated,
+          toolLogCoverage,
           reasoningStatus:
             typeof (item as any).reasoningStatus === 'string'
               ? ((item as any).reasoningStatus as MessageMeta['reasoningStatus'])
@@ -236,6 +253,9 @@ export const persistCompletionSnapshot = (snapshot: StreamCompletionSnapshot) =>
       toolEvents: snapshot.toolEvents ?? existing.toolEvents,
       reasoningStatus: snapshot.reasoningStatus ?? existing.reasoningStatus,
       streamStatus: snapshot.streamStatus ?? existing.streamStatus,
+      stopReason: snapshot.stopReason ?? existing.stopReason,
+      finalAnswerGenerated: snapshot.finalAnswerGenerated ?? existing.finalAnswerGenerated,
+      toolLogCoverage: snapshot.toolLogCoverage ?? existing.toolLogCoverage,
       metrics: snapshot.metrics ?? existing.metrics,
       reasoningPlayedLength:
         typeof snapshot.reasoningPlayedLength === 'number'

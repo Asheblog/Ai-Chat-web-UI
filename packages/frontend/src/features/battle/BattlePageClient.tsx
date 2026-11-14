@@ -660,6 +660,7 @@ export function BattlePageClient() {
         open={selectedDetail !== null}
         onOpenChange={(open) => !open && setSelectedNode(null)}
         detail={selectedDetail}
+        runKey={flow.currentRunId}
         isRunning={flow.isRunning}
         canCancelAttempt={canCancelAttempt}
         canRetryAttempt={canRetryAttempt}

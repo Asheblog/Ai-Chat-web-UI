@@ -140,8 +140,9 @@ describe('serializeToolLogsForPersistence', () => {
     expect(result.details!.stdout!.length).toBeLessThanOrEqual(510)
     expect(result.details!.resultText!.length).toBeLessThanOrEqual(510)
 
-    // truncated flag set
-    expect(result.details!.truncated).toBe(true)
+    // 存储层裁剪只写 storageTruncated：details.truncated 表示运行时截断，会被读成执行降级
+    expect(result.details!.storageTruncated).toBe(true)
+    expect(result.details!.truncated).toBeUndefined()
 
     // Original not mutated
     expect(entry.details.input).toBe('A'.repeat(1000))

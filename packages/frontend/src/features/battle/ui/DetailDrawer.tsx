@@ -14,6 +14,7 @@ import { CotTimeline } from '@/components/message-bubble/cot-timeline'
 import { useToast } from '@/components/ui/use-toast'
 import { Check, X, Clock, AlertCircle, Scale, Copy } from 'lucide-react'
 import type { BattleResult, MessageMeta, ToolEvent } from '@/types'
+import type { ToolLogCoverage } from '@aichat/shared/tool-operations'
 import type { NodeStatus } from '../hooks/useBattleFlow'
 
 interface DetailDrawerProps {
@@ -21,6 +22,8 @@ interface DetailDrawerProps {
     onOpenChange: (open: boolean) => void
     detail: BattleAttemptDetail | null
     isRunning: boolean
+    runKey?: string | number | null
+    toolLogCoverage?: ToolLogCoverage
     canCancelAttempt?: boolean
     canRetryAttempt?: boolean
     canRetryJudge?: boolean
@@ -74,6 +77,8 @@ export function DetailDrawer({
     onOpenChange,
     detail,
     isRunning,
+    runKey,
+    toolLogCoverage,
     canCancelAttempt,
     canRetryAttempt,
     canRetryJudge,
@@ -93,14 +98,14 @@ export function DetailDrawer({
     )
     const cotMeta = useMemo<MessageMeta>(
       () => ({
-        id: `battle:${detail?.modelKey ?? 'unknown'}:${detail?.attemptIndex ?? 0}`,
+        id: `battle:${runKey ?? (detail && !detail.isLive ? detail.battleRunId : 'live')}:${detail?.modelKey ?? 'unknown'}:${detail?.attemptIndex ?? 0}`,
         sessionId: 0,
-        stableKey: `battle:${detail?.modelKey ?? 'unknown'}:${detail?.attemptIndex ?? 0}`,
+        stableKey: `battle:${runKey ?? (detail && !detail.isLive ? detail.battleRunId : 'live')}:${detail?.modelKey ?? 'unknown'}:${detail?.attemptIndex ?? 0}`,
         role: 'assistant',
         createdAt: new Date().toISOString(),
         reasoningStatus: reasoningRaw.trim() ? 'done' : undefined,
       }),
-      [detail?.attemptIndex, detail?.modelKey, reasoningRaw],
+      [detail, reasoningRaw, runKey],
     )
     const hasCotProcess = Boolean(reasoningRaw.trim()) || toolEvents.length > 0
     const [copied, setCopied] = useState(false)
@@ -232,17 +237,6 @@ export function DetailDrawer({
                             </div>
                         )}
 
-                        {/* 平铺 CoT 时间轴 */}
-                        {hasCotProcess && (
-                          <CotTimeline
-                            meta={cotMeta}
-                            reasoningRaw={reasoningRaw}
-                            toolEvents={toolEvents}
-                            defaultExpanded={true}
-                            isStreaming={isLive && isRunning}
-                          />
-                        )}
-
                         {/* Model Output */}
                         <div className="min-w-0">
                             <div className="flex items-center justify-between gap-3 mb-2">
@@ -268,6 +262,22 @@ export function DetailDrawer({
                                 )}
                             </div>
                         </div>
+
+                        {/* 本轮只读过程工作区 */}
+                        {hasCotProcess && (
+                          <CotTimeline
+                            key={cotMeta.stableKey}
+                            meta={cotMeta}
+                            reasoningRaw={reasoningRaw}
+                            toolEvents={toolEvents}
+                            defaultExpanded={false}
+                            presentation="inline"
+                            isStreaming={isLive && isRunning}
+                            content={detail.output ?? ''}
+                            coverage={toolLogCoverage}
+                            readOnly
+                          />
+                        )}
 
                         {/* Judge Evaluation - 精简*/}
                         {!isLive && (

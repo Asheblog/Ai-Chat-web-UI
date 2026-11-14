@@ -6,6 +6,7 @@ import {
   mergeToolEventsForMessage,
   messageKey,
 } from '../utils'
+import { outcomeFieldsChanged, resolveOutcomeFields } from '../utils/outcome-fields'
 import {
   getSessionCompletionSnapshots,
   removeCompletionSnapshot,
@@ -155,6 +156,17 @@ export const createBufferedSnapshotApplier = (
           return prevPlayedLength
         })()
         const playedLengthChanged = resolvedPlayedLength !== prevPlayedLength
+        // 终态与覆盖：服务端/已知值优先，本地快照只在缺失时补位，绝不相互清除或升级为“完整”
+        const nextOutcome = resolveOutcomeFields(
+          {
+            stopReason: snapshot.stopReason,
+            finalAnswerGenerated: snapshot.finalAnswerGenerated,
+            toolLogCoverage: snapshot.toolLogCoverage,
+          },
+          meta,
+        )
+        const bodyOutcome = resolveOutcomeFields(nextOutcome, prevBody)
+        const terminalChanged = outcomeFieldsChanged(bodyOutcome, prevBody)
         const snapshotToolEvents = Array.isArray(snapshot.toolEvents) ? snapshot.toolEvents : null
         const normalizedToolEvents =
           snapshotToolEvents && snapshotToolEvents.length > 0
@@ -170,6 +182,7 @@ export const createBufferedSnapshotApplier = (
           contentChanged ||
           reasoningChanged ||
           playedLengthChanged ||
+          terminalChanged ||
           (normalizedToolEvents && normalizedToolEvents.length > 0)
         ) {
           const bodies = ensureBodies()
@@ -186,6 +199,7 @@ export const createBufferedSnapshotApplier = (
               normalizedToolEvents && normalizedToolEvents.length > 0
                 ? normalizedToolEvents
                 : prevBody.toolEvents,
+            ...bodyOutcome,
           }
           // 正文增长时必须失效旧 HTML（与 live SSE flushStreamBuffer 对称）。
           // 刷新后走 progress 轮询时若保留缓存，MessageBubble 宽松匹配会继续展示截断正文。
@@ -229,6 +243,7 @@ export const createBufferedSnapshotApplier = (
           nextStreamStatus !== meta.streamStatus ||
           nextReasoningStatus !== meta.reasoningStatus ||
           nextStreamError !== meta.streamError ||
+          outcomeFieldsChanged(nextOutcome, meta) ||
           meta.isPlaceholder ||
           (nextStreamStatus === 'done' && !meta.pendingSync)
         if (metaNeedsUpdate) {
@@ -238,6 +253,7 @@ export const createBufferedSnapshotApplier = (
             streamStatus: nextStreamStatus,
             streamError: nextStreamError,
             reasoningStatus: nextReasoningStatus,
+            ...nextOutcome,
             isPlaceholder: false,
             pendingSync: nextStreamStatus === 'done' ? true : meta.pendingSync,
           }

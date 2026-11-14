@@ -1,6 +1,8 @@
+import type { ToolLogCoverage } from '@aichat/shared/tool-operations'
 import type {
   ChatSession,
   ChatState,
+  ChatStopReason,
   Message,
   MessageBody,
   MessageMeta,
@@ -57,8 +59,11 @@ export interface StreamCompletionSnapshot {
   reasoningPlayedLength?: number | null
   usage?: StreamUsageSnapshot | null
   toolEvents?: ToolEvent[]
+  toolLogCoverage?: ToolLogCoverage
   reasoningStatus?: MessageMeta['reasoningStatus']
   streamStatus?: MessageMeta['streamStatus']
+  stopReason?: MessageMeta['stopReason']
+  finalAnswerGenerated?: MessageMeta['finalAnswerGenerated']
   completedAt: number
   metrics?: MessageStreamMetrics | null
 }
@@ -81,6 +86,8 @@ export interface StreamAccumulator {
       | 'reasoningUnavailableCode'
       | 'reasoningUnavailableReason'
       | 'reasoningUnavailableSuggestion'
+      | 'stopReason'
+      | 'finalAnswerGenerated'
     >
   >
   terminalStreamStatus?: 'done' | 'cancelled' | 'error'
@@ -96,6 +103,9 @@ export interface StreamAccumulator {
   completedAt?: number | null
   /** 后端发送的 metrics，优先使用 */
   serverMetrics?: MessageStreamMetrics | null
+  /** complete 事件下发的终止原因与最终回答标记（不推导） */
+  stopReason?: ChatStopReason
+  finalAnswerGenerated?: boolean
   lastSnapshotPersistedAt?: number
 }
 
@@ -165,6 +175,13 @@ export interface MessageSlice {
   cycleAssistantVariant: (parentKey: string, direction: 'prev' | 'next') => void
 }
 
+/** 停止指定 run 的目标；无参调用保留 composer 的当前会话批量语义。 */
+export interface StopStreamingTarget {
+  sessionId: number
+  messageId?: number | string
+  clientMessageId?: string | null
+}
+
 export interface StreamSlice {
   sendMessage: (sessionId: number, content: string) => Promise<void>
   streamMessage: (
@@ -173,7 +190,7 @@ export interface StreamSlice {
     images?: Array<{ data: string; mime: string }>,
     options?: StreamSendOptions,
   ) => Promise<void>
-  stopStreaming: () => void
+  stopStreaming: (target?: StopStreamingTarget) => void
 }
 
 export interface ShareSlice {

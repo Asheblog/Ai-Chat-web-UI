@@ -14,6 +14,7 @@ import {
   appendLegacyFunctionCallDelta,
   appendOpenAIToolCallDelta,
   appendResponsesToolCallEvent,
+  buildAbortedToolResultMessages,
   buildTextToolResultMessage,
   buildUnsupportedToolResult,
   createToolCallBuffers,
@@ -33,6 +34,11 @@ export type ToolTurnRequestParams = {
   messages: any[]
   iteration: number
   stream: boolean
+  /**
+   * 本轮是否允许携带工具定义。
+   * false 用于「停止工具 / 预算耗尽」的无工具收尾轮：请求体不得包含 tools/functions。
+   */
+  toolsEnabled: boolean
 }
 
 export type ToolTurnRequestResult =
@@ -50,30 +56,40 @@ type ParsedToolTurn = {
   thinkingBlocks?: Array<Record<string, any>>
 }
 
+/** 本次运行被提前收尾的原因 */
+export type ToolOrchestrationStopReason = 'stop_tools' | 'budget_exhausted'
+
+/** 工具轮次预算耗尽时的行为 */
+export type ToolBudgetExhaustedBehavior = 'error' | 'finish'
+
+type ToolOrchestrationBaseResult = {
+  usage: Record<string, any> | null
+  messages: any[]
+  reasoningChunks: string[]
+  toolSchema: ToolSchema
+  /** null 表示正常结束；否则为被收尾的原因 */
+  stopReason: ToolOrchestrationStopReason | null
+  /** 是否已产出最终回答；false 时调用方不得伪造回答 */
+  finalAnswerGenerated: boolean
+}
+
 export type ToolOrchestrationResult =
-  | {
+  | (ToolOrchestrationBaseResult & {
       status: 'completed'
       content: string
-      usage: Record<string, any> | null
-      messages: any[]
-      reasoningChunks: string[]
-      toolSchema: ToolSchema
-    }
-  | {
+    })
+  | (ToolOrchestrationBaseResult & {
+      /** 收尾轮没有任何正文：调用方保留已产出的内容，不伪造回答 */
+      status: 'stopped_without_answer'
+      content: string
+    })
+  | (ToolOrchestrationBaseResult & {
       status: 'max_iterations'
-      usage: Record<string, any> | null
-      messages: any[]
-      reasoningChunks: string[]
-      toolSchema: ToolSchema
-    }
-  | {
+    })
+  | (ToolOrchestrationBaseResult & {
       status: 'terminated'
       termination: ToolHandlerTermination
-      usage: Record<string, any> | null
-      messages: any[]
-      reasoningChunks: string[]
-      toolSchema: ToolSchema
-    }
+    })
 
 export interface ToolOrchestratorParams {
   provider?: string
@@ -91,6 +107,23 @@ export interface ToolOrchestratorParams {
     iteration?: number,
   ) => Promise<ToolHandlerResult | null>
   checkAbort?: () => void
+  /**
+   * 每轮工具执行完、派发下一轮之前轮询。
+   * 返回 true 表示不再派发任何新工具：在途工具自然结束，随后最多一轮无工具收尾。
+   */
+  shouldStopTools?: () => boolean
+  /**
+   * 工具轮次预算耗尽时的行为。
+   * 默认 'error'（保持既有语义）：返回 max_iterations，由调用方决定如何反馈。
+   * 'finish'：走一轮无工具收尾，让模型基于已有工具结果作答。
+   */
+  onBudgetExhausted?: ToolBudgetExhaustedBehavior
+  /** 收尾时不会执行的 tool_calls：调用方据此补 stage=result / status=aborted 记录 */
+  onToolCallSkipped?: (params: {
+    toolCall: ToolCall
+    toolName: string
+    reason: ToolOrchestrationStopReason
+  }) => MaybePromise<void>
   onSchemaFallback?: (schema: ToolSchema) => MaybePromise<void>
   onUnsupportedTool?: (toolName: string, toolCallId: string | undefined) => MaybePromise<void>
   onContentDelta?: (delta: string) => MaybePromise<void>
@@ -124,6 +157,8 @@ export async function runToolOrchestration(
 ): Promise<ToolOrchestrationResult> {
   const provider = params.provider || ''
   const includeReasoningInToolMessage = params.includeReasoningInToolMessage !== false
+  const budgetBehavior: ToolBudgetExhaustedBehavior =
+    params.onBudgetExhausted === 'finish' ? 'finish' : 'error'
   const workingMessages = params.initialMessages.map((msg) => ({ ...msg }))
   const maxToolRounds = normalizeMaxToolRounds(params.maxIterations)
   let toolSchema: ToolSchema = resolveToolSchema({
@@ -133,16 +168,52 @@ export async function runToolOrchestration(
   let lastUsage: Record<string, any> | null = null
   const reasoningChunks: string[] = []
   let toolRoundsUsed = 0
+  let stopReason: ToolOrchestrationStopReason | null = null
 
-  for (let iteration = 0; ; iteration += 1) {
-    params.checkAbort?.()
+  const finishResult = (
+    extra:
+      | { status: 'completed'; content: string }
+      | { status: 'stopped_without_answer'; content: string }
+      | { status: 'max_iterations' }
+      | { status: 'terminated'; termination: ToolHandlerTermination },
+  ): ToolOrchestrationResult => {
+    const base: ToolOrchestrationBaseResult = {
+      usage: lastUsage,
+      messages: workingMessages,
+      reasoningChunks,
+      toolSchema,
+      stopReason,
+      finalAnswerGenerated: false,
+    }
+    if (extra.status === 'completed') {
+      return { ...base, status: 'completed', content: extra.content, finalAnswerGenerated: true }
+    }
+    if (extra.status === 'stopped_without_answer') {
+      return { ...base, status: 'stopped_without_answer', content: extra.content }
+    }
+    if (extra.status === 'terminated') {
+      return { ...base, status: 'terminated', termination: extra.termination }
+    }
+    return { ...base, status: 'max_iterations' }
+  }
 
+  /** 是否已被要求停止工具：一旦为 true，后续不再派发任何新工具 */
+  const stopToolsRequested = (): boolean => {
+    if (stopReason === 'stop_tools') return true
+    if (!params.shouldStopTools) return false
+    if (params.shouldStopTools() !== true) return false
+    stopReason = 'stop_tools'
+    return true
+  }
+
+  const requestTurnWithFallback = async (iteration: number, toolsEnabled: boolean) => {
     const turn = await executeTurnWithFallback({
       provider,
       schema: toolSchema,
       iteration,
       messages: workingMessages,
       stream: params.stream,
+      toolsEnabled,
       toolDefinitions: params.toolDefinitions,
       allowedToolNames: params.allowedToolNames,
       requestTurn: params.requestTurn,
@@ -155,7 +226,6 @@ export async function runToolOrchestration(
       onTurnError: params.onTurnError,
       checkAbort: params.checkAbort,
     })
-
     toolSchema = turn.schema
     if (turn.parsed.usage) {
       lastUsage = turn.parsed.usage
@@ -163,44 +233,24 @@ export async function runToolOrchestration(
     if (turn.parsed.reasoning.trim()) {
       reasoningChunks.push(turn.parsed.reasoning.trim())
     }
+    return turn
+  }
 
-    if (turn.parsed.toolCalls.length === 0) {
-      const finalContent = turn.parsed.content || ''
-      if (!finalContent.trim()) {
-        throw new Error(
-          params.emptyContentErrorMessage || 'Model finished without producing a final answer',
-        )
-      }
-      return {
-        status: 'completed',
-        content: finalContent,
-        usage: lastUsage,
-        messages: workingMessages,
-        reasoningChunks,
-        toolSchema,
-      }
-    }
-
-    if (Number.isFinite(maxToolRounds) && toolRoundsUsed >= maxToolRounds) {
-      return {
-        status: 'max_iterations',
-        usage: lastUsage,
-        messages: workingMessages,
-        reasoningChunks,
-        toolSchema,
-      }
-    }
-
-    const reasoningPayload = turn.parsed.reasoning.trim()
+  const pushAssistantToolCallTurn = (
+    content: string,
+    toolCalls: ToolCall[],
+    reasoningPayload: string,
+    thinkingBlocks?: Array<Record<string, any>>,
+  ) => {
     if (toolSchema === 'functions') {
-      // Push all assistant messages with function_call first (order matters)
+      // 每个 function_call 单独成条（顺序敏感），只有首条携带正文
       let isFirstToolCall = true
-      for (const toolCall of turn.parsed.toolCalls) {
+      for (const toolCall of toolCalls) {
         const toolName = toolCall?.function?.name || ''
         const toolArguments = toolCall?.function?.arguments || '{}'
         workingMessages.push({
           role: 'assistant',
-          content: isFirstToolCall ? turn.parsed.content : '',
+          content: isFirstToolCall ? content : '',
           function_call: {
             name: toolName || 'unknown',
             arguments: toolArguments,
@@ -208,143 +258,34 @@ export async function runToolOrchestration(
         })
         isFirstToolCall = false
       }
-
-      // Execute all tool calls in parallel
-      const settled = await Promise.allSettled(
-        turn.parsed.toolCalls.map((toolCall) => {
-          const toolName = toolCall?.function?.name || ''
-          return executeToolCall({
-            toolName,
-            toolCall,
-            handleToolCall: params.handleToolCall,
-            allowedToolNames: params.allowedToolNames,
-            onUnsupportedTool: params.onUnsupportedTool,
-            iteration,
-          })
-        }),
-      )
-
-      // Collect results in original order
-      for (let i = 0; i < settled.length; i++) {
-        const result = settled[i]
-        const toolName = turn.parsed.toolCalls[i]?.function?.name || 'unknown'
-        if (result.status === 'fulfilled') {
-          workingMessages.push({
-            role: 'function',
-            name: result.value.toolName,
-            content: result.value.message.content,
-          })
-          appendFollowupMessages(workingMessages, result.value.followupMessages)
-        } else {
-          const errorMsg =
-            result.reason instanceof Error
-              ? result.reason.message
-              : String(result.reason)
-          workingMessages.push({
-            role: 'function',
-            name: toolName,
-            content: JSON.stringify({ error: errorMsg }),
-          })
-        }
-      }
-
-      const termination = findToolTermination(settled)
-      if (termination) {
-        return {
-          status: 'terminated',
-          termination,
-          usage: lastUsage,
-          messages: workingMessages,
-          reasoningChunks,
-          toolSchema,
-        }
-      }
-      toolRoundsUsed += 1
-      continue
+      return
     }
 
     if (toolSchema === 'text') {
       workingMessages.push({
         role: 'assistant',
-        content: turn.parsed.content,
+        content,
       })
-
-      // Execute all tool calls in parallel
-      const settled = await Promise.allSettled(
-        turn.parsed.toolCalls.map((toolCall) => {
-          const toolName = toolCall?.function?.name || ''
-          return executeToolCall({
-            toolName,
-            toolCall,
-            handleToolCall: params.handleToolCall,
-            allowedToolNames: params.allowedToolNames,
-            onUnsupportedTool: params.onUnsupportedTool,
-            iteration,
-          })
-        }),
-      )
-
-      // Collect results in original order
-      for (let i = 0; i < settled.length; i++) {
-        const result = settled[i]
-        const toolName = turn.parsed.toolCalls[i]?.function?.name || 'unknown'
-        if (result.status === 'fulfilled') {
-          workingMessages.push(
-            buildTextToolResultMessage({
-              toolName: result.value.toolName,
-              content: result.value.message.content,
-            }),
-          )
-          appendTextSchemaFollowupMessages(workingMessages, result.value.followupMessages)
-        } else {
-          const errorMsg =
-            result.reason instanceof Error
-              ? result.reason.message
-              : String(result.reason)
-          workingMessages.push(
-            buildTextToolResultMessage({
-              toolName,
-              content: JSON.stringify({ error: errorMsg }),
-            }),
-          )
-        }
-      }
-
-      const termination = findToolTermination(settled)
-      if (termination) {
-        return {
-          status: 'terminated',
-          termination,
-          usage: lastUsage,
-          messages: workingMessages,
-          reasoningChunks,
-          toolSchema,
-        }
-      }
-      toolRoundsUsed += 1
-      continue
+      return
     }
 
     const assistantToolCallContent =
-      typeof turn.parsed.content === 'string' && turn.parsed.content.trim().length === 0
-        ? null
-        : turn.parsed.content
-
+      typeof content === 'string' && content.trim().length === 0 ? null : content
     workingMessages.push({
       role: 'assistant',
       content: assistantToolCallContent,
       ...(includeReasoningInToolMessage && reasoningPayload
         ? { reasoning_content: reasoningPayload }
         : {}),
-      ...(turn.parsed.thinkingBlocks?.length
-        ? { thinking_blocks: turn.parsed.thinkingBlocks }
-        : {}),
-      tool_calls: turn.parsed.toolCalls,
+      ...(thinkingBlocks && thinkingBlocks.length > 0 ? { thinking_blocks: thinkingBlocks } : {}),
+      tool_calls: toolCalls,
     })
+  }
 
-    // Execute all tool calls in parallel
+  /** 执行本轮全部工具：在途工具不被中止，结果按原顺序补成配对消息 */
+  const runToolRound = async (toolCalls: ToolCall[], iteration: number) => {
     const settled = await Promise.allSettled(
-      turn.parsed.toolCalls.map((toolCall) => {
+      toolCalls.map((toolCall) => {
         const toolName = toolCall?.function?.name || ''
         return executeToolCall({
           toolName,
@@ -357,37 +298,161 @@ export async function runToolOrchestration(
       }),
     )
 
-    // Collect results in original order
     for (let i = 0; i < settled.length; i++) {
       const result = settled[i]
+      const toolName = toolCalls[i]?.function?.name || 'unknown'
       if (result.status === 'fulfilled') {
-        workingMessages.push(result.value.message)
-        appendFollowupMessages(workingMessages, result.value.followupMessages)
+        if (toolSchema === 'functions') {
+          workingMessages.push({
+            role: 'function',
+            name: result.value.toolName,
+            content: result.value.message.content,
+          })
+          appendFollowupMessages(workingMessages, result.value.followupMessages)
+        } else if (toolSchema === 'text') {
+          workingMessages.push(
+            buildTextToolResultMessage({
+              toolName: result.value.toolName,
+              content: result.value.message.content,
+            }),
+          )
+          appendTextSchemaFollowupMessages(workingMessages, result.value.followupMessages)
+        } else {
+          workingMessages.push(result.value.message)
+          appendFollowupMessages(workingMessages, result.value.followupMessages)
+        }
+        continue
+      }
+
+      const errorMsg =
+        result.reason instanceof Error ? result.reason.message : String(result.reason)
+      const errorContent = JSON.stringify({ error: errorMsg })
+      if (toolSchema === 'functions') {
+        workingMessages.push({ role: 'function', name: toolName, content: errorContent })
+      } else if (toolSchema === 'text') {
+        workingMessages.push(buildTextToolResultMessage({ toolName, content: errorContent }))
       } else {
-        const toolCall = turn.parsed.toolCalls[i]
-        const toolCallId = toolCall?.id || `call_${i}`
-        const errorMsg =
-          result.reason instanceof Error
-            ? result.reason.message
-            : String(result.reason)
         workingMessages.push({
           role: 'tool',
-          tool_call_id: toolCallId,
-          content: JSON.stringify({ error: errorMsg }),
+          tool_call_id: toolCalls[i]?.id || `call_${i}`,
+          content: errorContent,
         })
       }
     }
 
-    const termination = findToolTermination(settled)
-    if (termination) {
-      return {
-        status: 'terminated',
-        termination,
-        usage: lastUsage,
-        messages: workingMessages,
-        reasoningChunks,
-        toolSchema,
+    return { termination: findToolTermination(settled) }
+  }
+
+  /** 未执行的 tool_calls：补配对占位结果，并通知调用方补 stage=result / status=aborted */
+  const skipToolCalls = async (
+    toolCalls: ToolCall[],
+    reason: ToolOrchestrationStopReason,
+  ) => {
+    const abortedMessages = buildAbortedToolResultMessages({
+      schema: toolSchema,
+      toolCalls,
+      reason,
+    })
+    for (const message of abortedMessages) {
+      workingMessages.push(message)
+    }
+    if (!params.onToolCallSkipped) return
+    for (const toolCall of toolCalls) {
+      await params.onToolCallSkipped({
+        toolCall,
+        toolName: toolCall?.function?.name || '',
+        reason,
+      })
+    }
+  }
+
+  /**
+   * 收尾轮：不带任何工具再请求一次，最多一轮。
+   * 收尾轮若仍返回 tool_calls，只标未执行、补配对消息，不再请求。
+   */
+  const finishWithClosingTurn = async (
+    reason: ToolOrchestrationStopReason,
+    iteration: number,
+  ): Promise<ToolOrchestrationResult> => {
+    stopReason = reason
+    // 真正取消优先：cancel 抛错立即退出，不进入收尾
+    params.checkAbort?.()
+    const turn = await requestTurnWithFallback(iteration, false)
+    if (turn.parsed.toolCalls.length > 0) {
+      pushAssistantToolCallTurn(
+        turn.parsed.content || '',
+        turn.parsed.toolCalls,
+        turn.parsed.reasoning.trim(),
+        turn.parsed.thinkingBlocks,
+      )
+      await skipToolCalls(turn.parsed.toolCalls, reason)
+    }
+    if (!turn.parsed.content.trim()) {
+      return finishResult({ status: 'stopped_without_answer', content: '' })
+    }
+    return finishResult({ status: 'completed', content: turn.parsed.content })
+  }
+
+  for (let iteration = 0; ; iteration += 1) {
+    params.checkAbort?.()
+
+    if (stopToolsRequested()) {
+      return await finishWithClosingTurn('stop_tools', iteration)
+    }
+
+    const turn = await requestTurnWithFallback(iteration, true)
+    const parsed = turn.parsed
+
+    if (parsed.toolCalls.length === 0) {
+      const finalContent = parsed.content || ''
+      if (!finalContent.trim()) {
+        throw new Error(
+          params.emptyContentErrorMessage || 'Model finished without producing a final answer',
+        )
       }
+      // 这一轮已经把最终回答交出来了：停止请求若在此间到达也不改判本次运行结果，
+      // 否则"没被打断的作答"会被标成 stop_tools。
+      return finishResult({ status: 'completed', content: finalContent })
+    }
+
+    if (stopToolsRequested()) {
+      // 停止请求在本轮生成期间到达：这一轮工具不再派发，只标未执行后收尾
+      pushAssistantToolCallTurn(
+        parsed.content,
+        parsed.toolCalls,
+        parsed.reasoning.trim(),
+        parsed.thinkingBlocks,
+      )
+      await skipToolCalls(parsed.toolCalls, 'stop_tools')
+      return await finishWithClosingTurn('stop_tools', iteration)
+    }
+
+    if (Number.isFinite(maxToolRounds) && toolRoundsUsed >= maxToolRounds) {
+      if (budgetBehavior === 'finish') {
+        // 预算耗尽后这一轮工具不再派发：与停止分支同样补配对占位并通知台账
+        pushAssistantToolCallTurn(
+          parsed.content,
+          parsed.toolCalls,
+          parsed.reasoning.trim(),
+          parsed.thinkingBlocks,
+        )
+        await skipToolCalls(parsed.toolCalls, 'budget_exhausted')
+        return await finishWithClosingTurn('budget_exhausted', iteration)
+      }
+      stopReason = 'budget_exhausted'
+      return finishResult({ status: 'max_iterations' })
+    }
+
+    pushAssistantToolCallTurn(
+      parsed.content,
+      parsed.toolCalls,
+      parsed.reasoning.trim(),
+      parsed.thinkingBlocks,
+    )
+
+    const { termination } = await runToolRound(parsed.toolCalls, iteration)
+    if (termination) {
+      return finishResult({ status: 'terminated', termination })
     }
     toolRoundsUsed += 1
   }
@@ -520,6 +585,7 @@ async function executeTurnWithFallback(params: {
   iteration: number
   messages: any[]
   stream: boolean
+  toolsEnabled: boolean
   toolDefinitions: ToolDefinition[]
   allowedToolNames: Set<string>
   requestTurn: (params: ToolTurnRequestParams) => Promise<ToolTurnRequestResult>
@@ -545,6 +611,7 @@ async function executeTurnWithFallback(params: {
         messages: params.messages,
         iteration: params.iteration,
         stream: params.stream,
+        toolsEnabled: params.toolsEnabled,
       })
       const normalized = normalizeTurnRequestResult(turnResult)
       try {

@@ -35,15 +35,6 @@ export interface ChatControlRoutesDeps {
 
 export const registerChatControlRoutes = (router: Hono, deps: ChatControlRoutesDeps) => {
   const { prisma, secretVault } = deps
-  router.post('/stop', actorMiddleware, zValidator('json', z.object({
-    sessionId: z.number().int().positive(),
-  })), async (c) => {
-    return c.json<ApiResponse>({
-      success: true,
-      message: 'Stop request received',
-    });
-  });
-
   router.post('/regenerate', actorMiddleware, zValidator('json', z.object({
     sessionId: z.number().int().positive(),
     messageId: z.number().int().positive(),

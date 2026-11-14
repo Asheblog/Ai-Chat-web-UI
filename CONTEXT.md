@@ -29,20 +29,26 @@
 ## 思考与推理
 
 - **Reasoning（推理/思考）**：模型在生成最终回答之前的内部思考过程，以文本形式暴露给用户；推理通道不含工具进度文案
-- **CoT（Chain of Thought，思维链）**：模型逐步推理的过程。主聊天 / 分享 / Battle / Android 均按 Reasoning Offset 将推理与工具拆为平铺步骤流（每个节点独立卡片）
+- **CoT（Chain of Thought，思维链）**：模型返回的推理文本或摘要；与工具执行日志分别呈现，不将工具进度或执行器反馈伪装为模型推理。Android 保留既有交错展示。
 - **Reasoning Offset**：工具调用在推理文本中的字符偏移位置；用于将工具事件插入对应推理段落之间，形成步骤流（Start/End 由后端与流式层写入）
 - **Reasoning Text**：推理的文本内容，流式传输；展示前可对历史污染行做剥离，但 offset 切片始终基于原始文本
-- **Cot Timeline（过程记录）**：按真实先后顺序展示推理与工具步骤的过程记录。Web 完成态默认只显示状态、耗时与查看入口；展开后先显示最多 7 步，其余按需查看更多，每一步可单独展开详情。用户主动选择的展开状态优先于运行状态自动切换。Battle 详情可显式默认全部展开；Android 本轮保留原展示方式。
+- **Process Workspace（本轮工作区）**：与一条助手回答关联的过程、来源和产物视图。答案保持主位，摘要入口打开工作区；工具按已知父子关系展示，模型返回的推理文本单独按需查看。聊天、分享与 Battle 共用展示，命令能力按运行和只读边界隔离。
+- **Cot Timeline（过程入口）**：消息中打开本轮工作区的摘要，保留真实状态、耗时及当前活动；消息级展开偏好独立记忆。
+- **Call Ledger（调用台账）**：当前消息全部已知操作记录的可搜索、可筛选明细，不等同全局任务追踪日志。
 - **Model Picker（模型选择器）**：通过单一搜索和单列模型列表选择聊天模型；每项显示模型名、供应商身份与当前选择，同名模型通过连接来源区分；不显示凭据级细节。
 
 ## 工具调用
 
-- **Tool Event（工具事件）**：一次工具调用的完整生命周期记录，包含工具名、状态、参数、结果等
+- **Tool Event（工具事件）**：工具执行过程中的一条生命周期更新。相同记录 id 的更新合并为一个操作；不同 id 即使共用 callId 也保留独立记录。
+- **Tool Operation（工具操作）**：以事件 id 为身份的逻辑记录，分别描述执行结果、恢复证据和父子归属。父关系只在 parentCallId 唯一匹配父调用时建立；孤儿和歧义记录单列。
+- **Tool Log Coverage（工具日志覆盖）**：实时追踪、持久化记录、当前视图投影各自的完整性，独立为完整、部分或未知。字段裁剪与记录丢失分开计量，旧数据缺证据时保持未知。
+- **Stop Tools（停止工具并继续作答）**：让当前在途工具自然结束，停止后续工具派发，然后仅请求一次无工具最终回答；不等同整轮取消，取消优先。
+- **Run Result（本轮收尾结果）**：记录停止或预算收尾的原因，以及是否确实生成最终回答。未生成时保留已有正文并明确提示，不制造模型答案。
 - **Tool Call Source**：工具来源 — builtin（内置）、plugin（插件）、MCP、workspace（工作区）、system
 - **Tool Call Phase**：工具调用阶段 — arguments_streaming → pending_approval → executing → result/error/rejected/aborted
-- **Tool Timeline（工具时间轴）**：消息内工具调用事件按时间/offset 排序后的序列；在步骤流中与推理段穿插排列，并可按 web_search/read_url 合并为工具组
-- **Tool Node（工具节点）**：步骤流中的单个工具步骤，展示类型图标、标题、状态与可展开的参数/结果；四端均为独立平铺卡片
-- **Tool Group（工具合并组）**：将同一 offset 下相关的搜索/读取调用合并展示，展开后显示各子调用明细
+- **Tool Timeline（工具时间轴）**：消息工具记录的时间序列；Web 在工作区按父子关系和异常分组，Android 保留 offset 交错展示。
+- **Tool Node（工具节点）**：可下钻查看参数、结果、状态和恢复证据的一个操作。
+- **Tool Group（工具合并组）**：用于呈现相关操作的展示分组，不改变记录身份，也不凭相同工具名称推定父子或重试关系。
 - **History List Tool Event Projection（历史列表工具事件投影）**：`GET .../messages` 分页列表对 Tool Event 的只读投影——去掉 `hits[]` 与大体量 `details`，保留 CoT 折叠/分组所需字段（含 `hitsCount`）；列表路径以 `history-list` 模式解析 `toolLogsJson`（不物化 hits）；单条 progress/by-client 读路径保持完整事件
 - **Session Usage Lightweight Read（会话用量轻读）**：切会话不再请求重型 `/usage`（含 Tokenizer）；侧栏用量来自 `/sessions/usage` 缓存；`/usage` 默认仅 SQL aggregate totals + last_round，`includeContext=1` 才计算 context token
 

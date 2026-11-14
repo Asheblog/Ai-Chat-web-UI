@@ -1,4 +1,5 @@
 import type { ExecutionSseEvent } from './execution-contract.js'
+import type { ToolLogCoverage } from './tool-operation-coverage.js'
 
 export type BattleRunStatus = 'pending' | 'running' | 'completed' | 'error' | 'cancelled'
 export type BattleMode = 'multi_model' | 'single_model_multi_question'
@@ -101,6 +102,17 @@ export interface BattleResult {
   judgeScore?: number | null
   judgeReason?: string | null
   judgeFallbackUsed?: boolean
+}
+
+/**
+ * 本轮运行由「停止后续工具 / 预算收尾」结束时的真实结果。
+ * 只在确有该来源时出现；没有就整段不写，不用 aborted/空正文推断。
+ */
+export interface BattleRunResult {
+  /** 只表示终止原因，不表示成功 */
+  stopReason?: 'stop_tools' | 'budget_exhausted'
+  /** false 表示未生成最终回答，不得当 done 成功 */
+  finalAnswerGenerated?: boolean
 }
 
 export interface BattleWebSearchHit {
@@ -335,8 +347,15 @@ export interface BattleSharePayload {
       durationMs?: number | null
       error?: string | null
       toolEvents?: BattleToolCallEvent[]
+      /**
+       * 该次尝试的调用记录覆盖：Battle 没有 trace 记录，trace 恒为 unknown；
+       * 未结束的尝试 persisted=partial；仅确有 toolEvents 时出现。
+       */
+      toolEventsCoverage?: ToolLogCoverage
     }>
   }
+  /** 运行由停止工具/预算收尾结束时的真实结果；没有该来源时不写。 */
+  runResult?: BattleRunResult
   createdAt: string
 }
 

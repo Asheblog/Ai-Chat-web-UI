@@ -1,7 +1,7 @@
 import type { Request } from 'undici'
 import { ChatMessageQueryService, invalidateSiteBaseUrlCache } from './message-query-service'
 
-const buildService = () => {
+const buildService = (options: { realToolLogParser?: boolean } = {}) => {
   invalidateSiteBaseUrlCache()
   const prisma = {
     message: {
@@ -24,13 +24,20 @@ const buildService = () => {
   const resolveChatImageUrls = jest.fn((paths: string[], base: string) =>
     paths.map((p) => `${base}${p}`),
   )
-  const parseToolLogsJson = jest.fn(() => [{ level: 'info', message: 'tool-event' }])
+  const parseToolLogsPayload = jest.fn((_raw?: string | null, _options?: { mode?: string }) => ({
+    entries: [{ level: 'info', message: 'tool-event' }] as any[],
+    coverage: {
+      trace: { status: 'unknown' as const },
+      persisted: { status: 'unknown' as const },
+      projection: { status: 'unknown' as const },
+    },
+  }))
 
   const service = new ChatMessageQueryService({
     prisma: prisma as any,
     determineChatImageBaseUrl,
     resolveChatImageUrls,
-    parseToolLogsJson,
+    ...(options.realToolLogParser ? {} : { parseToolLogsPayload }),
   })
 
   const actor = { type: 'user', id: 1, role: 'ADMIN', identifier: 'user:1' } as const
@@ -40,7 +47,7 @@ const buildService = () => {
     prisma,
     determineChatImageBaseUrl,
     resolveChatImageUrls,
-    parseToolLogsJson,
+    parseToolLogsPayload,
     service,
     actor,
     request,
@@ -49,9 +56,15 @@ const buildService = () => {
 
 describe('ChatMessageQueryService', () => {
   it('lists messages with normalized images, tool events and rich payload', async () => {
-    const { prisma, service, actor, request, resolveChatImageUrls, parseToolLogsJson, determineChatImageBaseUrl } =
+    const { prisma, service, actor, request, resolveChatImageUrls, parseToolLogsPayload, determineChatImageBaseUrl } =
       buildService()
-    parseToolLogsJson.mockReturnValue([
+    parseToolLogsPayload.mockReturnValue({
+      coverage: {
+        trace: { status: 'unknown' as const },
+        persisted: { status: 'unknown' as const },
+        projection: { status: 'unknown' as const },
+      },
+      entries: [
       {
         id: 'tool-1',
         tool: 'web_search',
@@ -74,7 +87,8 @@ describe('ChatMessageQueryService', () => {
           ],
         },
       },
-    ])
+      ],
+    })
 
     prisma.message.count.mockResolvedValue(1)
     prisma.messageGroup.count.mockResolvedValue(0)
@@ -159,7 +173,7 @@ describe('ChatMessageQueryService', () => {
       siteBaseUrl: 'https://cdn.example.com',
     })
     expect(resolveChatImageUrls).toHaveBeenCalledWith(['/img/a.png'], 'https://cdn.example.com')
-    expect(parseToolLogsJson).toHaveBeenCalledWith(expect.any(String), { mode: 'history-list' })
+    expect(parseToolLogsPayload).toHaveBeenCalledWith(expect.any(String), { mode: 'history-list' })
     expect(result.messages[0].images).toEqual(['https://cdn.example.com/img/a.png'])
     expect(result.messages[0].toolEvents).toEqual([
       expect.objectContaining({
@@ -197,7 +211,7 @@ describe('ChatMessageQueryService', () => {
   })
 
   it('keeps full tool hits on getMessageById while listMessages projects them away', async () => {
-    const { prisma, service, actor, request, parseToolLogsJson } = buildService()
+    const { prisma, service, actor, request, parseToolLogsPayload } = buildService()
     const fullEvents = [
       {
         id: 'tool-full',
@@ -208,7 +222,14 @@ describe('ChatMessageQueryService', () => {
         details: { engine: 'tavily' },
       },
     ]
-    parseToolLogsJson.mockReturnValue(fullEvents)
+    parseToolLogsPayload.mockReturnValue({
+      entries: fullEvents,
+      coverage: {
+        trace: { status: 'unknown' as const },
+        persisted: { status: 'unknown' as const },
+        projection: { status: 'complete' as const },
+      },
+    })
 
     prisma.message.findFirst.mockResolvedValue({
       id: 30,
@@ -519,5 +540,202 @@ describe('ChatMessageQueryService', () => {
     })
 
     expect(result.messages[0]).not.toHaveProperty('imageDescriptions')
+  })
+})
+
+describe('ChatMessageQueryService tool log coverage', () => {
+  const baseMessage = (overrides: Record<string, unknown> = {}) => ({
+    id: 40,
+    sessionId: 5,
+    messageGroupId: null,
+    role: 'assistant',
+    content: 'answer',
+    parentMessageId: null,
+    variantIndex: null,
+    attachments: [],
+    clientMessageId: 'c40',
+    reasoning: null,
+    reasoningDurationSeconds: null,
+    toolLogsJson: null,
+    createdAt: new Date('2024-01-01T00:00:00Z'),
+    updatedAt: new Date('2024-01-01T00:00:00Z'),
+    streamStatus: 'done',
+    streamCursor: 6,
+    streamReasoning: null,
+    streamError: null,
+    usageMetrics: [],
+    generatedImages: [],
+    ...overrides,
+  })
+
+  const envelopeJson = JSON.stringify({
+    v: 2,
+    entries: [
+      {
+        id: 'call_1',
+        callId: 'call_1',
+        tool: 'web_search',
+        stage: 'result',
+        status: 'success',
+        createdAt: 1000,
+        details: { parentCallId: null, engine: 'tavily' },
+      },
+    ],
+    coverage: {
+      trace: { status: 'unknown' },
+      persisted: { status: 'partial', asOf: 1000, droppedRecords: 2, truncatedFields: 3 },
+      projection: { status: 'unknown' },
+    },
+    runResult: { stopReason: 'stop_tools', finalAnswerGenerated: false },
+  })
+
+  const setupList = async (message: Record<string, unknown>) => {
+    const deps = buildService({ realToolLogParser: true })
+    deps.prisma.message.count.mockResolvedValue(1)
+    deps.prisma.messageGroup.findMany.mockResolvedValue([])
+    deps.prisma.message.findMany.mockResolvedValue([message])
+    deps.prisma.systemSetting.findUnique.mockResolvedValue({ value: null })
+    const result = await deps.service.listMessages({
+      actor: deps.actor,
+      sessionId: 5,
+      page: 1,
+      limit: 10,
+      request: deps.request,
+    })
+    return result.messages[0]
+  }
+
+  it('历史列表逐字透出 persisted 缺口与终止字段', async () => {
+    const message = await setupList(baseMessage({ toolLogsJson: envelopeJson }))
+
+    expect(message.toolLogCoverage?.persisted).toMatchObject({
+      status: 'partial',
+      droppedRecords: 2,
+      truncatedFields: 3,
+      asOf: 1000,
+    })
+    expect(message.toolLogCoverage?.trace.status).toBe('unknown')
+    expect(message.toolLogCoverage?.projection.status).toBe('complete')
+    expect(message.stopReason).toBe('stop_tools')
+    expect(message.finalAnswerGenerated).toBe(false)
+    expect(message.toolEvents?.[0]).toMatchObject({ id: 'call_1', callId: 'call_1' })
+  })
+
+  it('列表投影裁掉 hits 时 projection 标记 partial 并计量字段', async () => {
+    const message = await setupList(
+      baseMessage({
+        toolLogsJson: JSON.stringify({
+          v: 2,
+          entries: [
+            {
+              id: 'call_1',
+              tool: 'web_search',
+              stage: 'result',
+              status: 'success',
+              createdAt: 1000,
+              hits: [{ title: 't', url: 'https://example.com/a', snippet: 's' }],
+              details: { engine: 'tavily' },
+            },
+          ],
+          coverage: { trace: { status: 'unknown' }, persisted: { status: 'complete' } },
+        }),
+      }),
+    )
+
+    expect(message.toolEvents?.[0].hits).toBeUndefined()
+    expect(message.toolEvents?.[0].details).toMatchObject({ engine: 'tavily', hitsCount: 1 })
+    expect(message.toolLogCoverage?.projection.status).toBe('partial')
+    expect(message.toolLogCoverage?.projection.truncatedFields).toBeGreaterThan(0)
+  })
+
+  it('详情路径保留全部条目且投影为 complete', async () => {
+    const deps = buildService({ realToolLogParser: true })
+    deps.prisma.message.findFirst.mockResolvedValue(baseMessage({ toolLogsJson: envelopeJson }))
+    deps.prisma.systemSetting.findUnique.mockResolvedValue({ value: null })
+
+    const message = await deps.service.getMessageById({
+      actor: deps.actor,
+      sessionId: 5,
+      messageId: 40,
+      request: deps.request,
+    })
+
+    expect(message?.toolEvents?.[0].id).toBe('call_1')
+    expect(message?.toolLogCoverage?.projection.status).toBe('complete')
+    expect(message?.toolLogCoverage?.persisted.status).toBe('partial')
+    expect(message?.stopReason).toBe('stop_tools')
+  })
+
+  it('无工具日志的消息不下发覆盖与终止字段', async () => {
+    const message = await setupList(baseMessage({ toolLogsJson: null }))
+    expect(message.toolEvents).toEqual([])
+    expect(message.toolLogCoverage).toBeUndefined()
+    expect(message.stopReason).toBeUndefined()
+    expect(message.finalAnswerGenerated).toBeUndefined()
+  })
+
+  it('旧数组日志只声明 unknown 覆盖，不冒充完整', async () => {
+    const message = await setupList(
+      baseMessage({
+        toolLogsJson: JSON.stringify([
+          { id: 'call_1', tool: 'get_time_info', stage: 'result', createdAt: 1000 },
+        ]),
+      }),
+    )
+    expect(message.toolLogCoverage?.persisted.status).toBe('unknown')
+    expect(message.toolLogCoverage?.trace.status).toBe('unknown')
+    expect(message.stopReason).toBeUndefined()
+  })
+})
+
+describe('ChatMessageQueryService 无工具记录时的运行结果', () => {
+  it('空 entries 信封的终止字段照样透出，且不下发覆盖', async () => {
+    const deps = buildService({ realToolLogParser: true })
+    deps.prisma.message.count.mockResolvedValue(1)
+    deps.prisma.messageGroup.findMany.mockResolvedValue([])
+    deps.prisma.systemSetting.findUnique.mockResolvedValue({ value: null })
+    deps.prisma.message.findMany.mockResolvedValue([
+      {
+        id: 41,
+        sessionId: 5,
+        messageGroupId: null,
+        role: 'assistant',
+        content: '未生成最终回答',
+        parentMessageId: null,
+        variantIndex: null,
+        attachments: [],
+        clientMessageId: 'c41',
+        reasoning: null,
+        reasoningDurationSeconds: null,
+        toolLogsJson: JSON.stringify({
+          v: 2,
+          entries: [],
+          coverage: { trace: { status: 'unknown' }, persisted: { status: 'complete' } },
+          runResult: { stopReason: 'budget_exhausted', finalAnswerGenerated: false },
+        }),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        updatedAt: new Date('2024-01-01T00:00:00Z'),
+        streamStatus: 'done',
+        streamCursor: 6,
+        streamReasoning: null,
+        streamError: null,
+        usageMetrics: [],
+        generatedImages: [],
+      },
+    ])
+
+    const result = await deps.service.listMessages({
+      actor: deps.actor,
+      sessionId: 5,
+      page: 1,
+      limit: 10,
+      request: deps.request,
+    })
+
+    const message = result.messages[0]
+    expect(message.toolEvents).toEqual([])
+    expect(message.toolLogCoverage).toBeUndefined()
+    expect(message.stopReason).toBe('budget_exhausted')
+    expect(message.finalAnswerGenerated).toBe(false)
   })
 })

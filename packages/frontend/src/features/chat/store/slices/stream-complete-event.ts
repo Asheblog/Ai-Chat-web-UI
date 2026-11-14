@@ -1,8 +1,23 @@
+import type { ChatStopReason } from '@/types'
 import type { StreamEventContext } from './stream-event-context'
+
+const resolveStopReason = (value: unknown): ChatStopReason | undefined =>
+  value === 'stop_tools' || value === 'budget_exhausted' ? value : undefined
 
 export const handleCompleteEvent = (evt: any, ctx: StreamEventContext): void => {
   const { active, set, runtime } = ctx
   const activeBuffer = active
+  // complete 上扁平下发的终止信息：只接受已冻结取值，缺失保持未知（不从 aborted/空正文推导）
+  const stopReason = resolveStopReason((evt as any).stopReason)
+  if (stopReason) {
+    active.pendingMeta.stopReason = stopReason
+    active.stopReason = stopReason
+  }
+  const finalAnswerGenerated = (evt as any).finalAnswerGenerated
+  if (typeof finalAnswerGenerated === 'boolean') {
+    active.pendingMeta.finalAnswerGenerated = finalAnswerGenerated
+    active.finalAnswerGenerated = finalAnswerGenerated
+  }
   // 如果后端在 complete 事件中下发了最终内容，直接覆盖本地累积的内容
   if (typeof (evt as any).content === 'string' && (evt as any).content.length > 0) {
     active.pendingContent = ''

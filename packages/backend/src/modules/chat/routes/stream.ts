@@ -12,10 +12,16 @@ import {
   findStreamMetaByMessageId,
   getStreamMetaByKey,
   registerPendingCancelMarker,
+  requestStopTools,
   resolveAssistantClientIdFromRequest,
 } from '../../chat/stream-state'
 import type { AgentStreamMeta } from '../../chat/stream-state'
-import { cancelStreamSchema, researchPlanRespondSchema, sendMessageSchema } from '../chat-common'
+import {
+  cancelStreamSchema,
+  researchPlanRespondSchema,
+  sendMessageSchema,
+  stopToolsSchema,
+} from '../chat-common'
 import {
   createChatStreamHandler,
   type ChatStreamRoutesDeps,
@@ -31,6 +37,37 @@ import {
 import type { ExecutionSseEvent } from '@aichat/shared/execution-contract'
 
 export type { ChatStreamRoutesDeps }
+
+/**
+ * 解析目标 run 的活动 stream meta。
+ * 与 cancel 使用同一目标规则：clientMessageId / messageId / 会话级 key 依次回退。
+ */
+const resolveActiveStreamMeta = (params: {
+  sessionId: number
+  clientMessageId: string | null
+  messageId: number | null
+}): AgentStreamMeta | null => {
+  const { sessionId, clientMessageId, messageId } = params
+  const keyCandidates = [
+    buildAgentStreamKey(sessionId, clientMessageId ?? null),
+    messageId != null ? buildAgentStreamKey(sessionId, null, messageId) : null,
+  ].filter(Boolean) as string[]
+
+  for (const key of keyCandidates) {
+    const candidate = getStreamMetaByKey(key)
+    if (candidate) return candidate
+  }
+  if (messageId != null) {
+    const byMessage = findStreamMetaByMessageId(sessionId, messageId)
+    if (byMessage) return byMessage
+  }
+  if (clientMessageId) {
+    const byClient = findStreamMetaByClientMessageId(sessionId, clientMessageId)
+    if (byClient) return byClient
+    return findStreamMetaByAssistantClientMessageId(sessionId, clientMessageId)
+  }
+  return null
+}
 
 export const registerChatStreamRoutes = (router: Hono, deps: ChatStreamRoutesDeps) => {
   const prisma: PrismaClient = deps.prisma
@@ -106,7 +143,10 @@ export const registerChatStreamRoutes = (router: Hono, deps: ChatStreamRoutesDep
             })
           }
         } else if (event.type === 'step_complete') {
-          const payload = event.payload as { error?: string }
+          const payload = event.payload as {
+            error?: string
+            result?: Record<string, unknown>
+          }
           if (event.status !== 'completed') {
             chatSessionEventBus.publish(sessionId, {
               type: 'stream_error',
@@ -117,10 +157,21 @@ export const registerChatStreamRoutes = (router: Hono, deps: ChatStreamRoutesDep
             })
             return
           }
+          const result = payload.result ?? {}
+          const stopReason =
+            result.stopReason === 'stop_tools' || result.stopReason === 'budget_exhausted'
+              ? result.stopReason
+              : undefined
+          const finalAnswerGenerated =
+            typeof result.finalAnswerGenerated === 'boolean'
+              ? result.finalAnswerGenerated
+              : undefined
           chatSessionEventBus.publish(sessionId, {
             type: 'message_complete',
             sessionId,
             messageId,
+            ...(stopReason ? { stopReason } : {}),
+            ...(finalAnswerGenerated !== undefined ? { finalAnswerGenerated } : {}),
             ts,
           })
         } else if (event.type === 'run_error') {
@@ -175,30 +226,13 @@ export const registerChatStreamRoutes = (router: Hono, deps: ChatStreamRoutesDep
       typeof clientMessageId === 'string' && clientMessageId.trim().length > 0
         ? clientMessageId.trim()
         : null
-    const keyCandidates = [
-      buildAgentStreamKey(sessionId, normalizedClientMessageId ?? null),
-      typeof messageId === 'number' && Number.isFinite(messageId)
-        ? buildAgentStreamKey(sessionId, null, messageId)
-        : null,
-    ].filter(Boolean) as string[]
-
-    let meta: AgentStreamMeta | null = null
-    for (const key of keyCandidates) {
-      const candidate = getStreamMetaByKey(key)
-      if (candidate) {
-        meta = candidate
-        break
-      }
-    }
-    if (!meta && typeof messageId === 'number' && Number.isFinite(messageId)) {
-      meta = findStreamMetaByMessageId(sessionId, messageId)
-    }
-    if (!meta && normalizedClientMessageId) {
-      meta = findStreamMetaByClientMessageId(sessionId, normalizedClientMessageId)
-      if (!meta) {
-        meta = findStreamMetaByAssistantClientMessageId(sessionId, normalizedClientMessageId)
-      }
-    }
+    const lookupMessageId =
+      typeof messageId === 'number' && Number.isFinite(messageId) ? messageId : null
+    const meta: AgentStreamMeta | null = resolveActiveStreamMeta({
+      sessionId,
+      clientMessageId: normalizedClientMessageId,
+      messageId: lookupMessageId,
+    })
 
     const matchedMeta =
       meta && meta.actorId === actor.identifier && meta.sessionId === sessionId ? meta : null
@@ -288,5 +322,52 @@ export const registerChatStreamRoutes = (router: Hono, deps: ChatStreamRoutesDep
     }
 
     return c.json<ApiResponse>({ success: true })
+  })
+
+  router.post('/stream/stop-tools', actorMiddleware, zValidator('json', stopToolsSchema), async (c) => {
+    const actor = c.get('actor') as Actor
+    const payload = c.req.valid('json')
+    const { sessionId } = payload
+    const clientMessageId =
+      typeof payload.clientMessageId === 'string' && payload.clientMessageId.trim().length > 0
+        ? payload.clientMessageId.trim()
+        : null
+    const messageId =
+      typeof payload.messageId === 'number' && Number.isFinite(payload.messageId)
+        ? payload.messageId
+        : null
+
+    const meta = resolveActiveStreamMeta({ sessionId, clientMessageId, messageId })
+    const target = {
+      sessionId,
+      ...(clientMessageId ? { clientMessageId } : {}),
+      ...(messageId != null ? { messageId } : {}),
+      ...(meta ? { streamKey: meta.streamKey, via: 'active' as const } : {}),
+    }
+
+    if (!meta) {
+      log.debug('Stop tools: no active stream for target', { sessionId, clientMessageId, messageId })
+      return c.json<ApiResponse>({
+        success: true,
+        data: { accepted: false, reason: 'no_active_run', target },
+      })
+    }
+
+    if (meta.actorId !== actor.identifier || meta.sessionId !== sessionId) {
+      log.warn('Stop tools rejected: stream owned by another actor', {
+        sessionId,
+        metaActorId: meta.actorId,
+        requestActorId: actor.identifier,
+      })
+      return c.json<ApiResponse>({ success: false, error: 'Stream not found' }, 404)
+    }
+
+    const outcome = requestStopTools(meta)
+    log.debug('Stop tools accepted', {
+      sessionId,
+      streamKey: meta.streamKey,
+      reason: outcome.reason,
+    })
+    return c.json<ApiResponse>({ success: true, data: { ...outcome, target } })
   })
 }

@@ -3,8 +3,10 @@ import type {
   BattleContent,
   BattleContentInput,
   BattleToolCallEvent,
+  BattleRunResult,
   BattleRunStatus,
 } from '@aichat/shared/battle-contract'
+import type { ToolLogCoverage } from '@aichat/shared/tool-operations'
 
 export type BattleModelSkills = {
   builtin?: string[]
@@ -263,7 +265,14 @@ export interface BattleSharePayload {
       durationMs?: number | null
       error?: string | null
       toolEvents?: BattleToolCallEvent[]
+      /**
+       * 该次尝试的调用记录覆盖。trace 恒为 unknown（Battle 无 trace 记录），
+       * 未结束的尝试 persisted=partial，仅在确有 toolEvents 时出现。
+       */
+      toolEventsCoverage?: ToolLogCoverage
     }>
   }
+  /** 运行由停止工具/预算收尾结束时的真实结果；Battle 没有该来源时不写。 */
+  runResult?: BattleRunResult
   createdAt: string
 }

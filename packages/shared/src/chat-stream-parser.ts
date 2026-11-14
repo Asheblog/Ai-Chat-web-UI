@@ -260,10 +260,19 @@ const normalizeExecutionEventChunk = (payload: any): ChatStreamChunk | null => {
       summary.streamStatus === 'error'
         ? summary.streamStatus
         : undefined
+    // 终止原因与“是否已产出最终回答”是独立字段：stopReason 不表示成功
+    const stopReason =
+      summary.stopReason === 'stop_tools' || summary.stopReason === 'budget_exhausted'
+        ? summary.stopReason
+        : undefined
+    const finalAnswerGenerated =
+      typeof summary.finalAnswerGenerated === 'boolean' ? summary.finalAnswerGenerated : undefined
     return {
       type: 'complete',
       ...(content ? { content } : {}),
       ...(streamStatus ? { streamStatus } : {}),
+      ...(stopReason ? { stopReason } : {}),
+      ...(finalAnswerGenerated !== undefined ? { finalAnswerGenerated } : {}),
     }
   }
 
@@ -400,6 +409,12 @@ export const normalizeStreamChunk = (payload: any): ChatStreamChunk | null => {
         payload.streamStatus === 'error'
           ? payload.streamStatus
           : undefined,
+      ...(payload.stopReason === 'stop_tools' || payload.stopReason === 'budget_exhausted'
+        ? { stopReason: payload.stopReason }
+        : {}),
+      ...(typeof payload.finalAnswerGenerated === 'boolean'
+        ? { finalAnswerGenerated: payload.finalAnswerGenerated }
+        : {}),
     }
   }
   if (payload?.type === 'skill_approval_request') {

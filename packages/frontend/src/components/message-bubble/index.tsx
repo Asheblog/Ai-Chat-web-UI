@@ -17,6 +17,7 @@ import { ShareBadge } from './share-badge'
 import { normalizeMetricMs, normalizeMetricNumber } from './message-metrics'
 import { useToolTimeline } from '@/features/chat/tool-events/useToolTimeline'
 import { CotTimeline } from './cot-timeline'
+import { useProcessCommands } from './use-process-commands'
 
 
 
@@ -54,6 +55,7 @@ function MessageBubbleComponent({
   shareSelection,
 }: MessageBubbleProps) {
   const { toast } = useToast()
+  const processCommands = useProcessCommands(meta.sessionId, variantInfo?.onRegenerate, meta.id)
   const applyRenderedContent = useChatStore((state) => state.applyRenderedContent)
   const editLastUserMessage = useChatStore((state) => state.editLastUserMessage)
   const currentUser = useAuthStore((state) => state.user)
@@ -202,14 +204,6 @@ function MessageBubbleComponent({
               }}
             />
           )}
-          <CotTimeline
-            meta={meta}
-            reasoningRaw={reasoningRaw}
-            toolEvents={toolTimeline}
-            isStreaming={Boolean(isStreaming)}
-            reasoningPlayedLength={reasoningPlayedLength}
-          />
-
           <MessageBodyContent
             isUser={isUser}
             meta={meta}
@@ -222,6 +216,19 @@ function MessageBubbleComponent({
             isRendering={isRendering}
             renderErrored={markdown.errored}
           />
+
+          {!isUser && <CotTimeline
+            meta={meta}
+            reasoningRaw={reasoningRaw}
+            toolEvents={toolTimeline}
+            isStreaming={Boolean(isStreaming)}
+            reasoningPlayedLength={reasoningPlayedLength}
+            content={content}
+            artifacts={artifacts}
+            coverage={body.toolLogCoverage ?? meta.toolLogCoverage}
+            readOnly={false}
+            commands={processCommands}
+          />}
 
           {!isUser && artifacts.length > 0 && (
             <div className="mt-2 space-y-2">

@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import type { Prisma, PrismaClient } from '@prisma/client'
+import type { ToolLogCoverage } from '@aichat/shared/tool-operations'
 import type { Actor, RichMessageImagePart, RichMessagePayload } from '../../types'
 import { prisma as defaultPrisma } from '../../db'
 import {
@@ -11,6 +12,13 @@ import {
   buildRichMessagePayload,
   type GeneratedImageRecord,
 } from '../chat/rich-payload-builder'
+import { resolveToolLogStatus, type ToolRunStopReason } from '../chat/tool-log-model'
+import {
+  parseToolLogsPayloadJson,
+  resolveMessageToolLogCoverage,
+  resolveToolLogTerminalOutcome,
+} from '../chat/tool-log-parse'
+import { buildShareToolEvents, type ShareToolEvent } from './share-tool-events'
 
 export class ShareServiceError extends Error {
   statusCode: number
@@ -29,19 +37,7 @@ const buildSessionOwnershipWhere = (actor: Actor): Prisma.ChatSessionWhereInput 
     ? { userId: actor.id }
     : { anonymousKey: actor.key }
 
-export interface ShareToolEvent {
-  id: string
-  tool: string
-  stage: 'start' | 'result' | 'error'
-  status: 'running' | 'success' | 'error'
-  query?: string
-  url?: string
-  summary?: string
-  error?: string
-  createdAt: number
-  hits?: { title: string; url: string; snippet?: string; imageUrl?: string; thumbnailUrl?: string }[]
-  details?: Record<string, unknown>
-}
+export type { ShareToolEvent } from './share-tool-events'
 
 export interface ShareMessageSnapshot {
   id: number
@@ -52,6 +48,11 @@ export interface ShareMessageSnapshot {
   images?: string[]
   richPayload?: RichMessagePayload | null
   toolEvents?: ShareToolEvent[]
+  /** 三层覆盖：分享快照与历史视图同一口径。 */
+  toolLogCoverage?: ToolLogCoverage
+  /** 运行由停止工具/预算收尾结束时的真实结果；未记录时保持缺失。 */
+  stopReason?: ToolRunStopReason
+  finalAnswerGenerated?: boolean
 }
 
 export interface ShareDetail {
@@ -521,22 +522,19 @@ export class ShareService {
     return source.length > 200 ? source.slice(0, 200) : source
   }
 
+  /**
+   * 已取消/过期的深度研究消息不可分享。
+   * 与历史读取走同一解析（兼容旧数组与 v2 信封），状态由显式 status/phase 解析，不猜。
+   */
   private assertShareableDeepResearchMessages(messages: MessageRecord[]): void {
     for (const message of messages) {
       if (message.role !== 'assistant') continue
       if (message.streamStatus !== 'cancelled' && message.streamStatus !== 'error') continue
-      let toolEvents: unknown[] = []
-      try {
-        const parsed = message.toolLogsJson ? JSON.parse(message.toolLogsJson) : []
-        if (Array.isArray(parsed)) toolEvents = parsed
-      } catch {
-        continue
-      }
-      const hasTerminalResearchPlan = toolEvents.some((event) => {
-        if (!event || typeof event !== 'object') return false
-        const record = event as Record<string, unknown>
-        if (record.tool !== 'research_plan') return false
-        return record.status === 'rejected' || record.status === 'aborted'
+      const parsed = parseToolLogsPayloadJson(message.toolLogsJson)
+      const hasTerminalResearchPlan = parsed.entries.some((entry) => {
+        if (entry.tool !== 'research_plan') return false
+        const status = resolveToolLogStatus(entry)
+        return status === 'rejected' || status === 'aborted'
       })
       if (hasTerminalResearchPlan) {
         throw new ShareServiceError('已取消或已过期的深度研究消息不能分享', 400)
@@ -569,7 +567,10 @@ export class ShareService {
         attachmentPaths,
         baseUrl,
       )
-      const toolEvents = this.parseToolLogs(msg.toolLogsJson)
+      const parsedToolLogs = parseToolLogsPayloadJson(msg.toolLogsJson)
+      const toolEvents = buildShareToolEvents(parsedToolLogs.entries)
+      const toolLogCoverage = resolveMessageToolLogCoverage(parsedToolLogs)
+      const terminalOutcome = resolveToolLogTerminalOutcome(parsedToolLogs.runResult)
       const richPayload = buildRichMessagePayload({
         content: msg.content,
         attachmentRelativePaths: attachmentPaths,
@@ -587,43 +588,11 @@ export class ShareService {
         createdAt: msg.createdAt.toISOString(),
         images: images.length > 0 ? images : undefined,
         richPayload,
-        toolEvents: toolEvents.length > 0 ? toolEvents : undefined,
+        ...(toolEvents.length > 0 ? { toolEvents } : {}),
+        ...(toolLogCoverage ? { toolLogCoverage } : {}),
+        ...terminalOutcome,
       }
     })
-  }
-
-  private parseToolLogs(json: string | null | undefined): ShareToolEvent[] {
-    if (!json) return []
-    try {
-      const parsed = JSON.parse(json)
-      if (!Array.isArray(parsed)) return []
-      return parsed
-        .filter((item): item is Record<string, unknown> => item && typeof item === 'object')
-        .map((item) => {
-          const stage = (item.stage as 'start' | 'result' | 'error') ?? 'start'
-          const resolveStatus = (raw: unknown): 'running' | 'success' | 'error' => {
-            if (raw === 'running' || raw === 'success' || raw === 'error') return raw
-            if (stage === 'result') return 'success'
-            if (stage === 'error') return 'error'
-            return 'running'
-          }
-          return {
-            id: String(item.id ?? ''),
-            tool: String(item.tool ?? ''),
-            stage,
-            status: resolveStatus(item.status),
-            query: typeof item.query === 'string' ? item.query : undefined,
-            url: typeof item.url === 'string' ? item.url : undefined,
-            summary: typeof item.summary === 'string' ? item.summary : undefined,
-            error: typeof item.error === 'string' ? item.error : undefined,
-            createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now(),
-            hits: Array.isArray(item.hits) ? item.hits : undefined,
-            details: item.details as Record<string, unknown> | undefined,
-          }
-        })
-    } catch {
-      return []
-    }
   }
 
   private computeExpiry(expiresInHours?: number | null): Date | null {
