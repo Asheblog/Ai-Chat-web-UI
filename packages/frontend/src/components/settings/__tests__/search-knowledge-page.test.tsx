@@ -416,6 +416,37 @@ describe("SearchKnowledgePage", () => {
     )
   })
 
+  test("仅启用 Tavily 时仍可配置网页原文，且不显示 Metaso 范围与召回增强", async () => {
+    mockSystemSettings({
+      ...searchKnowledgeSettings,
+      webSearchEnabledEngines: ["tavily"],
+      webSearchEngineOrder: ["tavily"],
+    })
+    render(<SearchKnowledgePage />)
+    const card = getCard("联网搜索")
+
+    await userEvent.click(within(card).getByRole("button", { name: "更多参数" }))
+    expect(within(card).getByRole("switch", { name: "获取网页原文" })).not.toBeChecked()
+    expect(within(card).queryByText("召回增强")).not.toBeInTheDocument()
+    expect(within(card).queryByText("Metaso 默认搜索范围")).not.toBeInTheDocument()
+  })
+
+  test("仅启用 Exa 时显示召回增强与网页原文，不显示 Metaso 范围", async () => {
+    mockSystemSettings({
+      ...searchKnowledgeSettings,
+      webSearchEnabledEngines: ["exa"],
+      webSearchEngineOrder: ["exa"],
+      webSearchHasApiKeyExa: true,
+    })
+    render(<SearchKnowledgePage />)
+    const card = getCard("联网搜索")
+
+    await userEvent.click(within(card).getByRole("button", { name: "更多参数" }))
+    expect(within(card).getByText("召回增强")).toBeInTheDocument()
+    expect(within(card).getByRole("switch", { name: "获取网页原文" })).toBeInTheDocument()
+    expect(within(card).queryByText("Metaso 默认搜索范围")).not.toBeInTheDocument()
+  })
+
   test("DeepSeek 未勾选时 Fetch 仍可独立开启并保存", async () => {
     render(<SearchKnowledgePage />)
     const card = getCard("联网搜索")

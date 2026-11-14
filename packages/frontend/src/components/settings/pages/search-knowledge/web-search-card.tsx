@@ -17,7 +17,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/use-toast"
 import { FeatureCard } from "@/components/settings/components/feature-card"
 import type { SystemSettings, WebSearchBilingualMode, WebSearchEngine } from "@/types"
-import { isWebSearchEngine, WEB_SEARCH_ENGINE_IDS } from "@aichat/shared"
+import {
+  isWebSearchEngine,
+  WEB_SEARCH_ENGINE_IDS,
+  WEB_SEARCH_SCOPE_IDS,
+  type WebSearchScope,
+} from "@aichat/shared"
 import { parseNumericInput } from "@/features/settings/shared"
 
 const ENGINE_LABELS: Record<WebSearchEngine, string> = {
@@ -32,6 +37,26 @@ const ENGINE_OPTIONS = WEB_SEARCH_ENGINE_IDS.map((value) => ({
   value,
   label: ENGINE_LABELS[value],
 }))
+
+const SCOPE_LABELS: Record<WebSearchScope, string> = {
+  webpage: "网页",
+  document: "文档",
+  paper: "论文",
+  scholar: "学术",
+  image: "图片",
+  video: "视频",
+  podcast: "播客",
+}
+
+const SCOPE_OPTIONS = WEB_SEARCH_SCOPE_IDS.map((value) => ({
+  value,
+  label: SCOPE_LABELS[value],
+}))
+
+/** 支持在搜索阶段返回网页原文的引擎；Brave 没有对应参数，Metaso 仅网页范围生效。 */
+const RAW_CONTENT_ENGINES: WebSearchEngine[] = ["tavily", "exa", "metaso", "deepseek"]
+/** 支持摘要召回增强的引擎。 */
+const SUMMARY_ENGINES: WebSearchEngine[] = ["metaso", "exa"]
 
 const mergeStrategy = "hybrid_score_v1" as const
 
@@ -153,7 +178,8 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
   )
 
   const hasMetasoEnabled = enabledEngines.includes("metaso")
-  const hasRawContentEngineEnabled = hasMetasoEnabled || enabledEngines.includes("deepseek")
+  const hasSummaryEngineEnabled = enabledEngines.some((engine) => SUMMARY_ENGINES.includes(engine))
+  const hasRawContentEngineEnabled = enabledEngines.some((engine) => RAW_CONTENT_ENGINES.includes(engine))
 
   const limitRange = { min: 1, max: 10 }
   const parallelEngineRange = { min: 1, max: 5 }
@@ -392,35 +418,41 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
             </div>
           </div>
 
-          {hasMetasoEnabled && (
+          {(hasMetasoEnabled || hasSummaryEngineEnabled) && (
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium" htmlFor="web-search-scope">
-                  Metaso 默认搜索范围
-                </label>
-                <Select value={scope} onValueChange={(value) => setScope(value)}>
-                  <SelectTrigger id="web-search-scope">
-                    <SelectValue placeholder="选择搜索范围" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="webpage">网页</SelectItem>
-                    <SelectItem value="document">文档</SelectItem>
-                    <SelectItem value="paper">论文</SelectItem>
-                    <SelectItem value="image">图片</SelectItem>
-                    <SelectItem value="video">视频</SelectItem>
-                    <SelectItem value="podcast">播客</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium">召回增强</p>
-                    <p className="text-xs text-muted-foreground">适度提升召回，可能略增延迟。</p>
-                  </div>
-                  <Switch checked={includeSummary} onCheckedChange={(v) => setIncludeSummary(!!v)} />
+              {hasMetasoEnabled && (
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium" htmlFor="web-search-scope">
+                    Metaso 默认搜索范围
+                  </label>
+                  <Select value={scope} onValueChange={(value) => setScope(value)}>
+                    <SelectTrigger id="web-search-scope">
+                      <SelectValue placeholder="选择搜索范围" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SCOPE_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">论文会映射到 Metaso 官方「学术」范围。</p>
                 </div>
-              </div>
+              )}
+              {hasSummaryEngineEnabled && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium">召回增强</p>
+                      <p className="text-xs text-muted-foreground">
+                        Metaso / Exa 用摘要参与召回，可能略增延迟。
+                      </p>
+                    </div>
+                    <Switch checked={includeSummary} onCheckedChange={(v) => setIncludeSummary(!!v)} />
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -431,7 +463,7 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
                   获取网页原文
                 </label>
                 <p id="web-search-include-raw-description" className="text-xs text-muted-foreground">
-                  搜索时获取可用的网页正文，可能增加流量与等待时间，默认关闭。
+                  搜索时获取可用的网页正文（Tavily / Exa / Metaso / DeepSeek），可能增加流量与等待时间，默认关闭。
                 </p>
               </div>
               <Switch
