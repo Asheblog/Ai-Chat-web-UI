@@ -1,0 +1,3 @@
+# 默认把所有文本文件归一化为 LF（二进制由 text=auto 自动跳过）；
+# 避免 Windows 工作区与 Linux 容器互相改写行尾。
+* text=auto eol=lf
