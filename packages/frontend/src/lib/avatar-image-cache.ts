@@ -1,7 +1,10 @@
-const loadedAvatarUrls = new Set<string>()
-const avatarPreloadTasks = new Map<string, Promise<boolean>>()
-
-export type AvatarLoadingStatus = 'idle' | 'loading' | 'loaded' | 'error'
+/**
+ * 头像 URL 工具：只做 URL 规范化与预热去重，**不保存**「某个 URL 已加载」这类渲染状态。
+ *
+ * 渲染是否就绪由 Radix Avatar 自己的探测图决定（命中缓存时它会在同一帧返回 loaded），
+ * 用全局标志去控制占位可见性只会制造与元素实际状态脱节的空圈。
+ */
+const avatarPreloadTasks = new Map<string, Promise<void>>()
 
 export const normalizeAvatarUrl = (value?: string | null) => {
   const normalized = typeof value === 'string' ? value.trim() : ''
@@ -21,54 +24,29 @@ export const normalizeAvatarUrl = (value?: string | null) => {
   return normalized
 }
 
-export const isAvatarImageLoaded = (url?: string | null) => {
-  const normalized = normalizeAvatarUrl(url)
-  return normalized.length > 0 && loadedAvatarUrls.has(normalized)
-}
-
-export const markAvatarImageLoaded = (url?: string | null, loaded = true) => {
+/**
+ * 把头像预热进浏览器缓存。
+ *
+ * Radix Avatar 的探测图在设置 `src` 后会同步读取 `complete/naturalWidth`，命中缓存时
+ * 当帧就是 `loaded`，气泡挂载即可直接出图。这里只做 in-flight 去重，不维护「已加载」全局
+ * 状态——那个状态只说明某个 URL 曾被别处加载过，与当前元素能否绘制无关。
+ */
+export const preloadAvatarImage = async (url?: string | null): Promise<void> => {
   const normalized = normalizeAvatarUrl(url)
   if (!normalized) return
-  if (loaded) {
-    loadedAvatarUrls.add(normalized)
-    return
-  }
-  loadedAvatarUrls.delete(normalized)
-}
-
-export const syncAvatarLoadingStatus = (
-  url: string | null | undefined,
-  status: AvatarLoadingStatus,
-) => {
-  if (status === 'loaded') {
-    markAvatarImageLoaded(url, true)
-  } else if (status === 'error') {
-    markAvatarImageLoaded(url, false)
-  }
-}
-
-export const preloadAvatarImage = async (url?: string | null): Promise<boolean> => {
-  const normalized = normalizeAvatarUrl(url)
-  if (!normalized) return false
-  if (loadedAvatarUrls.has(normalized)) return true
+  if (typeof window === 'undefined') return
 
   const inFlight = avatarPreloadTasks.get(normalized)
   if (inFlight) return inFlight
 
-  if (typeof window === 'undefined') return false
-
-  const task = new Promise<boolean>((resolve) => {
+  const task = new Promise<void>((resolve) => {
     const image = new window.Image()
     image.decoding = 'async'
-    image.onload = () => resolve(true)
-    image.onerror = () => resolve(false)
+    image.onload = () => resolve()
+    image.onerror = () => resolve()
     image.src = normalized
-  }).then((loaded) => {
+  }).finally(() => {
     avatarPreloadTasks.delete(normalized)
-    if (loaded) {
-      loadedAvatarUrls.add(normalized)
-    }
-    return loaded
   })
 
   avatarPreloadTasks.set(normalized, task)

@@ -5,10 +5,12 @@ import sharp from 'sharp'
 import {
   CHAT_IMAGE_STORAGE_ROOT,
   CHAT_IMAGE_PUBLIC_PATH,
+  CHAT_IMAGE_BASE_URL,
 } from '../config/storage'
 import {
   determineChatImageBaseUrl,
   resolveChatImageUrls,
+  sanitizeBaseUrl,
 } from './chat-images'
 
 const AVATAR_DIR = 'profiles'
@@ -115,6 +117,18 @@ export async function deleteProfileImage(relativePath: string | null | undefined
 }
 
 export const determineProfileImageBaseUrl = determineChatImageBaseUrl
+
+/**
+ * 只认显式配置的头像基址（系统设置 site_base_url 优先，其次 CHAT_IMAGE_BASE_URL）。
+ *
+ * 与 determineProfileImageBaseUrl 的区别：这里绝不回落到「用请求 Host 推导」，并保留
+ * sanitizeBaseUrl 的协议补全与校验——裸主机名（如 chat.example.com）会补成 https://，
+ * 否则会拼出没有前导斜杠的相对地址导致坏图。两者都没配时返回空串，调用方据此输出
+ * 同源相对路径 /chat-images/...。
+ */
+export function resolveConfiguredProfileImageBaseUrl(siteBaseUrl?: string | null): string {
+  return sanitizeBaseUrl(siteBaseUrl) || sanitizeBaseUrl(CHAT_IMAGE_BASE_URL)
+}
 
 export function resolveProfileImageUrl(relativePath: string | null | undefined, baseUrl: string): string | null {
   if (!relativePath) return null

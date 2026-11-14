@@ -75,7 +75,7 @@ export function UserMenu({ variant = 'label', className }: UserMenuProps) {
         >
           <Avatar className={cn(showLabel ? 'h-6 w-6' : 'h-7 w-7')}>
             <AvatarImage src={user?.avatarUrl || undefined} alt={user?.username || '用户头像'} />
-            <AvatarFallback delayMs={user?.avatarUrl ? 180 : 0} className="text-xs">
+            <AvatarFallback className="text-xs">
               {user?.username?.charAt(0).toUpperCase() || 'U'}
             </AvatarFallback>
           </Avatar>
