@@ -56,7 +56,7 @@ export function ChatSurface({ previewCase }: { previewCase: PreviewCase }) {
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto" data-preview-scroll="answer">
-          <div className="mx-auto flex w-full max-w-[46rem] flex-col gap-4 px-5 py-6 sm:px-6">
+          <div className="flex w-full flex-col gap-4 px-5 py-6 sm:px-6">
             <div className="flex justify-end">
               <p className="max-w-[85%] rounded-2xl rounded-br-md bg-userBubble px-4 py-2.5 text-sm leading-relaxed">
                 {prompt}
@@ -117,7 +117,7 @@ export function ChatSurface({ previewCase }: { previewCase: PreviewCase }) {
         </div>
 
         <div className="border-t border-border px-5 py-3 sm:px-6" data-preview-composer>
-          <div className="mx-auto flex w-full max-w-[46rem] items-center gap-2 rounded-[var(--radius-composer)] border border-border bg-surface px-3 py-2">
+          <div className="flex w-full items-center gap-2 rounded-[var(--radius-composer)] border border-border bg-surface px-3 py-2">
             <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
               {entry.isStreaming ? '正在生成，可停止后续工具…' : '继续提问'}
             </span>

@@ -42,12 +42,11 @@ export function AppShell({ ready, sidebar, toolbar, children }: AppShellProps) {
           </div>
         </aside>
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="v2-toolbar grid h-14 shrink-0 grid-cols-3 items-center gap-2 px-4 lg:hidden">
-            <SkeletonBlock className="h-9 w-9 justify-self-start" />
-            <SkeletonBlock className="h-8 w-28 justify-self-center" />
-            <SkeletonBlock className="h-8 w-14 justify-self-end" />
+          <div className="v2-toolbar flex h-14 shrink-0 items-center justify-between gap-2 px-4 lg:hidden">
+            <SkeletonBlock className="h-9 w-9" />
+            <SkeletonBlock className="h-8 w-14" />
           </div>
-          <div className="mx-auto flex w-full max-w-[var(--chat-max-width)] flex-1 flex-col gap-4 px-4 py-8 sm:px-6">
+          <div className="flex w-full flex-1 flex-col gap-4 px-4 py-8 sm:px-6">
             <SkeletonBlock className="h-5 w-40" />
             <SkeletonBlock className="h-20 w-full max-w-2xl" />
             <SkeletonBlock className="h-20 w-full max-w-xl" />

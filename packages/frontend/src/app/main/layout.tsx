@@ -60,8 +60,8 @@ export default function MainLayout({
   const isAdmin = actorState === 'authenticated' && userRole === 'ADMIN'
 
   const toolbar = (
-            <div className="v2-toolbar sticky top-0 z-40 grid grid-cols-3 items-center gap-2 px-4 lg:hidden">
-              <div className="justify-self-start">
+            <div className="v2-toolbar sticky top-0 z-40 flex items-center justify-between gap-2 px-4 lg:hidden">
+              <div>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -79,8 +79,7 @@ export default function MainLayout({
                   <SidebarToggleIcon className="h-5 w-5" />
                 </Button>
               </div>
-              <span className="truncate text-center text-sm font-semibold">AIChat</span>
-              <div className="justify-self-end">
+              <div>
                 <UserMenu variant="icon" />
               </div>
             </div>

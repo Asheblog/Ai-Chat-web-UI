@@ -69,7 +69,7 @@ export function WelcomeForm({ form, selectedModelId, onModelChange, modelDisable
 
   return (
     <div
-      className="relative w-full max-w-[720px]"
+      className="relative w-full"
       {...(dragHandlers ?? {})}
     >
       {/* 拖拽上传遮罩 */}

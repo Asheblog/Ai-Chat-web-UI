@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type MouseEvent } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ChevronRight, Folder, Github, MessageCircle, Pin, PinOff, Plus, Settings, Trash2, Trophy } from 'lucide-react'
+import { ArrowUpRight, Folder, Github, MessageCircle, Pin, PinOff, Plus, Settings, Trash2, Trophy } from 'lucide-react'
 import { shallow } from 'zustand/shallow'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -527,16 +527,14 @@ export function Sidebar() {
           href={PROJECT_URL}
           target="_blank"
           rel="noreferrer"
-          aria-label={`${PROJECT_NAME} 项目地址`}
-          className="group flex min-h-11 items-center justify-between gap-3 rounded-md px-2.5 py-2 text-muted-foreground transition-colors hover:bg-surface-hover sm:min-h-8"
+          aria-label={`${PROJECT_NAME} GitHub 开源项目（新窗口打开）`}
+          title={PROJECT_HOST_PATH}
+          className="group flex min-h-11 items-center gap-2.5 rounded-[10px] border border-border bg-surface px-3 text-muted-foreground transition-colors [transition-duration:160ms] hover:border-borderStrong hover:bg-surface-hover hover:text-foreground active:bg-surface-subtle sm:min-h-8"
         >
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-foreground">{PROJECT_NAME}</p>
-            <p className="mt-0.5 truncate text-[11px] text-ink-tertiary group-hover:text-foreground">
-              {PROJECT_HOST_PATH}
-            </p>
-          </div>
-          <ChevronRight className="h-4 w-4 shrink-0 text-ink-tertiary group-hover:text-foreground" />
+          <Github aria-hidden="true" className="h-4 w-4 shrink-0" />
+          <span className="text-sm font-medium text-foreground">GitHub</span>
+          <span className="ml-auto text-xs text-ink-tertiary group-hover:text-muted-foreground">开源项目</span>
+          <ArrowUpRight aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-ink-tertiary group-hover:text-foreground" />
         </Link>
       </div>
 

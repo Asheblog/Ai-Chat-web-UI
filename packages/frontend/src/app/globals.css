@@ -562,6 +562,16 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
   overflow-wrap: anywhere;
 }
 
+.markdown-body h2 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* HTML 包装层不应让首标题继承 prose 的章节上边距。 */
+.markdown-body > div:first-child > :is(h1, h2, h3, h4, h5, h6):first-child {
+  margin-top: 0;
+}
+
 @media (max-width: 640px) {
   .markdown-body,
   .markdown-body--reasoning {

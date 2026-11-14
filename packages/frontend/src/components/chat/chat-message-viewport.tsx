@@ -129,7 +129,7 @@ function ChatMessageViewportComponent({
       <ScrollArea ref={scrollAreaRef} className="chat-message-viewport flex-1 px-3 sm:px-4 md:px-6">
         <div
           className={cn(
-            'mx-auto w-full max-w-[760px] px-4 pb-2 pt-4 md:px-0 md:pt-6 lg:pt-10',
+            'w-full px-4 pb-2 pt-4 md:px-0 md:pt-6 lg:pt-10',
             shareModeActive ? 'pb-32 md:pb-10' : 'pb-6',
           )}
         >
