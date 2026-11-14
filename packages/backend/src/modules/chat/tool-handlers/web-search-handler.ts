@@ -14,6 +14,7 @@ import {
   type WebSearchTaskResult,
 } from '../../../utils/web-search'
 import { truncateText } from '../../../utils/parsers'
+import { WEB_SEARCH_SCOPE_IDS, isWebSearchScope } from '@aichat/shared/web-search-contract'
 import { readUrlContent, type UrlReadErrorCode } from '../../../utils/url-reader'
 import type {
   IToolHandler,
@@ -676,7 +677,7 @@ export class WebSearchToolHandler implements IToolHandler {
             },
             scope: {
               type: 'string',
-              enum: ['webpage', 'image', 'document', 'paper', 'scholar', 'video', 'podcast'],
+              enum: [...WEB_SEARCH_SCOPE_IDS],
               description: 'Optional search scope/type. Use "image" only when the research needs news/evidence images; the backend will run image-capable engines and return their raw image urls.',
             },
           },
@@ -721,8 +722,7 @@ export class WebSearchToolHandler implements IToolHandler {
     const modelRequestedLimit = parseRequestedLimit(args.num_results)
     const appliedLimit = this.config.resultLimit
     const requestedScope = typeof args.scope === 'string' ? args.scope.trim().toLowerCase() : ''
-    const validScopes = ['webpage', 'image', 'document', 'paper', 'scholar', 'video', 'podcast']
-    const effectiveScope = validScopes.includes(requestedScope) ? requestedScope : this.config.scope
+    const effectiveScope = isWebSearchScope(requestedScope) ? requestedScope : this.config.scope
     const autoReadEnabledForSearch =
       effectiveScope !== 'image' && this.config.autoReadAfterSearch !== false
     const expandedQueries = buildBilingualQueries(query, this.config)
@@ -873,6 +873,7 @@ export class WebSearchToolHandler implements IToolHandler {
         apiKeys: this.config.apiKeys || {},
         queries: expandedQueries,
         queryPlans: routingPlan.queryPlans,
+        originalQuery: query,
         limit: appliedLimit,
         domains: this.config.domains,
         endpoint: this.config.endpoint,
@@ -921,6 +922,7 @@ export class WebSearchToolHandler implements IToolHandler {
               queryLanguage: item.queryLanguage,
             })),
             queryPlans: escalationPlans,
+            originalQuery: query,
             limit: appliedLimit,
             domains: this.config.domains,
             endpoint: this.config.endpoint,

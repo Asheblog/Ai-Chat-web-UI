@@ -4,16 +4,16 @@
  * 收敛历史重复实现：
  * - usage token 归一化（chat-stream-use-case.ts 3 处内联 + battle-executor.ts buildUsage）
  * - agentMaxToolIterations 解析（chat-stream-use-case.ts 内联 + battle-executor.ts resolveMaxToolIterations）
- * - metaso scope 白名单（统一引用 utils/web-search.ts 权威声明）
+ * - 搜索 scope 白名单（统一引用 @aichat/shared/web-search-contract 权威声明）
  */
 import type { UsageStats } from '@aichat/shared/chat-stream-contract'
-import { METASO_SCOPE_WHITELIST } from '../utils/web-search'
+import { isWebSearchScope } from '@aichat/shared/web-search-contract'
 
-/** 规范化 scope：仅接受白名单内取值，非法值返回 undefined（与 web-search.ts 默认 'webpage' 策略相区分） */
+/** 规范化 scope：仅接受共享契约内取值，非法值返回 undefined（与适配层默认 'webpage' 策略相区分） */
 export const sanitizeScope = (scope?: string): string | undefined => {
   if (!scope) return undefined
   const normalized = scope.trim().toLowerCase()
-  return METASO_SCOPE_WHITELIST.has(normalized) ? normalized : undefined
+  return isWebSearchScope(normalized) ? normalized : undefined
 }
 
 /** 解析 agent 最大工具迭代次数（0=无限，1-20=硬限制，默认 4） */

@@ -39,6 +39,8 @@ export interface DeepSeekSearchOptions {
   domains?: string[]
   scope?: string
   includeRawContent?: boolean
+  /** 触发检索的用户原始问题（官方 ori_question，1-128 字符），用于理解搜索意图。 */
+  oriQuestion?: string
   signal?: AbortSignal
   timeoutMs?: number
 }
@@ -60,6 +62,12 @@ export interface DeepSeekSearchHit {
   url: string
   snippet?: string
   content?: string
+  /** 官方 date 字段（UTC RFC 3339），未知时省略。 */
+  publishedDate?: string
+  /** 官方 site_name 字段，缺失时为 null。 */
+  siteName?: string
+  /** 官方 authority 字段（0-4，-1 表示未知）。 */
+  authority?: number
 }
 
 const requireApiKey = (apiKey?: string): string => {
@@ -124,19 +132,33 @@ const isAbortError = (error: unknown): boolean =>
   error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError')
 
 const mapStatusError = (status: number): DeepSeekToolError => {
+  // 状态码语义见 https://api-docs.deepseek.com/zh-cn/guides/search/ 「错误」表
   const hint =
-    status === 401
-      ? 'DeepSeek rejected the API key'
-      : status === 402
-        ? 'DeepSeek account balance is insufficient'
-        : status === 429
-          ? 'DeepSeek search/fetch rate limit exceeded'
-          : status === 422
-            ? 'DeepSeek rejected the request parameters'
-            : status >= 500
-              ? 'DeepSeek search/fetch service is unavailable'
-              : 'DeepSeek search/fetch request failed'
-  return new DeepSeekToolError(`HTTP_${status}` as DeepSeekToolErrorCode, `${hint} (HTTP ${status})`, status)
+    status === 400
+      ? 'DeepSeek rejected the request headers or body'
+      : status === 401
+        ? 'DeepSeek rejected the API key'
+        : status === 402
+          ? 'DeepSeek account balance is insufficient'
+          : status === 403
+            ? 'DeepSeek fetch was blocked by its security policy'
+            : status === 404
+              ? 'DeepSeek fetch could not extract usable page content'
+              : status === 408
+                ? 'DeepSeek timed out while reading the request body'
+                : status === 413
+                  ? 'DeepSeek request body exceeded its size limit'
+                  : status === 429
+                    ? 'DeepSeek search/fetch rate limit exceeded'
+                    : status >= 500
+                      ? 'DeepSeek search/fetch service is unavailable'
+                      : 'DeepSeek search/fetch request failed'
+  // 不拼接上游 error.message：官方错误体可能原样回显 API Key（已有测试锁定该契约）
+  return new DeepSeekToolError(
+    `HTTP_${status}` as DeepSeekToolErrorCode,
+    `${hint} (HTTP ${status})`,
+    status,
+  )
 }
 
 const postJson = async (
@@ -208,10 +230,15 @@ export const runDeepSeekSearch = async (
   assertWebScope(options.scope)
 
   const domains = normalizeDomains(options.domains)
-  const payload = {
+  const oriQuestion = (options.oriQuestion || '').trim()
+  const payload: Record<string, unknown> = {
     query: normalizedQuery,
     count: clampLimit(options.limit),
     need_content: Boolean(options.includeRawContent),
+  }
+  // 官方 ori_question 为可选 1-128 字符；超出范围时省略而不是截断成另一个意图
+  if (oriQuestion && Array.from(oriQuestion).length <= MAX_QUERY_CODE_POINTS) {
+    payload.ori_question = oriQuestion
   }
   const data = await postJson(DEEPSEEK_SEARCH_ENDPOINT, apiKey, payload, {
     signal: options.signal,
@@ -233,11 +260,21 @@ export const runDeepSeekSearch = async (
     seen.add(url)
     const snippet = pickText(item.summary) || pickText(item.snippet)
     const content = pickText(item.content)
+    const publishedDate = pickText(item.date)
+    const siteName = pickText(item.site_name)
+    const rawAuthority = item.authority
+    const authority =
+      typeof rawAuthority === 'number' && Number.isFinite(rawAuthority) && rawAuthority >= 0
+        ? rawAuthority
+        : undefined
     hits.push({
       title: pickText(item.title) || url || 'Untitled',
       url,
       snippet,
       ...(content ? { content } : {}),
+      ...(publishedDate ? { publishedDate } : {}),
+      ...(siteName ? { siteName } : {}),
+      ...(authority !== undefined ? { authority } : {}),
     })
     if (hits.length >= clampLimit(options.limit)) break
   }
