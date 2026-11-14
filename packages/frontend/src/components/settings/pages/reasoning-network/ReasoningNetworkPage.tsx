@@ -247,8 +247,8 @@ export function ReasoningNetworkPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-3 pb-3 border-b border-border/60">
-        <BrainCircuit className="w-5 h-5 text-primary flex-shrink-0" />
+      <div className="flex items-center gap-3 pb-3 border-b border-border">
+        <BrainCircuit className="w-5 h-5 text-ink-tertiary flex-shrink-0" />
         <div className="space-y-1">
           <CardTitle>推理与网络</CardTitle>
           <CardDescription className="text-sm text-muted-foreground">
@@ -257,7 +257,7 @@ export function ReasoningNetworkPage() {
         </div>
       </div>
 
-      <Alert className="v2-panel-soft border-border bg-background/78">
+      <Alert className="v2-panel-soft border-border bg-surface">
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>这里保持默认即可，调整前请确认你了解这些参数的影响。</AlertDescription>
       </Alert>

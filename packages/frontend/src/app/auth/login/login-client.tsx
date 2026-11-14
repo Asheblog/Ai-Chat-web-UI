@@ -109,6 +109,8 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
 
   return (
     <AuthFormLayout
+      title="登录"
+      description="继续你的对话，历史记录与偏好都会同步。"
       error={
         errorMessage ? (
           <span className="flex items-center gap-2">
@@ -121,7 +123,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
         <>
           <div>
             还没有账户？{' '}
-            <Link href="/auth/register" className="text-primary hover:text-[hsl(var(--primary-hover))] hover:underline">立即注册</Link>
+            <Link href="/auth/register" className="text-signal hover:text-[hsl(var(--primary-hover))] hover:underline">立即注册</Link>
           </div>
         </>
       }
@@ -159,7 +161,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
             />
             <button
               type="button"
-              className="absolute right-3 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
+              className="absolute right-3 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition hover:bg-surface-hover hover:text-foreground"
               onClick={() => setPasswordVisible((value) => !value)}
               aria-label={passwordVisible ? '隐藏密码' : '显示密码'}
               disabled={isLoading}

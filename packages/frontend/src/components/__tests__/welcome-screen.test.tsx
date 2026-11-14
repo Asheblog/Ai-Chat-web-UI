@@ -183,7 +183,7 @@ describe('WelcomeScreen', () => {
     expect(parent.className).toContain('rounded-[var(--radius-composer)]')
     expect(parent.className).toContain('relative')
     expect(parent.className).toContain('p-4')
-    expect(parent.className).toContain('focus-within:ring-2')
+    expect(parent.className).toContain('composer-shell')
     // shell uses COMPOSER_SHELL_BASE_CLASS; inner editor class is not a parent wrapper
     expect(parent.className).toContain('overflow-hidden')
   })

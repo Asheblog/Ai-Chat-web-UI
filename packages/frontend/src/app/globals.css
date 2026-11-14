@@ -4,46 +4,55 @@
 
 @layer base {
   :root {
-    /* Claude-like warm flat light theme — unified canvas, no paper lift */
-    --background: 40 22% 96%;
-    --background-alt: 36 18% 94%;
-    --surface: 40 22% 96%;
-    --surface-hover: 36 16% 92%;
-    --foreground: 25 16% 14%;
-    --card: 40 18% 98%;
-    --card-foreground: 25 16% 14%;
-    --popover: 40 18% 98%;
-    --popover-foreground: 25 16% 14%;
-    --primary: 18 65% 52%;
-    --primary-foreground: 40 40% 98%;
-    --secondary: 36 14% 92%;
-    --secondary-foreground: 25 14% 20%;
-    --muted: 36 12% 92%;
-    --muted-foreground: 25 10% 40%;
-    --accent: 18 28% 94%;
-    --accent-foreground: 25 16% 14%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 40 40% 98%;
-    --border: 30 12% 86%;
-    --input: 30 12% 86%;
-    --ring: 18 65% 52%;
+    /* Ink & Mist 浅色：雾色画布 + 白色面板 + 墨色文字，结构只靠 1px 发丝线 */
+    --background: 60 16% 96%;
+    --background-alt: 60 13% 94%;
+    --surface: 0 0% 100%;
+    --surface-subtle: 60 13% 94%;
+    --surface-hover: 60 12% 92%;
+    --foreground: 220 13% 9%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 13% 9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 13% 9%;
+    --primary: 175 77% 26%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 60 13% 94%;
+    --secondary-foreground: 220 13% 9%;
+    --muted: 60 13% 94%;
+    --muted-foreground: 212 9% 28%;
+    --accent: 169 20% 95%;
+    --accent-foreground: 220 13% 9%;
+    --destructive: 6 63% 46%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 60 11% 89%;
+    --input: 60 11% 89%;
+    --border-strong: 60 8% 84%;
+    --ring: 175 77% 26%;
     --radius: 0.75rem;
-    --radius-composer: 1.25rem;
+    --radius-composer: 1rem;
     --chat-max-width: 90rem;
 
-    --primary-hover: 18 65% 45%;
-    --accent-color: 18 65% 52%;
-    --success: 142 50% 40%;
-    --warning: 38 92% 50%;
-    --sidebar-bg: 40 18% 95%;
-    --sidebar-hover: 36 14% 91%;
-    --sidebar-active: 18 65% 52%;
-    --hero-from: 25 16% 14%;
-    --hero-to: 18 65% 52%;
-    --code-bg: 36 14% 94%;
-    --code-header: 36 12% 91%;
-    --code-border: 30 10% 84%;
-    --code-text: 25 14% 18%;
+    /* 信号色：青瓷。跟随 --primary，品牌换色时整条信号色链路一起换，页面骨架不动 */
+    --signal: var(--primary);
+    --signal-soft: 169 30% 93%;
+    --signal-text: 176 79% 20%;
+    --ink-tertiary: 210 3% 43%;
+    --user-bubble: 60 15% 94%;
+
+    --primary-hover: 175 77% 21%;
+    --accent-color: 175 77% 26%;
+    --success: 142 72% 29%;
+    --warning: 35 92% 33%;
+    --sidebar-bg: 60 16% 96%;
+    --sidebar-hover: 60 12% 92%;
+    --sidebar-active: 175 77% 26%;
+    --hero-from: 220 13% 9%;
+    --hero-to: 175 77% 26%;
+    --code-bg: 60 17% 95%;
+    --code-header: 60 13% 94%;
+    --code-border: 60 11% 89%;
+    --code-text: 220 12% 14%;
 
     /* Structural spacing tokens (not brand-overridable) */
     --space-1: 0.25rem;
@@ -55,45 +64,54 @@
   }
 
   .dark {
-    /* Warm charcoal flat companion — unified canvas */
-    --background: 30 10% 10%;
-    --background-alt: 30 9% 12%;
-    --surface: 30 10% 10%;
-    --surface-hover: 30 8% 15%;
-    --foreground: 36 16% 92%;
-    --card: 30 9% 13%;
-    --card-foreground: 36 16% 92%;
-    --popover: 30 9% 13%;
-    --popover-foreground: 36 16% 92%;
-    --primary: 18 70% 58%;
-    --primary-foreground: 30 12% 9%;
-    --secondary: 30 8% 16%;
-    --secondary-foreground: 36 14% 90%;
-    --muted: 30 8% 16%;
-    --muted-foreground: 30 8% 58%;
-    --accent: 25 12% 16%;
-    --accent-foreground: 36 16% 92%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 40 40% 98%;
-    --border: 30 8% 20%;
-    --input: 30 8% 20%;
-    --ring: 18 70% 58%;
-    --radius-composer: 1.25rem;
+    /* Ink & Mist 深色：墨绿夜底 + 抬升一阶的面板，同样只靠发丝线分区 */
+    color-scheme: dark;
+    --background: 90 15% 5%;
+    --background-alt: 86 13% 8%;
+    --surface: 84 14% 7%;
+    --surface-subtle: 86 13% 10%;
+    --surface-hover: 82 12% 13%;
+    --foreground: 72 13% 92%;
+    --card: 84 14% 7%;
+    --card-foreground: 72 13% 92%;
+    --popover: 84 14% 7%;
+    --popover-foreground: 72 13% 92%;
+    --primary: 174 64% 52%;
+    --primary-foreground: 90 15% 5%;
+    --secondary: 86 13% 10%;
+    --secondary-foreground: 72 13% 92%;
+    --muted: 86 13% 10%;
+    --muted-foreground: 88 9% 70%;
+    --accent: 174 22% 13%;
+    --accent-foreground: 72 13% 92%;
+    --destructive: 6 65% 65%;
+    --destructive-foreground: 90 15% 5%;
+    --border: 90 10% 16%;
+    --input: 90 10% 16%;
+    --border-strong: 90 9% 22%;
+    --ring: 174 64% 52%;
+    --radius-composer: 1rem;
     --chat-max-width: 90rem;
 
-    --primary-hover: 18 70% 50%;
-    --accent-color: 18 70% 58%;
-    --success: 142 50% 45%;
-    --warning: 38 92% 50%;
-    --sidebar-bg: 30 9% 11%;
-    --sidebar-hover: 30 8% 15%;
-    --sidebar-active: 18 70% 58%;
-    --hero-from: 36 16% 92%;
-    --hero-to: 30 8% 58%;
-    --code-bg: 30 12% 8%;
-    --code-header: 30 10% 12%;
-    --code-border: 30 9% 18%;
-    --code-text: 36 14% 82%;
+    --signal: var(--primary);
+    --signal-soft: 171 37% 14%;
+    --signal-text: 173 70% 63%;
+    --ink-tertiary: 93 5% 56%;
+    --user-bubble: 86 12% 11%;
+
+    --primary-hover: 174 64% 58%;
+    --accent-color: 174 64% 52%;
+    --success: 145 50% 62%;
+    --warning: 40 65% 57%;
+    --sidebar-bg: 90 15% 5%;
+    --sidebar-hover: 82 12% 13%;
+    --sidebar-active: 174 64% 52%;
+    --hero-from: 72 13% 92%;
+    --hero-to: 174 64% 52%;
+    --code-bg: 86 14% 10%;
+    --code-header: 86 13% 13%;
+    --code-border: 90 10% 16%;
+    --code-text: 90 8% 86%;
   }
 }
 
@@ -103,7 +121,20 @@
   }
 
   html {
-    color-scheme: light dark;
+    color-scheme: light;
+    scrollbar-color: hsl(var(--border-strong)) transparent;
+    /* 原生控件（复选/单选/进度条）默认蓝改为信号色 */
+    accent-color: hsl(var(--signal));
+  }
+
+  /* 焦点统一 1.5px 信号色描边：不用阴影环，也不留浏览器默认蓝 */
+  :focus-visible {
+    outline: 1.5px solid hsl(var(--signal));
+    outline-offset: 2px;
+  }
+
+  :focus:not(:focus-visible) {
+    outline: none;
   }
 
   body {
@@ -122,113 +153,114 @@
   }
 
   ::selection {
-    background: hsl(var(--primary) / 0.25);
+    background: hsl(var(--signal) / 0.25);
     color: hsl(var(--foreground));
   }
 }
 
 @layer components {
-  /* Flat app canvas — no diagonal stripe, no paper stack */
+  /* 结构只用 1px 发丝线与色阶：无阴影、无渐变，圆角固定在 8 / 10 / 12 / 16 */
   .v2-app-surface {
     position: relative;
     background: hsl(var(--background));
   }
 
   .v2-panel {
-    border: 1px solid hsl(var(--border) / 0.85);
-    border-radius: var(--radius);
+    border: 1px solid hsl(var(--border));
+    border-radius: 12px;
     background: hsl(var(--card));
-    box-shadow: none;
   }
 
   .v2-panel-soft {
-    border: 1px solid hsl(var(--border) / 0.7);
-    border-radius: var(--radius);
-    background: hsl(var(--muted) / 0.45);
-    box-shadow: none;
+    border: 1px solid hsl(var(--border));
+    border-radius: 12px;
+    background: hsl(var(--surface-subtle));
   }
 
   .v2-toolbar {
     height: 3rem;
-    border-bottom: 1px solid hsl(var(--border) / 0.75);
+    border-bottom: 1px solid hsl(var(--border));
     background: hsl(var(--background));
-    box-shadow: none;
   }
 
   .v2-icon-button {
     display: inline-flex;
-    height: 2.25rem;
-    width: 2.25rem;
+    height: 2rem;
+    width: 2rem;
     align-items: center;
     justify-content: center;
-    border-radius: calc(var(--radius) - 2px);
+    border-radius: 8px;
     border: 1px solid transparent;
     background: transparent;
     color: hsl(var(--muted-foreground));
-    transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+    transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
   }
 
   .v2-icon-button:hover {
-    border-color: hsl(var(--border));
-    background: hsl(var(--accent));
+    background: hsl(var(--surface-hover));
     color: hsl(var(--foreground));
+  }
+
+  .v2-icon-button:focus-visible {
+    outline: 1.5px solid hsl(var(--signal));
+    outline-offset: 2px;
   }
 
   .v2-chip {
     display: inline-flex;
-    min-height: 2rem;
+    min-height: 1.75rem;
     align-items: center;
-    gap: 0.42rem;
+    gap: 0.375rem;
     border-radius: 999px;
-    border: 1px solid hsl(var(--border) / 0.85);
-    background: hsl(var(--background));
-    padding: 0.35rem 0.8rem;
-    font-size: 0.875rem;
-    line-height: 1.1;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+    padding: 0.25rem 0.75rem;
+    font-size: 0.8125rem;
+    line-height: 1.2;
     color: hsl(var(--foreground));
-    transition: background 0.16s ease, border-color 0.16s ease;
+    transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
   }
 
   .v2-chip:hover {
-    border-color: hsl(var(--primary) / 0.3);
-    background: hsl(var(--accent));
+    background: hsl(var(--surface-hover));
   }
 
   .v2-chip-active {
-    border-color: hsl(var(--primary) / 0.42);
-    background: hsl(var(--primary) / 0.1);
-    color: hsl(var(--primary));
+    border-color: hsl(var(--signal) / 0.35);
+    background: hsl(var(--signal-soft));
+    color: hsl(var(--signal-text));
+    font-weight: 500;
   }
 
   .v2-status {
     display: inline-flex;
     min-height: 1.375rem;
     align-items: center;
-    gap: 0.3rem;
+    gap: 0.25rem;
     border-radius: 999px;
-    border: 1px solid hsl(var(--border) / 0.7);
-    background: hsl(var(--muted) / 0.55);
-    padding: 0.14rem 0.5rem;
-    font-size: 0.75rem;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--surface-subtle));
+    padding: 0.125rem 0.5rem;
+    font-size: 0.6875rem;
     line-height: 1;
     font-weight: 500;
     color: hsl(var(--muted-foreground));
   }
 
   .v2-status-success {
-    border-color: hsl(var(--success) / 0.25);
-    background: hsl(var(--success) / 0.11);
+    border-color: hsl(var(--success) / 0.3);
+    background: hsl(var(--success) / 0.1);
     color: hsl(var(--success));
   }
 
   .v2-status-warning {
-    border-color: hsl(var(--warning) / 0.26);
-    background: hsl(var(--warning) / 0.11);
+    border-color: hsl(var(--warning) / 0.3);
+    background: hsl(var(--warning) / 0.1);
     color: hsl(var(--warning));
   }
 
   .v2-status-danger {
-    border-color: hsl(var(--destructive) / 0.28);
+    border-color: hsl(var(--destructive) / 0.3);
     background: hsl(var(--destructive) / 0.1);
     color: hsl(var(--destructive));
   }
@@ -236,21 +268,21 @@
   .v2-table-wrap {
     overflow-y: hidden;
     overflow-x: auto;
-    border: 1px solid hsl(var(--border) / 0.8);
-    border-radius: var(--radius);
+    border: 1px solid hsl(var(--border));
+    border-radius: 12px;
     background: hsl(var(--card));
   }
 
   .v2-slide-over {
-    border-left: 1px solid hsl(var(--border) / 0.85);
-    background: hsl(var(--background));
-    box-shadow: none;
+    border-left: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
   }
 
   .v2-section-title {
-    font-size: 1rem;
+    font-size: 1.125rem;
+    line-height: 1.4;
     font-weight: 600;
-    letter-spacing: 0;
+    letter-spacing: -0.01em;
     color: hsl(var(--foreground));
   }
 
@@ -261,15 +293,27 @@
   }
 }
 
+@layer utilities {
+  /* 耗时 / token / 计数列：数字等宽，流式刷新时不跳动 */
+  .num-tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .num-mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
 /* 全局代码块外观对齐 OpenWebUI 风格 */
 code {
-  border-radius: 0.45rem;
-  background: hsl(var(--muted) / 0.7);
+  border-radius: 6px;
+  background: hsl(var(--surface-subtle));
   padding: 0.12rem 0.35rem;
 }
 
 pre {
-  border-radius: calc(var(--radius) + 0.15rem);
+  border-radius: 10px;
   border: 1px solid hsl(var(--code-border));
   background: hsl(var(--code-bg));
 }
@@ -314,14 +358,14 @@ pre code {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--border));
+  background: hsl(var(--border-strong));
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.45);
+  background: hsl(var(--ink-tertiary));
   border: 2px solid transparent;
   background-clip: padding-box;
 }
@@ -403,7 +447,7 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.6rem;
-  background: hsl(var(--muted) / 0.3);
+  background: hsl(var(--surface-subtle));
   border-radius: var(--radius);
   padding: 0.85rem;
   font-size: 0.75rem;
@@ -508,14 +552,14 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
 .markdown-body {
   contain: content paint;
   will-change: contents;
-  font-size: 1rem;
-  line-height: 1.65;
+  font-size: 0.9375rem;
+  line-height: 1.8;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
 
 .markdown-body--reasoning {
-  line-height: 1.65;
+  line-height: 1.8;
 }
 
 .markdown-body p,
@@ -540,7 +584,7 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
 @media (max-width: 640px) {
   .markdown-body,
   .markdown-body--reasoning {
-    line-height: 1.5; /* 小屏更紧凑 */
+    line-height: 1.7; /* 小屏更紧凑 */
   }
 }
 
@@ -549,8 +593,8 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
 }
 
 .markdown-body :not(pre) > code {
-  background: hsl(var(--muted) / 0.6);
-  border-radius: 0.4rem;
+  background: hsl(var(--surface-subtle));
+  border-radius: 6px;
   padding: 0.15rem 0.4rem;
   font-size: 0.85em;
   font-family: var(--font-mono);
@@ -562,13 +606,12 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
 
 .markdown-body .md-pre {
   margin: 1rem 0;
-  border-radius: 0.75rem;
+  border-radius: 10px;
   border: 1px solid hsl(var(--code-border));
   background: hsl(var(--code-bg));
   color: hsl(var(--code-text));
   overflow: hidden;
   position: relative;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 }
 
 .markdown-body .md-pre code {
@@ -577,8 +620,8 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
   background: transparent;
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 0.875rem;
-  line-height: 1.65;
+  font-size: 0.78125rem;
+  line-height: 1.7;
 }
 
 .markdown-body .md-pre + .md-pre {
@@ -586,7 +629,7 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
 }
 
 .markdown-body a {
-  color: hsl(var(--primary));
+  color: hsl(var(--signal));
   text-decoration: none;
 }
 
@@ -610,7 +653,7 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
 }
 
 .markdown-body thead {
-  background: hsl(var(--muted));
+  background: hsl(var(--surface-subtle));
 }
 
 /* KaTeX 渲染区域样式，避免大公式溢出 */
@@ -623,14 +666,10 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
   margin: 1.25rem 0;
   padding: 0.75rem 0.5rem;
   overflow-x: auto;
-  border-radius: 0.6rem;
-  background: hsl(var(--muted) / 0.35);
+  border-radius: 8px;
+  background: hsl(var(--surface-subtle));
   max-width: 100%;
   box-sizing: border-box;
-}
-
-.dark .markdown-body .katex-display {
-  background: hsl(var(--muted) / 0.25);
 }
 
 .markdown-body .katex-display > .katex {
@@ -639,10 +678,9 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
 }
 
 .markdown-body blockquote {
-  border-left: 3px solid hsl(var(--primary));
+  border-left: 1px solid hsl(var(--border-strong));
   padding-left: 1rem;
   color: hsl(var(--muted-foreground));
-  font-style: italic;
 }
 
 .markdown-body ul,
@@ -662,8 +700,8 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
 }
 
 .markdown-fallback {
-  background: hsl(var(--muted) / 0.5);
-  border: 1px dashed hsl(var(--border));
+  background: hsl(var(--surface-subtle));
+  border: 1px dashed hsl(var(--border-strong));
 }
 
 /* 修复 Radix ScrollArea 内部 table div 被内容撑开的问题 */
@@ -753,13 +791,15 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
   }
 }
 
-/* 设置搜索跳转后的位置提醒：导航项/功能卡外发光脉冲（3 次，约 1.5s 一次性） */
+/* 设置搜索跳转后的位置提醒：信号色描边脉冲（3 次，约 1.5s 一次性） */
 @keyframes settings-flash-pulse {
   0%, 100% {
-    box-shadow: 0 0 0 0 hsl(var(--ring) / 0.65);
+    outline: 0 solid hsl(var(--signal) / 0.55);
+    outline-offset: 2px;
   }
   50% {
-    box-shadow: 0 0 0 4px hsl(var(--ring) / 0.65);
+    outline: 3px solid hsl(var(--signal) / 0.55);
+    outline-offset: 2px;
   }
 }
 

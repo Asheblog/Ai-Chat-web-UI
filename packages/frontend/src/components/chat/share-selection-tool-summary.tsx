@@ -29,9 +29,9 @@ export function ShareSelectionToolSummary({
 
   return (
     <div
-      className={`rounded-lg border border-dashed border-primary/30 bg-primary/5 px-3 py-2 text-xs text-primary/80 ${className ?? ''}`}
+      className={`rounded-lg border border-dashed border-borderStrong bg-surface-subtle px-3 py-2 text-[11.5px] text-ink-tertiary ${className ?? ''}`}
     >
-      <p className="font-semibold text-primary">{title}</p>
+      <p className="font-semibold text-signal">{title}</p>
       {summary ? (
         <>
           <p className="mt-1 text-muted-foreground">{summary.label}</p>

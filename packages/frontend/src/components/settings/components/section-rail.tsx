@@ -20,22 +20,15 @@ export type SectionRailProps<K extends string = string> = {
   panelId?: string
 }
 
-const focusRing =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-
-const desktopItemBase = cn(
-  "flex min-h-9 w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors",
-  focusRing,
-)
-
-const mobileItemBase = cn(
-  "inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
-  focusRing,
-)
+const desktopItemBase =
+  "flex h-8 w-full items-center gap-2 rounded-lg border px-2 text-left text-[13px] transition-colors duration-[160ms]"
+const mobileItemBase =
+  "inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-[13px] font-medium transition-colors duration-[160ms]"
 
 /**
  * 分段导航：桌面左侧竖排段列表，移动端折成一行可横向滚动的分段按钮。
- * 纯受控展示组件（无内部 state），样式沿用原 MCP 页导航的桌面/移动两分支。
+ * 纯受控展示组件（无内部 state）。选中态 = 白底 + 发丝线 + 左侧 2×14 信号竖条；
+ * 焦点环由全局 :focus-visible 提供（1.5px signal 描边），此处不再写 ring。
  * 移动端用 role=tab，故补 aria-controls 指向页面内容区，读屏能说出标签控制哪块内容。
  */
 export function SectionRail<K extends string>({
@@ -63,13 +56,13 @@ export function SectionRail<K extends string>({
               className={cn(
                 desktopItemBase,
                 isActive
-                  ? "bg-primary/10 text-primary font-medium"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  ? "border-border bg-surface font-medium text-foreground"
+                  : "border-transparent text-ink-secondary hover:bg-surface-hover hover:text-foreground",
               )}
             >
-              <Icon className="h-4 w-4 shrink-0" />
+              <span className={cn("h-3.5 w-0.5 shrink-0 rounded-full", isActive ? "bg-signal" : "bg-transparent")} aria-hidden="true" />
+              <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span className="truncate">{item.label}</span>
-              {isActive && <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
             </button>
           )
         })}
@@ -91,11 +84,11 @@ export function SectionRail<K extends string>({
               className={cn(
                 mobileItemBase,
                 isActive
-                  ? "border-primary/70 bg-primary/10 text-primary"
-                  : "border-border bg-background/70 text-muted-foreground hover:bg-accent hover:text-foreground",
+                  ? "border-border bg-surface text-foreground"
+                  : "border-border bg-surface-subtle text-ink-secondary hover:bg-surface-hover hover:text-foreground",
               )}
             >
-              <Icon className="h-3.5 w-3.5" />
+              <Icon className="h-3.5 w-3.5" aria-hidden="true" />
               {item.shortLabel ?? item.label}
             </button>
           )

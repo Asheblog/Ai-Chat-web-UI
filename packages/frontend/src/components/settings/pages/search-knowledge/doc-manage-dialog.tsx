@@ -46,7 +46,7 @@ const getStatusBadge = (status: string) => {
     ready: 'border border-[hsl(var(--success)/0.35)] bg-[hsl(var(--success)/0.15)] text-[hsl(var(--success))]',
     processing: 'border border-[hsl(var(--warning)/0.35)] bg-[hsl(var(--warning)/0.15)] text-[hsl(var(--warning))]',
     error: 'border border-destructive/30 bg-destructive/10 text-destructive',
-    pending: 'border border-border/70 bg-[hsl(var(--surface-hover))] text-muted-foreground',
+    pending: 'border border-border bg-[hsl(var(--surface-hover))] text-muted-foreground',
   }
   const labels: Record<string, string> = {
     ready: '就绪',
@@ -146,7 +146,7 @@ export function DocManageDialog({
         </div>
 
         {selectedDocIds.size > 0 && (
-          <div className="flex items-center gap-3 py-2 px-3 bg-muted rounded-lg">
+          <div className="flex items-center gap-3 py-2 px-3 bg-surface-subtle rounded-lg">
             <span className="text-sm">已选择 {selectedDocIds.size} 个文档</span>
             <Button
               variant="destructive"

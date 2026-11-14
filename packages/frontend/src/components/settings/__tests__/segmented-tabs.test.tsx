@@ -80,7 +80,7 @@ describe("SegmentedTabs", () => {
 
     const approvalsTab = screen.getByRole("tab", { name: /待审批/ })
     const badge = within(approvalsTab).getByText("3")
-    expect(badge.className).toContain("text-micro")
+    expect(badge.className).toContain("text-[11px]")
     expect(badge.className).toContain("rounded-full")
     // 图标 + label + 徽标
     expect(approvalsTab.querySelectorAll("span")).toHaveLength(2)
@@ -137,16 +137,29 @@ describe("SegmentedTabs", () => {
     expect(segmentPanelId("mcp-tab", "install")).toBe("mcp-tab-panel-install")
   })
 
-  test("全部标签 type=button、可见焦点环，触控高度 ≥36px", () => {
+  test("全部标签 type=button、焦点环交给全局 outline、控件高 32px", () => {
     renderTabs("install")
 
     for (const tab of screen.getAllByRole("tab")) {
       expect(tab.getAttribute("type")).toBe("button")
-      expect(tab.className).toContain("focus-visible:outline-none")
-      expect(tab.className).toContain("focus-visible:ring-2")
-      expect(tab.className).toContain("focus-visible:ring-primary")
-      expect(tab.className).toContain("focus-visible:ring-offset-background")
-      expect(tab.className).toContain("min-h-9")
+      // 全局 :focus-visible 提供 1.5px signal 描边；组件不再叠 ring，也不得 outline-none 抹掉它。
+      expect(tab.className).not.toContain("ring-")
+      expect(tab.className).not.toContain("shadow")
+      expect(tab.className).not.toContain("outline-none")
+      expect(tab.className).toContain("min-h-8")
     }
+  })
+
+  test("外底 surface-subtle、选中项白底 + 发丝线", () => {
+    renderTabs("install")
+    const tablist = screen.getByRole("tablist", { name: ARIA_LABEL })
+
+    expect(tablist.className).toContain("bg-surface-subtle")
+    expect(tablist.className).toContain("border-border")
+
+    const selected = screen.getByRole("tab", { name: "安装" })
+    expect(selected.className).toContain("bg-surface")
+    expect(selected.className).toContain("border-border")
+    expect(screen.getByRole("tab", { name: "绑定" }).className).toContain("border-transparent")
   })
 })

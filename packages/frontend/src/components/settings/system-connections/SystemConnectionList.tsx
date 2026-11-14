@@ -28,7 +28,7 @@ export function SystemConnectionList({
     return (
       <ul aria-busy="true" aria-label="连接列表" className="divide-y divide-border/70">
         {Array.from({ length: 3 }).map((_, index) => (
-          <li key={index} className="h-16 animate-pulse bg-muted/40" />
+          <li key={index} className="h-16 animate-pulse bg-surface-subtle" />
         ))}
       </ul>
     )
@@ -70,7 +70,7 @@ function ConnectionRow({
   const tags = group.tags.map((tag) => tag.name).filter(Boolean).slice(0, 3)
 
   return (
-    <li className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3 transition-colors hover:bg-accent/60">
+    <li className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3 transition-colors hover:bg-surface-hover">
       <button
         type="button"
         onClick={onEdit}
@@ -80,10 +80,10 @@ function ConnectionRow({
           className={cn(
             "flex h-9 w-9 shrink-0 items-center justify-center rounded-md border",
             health === "healthy"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-600"
+              ? "border-success/30 bg-success/10 text-success"
               : health === "warning"
-                ? "border-amber-200 bg-amber-50 text-amber-600"
-                : "border-red-200 bg-red-50 text-red-600",
+                ? "border-warning/30 bg-warning/10 text-warning"
+                : "border-destructive/30 bg-destructive/10 text-destructive",
           )}
           role="img"
           aria-label={healthLabel[health]}
@@ -115,11 +115,11 @@ function ConnectionRow({
       <div className="ml-auto flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <span>Keys {group.apiKeys.length}</span>
-          <span aria-hidden className="text-muted-foreground/45">
+          <span aria-hidden className="text-ink-tertiary">
             ·
           </span>
           <span>模型 {modelCount || "自动"}</span>
-          <span aria-hidden className="text-muted-foreground/45">
+          <span aria-hidden className="text-ink-tertiary">
             ·
           </span>
           <span>更新 {formatDate(group.updatedAt)}</span>

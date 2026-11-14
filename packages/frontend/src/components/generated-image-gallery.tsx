@@ -107,7 +107,7 @@ function GeneratedImageGalleryInner({
           <img
             src={src}
             alt={image.revisedPrompt || 'AI generated image'}
-            className="rounded-lg cursor-pointer shadow-md hover:shadow-lg transition-shadow w-full"
+            className="w-full cursor-pointer rounded-lg"
             onClick={() => onImageClick(0)}
           />
           {/* 操作按钮 */}
@@ -154,7 +154,7 @@ function GeneratedImageGalleryInner({
               <img
                 src={src}
                 alt={image.revisedPrompt || `AI generated image ${index + 1}`}
-                className="rounded-lg cursor-pointer shadow-md hover:shadow-lg transition-shadow w-full aspect-square object-cover"
+                className="aspect-square w-full cursor-pointer rounded-lg object-cover"
                 onClick={() => onImageClick(index)}
               />
               <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">

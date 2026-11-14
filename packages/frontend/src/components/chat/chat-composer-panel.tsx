@@ -510,10 +510,10 @@ function ChatComposerPanelComponent({
     >
       {/* 拖拽上传遮罩 */}
       {isDragOver && (
-        <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary/50 bg-primary/[0.04] backdrop-blur-[1px]">
-          <div className="rounded-xl bg-background/80 px-5 py-3 text-center shadow-sm backdrop-blur-sm">
+        <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center rounded-lg border-2 border-dashed border-signal/50 bg-signal/5 ">
+          <div className="rounded-xl bg-surface px-5 py-3 text-center  ">
             <p className="text-sm font-medium text-foreground">松开以上传文件</p>
-            <p className="mt-0.5 text-micro text-muted-foreground">推荐 PDF / Word / Excel / CSV / 文本 / 代码</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">推荐 PDF / Word / Excel / CSV / 文本 / 代码</p>
           </div>
         </div>
       )}
@@ -527,10 +527,10 @@ function ChatComposerPanelComponent({
             onClick={() => setAdvancedOpen(false)}
           >
             <div
-              className="w-full max-w-5xl rounded-2xl bg-background shadow-2xl border border-border/70 max-h-full overflow-y-auto"
+              className="w-full max-w-5xl rounded-lg bg-background  border border-border max-h-full overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
+              <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
                 <div>
                   <p className="text-lg font-semibold leading-none">高级请求定制</p>
                   <p className="text-sm text-muted-foreground mt-1">
@@ -553,7 +553,7 @@ function ChatComposerPanelComponent({
                   customBodyError={customBodyError}
                 />
               </div>
-              <div className="flex justify-end border-t border-border/60 px-5 py-3">
+              <div className="flex justify-end border-t border-border px-5 py-3">
                 <Button variant="secondary" onClick={() => setAdvancedOpen(false)}>
                   完成
                 </Button>
@@ -574,10 +574,10 @@ function ChatComposerPanelComponent({
             onClick={() => setSessionPromptOpen(false)}
           >
             <div
-              className="w-full max-w-2xl rounded-2xl bg-background shadow-2xl border border-border/70 max-h-[80vh] overflow-y-auto"
+              className="w-full max-w-2xl rounded-lg bg-background  border border-border max-h-[80vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-start justify-between gap-3 border-b border-border/60 px-5 py-4">
+              <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
                 <div>
                   <p className="text-lg font-semibold leading-none">会话系统提示词</p>
                   <p className="text-sm text-muted-foreground mt-1">{sessionPromptSourceLabel}</p>
@@ -594,7 +594,7 @@ function ChatComposerPanelComponent({
                         value={promptTemplateSearch}
                         onChange={(event) => setPromptTemplateSearch(event.target.value)}
                         placeholder="搜索模板"
-                        className="h-9 w-full rounded-lg border border-border/60 bg-muted/20 px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                        className="h-9 w-full rounded-lg border border-border bg-surface-subtle px-3 text-sm outline-none  "
                       />
                       <Button
                         variant="outline"
@@ -605,7 +605,7 @@ function ChatComposerPanelComponent({
                         刷新
                       </Button>
                     </div>
-                    <div className="max-h-[320px] overflow-y-auto rounded-xl border border-border/60 bg-muted/20 p-2">
+                    <div className="max-h-[320px] overflow-y-auto rounded-xl border border-border bg-surface-subtle p-2">
                       {promptTemplatesLoading ? (
                         <div className="px-2 py-3 text-xs text-muted-foreground">正在加载模板...</div>
                       ) : filteredPromptTemplates.length === 0 ? (
@@ -616,7 +616,7 @@ function ChatComposerPanelComponent({
                             key={template.id}
                             className={`rounded-lg border px-2.5 py-2 ${
                               selectedTemplateId === template.id
-                                ? 'border-primary/50 bg-primary/10'
+                                ? 'border-signal/50 bg-signal-soft'
                                 : 'border-border/50 bg-background/70'
                             }`}
                           >
@@ -628,7 +628,7 @@ function ChatComposerPanelComponent({
                               <div className="flex items-center justify-between gap-2">
                                 <p className="truncate text-sm font-medium">{template.title}</p>
                                 {template.pinnedAt ? (
-                                  <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-micro text-primary">置顶</span>
+                                  <span className="rounded-full bg-signal-soft px-1.5 py-0.5 text-[11px] text-signal">置顶</span>
                                 ) : null}
                               </div>
                               <p className="mt-1 max-h-10 overflow-hidden text-xs leading-5 text-muted-foreground">
@@ -671,14 +671,14 @@ function ChatComposerPanelComponent({
                       onChange={(e) => onSessionPromptChange(e.target.value)}
                       rows={8}
                       placeholder={sessionPromptPlaceholder}
-                      className="w-full rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-sm leading-relaxed focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                      className="w-full rounded-xl border border-border bg-surface-subtle px-3 py-2 text-sm leading-relaxed  "
                     />
                     <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
                       <input
                         value={promptTemplateTitle}
                         onChange={(event) => setPromptTemplateTitle(event.target.value)}
                         placeholder="模板名称（可选）"
-                        className="h-9 w-full rounded-lg border border-border/60 bg-muted/20 px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                        className="h-9 w-full rounded-lg border border-border bg-surface-subtle px-3 text-sm outline-none  "
                       />
                       <Button
                         variant="outline"
@@ -701,7 +701,7 @@ function ChatComposerPanelComponent({
                   </div>
                 </div>
               </div>
-              <div className="flex items-center justify-between border-t border-border/60 px-5 py-3">
+              <div className="flex items-center justify-between border-t border-border px-5 py-3">
                 <Button variant="ghost" onClick={() => onSessionPromptChange('')} disabled={sessionPromptSaving}>
                   清空
                 </Button>
@@ -880,7 +880,7 @@ function ChatComposerPanelComponent({
         onApply={applyExpand}
       />
       {sendLocked && sendLockedReason ? (
-        <p className="mx-auto mb-3 max-w-3xl rounded-full border border-border/70 bg-[hsl(var(--surface))/0.65] px-3 py-1.5 text-center text-xs text-muted-foreground backdrop-blur-sm">
+        <p className="mx-auto mb-3 max-w-3xl rounded-full border border-border bg-[hsl(var(--surface))/0.65] px-3 py-1.5 text-center text-xs text-muted-foreground ">
           {sendLockedReason}
         </p>
       ) : null}

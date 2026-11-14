@@ -14,11 +14,11 @@ const TOOL_VISIBILITY_STORAGE_KEY = 'aichat.cot_tool_visibility'
 
 const DOT_CLASS = 'absolute -left-[19px] h-2 w-2 rounded-full border-2 border-background'
 
-const CARD_SHELL_CLASS = 'overflow-hidden rounded-lg border border-border/60 bg-background/50'
-const CARD_SHELL_COMPACT_CLASS = 'rounded-md transition-colors duration-200 hover:bg-muted/40'
+const CARD_SHELL_CLASS = 'overflow-hidden rounded-lg border border-border bg-background/50'
+const CARD_SHELL_COMPACT_CLASS = 'rounded-md transition-colors duration-200 hover:bg-surface-subtle/40'
 
 const CARD_BUTTON_CLASS =
-  'flex w-full cursor-pointer flex-col gap-1.5 px-3 py-2 text-left transition-colors duration-200 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring'
+  'flex w-full cursor-pointer flex-col gap-1.5 px-3 py-2 text-left transition-colors duration-200 hover:bg-surface-subtle/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring'
 const CARD_BUTTON_COMPACT_CLASS =
   'flex w-full cursor-pointer flex-col gap-0.5 px-2 py-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring'
 
@@ -125,7 +125,7 @@ export function CotReasoningCard({
           )}
         </button>
         {expanded && (
-          <div className={compact ? 'border-t border-border/60 px-2 py-2' : 'border-t border-border/60 px-3 py-2.5'}>
+          <div className={compact ? 'border-t border-border px-2 py-2' : 'border-t border-border px-3 py-2.5'}>
             <FadeScrollContainer
               maxHeightClassName="max-h-72"
               stickToBottomKey={isStreamingTail ? text.length : null}

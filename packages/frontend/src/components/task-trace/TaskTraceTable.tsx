@@ -56,7 +56,7 @@ export const TaskTraceTable: FC<TaskTraceTableProps> = ({
       {items.map((item) => (
         <TableRow
           key={item.id}
-          className="cursor-pointer hover:bg-muted/40"
+          className="cursor-pointer hover:bg-surface-subtle/40"
           onClick={() => onOpenDetail(item)}
         >
           <TableCell>{item.id}</TableCell>
@@ -95,7 +95,7 @@ export const TaskTraceTable: FC<TaskTraceTableProps> = ({
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-primary"
+                className="text-signal"
                 onClick={(e) => {
                   e.stopPropagation()
                   onExport(item.id)

@@ -98,7 +98,7 @@ export function BindingsTab() {
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <McpField label="连接（connectionId）" required>
-              <select className="h-9 w-full rounded-md border bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary" value={formConnId} onChange={(e) => setFormConnId(e.target.value)}>
+              <select className="h-9 w-full rounded-md border bg-background px-3 text-xs focus:outline-none focus: focus:" value={formConnId} onChange={(e) => setFormConnId(e.target.value)}>
                 <option value="">选择...</option>
                 {connections.map((c) => <option key={c.id} value={c.id}>{c.name} (ID:{c.id})</option>)}
               </select>
@@ -130,14 +130,14 @@ export function BindingsTab() {
             </thead>
             <tbody>
               {items.map((b) => (
-                <tr key={b.id} className="border-b border-border/50 hover:bg-muted/30">
+                <tr key={b.id} className="border-b border-border hover:bg-surface-subtle">
                   <td className="py-2 pr-3 font-mono">{b.id}</td>
                   <td className="py-2 pr-3">{connMap.get(b.connectionId)?.name ?? b.connectionId}</td>
-                  <td className="py-2 pr-3"><Badge variant="outline" className="text-micro">{b.scopeType}</Badge></td>
-                  <td className="py-2 pr-3 font-mono text-micro">{b.scopeId}</td>
+                  <td className="py-2 pr-3"><Badge variant="outline" className="text-[11px]">{b.scopeType}</Badge></td>
+                  <td className="py-2 pr-3 font-mono text-[11px]">{b.scopeId}</td>
                   <td className="py-2 pr-3"><Switch checked={b.enabled} onCheckedChange={(v) => handleToggle(b.id, v)} /></td>
                   <td className="py-2 pr-3">
-                    <button type="button" onClick={() => setDeleteId(b.id)} title="删除" className="inline-flex p-1 rounded hover:bg-accent"><Trash2 className="h-3.5 w-3.5 text-destructive/70 hover:text-destructive" /></button>
+                    <button type="button" onClick={() => setDeleteId(b.id)} title="删除" className="inline-flex p-1 rounded hover:bg-surface-hover"><Trash2 className="h-3.5 w-3.5 text-destructive/70 hover:text-destructive" /></button>
                   </td>
                 </tr>
               ))}

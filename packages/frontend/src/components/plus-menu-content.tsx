@@ -45,7 +45,7 @@ function ActionCardButton({
   return (
     <button
       type="button"
-      className="w-full cursor-pointer rounded-xl border border-border/70 bg-[hsl(var(--surface))/0.75] px-3 py-2.5 text-left transition-colors hover:bg-[hsl(var(--surface-hover))] disabled:cursor-not-allowed disabled:opacity-45"
+      className="w-full cursor-pointer rounded-xl border border-border bg-[hsl(var(--surface))/0.75] px-3 py-2.5 text-left transition-colors hover:bg-[hsl(var(--surface-hover))] disabled:cursor-not-allowed disabled:opacity-45"
       onClick={onClick}
       disabled={disabled}
     >
@@ -84,13 +84,13 @@ export function PlusMenuContent({
   const body = (
     <div className={cn('space-y-3', bodyClassName)}>
       {showControlCard && hasSecondaryControls ? (
-        <div className="rounded-2xl border border-border/70 bg-[hsl(var(--surface))/0.72] p-3">
+        <div className="rounded-lg border border-border bg-[hsl(var(--surface))/0.72] p-3">
           <div className="space-y-3">
             {onEffortChange ? (
               <div className="flex items-center justify-between gap-3">
                 <span className="text-xs font-medium text-muted-foreground">思考深度</span>
                 <Select value={effort} onValueChange={(value) => onEffortChange(value as typeof effort)}>
-                  <SelectTrigger className="h-8 w-32 rounded-lg border-border/70 bg-background/60 text-xs">
+                  <SelectTrigger className="h-8 w-32 rounded-lg border-border bg-background/60 text-xs">
                     <SelectValue placeholder="不设置" />
                   </SelectTrigger>
                   <SelectContent>
@@ -161,7 +161,7 @@ export function PlusMenuContent({
     <DropdownMenuContent
       align={align}
       sideOffset={8}
-      className={cn('w-72 rounded-2xl border-border/80 p-2', contentClassName)}
+      className={cn('w-72 rounded-lg border-border p-2', contentClassName)}
     >
       {body}
     </DropdownMenuContent>

@@ -160,7 +160,7 @@ export function SystemSkillAuditsPage() {
           <>
             {activeKey === 'skill-audit' && (
               <>
-                <section className="v2-panel p-4 shadow-none sm:p-5">
+                <section className="v2-panel p-4 sm:p-5">
                   <div className="space-y-4">
                     <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6">
                       <div className="space-y-1 lg:col-span-2">
@@ -224,7 +224,7 @@ export function SystemSkillAuditsPage() {
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
+                    <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
                       <Button variant={hasErrorOnly ? 'default' : 'outline'} onClick={() => setHasErrorOnly((prev) => !prev)}>
                         {hasErrorOnly ? '仅错误：开' : '仅错误：关'}
                       </Button>
@@ -241,9 +241,9 @@ export function SystemSkillAuditsPage() {
                   </div>
                 </section>
 
-                <section className="v2-panel p-4 shadow-none sm:p-5">
-                  <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                <section className="v2-panel p-4 sm:p-5">
+                  <div className="mb-4 flex items-start gap-3 border-b border-border pb-4">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface-subtle text-ink-tertiary">
                       <FileText className="h-5 w-5" />
                     </span>
                     <div>
@@ -320,17 +320,17 @@ export function SystemSkillAuditsPage() {
                         {items.map((item) => {
                           if (!expandedIds.has(item.id)) return null
                           return (
-                            <div key={`detail-${item.id}`} className="rounded-md border border-border/70 bg-muted/20 p-3 text-xs space-y-3">
+                            <div key={`detail-${item.id}`} className="rounded-md border border-border bg-surface-subtle p-3 text-xs space-y-3">
                               <div className="grid gap-2 md:grid-cols-2">
                                 <div>
                                   <div className="mb-1 font-medium">Request Payload</div>
-                                  <pre className="max-h-64 overflow-auto rounded border border-border/70 bg-background p-2">
+                                  <pre className="max-h-64 overflow-auto rounded border border-border bg-background p-2">
                                     {normalizePayload(item.requestPayloadJson)}
                                   </pre>
                                 </div>
                                 <div>
                                   <div className="mb-1 font-medium">Response Payload</div>
-                                  <pre className="max-h-64 overflow-auto rounded border border-border/70 bg-background p-2">
+                                  <pre className="max-h-64 overflow-auto rounded border border-border bg-background p-2">
                                     {normalizePayload(item.responsePayloadJson)}
                                   </pre>
                                 </div>

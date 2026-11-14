@@ -194,7 +194,7 @@ export function ConnectionsTab() {
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <McpField label="安装模板（installationId）" required>
-              <select className="h-9 w-full rounded-md border bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary" value={formInstId} onChange={(e) => setFormInstId(e.target.value)}>
+              <select className="h-9 w-full rounded-md border bg-background px-3 text-xs focus:outline-none focus: focus:" value={formInstId} onChange={(e) => setFormInstId(e.target.value)}>
                 <option value="">选择...</option>
                 {installations.map((i) => <option key={i.id} value={i.id}>{i.namespaceKey}</option>)}
               </select>
@@ -209,7 +209,7 @@ export function ConnectionsTab() {
             />
             <McpField label="关联已有凭据（secretVaultId）">
               <div className="flex gap-1">
-                <select className="h-9 flex-1 rounded-md border bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary" value={formSecretVaultId} onChange={(e) => setFormSecretVaultId(e.target.value)}>
+                <select className="h-9 flex-1 rounded-md border bg-background px-3 text-xs focus:outline-none focus: focus:" value={formSecretVaultId} onChange={(e) => setFormSecretVaultId(e.target.value)}>
                   <option value="">无（不关联凭据）</option>
                   {secrets.map((s) => <option key={s.id} value={s.id}>{s.label} (ID:{s.id})</option>)}
                 </select>
@@ -256,9 +256,9 @@ export function ConnectionsTab() {
             </thead>
             <tbody>
               {items.map((conn) => (
-                <tr key={conn.id} className="border-b border-border/50 hover:bg-muted/30">
+                <tr key={conn.id} className="border-b border-border hover:bg-surface-subtle">
                   <td className="py-2 pr-3">{conn.name}</td>
-                  <td className="py-2 pr-3 font-mono text-micro">{instMap.get(conn.installationId)?.namespaceKey ?? conn.installationId}</td>
+                  <td className="py-2 pr-3 font-mono text-[11px]">{instMap.get(conn.installationId)?.namespaceKey ?? conn.installationId}</td>
                   <td className="py-2 pr-3"><Switch checked={conn.enabled} onCheckedChange={(v) => handleToggle(conn.id, v)} /></td>
                   <td className="py-2 pr-3">
                     <ConnectionCredentialBadge
@@ -266,14 +266,14 @@ export function ConnectionsTab() {
                       requiredEnv={parseRequiredEnv(instMap.get(conn.installationId)?.envJson)}
                     />
                   </td>
-                  <td className="py-2 pr-3"><Badge variant={conn.status === 'active' ? 'default' : conn.status === 'error' ? 'destructive' : 'secondary'} className="text-micro">{conn.status || 'unknown'}</Badge></td>
+                  <td className="py-2 pr-3"><Badge variant={conn.status === 'active' ? 'default' : conn.status === 'error' ? 'destructive' : 'secondary'} className="text-[11px]">{conn.status || 'unknown'}</Badge></td>
                   <td className="py-2 pr-3">
                     <div className="flex items-center gap-1">
-                      <button type="button" onClick={() => openEdit(conn)} title="编辑" className="inline-flex p-1 rounded hover:bg-accent"><Pencil className="h-3.5 w-3.5" /></button>
-                      <button type="button" onClick={() => handleRefresh(conn.id)} disabled={refreshing === conn.id} title="刷新工具缓存" className="inline-flex p-1 rounded hover:bg-accent">
+                      <button type="button" onClick={() => openEdit(conn)} title="编辑" className="inline-flex p-1 rounded hover:bg-surface-hover"><Pencil className="h-3.5 w-3.5" /></button>
+                      <button type="button" onClick={() => handleRefresh(conn.id)} disabled={refreshing === conn.id} title="刷新工具缓存" className="inline-flex p-1 rounded hover:bg-surface-hover">
                         <RefreshCw className={cn('h-3.5 w-3.5', refreshing === conn.id && 'animate-spin')} />
                       </button>
-                      <button type="button" onClick={() => setDeleteId(conn.id)} title="删除" className="inline-flex p-1 rounded hover:bg-accent"><Trash2 className="h-3.5 w-3.5 text-destructive/70 hover:text-destructive" /></button>
+                      <button type="button" onClick={() => setDeleteId(conn.id)} title="删除" className="inline-flex p-1 rounded hover:bg-surface-hover"><Trash2 className="h-3.5 w-3.5 text-destructive/70 hover:text-destructive" /></button>
                     </div>
                   </td>
                 </tr>

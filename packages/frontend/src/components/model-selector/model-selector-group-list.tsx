@@ -61,7 +61,7 @@ export function ModelSelectorGroupList({
   if (layout === "mobile") {
     return (
       <div className="min-h-0 flex-1 overflow-hidden">
-        <div className="flex items-center gap-2 overflow-x-auto border-b border-border/60 px-3 py-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex items-center gap-2 overflow-x-auto border-b border-border px-3 py-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {groupNames.map((group) => (
             <button
               key={group}
@@ -69,8 +69,8 @@ export function ModelSelectorGroupList({
               className={cn(
                 "h-9 shrink-0 rounded-md px-3 text-sm font-medium transition-colors",
                 resolvedActiveGroup === group
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:bg-surface-subtle hover:text-foreground"
               )}
               onClick={() => onActiveGroupChange(group)}
             >
@@ -93,7 +93,7 @@ export function ModelSelectorGroupList({
 
   return (
     <div className="grid min-h-0 flex-1 grid-cols-[164px_minmax(0,1fr)] overflow-hidden">
-      <div className="min-h-0 border-r border-border/60 bg-muted/20">
+      <div className="min-h-0 border-r border-border bg-surface-subtle">
         <div className="max-h-[min(48dvh,430px)] overflow-y-auto p-2">
           {groupNames.map((group) => (
             <button
@@ -102,7 +102,7 @@ export function ModelSelectorGroupList({
               className={cn(
                 "flex h-9 w-full items-center justify-between rounded-md px-2.5 text-left text-sm transition-colors",
                 resolvedActiveGroup === group
-                  ? "bg-primary/10 text-primary"
+                  ? "bg-signal-soft text-signal"
                   : "text-muted-foreground hover:bg-background hover:text-foreground"
               )}
               onClick={() => onActiveGroupChange(group)}
@@ -116,7 +116,7 @@ export function ModelSelectorGroupList({
       </div>
 
       <div className="min-h-0 overflow-hidden bg-background">
-        <div className="flex h-10 items-center justify-between border-b border-border/60 px-3">
+        <div className="flex h-10 items-center justify-between border-b border-border px-3">
           <div className="min-w-0 text-sm">
             <span className="font-semibold text-foreground">{resolvedActiveGroup}</span>
             <span className="ml-2 text-xs text-muted-foreground">{activeModels.length} 个模型</span>
@@ -189,8 +189,8 @@ function ModelRows({
               "group/model-row mb-1 flex items-center rounded-md border transition-colors",
               compact ? "min-h-[58px] px-2.5 py-2" : "min-h-[58px] px-2.5 py-2",
               isActive
-                ? "border-primary/45 bg-primary/8"
-                : "border-transparent hover:border-border/70 hover:bg-muted/35"
+                ? "border-primary/45 bg-foreground/8"
+                : "border-transparent hover:border-border hover:bg-surface-subtle/35"
             )}
           >
             <button
@@ -204,10 +204,10 @@ function ModelRows({
                 <span className="truncate text-sm font-semibold leading-5 text-foreground">
                   {model.name}
                 </span>
-                {isActive && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                {isActive && <Check className="h-3.5 w-3.5 shrink-0 text-signal" />}
               </div>
               {secondary && (
-                <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-micro leading-4 text-muted-foreground">
+                <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
                   <span className="truncate">{secondary}</span>
                 </div>
               )}
@@ -220,7 +220,7 @@ function ModelRows({
                 type="button"
                 onClick={(event) => onToggleFavorite(key, event)}
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-muted",
+                  "flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-surface-subtle",
                   isFavorite ? "text-amber-500" : "text-muted-foreground"
                 )}
                 aria-label={isFavorite ? "取消收藏" : "收藏"}

@@ -12,7 +12,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
         class="flex items-center gap-3 pb-3 border-b"
       >
         <svg
-          class="w-5 h-5 text-primary"
+          class="w-5 h-5 text-signal"
           fill="none"
           height="24"
           stroke="currentColor"
@@ -63,19 +63,19 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
         </svg>
         <div>
           <h3
-            class="text-title-m font-semibold leading-none tracking-tight"
+            class="text-[13px] font-medium leading-snug text-foreground"
           >
             模型管理
           </h3>
           <p
-            class="text-sm text-muted-foreground"
+            class="text-[11.5px] leading-relaxed text-ink-tertiary"
           >
             为模型开启/关闭能力标签:图片理解、图像生成
           </p>
         </div>
       </div>
       <div
-        class="rounded-lg border border-border/85 bg-card/95 text-card-foreground shadow-[0_12px_32px_hsl(var(--foreground)/0.05)] backdrop-blur-sm px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm"
+        class="rounded-lg border border-border bg-surface text-card-foreground px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-borderStrong"
       >
         <div
           class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
@@ -108,7 +108,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                 />
               </svg>
               <input
-                class="flex h-10 w-full rounded-[calc(var(--radius)-2px)] border border-input/90 bg-[hsl(var(--surface)/0.65)] px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.65)] ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 pl-9"
+                class="flex h-9 w-full rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-foreground caret-signal transition-colors duration-[160ms] file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-ink-tertiary focus-visible:border-signal disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:opacity-60 pl-9"
                 placeholder="搜索模型/提供方..."
                 value=""
               />
@@ -117,12 +117,12 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
               class="flex items-center gap-2 px-3 py-2 rounded border bg-background"
             >
               <input
-                class="h-4 w-4 rounded-sm border border-input text-primary focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                class="h-[15px] w-[15px] cursor-pointer rounded-[4px] border border-borderStrong bg-surface accent-signal disabled:cursor-not-allowed disabled:opacity-50"
                 id="only-overridden"
                 type="checkbox"
               />
               <label
-                class="peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-sm font-normal cursor-pointer"
+                class="text-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-sm font-normal cursor-pointer"
                 for="only-overridden"
               >
                 仅显示已手动设置
@@ -133,7 +133,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
             class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2"
           >
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap rounded-md border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/90 bg-[hsl(var(--surface)/0.65)] text-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3 w-full sm:w-auto"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-md border text-[13px] font-medium transition-colors duration-[160ms] disabled:pointer-events-none disabled:border-transparent disabled:bg-surface-subtle disabled:text-ink-tertiary border-border bg-transparent text-foreground hover:bg-surface-hover h-8 px-3 w-full sm:w-auto"
             >
               <svg
                 class="w-4 h-4 mr-1 "
@@ -163,7 +163,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
               重新加载
             </button>
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap rounded-md border border-transparent text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 bg-primary text-primary-foreground shadow-[0_1px_2px_hsl(var(--primary)/0.28)] hover:bg-[hsl(var(--primary-hover))] active:translate-y-[1px] h-9 px-3 w-full sm:w-auto"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-md border border-transparent text-[13px] font-medium transition-colors duration-[160ms] disabled:pointer-events-none disabled:border-transparent disabled:bg-surface-subtle disabled:text-ink-tertiary bg-foreground text-background hover:bg-[hsl(var(--foreground)/0.9)] h-8 px-3 w-full sm:w-auto"
             >
               <svg
                 class="w-4 h-4 mr-1 "
@@ -195,7 +195,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
             <button
               aria-expanded="false"
               aria-haspopup="menu"
-              class="inline-flex items-center justify-center whitespace-nowrap rounded-md border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/90 bg-[hsl(var(--surface)/0.65)] text-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3 w-full sm:w-auto"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-md border text-[13px] font-medium transition-colors duration-[160ms] disabled:pointer-events-none disabled:border-transparent disabled:bg-surface-subtle disabled:text-ink-tertiary border-border bg-transparent text-foreground hover:bg-surface-hover h-8 px-3 w-full sm:w-auto"
               data-state="closed"
               id="radix-:r0:"
               type="button"
@@ -232,7 +232,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
             </button>
             <input
               accept="application/json"
-              class="h-10 w-full rounded-[calc(var(--radius)-2px)] border border-input/90 bg-[hsl(var(--surface)/0.65)] px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_0_hsl(var(--background)/0.65)] ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 hidden"
+              class="h-9 w-full rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-foreground caret-signal transition-colors duration-[160ms] file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-ink-tertiary focus-visible:border-signal disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:opacity-60 hidden"
               type="file"
             />
           </div>
@@ -254,7 +254,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
             class="flex items-center gap-1.5"
           >
             <div
-              class="w-2 h-2 rounded-full bg-muted border"
+              class="w-2 h-2 rounded-full bg-surface-subtle border"
             />
             <span>
               未开启
@@ -300,13 +300,13 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
       </div>
     </div>
     <div
-      class="rounded-lg border border-border/85 bg-card/95 text-card-foreground shadow-[0_12px_32px_hsl(var(--foreground)/0.05)] backdrop-blur-sm px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm"
+      class="rounded-lg border border-border bg-surface text-card-foreground px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-borderStrong"
     >
       <div
         class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
       >
         <h3
-          class="font-semibold tracking-tight text-base"
+          class="font-medium text-foreground text-base"
         >
           批量开关能力
         </h3>
@@ -329,7 +329,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
         class="mt-4 grid gap-2 sm:grid-cols-2"
       >
         <div
-          class="flex items-center justify-between gap-2 rounded border bg-muted/40 px-3 py-2"
+          class="flex items-center justify-between gap-2 rounded border bg-surface-subtle/40 px-3 py-2"
         >
           <div
             class="flex items-center gap-2 text-sm"
@@ -365,19 +365,19 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
             class="flex items-center gap-1"
           >
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap rounded-md border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/70 bg-secondary text-secondary-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-md border text-[13px] font-medium transition-colors duration-[160ms] disabled:pointer-events-none disabled:border-transparent disabled:bg-surface-subtle disabled:text-ink-tertiary border-border bg-surface text-foreground hover:bg-surface-subtle h-8 px-3"
             >
               开启
             </button>
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap rounded-md border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/90 bg-[hsl(var(--surface)/0.65)] text-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-md border text-[13px] font-medium transition-colors duration-[160ms] disabled:pointer-events-none disabled:border-transparent disabled:bg-surface-subtle disabled:text-ink-tertiary border-border bg-transparent text-foreground hover:bg-surface-hover h-8 px-3"
             >
               关闭
             </button>
           </div>
         </div>
         <div
-          class="flex items-center justify-between gap-2 rounded border bg-muted/40 px-3 py-2"
+          class="flex items-center justify-between gap-2 rounded border bg-surface-subtle/40 px-3 py-2"
         >
           <div
             class="flex items-center gap-2 text-sm"
@@ -421,12 +421,12 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
             class="flex items-center gap-1"
           >
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap rounded-md border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/70 bg-secondary text-secondary-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-md border text-[13px] font-medium transition-colors duration-[160ms] disabled:pointer-events-none disabled:border-transparent disabled:bg-surface-subtle disabled:text-ink-tertiary border-border bg-surface text-foreground hover:bg-surface-subtle h-8 px-3"
             >
               开启
             </button>
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap rounded-md border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/90 bg-[hsl(var(--surface)/0.65)] text-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-md border text-[13px] font-medium transition-colors duration-[160ms] disabled:pointer-events-none disabled:border-transparent disabled:bg-surface-subtle disabled:text-ink-tertiary border-border bg-transparent text-foreground hover:bg-surface-hover h-8 px-3"
             >
               关闭
             </button>
@@ -441,7 +441,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
         class="flex items-center justify-between"
       >
         <h3
-          class="text-title-m font-semibold leading-none tracking-tight"
+          class="text-[13px] font-medium leading-snug text-foreground"
         >
           模型列表 (
           2
@@ -449,7 +449,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
         </h3>
       </div>
       <div
-        class="rounded-lg border border-border/85 bg-card/95 text-card-foreground shadow-[0_12px_32px_hsl(var(--foreground)/0.05)] backdrop-blur-sm px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm"
+        class="rounded-lg border border-border bg-surface text-card-foreground px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-borderStrong"
       >
         <div
           class="overflow-x-auto"
@@ -458,30 +458,30 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
             class="relative w-full overflow-x-auto"
           >
             <table
-              class="caption-bottom text-sm w-full table-fixed"
+              class="caption-bottom text-[13px] w-full table-fixed"
             >
               <thead
-                class="[&_tr]:border-b sticky top-0 z-30 bg-muted/50"
+                class="[&_tr]:border-b sticky top-0 z-30 bg-surface-subtle/50"
               >
                 <tr
-                  class="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
+                  class="border-b border-border transition-colors duration-[160ms] hover:bg-surface-subtle data-[state=selected]:bg-surface-hover"
                 >
                   <th
-                    class="h-10 px-4 align-middle text-xs font-semibold text-muted-foreground [&:has([role=checkbox])]:pr-0 w-12 text-center"
+                    class="h-9 px-4 align-middle text-[11px] font-medium tracking-[0.04em] text-ink-tertiary [&:has([role=checkbox])]:pr-0 w-12 text-center"
                   >
                     <input
-                      class="h-4 w-4 rounded-sm border border-input text-primary focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      class="h-[15px] w-[15px] cursor-pointer rounded-[4px] border border-borderStrong bg-surface accent-signal disabled:cursor-not-allowed disabled:opacity-50"
                       type="checkbox"
                     />
                   </th>
                   <th
-                    class="h-10 px-4 text-left align-middle text-xs font-semibold text-muted-foreground [&:has([role=checkbox])]:pr-0 w-[200px] cursor-pointer hover:bg-muted/80 transition-colors"
+                    class="h-9 px-4 text-left align-middle text-[11px] font-medium tracking-[0.04em] text-ink-tertiary [&:has([role=checkbox])]:pr-0 w-[200px] cursor-pointer hover:bg-surface-subtle/80 transition-colors"
                   >
                     模型 
                     ↑
                   </th>
                   <th
-                    class="h-10 px-4 align-middle text-xs font-semibold text-muted-foreground [&:has([role=checkbox])]:pr-0 text-center w-[48px]"
+                    class="h-9 px-4 align-middle text-[11px] font-medium tracking-[0.04em] text-ink-tertiary [&:has([role=checkbox])]:pr-0 text-center w-[48px]"
                   >
                     <div
                       class="flex items-center justify-center gap-1 cursor-help"
@@ -511,7 +511,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                     </div>
                   </th>
                   <th
-                    class="h-10 px-4 align-middle text-xs font-semibold text-muted-foreground [&:has([role=checkbox])]:pr-0 text-center w-[48px]"
+                    class="h-9 px-4 align-middle text-[11px] font-medium tracking-[0.04em] text-ink-tertiary [&:has([role=checkbox])]:pr-0 text-center w-[48px]"
                   >
                     <div
                       class="flex items-center justify-center gap-1 cursor-help"
@@ -549,12 +549,12 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                     </div>
                   </th>
                   <th
-                    class="h-10 px-4 align-middle text-xs font-semibold text-muted-foreground [&:has([role=checkbox])]:pr-0 text-center w-[56px]"
+                    class="h-9 px-4 align-middle text-[11px] font-medium tracking-[0.04em] text-ink-tertiary [&:has([role=checkbox])]:pr-0 text-center w-[56px]"
                   >
                     手动
                   </th>
                   <th
-                    class="h-10 px-4 align-middle text-xs font-semibold text-muted-foreground [&:has([role=checkbox])]:pr-0 text-center w-[64px]"
+                    class="h-9 px-4 align-middle text-[11px] font-medium tracking-[0.04em] text-ink-tertiary [&:has([role=checkbox])]:pr-0 text-center w-[64px]"
                   >
                     操作
                   </th>
@@ -564,18 +564,18 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                 class="[&_tr:last-child]:border-0"
               >
                 <tr
-                  class="border-b data-[state=selected]:bg-muted hover:bg-muted/30 transition-colors"
+                  class="border-b border-border duration-[160ms] data-[state=selected]:bg-surface-hover hover:bg-surface-subtle transition-colors"
                 >
                   <td
-                    class="px-4 py-3 align-middle [&:has([role=checkbox])]:pr-0 text-center"
+                    class="h-11 px-4 align-middle [&:has([role=checkbox])]:pr-0 text-center"
                   >
                     <input
-                      class="h-4 w-4 rounded-sm border border-input text-primary focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      class="h-[15px] w-[15px] cursor-pointer rounded-[4px] border border-borderStrong bg-surface accent-signal disabled:cursor-not-allowed disabled:opacity-50"
                       type="checkbox"
                     />
                   </td>
                   <td
-                    class="align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3"
+                    class="h-11 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3"
                   >
                     <div
                       class="font-medium whitespace-normal break-words"
@@ -591,24 +591,24 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                       class="mt-1 flex items-center gap-2 flex-wrap text-xs"
                     >
                       <div
-                        class="inline-flex items-center rounded-full border px-2.5 py-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground text-micro font-normal"
+                        class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 transition-colors border border-border text-foreground text-[11px] font-normal"
                       >
                         推荐:通用对话
                       </div>
                       <div
-                        class="inline-flex items-center rounded-full border px-2.5 py-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-secondary/80 text-micro font-normal bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+                        class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 transition-colors text-[11px] font-normal bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
                       >
                         手动设置
                       </div>
                     </div>
                   </td>
                   <td
-                    class="align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                    class="h-11 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
                   >
                     <button
                       aria-checked="true"
                       aria-label="图片理解开关"
-                      class="peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input scale-75 mx-auto"
+                      class="peer inline-flex h-[22px] w-[38px] shrink-0 cursor-pointer items-center rounded-full border transition-colors duration-[160ms] border-border bg-surface-hover data-[state=checked]:border-transparent data-[state=checked]:bg-signal disabled:cursor-not-allowed disabled:opacity-50 scale-75 mx-auto"
                       data-state="checked"
                       id="openai-gpt-4o-mini-vision"
                       role="switch"
@@ -616,18 +616,18 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                       value="on"
                     >
                       <span
-                        class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0"
+                        class="pointer-events-none block h-[18px] w-[18px] rounded-full bg-surface transition-transform duration-[160ms] data-[state=checked]:translate-x-[18px] data-[state=unchecked]:translate-x-[2px] data-[state=checked]:bg-background"
                         data-state="checked"
                       />
                     </button>
                   </td>
                   <td
-                    class="align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                    class="h-11 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
                   >
                     <button
                       aria-checked="false"
                       aria-label="图像生成开关"
-                      class="peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input scale-75 mx-auto"
+                      class="peer inline-flex h-[22px] w-[38px] shrink-0 cursor-pointer items-center rounded-full border transition-colors duration-[160ms] border-border bg-surface-hover data-[state=checked]:border-transparent data-[state=checked]:bg-signal disabled:cursor-not-allowed disabled:opacity-50 scale-75 mx-auto"
                       data-state="unchecked"
                       id="openai-gpt-4o-mini-image_generation"
                       role="switch"
@@ -635,27 +635,27 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                       value="on"
                     >
                       <span
-                        class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0"
+                        class="pointer-events-none block h-[18px] w-[18px] rounded-full bg-surface transition-transform duration-[160ms] data-[state=checked]:translate-x-[18px] data-[state=unchecked]:translate-x-[2px] data-[state=checked]:bg-background"
                         data-state="unchecked"
                       />
                     </button>
                   </td>
                   <td
-                    class="align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                    class="h-11 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
                   >
                     <div
-                      class="inline-flex items-center rounded-full border px-2.5 py-0.5 font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-primary/80 bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 text-xs"
+                      class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium transition-colors bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 text-xs"
                     >
                       是
                     </div>
                   </td>
                   <td
-                    class="align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                    class="h-11 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
                   >
                     <button
                       aria-expanded="false"
                       aria-haspopup="menu"
-                      class="inline-flex items-center justify-center whitespace-nowrap border border-transparent text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 text-muted-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground data-[state=open]:bg-[hsl(var(--surface-hover))] h-8 w-8 rounded-full"
+                      class="inline-flex items-center justify-center whitespace-nowrap border border-transparent text-[13px] font-medium transition-colors duration-[160ms] disabled:pointer-events-none disabled:border-transparent disabled:text-ink-tertiary text-muted-foreground hover:bg-surface-hover hover:text-foreground data-[state=open]:bg-surface-hover data-[state=open]:text-foreground disabled:bg-transparent h-7 w-7 rounded-full"
                       data-state="closed"
                       id="radix-:r8:"
                       type="button"
@@ -697,18 +697,18 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                   </td>
                 </tr>
                 <tr
-                  class="border-b data-[state=selected]:bg-muted hover:bg-muted/30 transition-colors"
+                  class="border-b border-border duration-[160ms] data-[state=selected]:bg-surface-hover hover:bg-surface-subtle transition-colors"
                 >
                   <td
-                    class="px-4 py-3 align-middle [&:has([role=checkbox])]:pr-0 text-center"
+                    class="h-11 px-4 align-middle [&:has([role=checkbox])]:pr-0 text-center"
                   >
                     <input
-                      class="h-4 w-4 rounded-sm border border-input text-primary focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      class="h-[15px] w-[15px] cursor-pointer rounded-[4px] border border-borderStrong bg-surface accent-signal disabled:cursor-not-allowed disabled:opacity-50"
                       type="checkbox"
                     />
                   </td>
                   <td
-                    class="align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3"
+                    class="h-11 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3"
                   >
                     <div
                       class="font-medium whitespace-normal break-words"
@@ -724,24 +724,24 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                       class="mt-1 flex items-center gap-2 flex-wrap text-xs"
                     >
                       <div
-                        class="inline-flex items-center rounded-full border px-2.5 py-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground text-micro font-normal"
+                        class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 transition-colors border border-border text-foreground text-[11px] font-normal"
                       >
                         推荐:通用对话
                       </div>
                       <div
-                        class="inline-flex items-center rounded-full border px-2.5 py-0.5 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent hover:bg-secondary/80 text-micro font-normal bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+                        class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 transition-colors text-[11px] font-normal bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
                       >
                         供应商标注
                       </div>
                     </div>
                   </td>
                   <td
-                    class="align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                    class="h-11 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
                   >
                     <button
                       aria-checked="false"
                       aria-label="图片理解开关"
-                      class="peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input scale-75 mx-auto"
+                      class="peer inline-flex h-[22px] w-[38px] shrink-0 cursor-pointer items-center rounded-full border transition-colors duration-[160ms] border-border bg-surface-hover data-[state=checked]:border-transparent data-[state=checked]:bg-signal disabled:cursor-not-allowed disabled:opacity-50 scale-75 mx-auto"
                       data-state="unchecked"
                       id="local-phi-3-vision"
                       role="switch"
@@ -749,18 +749,18 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                       value="on"
                     >
                       <span
-                        class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0"
+                        class="pointer-events-none block h-[18px] w-[18px] rounded-full bg-surface transition-transform duration-[160ms] data-[state=checked]:translate-x-[18px] data-[state=unchecked]:translate-x-[2px] data-[state=checked]:bg-background"
                         data-state="unchecked"
                       />
                     </button>
                   </td>
                   <td
-                    class="align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                    class="h-11 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
                   >
                     <button
                       aria-checked="true"
                       aria-label="图像生成开关"
-                      class="peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input scale-75 mx-auto"
+                      class="peer inline-flex h-[22px] w-[38px] shrink-0 cursor-pointer items-center rounded-full border transition-colors duration-[160ms] border-border bg-surface-hover data-[state=checked]:border-transparent data-[state=checked]:bg-signal disabled:cursor-not-allowed disabled:opacity-50 scale-75 mx-auto"
                       data-state="checked"
                       id="local-phi-3-image_generation"
                       role="switch"
@@ -768,13 +768,13 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                       value="on"
                     >
                       <span
-                        class="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0"
+                        class="pointer-events-none block h-[18px] w-[18px] rounded-full bg-surface transition-transform duration-[160ms] data-[state=checked]:translate-x-[18px] data-[state=unchecked]:translate-x-[2px] data-[state=checked]:bg-background"
                         data-state="checked"
                       />
                     </button>
                   </td>
                   <td
-                    class="align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                    class="h-11 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
                   >
                     <span
                       class="text-xs text-muted-foreground"
@@ -783,12 +783,12 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                     </span>
                   </td>
                   <td
-                    class="align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
+                    class="h-11 align-middle [&:has([role=checkbox])]:pr-0 py-3 px-3 text-center"
                   >
                     <button
                       aria-expanded="false"
                       aria-haspopup="menu"
-                      class="inline-flex items-center justify-center whitespace-nowrap border border-transparent text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 text-muted-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground data-[state=open]:bg-[hsl(var(--surface-hover))] h-8 w-8 rounded-full"
+                      class="inline-flex items-center justify-center whitespace-nowrap border border-transparent text-[13px] font-medium transition-colors duration-[160ms] disabled:pointer-events-none disabled:border-transparent disabled:text-ink-tertiary text-muted-foreground hover:bg-surface-hover hover:text-foreground data-[state=open]:bg-surface-hover data-[state=open]:text-foreground disabled:bg-transparent h-7 w-7 rounded-full"
                       data-state="closed"
                       id="radix-:ra:"
                       type="button"
@@ -847,7 +847,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
             class="flex items-center gap-2"
           >
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap rounded-md border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/90 bg-[hsl(var(--surface)/0.65)] text-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-md border text-[13px] font-medium transition-colors duration-[160ms] disabled:pointer-events-none disabled:border-transparent disabled:bg-surface-subtle disabled:text-ink-tertiary border-border bg-transparent text-foreground hover:bg-surface-hover h-8 px-3"
               disabled=""
             >
               上一页
@@ -860,7 +860,7 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                页
             </span>
             <button
-              class="inline-flex items-center justify-center whitespace-nowrap rounded-md border text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50 border-border/90 bg-[hsl(var(--surface)/0.65)] text-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground h-9 px-3"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-md border text-[13px] font-medium transition-colors duration-[160ms] disabled:pointer-events-none disabled:border-transparent disabled:bg-surface-subtle disabled:text-ink-tertiary border-border bg-transparent text-foreground hover:bg-surface-hover h-8 px-3"
               disabled=""
             >
               下一页

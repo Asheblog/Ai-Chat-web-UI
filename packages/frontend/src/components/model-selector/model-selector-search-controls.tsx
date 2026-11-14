@@ -42,7 +42,7 @@ export function ModelSelectorSearchControls({
   }
 
   return (
-    <div className="space-y-2 border-b border-border/60 bg-background/95 px-3 py-3">
+    <div className="space-y-2 border-b border-border bg-background/95 px-3 py-3">
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -50,12 +50,12 @@ export function ModelSelectorSearchControls({
           value={searchTerm}
           onChange={(event) => onSearchTermChange(event.target.value)}
           placeholder="搜索模型 / 厂商 / 能力"
-          className="h-10 rounded-md border-border/80 bg-background pl-9 pr-8 text-sm shadow-none"
+          className="h-10 rounded-md border-border bg-background pl-9 pr-8 text-sm shadow-none"
         />
         {searchTerm && (
           <button
             type="button"
-            className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted"
+            className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-subtle"
             onClick={() => onSearchTermChange("")}
             aria-label="清空搜索"
           >

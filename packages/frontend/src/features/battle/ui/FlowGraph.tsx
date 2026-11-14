@@ -22,17 +22,17 @@ const statusConfig: Record<NodeStatus, {
     animationClass: string
 }> = {
     pending: {
-        icon: () => <div className="w-2 h-2 rounded-full bg-muted-foreground/50" />,
+        icon: () => <div className="w-2 h-2 rounded-full bg-surface-subtle-foreground/50" />,
         iconClass: '',
         borderClass: 'border-muted-foreground/30 border-dashed',
-        bgClass: 'bg-muted/50',
+        bgClass: 'bg-surface-subtle/50',
         animationClass: '',
     },
     running: {
         icon: Loader2,
-        iconClass: 'text-primary animate-spin',
+        iconClass: 'text-signal animate-spin',
         borderClass: 'border-primary',
-        bgClass: 'bg-primary/10',
+        bgClass: 'bg-signal-soft',
         animationClass: 'animate-node-pulse',
     },
     success: {
@@ -76,7 +76,7 @@ export function ModelNode({
             className={cn(
                 'relative flex min-h-[38px] w-full items-center justify-between gap-3',
                 'rounded-md border px-3 py-2',
-                'transition-all duration-300 hover:border-primary/50 hover:bg-accent',
+                'transition-all duration-300 hover:border-signal/50 hover:bg-surface-hover',
                 config.borderClass,
                 config.bgClass,
                 config.animationClass,
@@ -104,8 +104,8 @@ export function ModelNode({
             {status === 'running' && (
                 <div className="absolute -top-1 -right-1">
                     <span className="relative flex h-3 w-3">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-primary" />
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-foreground opacity-75" />
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-foreground" />
                     </span>
                 </div>
             )}
@@ -149,9 +149,9 @@ export function FlowGraph({
             <div className="flex flex-col items-center gap-2">
                 <div className={cn(
                     'flex items-center justify-center gap-2 rounded-md px-4 py-2',
-                    'border border-primary/30 bg-primary/10'
+                    'border border-borderStrong bg-signal-soft'
                 )}>
-                    <Scale className="h-4 w-4 text-primary" />
+                    <Scale className="h-4 w-4 text-signal" />
                     <span className="text-sm font-medium">{judgeLabel}</span>
                 </div>
                 <div className="text-xs text-muted-foreground">裁判模型</div>
@@ -217,9 +217,9 @@ export function FlowGraph({
                     <span className="text-muted-foreground">执行进度</span>
                     <span className="font-medium">{progress.completed}/{progress.total}</span>
                 </div>
-                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <div className="h-2 rounded-full bg-surface-subtle overflow-hidden">
                     <div
-                        className="h-full bg-primary rounded-full transition-all duration-500 ease-out"
+                        className="h-full bg-foreground rounded-full transition-all duration-500 ease-out"
                         style={{ width: `${progress.percentage}%` }}
                     />
                 </div>

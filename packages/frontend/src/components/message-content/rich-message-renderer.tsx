@@ -72,7 +72,7 @@ function EvidenceImageCard({ image, index }: EvidenceImageCardProps) {
 
   return (
     <article
-      className="rounded-xl border border-border/70 bg-[hsl(var(--surface))] p-3"
+      className="rounded-xl border border-border bg-[hsl(var(--surface))] p-3"
       data-testid={`evidence-card-${index + 1}`}
     >
       <a
@@ -84,13 +84,13 @@ function EvidenceImageCard({ image, index }: EvidenceImageCardProps) {
         <img
           src={image.url}
           alt={toImageAlt(image, index)}
-          className="aspect-[4/3] w-full rounded-lg border border-border/60 bg-muted object-cover"
+          className="aspect-[4/3] w-full rounded-lg border border-border bg-surface-subtle object-cover"
           loading="lazy"
         />
       </a>
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-micro text-muted-foreground">
-        <span className="rounded-full border border-border/70 px-2 py-0.5">{toEvidenceKindLabel(image.sourceKind)}</span>
-        {image.refId && <span className="rounded-full border border-border/70 px-2 py-0.5">{image.refId}</span>}
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+        <span className="rounded-full border border-border px-2 py-0.5">{toEvidenceKindLabel(image.sourceKind)}</span>
+        {image.refId && <span className="rounded-full border border-border px-2 py-0.5">{image.refId}</span>}
       </div>
       {image.title && (
         <p className="mt-2 line-clamp-2 text-sm font-medium leading-5">{image.title}</p>
@@ -100,7 +100,7 @@ function EvidenceImageCard({ image, index }: EvidenceImageCardProps) {
           href={image.url}
           target="_blank"
           rel="noreferrer"
-          className="rounded-md border border-border/70 px-2.5 py-1 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="rounded-md border border-border px-2.5 py-1 hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           查看原图
         </a>
@@ -109,7 +109,7 @@ function EvidenceImageCard({ image, index }: EvidenceImageCardProps) {
             href={image.sourceUrl}
             target="_blank"
             rel="noreferrer"
-            className="rounded-md border border-border/70 px-2.5 py-1 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="rounded-md border border-border px-2.5 py-1 hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             查看原文
           </a>
@@ -188,7 +188,7 @@ export function RichMessageRenderer({
         <div className={cn('min-w-0', sideBySide && 'lg:col-span-5')}>
           <button
             type="button"
-            className="mt-3 flex w-full items-center justify-between gap-3 rounded-md border border-border bg-surface px-4 py-2.5 text-left text-sm transition hover:bg-accent"
+            className="mt-3 flex w-full items-center justify-between gap-3 rounded-md border border-border bg-surface px-4 py-2.5 text-left text-sm transition hover:bg-surface-hover"
             onClick={() => setImagesExpanded((value) => !value)}
             aria-expanded={imagesExpanded}
           >

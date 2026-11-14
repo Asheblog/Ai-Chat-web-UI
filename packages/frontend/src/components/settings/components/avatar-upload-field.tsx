@@ -96,14 +96,11 @@ export function AvatarUploadField({
 
   if (variant === 'profile') {
     return (
-      <div className={cn('flex flex-col items-center gap-2 text-center', className)}>
-        <div className="relative rounded-full bg-gradient-to-b from-primary/60 to-primary p-1 shadow-[0_16px_32px_hsl(var(--primary)/0.16)]">
-          <Avatar
-            className="border-4 border-background bg-muted"
-            style={{ height: avatarSize, width: avatarSize }}
-          >
-            <AvatarImage src={imageUrl || undefined} alt="头像" />
-            <AvatarFallback className="text-lg font-semibold text-foreground/80">{fallbackText}</AvatarFallback>
+      <div className={cn('flex items-center gap-3', className)}>
+        <div className="relative shrink-0 rounded-full border border-border bg-surface-subtle p-1">
+          <Avatar className="bg-surface-subtle" style={{ height: avatarSize, width: avatarSize }}>
+            {imageUrl ? <AvatarImage src={imageUrl} alt="头像" /> : null}
+            <AvatarFallback className="text-base font-semibold text-ink-secondary">{fallbackText}</AvatarFallback>
           </Avatar>
           <Button
             type="button"
@@ -113,27 +110,29 @@ export function AvatarUploadField({
             title={uploading ? '头像上传中' : uploadText}
             disabled={uploading || disabled}
             onClick={() => inputRef.current?.click()}
-            className="absolute bottom-1 right-1 rounded-full border-background bg-card text-foreground shadow-[0_8px_18px_hsl(var(--background)/0.55)] hover:bg-accent hover:text-primary"
+            className="absolute -bottom-1 -right-1 rounded-full border-border bg-surface text-ink-secondary hover:bg-surface-hover hover:text-foreground"
           >
-            <Camera className="h-4 w-4" />
+            <Camera className="h-3.5 w-3.5" />
           </Button>
         </div>
-        {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
-        <div className="min-h-[22px] text-xs text-muted-foreground">
-          {uploading ? '上传中...' : imageUrl ? '头像已设置' : '点击相机上传'}
+        <div className="flex min-w-0 flex-col items-start gap-1">
+          <p className="text-[13px] text-ink-secondary">
+            {uploading ? '上传中...' : imageUrl ? '头像已设置' : '点击相机上传'}
+          </p>
+          {description ? <p className="text-[11.5px] text-ink-tertiary">{description}</p> : null}
+          {onClear ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={uploading || disabled || clearDisabled}
+              onClick={() => onClear?.()}
+              className="h-7 px-2 text-[11.5px] text-ink-tertiary"
+            >
+              {clearText}
+            </Button>
+          ) : null}
         </div>
-        {onClear ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={uploading || disabled || clearDisabled}
-            onClick={() => onClear?.()}
-            className="h-8 text-xs"
-          >
-            {clearText}
-          </Button>
-        ) : null}
         {input}
       </div>
     )

@@ -239,7 +239,7 @@ export function ModelSelector({
 
   const selectorContent = (
     <Command shouldFilter={false} className={cn("border-0 bg-background", isMobile && "h-full")}>
-      <div className="flex items-center justify-between border-b border-border/60 px-3 py-3">
+      <div className="flex items-center justify-between border-b border-border px-3 py-3">
         <div className="min-w-0">
           <div className="text-base font-semibold leading-6 text-foreground">选择模型</div>
           <div className="text-xs text-muted-foreground">
@@ -311,7 +311,7 @@ export function ModelSelector({
           side="bottom"
           showCloseButton={false}
           dialogTitle="选择模型"
-          className="max-h-[86dvh] rounded-t-[16px] border-border/80 bg-background p-0 pb-[env(safe-area-inset-bottom)]"
+          className="max-h-[86dvh] rounded-t-[16px] border-border bg-background p-0 pb-[env(safe-area-inset-bottom)]"
         >
           <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-border" aria-hidden="true" />
           {selectorContent}
@@ -336,7 +336,7 @@ export function ModelSelector({
             : undefined
         }
         className={cn(
-          "w-[min(96vw,580px)] overflow-hidden rounded-xl border border-border/70 bg-background p-0 shadow-xl",
+          "w-[min(96vw,580px)] overflow-hidden rounded-xl border border-border bg-background p-0 shadow-xl",
           forceBottomDropdown
             ? "max-h-[var(--radix-popover-content-available-height)]"
             : "max-h-[min(78dvh,660px)]"

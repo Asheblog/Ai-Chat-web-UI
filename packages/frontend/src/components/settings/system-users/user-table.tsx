@@ -68,7 +68,7 @@ export function UserTable({
   const { page, limit, totalPages } = pagination
 
   return (
-    <section className="v2-panel p-4 shadow-none sm:p-5">
+    <section className="v2-panel p-4 sm:p-5">
       {loading && rows.length === 0 ? (
         <div className="space-y-3">
           {[...Array(5)].map((_, i) => (
@@ -82,8 +82,8 @@ export function UserTable({
           ))}
         </div>
       ) : !loading && rows.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border/70 bg-muted/40 py-12 text-center">
-          <Users className="w-16 h-16 mx-auto text-muted-foreground/40 mb-4" />
+        <div className="rounded-lg border border-dashed border-border bg-surface-subtle py-12 text-center">
+          <Users className="w-16 h-16 mx-auto text-ink-tertiary mb-4" />
           <p className="text-sm text-muted-foreground mb-2">暂无用户数据</p>
           <p className="text-xs text-muted-foreground">
             {search ? '尝试调整搜索条件或筛选器' : '等待用户注册后将在此显示'}
@@ -101,20 +101,20 @@ export function UserTable({
                   />
                 </TableHead>
                 <TableHead
-                  className="w-[180px] cursor-pointer hover:bg-muted/80 transition-colors"
+                  className="w-[180px] cursor-pointer hover:bg-surface-hover transition-colors"
                   onClick={() => toggleSort('username')}
                 >
                   用户名 {sortField === 'username' && (sortOrder === 'asc' ? '↑' : '↓')}
                 </TableHead>
                 <TableHead className="text-center w-[140px] whitespace-nowrap">角色</TableHead>
                 <TableHead
-                  className="text-center w-[96px] cursor-pointer hover:bg-muted/80 transition-colors"
+                  className="text-center w-[96px] cursor-pointer hover:bg-surface-hover transition-colors"
                   onClick={() => toggleSort('status')}
                 >
                   状态 {sortField === 'status' && (sortOrder === 'asc' ? '↑' : '↓')}
                 </TableHead>
                 <TableHead
-                  className="text-center w-[140px] cursor-pointer hover:bg-muted/80 transition-colors"
+                  className="text-center w-[140px] cursor-pointer hover:bg-surface-hover transition-colors"
                   onClick={() => toggleSort('createdAt')}
                 >
                   创建时间 {sortField === 'createdAt' && (sortOrder === 'asc' ? '↑' : '↓')}
@@ -131,7 +131,7 @@ export function UserTable({
                     : '账户已启用'
                 const isActionBusy = actionUserId === r.id || loading
                 return (
-                  <TableRow key={r.id} className="hover:bg-muted/30 transition-colors">
+                  <TableRow key={r.id} className="hover:bg-surface-subtle transition-colors">
                     <TableCell className="text-center">
                       <Checkbox
                         checked={selectedIds.has(r.id)}
@@ -143,7 +143,7 @@ export function UserTable({
                     </TableCell>
                     <TableCell className="text-center whitespace-nowrap w-[140px]">
                       {r.role === 'ADMIN' ? (
-                        <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                        <Badge className="bg-warning/10 text-warning">
                           <Shield className="w-3 h-3 mr-1" />
                           管理员
                         </Badge>
@@ -217,7 +217,7 @@ export function UserTable({
           </Table>
           {/* 分页 */}
           {rows.length > 0 && (
-            <div className="flex flex-col gap-3 border-t border-border/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 border-t border-border px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm text-muted-foreground">
                 第 {page} / {totalPages} 页
               </div>

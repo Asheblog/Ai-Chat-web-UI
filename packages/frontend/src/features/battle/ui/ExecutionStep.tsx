@@ -94,7 +94,7 @@ export function ExecutionStep({
                     <h2 className="text-title-l font-semibold flex items-center gap-2">
                         {isRunning ? (
                             <>
-                                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                                <Loader2 className="h-5 w-5 animate-spin text-signal" />
                                 对战进行中...
                             </>
                         ) : error ? (
@@ -136,11 +136,11 @@ export function ExecutionStep({
             )}
 
             {shareLink && (
-                <Card className="bg-muted/30">
+                <Card className="bg-surface-subtle">
                     <CardContent className="pt-4">
                         <div className="text-sm text-muted-foreground">
                             分享链接：
-                            <a className="text-primary hover:underline ml-2" href={shareLink} target="_blank" rel="noreferrer">
+                            <a className="text-signal hover:underline ml-2" href={shareLink} target="_blank" rel="noreferrer">
                                 {shareLink}
                             </a>
                         </div>
@@ -214,9 +214,9 @@ export function ExecutionStep({
                         {stats.completed}/{stats.total} 完成
                     </span>
                 </div>
-                <div className="h-3 rounded-full bg-muted overflow-hidden">
+                <div className="h-3 rounded-full bg-surface-subtle overflow-hidden">
                     <div
-                        className="h-full bg-primary rounded-full transition-all duration-500 ease-out"
+                        className="h-full bg-foreground rounded-full transition-all duration-500 ease-out"
                         style={{ width: `${progressPercentage}%` }}
                     />
                 </div>

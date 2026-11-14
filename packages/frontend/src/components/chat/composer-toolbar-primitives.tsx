@@ -3,14 +3,14 @@ import { BookOpen, Brain, Code2, Globe2, Microscope } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export const composerInnerEditorClass =
-  'relative overflow-hidden rounded-[var(--radius-composer)] border border-border/80 bg-background transition-colors duration-200 focus-within:border-primary/35 focus-within:ring-2 focus-within:ring-primary/10'
+  'composer-inner-editor relative overflow-hidden rounded-[var(--radius-composer)] border border-borderStrong bg-surface transition-colors duration-[160ms] focus-within:border-signal'
 
 /** Named container + scroll fallback; sizes come from `.composer-toolbar*` in globals.css */
 export const composerToolbarScrollClass =
   'composer-toolbar flex min-w-0 max-w-full flex-nowrap items-center overflow-x-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
 
 export const composerToolbarButtonClass =
-  'composer-toolbar-btn relative inline-flex shrink-0 touch-manipulation cursor-pointer items-center justify-center rounded-lg border border-border/80 bg-background text-muted-foreground transition-colors duration-200 hover:border-primary/25 hover:bg-accent hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-45'
+  'composer-toolbar-btn relative inline-flex shrink-0 touch-manipulation cursor-pointer items-center justify-center rounded-[8px] border border-transparent bg-transparent text-ink-tertiary transition-colors duration-[160ms] hover:bg-surface-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-45'
 
 export const composerToolbarIconClass = 'composer-toolbar-icon'
 
@@ -29,7 +29,7 @@ export const ComposerIconButton = forwardRef<HTMLButtonElement, ComposerIconButt
         type={type}
         className={cn(
           composerToolbarButtonClass,
-          active && 'border-primary/35 bg-primary/5 text-primary',
+          active && 'border-signal/40 bg-signal-soft text-signal-text',
           className,
         )}
         {...props}
@@ -67,7 +67,7 @@ export function ComposerFeatureChip({
       title={title ?? label}
       className={cn(
         composerToolbarButtonClass,
-        active && 'border-primary/35 bg-primary/5 text-primary',
+        active && 'border-signal/40 bg-signal-soft text-signal-text',
         className,
       )}
       {...props}
@@ -75,7 +75,7 @@ export function ComposerFeatureChip({
       {icon}
       {showDot && active && (
         <span
-          className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_0_3px_hsl(var(--primary)/0.10)]"
+          className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-signal"
           aria-hidden="true"
         />
       )}
@@ -138,7 +138,7 @@ export function ComposerFeatureControls({
         >
           <BookOpen className={composerToolbarIconClass} />
           {Boolean(knowledgeBaseCount && knowledgeBaseCount > 0) && (
-            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-micro font-semibold text-primary-foreground">
+            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-foreground px-1 text-[10px] font-medium text-background">
               {knowledgeBaseCount! > 9 ? '9+' : knowledgeBaseCount}
             </span>
           )}

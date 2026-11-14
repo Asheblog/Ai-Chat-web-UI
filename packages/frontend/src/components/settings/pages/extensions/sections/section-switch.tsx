@@ -82,19 +82,19 @@ export function SectionSwitch({
         >
           {label} {stateText}
         </label>
-        {saving && <span className="text-xs text-muted-foreground/60">保存中...</span>}
+        {saving && <span className="text-xs text-ink-tertiary">保存中...</span>}
         {settings === null && error ? (
           <button
             type="button"
             onClick={() => void refresh().catch(() => {})}
-            className="text-xs text-primary underline-offset-2 hover:underline"
+            className="text-xs text-signal-text underline-offset-2 hover:underline"
           >
             重试
           </button>
         ) : null}
       </div>
-      {settings === null && error ? <p className="text-micro text-destructive">{error}</p> : null}
-      {hint ? <p className="text-micro text-muted-foreground/80">{hint}</p> : null}
+      {settings === null && error ? <p className="text-[11px] text-destructive">{error}</p> : null}
+      {hint ? <p className="text-[11px] text-ink-tertiary">{hint}</p> : null}
     </div>
   )
 }

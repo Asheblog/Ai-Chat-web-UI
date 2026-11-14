@@ -34,7 +34,7 @@ export function AttachmentUploadButton({
       type="button"
       className={cn(
         composerToolbarButtonClass,
-        hasAttachments && 'border-primary/35 bg-primary/5 text-primary',
+        hasAttachments && 'border-signal/40 bg-signal-soft text-signal-text',
         className,
       )}
       onClick={onPick}
@@ -44,7 +44,7 @@ export function AttachmentUploadButton({
     >
       <Paperclip className={composerToolbarIconClass} />
       {typeof count === 'number' && count > 0 && (
-        <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-micro font-semibold text-primary-foreground">
+        <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-foreground px-1 text-[10px] font-medium text-background">
           {count > 99 ? '99+' : count}
         </span>
       )}

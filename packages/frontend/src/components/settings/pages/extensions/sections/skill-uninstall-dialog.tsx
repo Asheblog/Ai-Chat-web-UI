@@ -59,7 +59,7 @@ const ActiveSkillSourcesBucket = (props: {
   ).sort((a, b) => a.localeCompare(b))
 
   return (
-    <div className="rounded-lg border border-emerald-500/35 bg-emerald-500/5 p-3">
+    <div className="rounded-lg border border-success/35 bg-success/5 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="text-sm font-medium">保留（激活 Skill 占用）</span>
         <Badge variant="outline">{displayPackages.length}</Badge>
@@ -72,31 +72,31 @@ const ActiveSkillSourcesBucket = (props: {
           {displayPackages.map((packageName) => {
             const consumers = sourceMap.get(packageName) || []
             return (
-              <details key={packageName} className="rounded-md border border-emerald-500/25 bg-background/70 px-3 py-2">
+              <details key={packageName} className="rounded-md border border-success/25 bg-surface px-3 py-2">
                 <summary className="flex cursor-pointer items-center justify-between gap-2">
                   <span className="font-mono text-xs">{packageName}</span>
-                  <Badge variant="outline" className="text-micro">
+                  <Badge variant="outline" className="text-[11px]">
                     {consumers.length} 条来源
                   </Badge>
                 </summary>
-                <div className="mt-2 space-y-2 border-t border-border/60 pt-2">
+                <div className="mt-2 space-y-2 border-t border-border pt-2">
                   {consumers.length === 0 ? (
                     <p className="text-xs text-muted-foreground">暂无来源明细（请刷新后重试）。</p>
                   ) : (
                     consumers.map((consumer) => (
-                      <div key={`${consumer.skillId}:${consumer.versionId}:${consumer.requirement}`} className="rounded-md border border-border/60 bg-muted/20 p-2">
+                      <div key={`${consumer.skillId}:${consumer.versionId}:${consumer.requirement}`} className="rounded-md border border-border bg-surface-subtle p-2">
                         <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="secondary" className="text-micro">
+                          <Badge variant="secondary" className="text-[11px]">
                             {consumer.skillDisplayName}
                           </Badge>
-                          <Badge variant="outline" className="text-micro">
+                          <Badge variant="outline" className="text-[11px]">
                             {consumer.skillSlug}
                           </Badge>
-                          <Badge variant="outline" className="text-micro">
+                          <Badge variant="outline" className="text-[11px]">
                             v{consumer.version}
                           </Badge>
                         </div>
-                        <p className="mt-1 break-all font-mono text-micro text-muted-foreground">{consumer.requirement}</p>
+                        <p className="mt-1 break-all font-mono text-[11px] text-muted-foreground">{consumer.requirement}</p>
                       </div>
                     ))
                   )}
@@ -126,8 +126,8 @@ export function SkillUninstallDialog({
 }): JSX.Element {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-hidden rounded-lg border-border/80 p-0 sm:max-w-4xl">
-        <DialogHeader className="border-b border-border/60 px-6 py-5">
+      <DialogContent className="max-h-[85vh] overflow-hidden rounded-lg border-border p-0 sm:max-w-4xl">
+        <DialogHeader className="border-b border-border px-6 py-5">
           <DialogTitle>卸载 Skill 前预览回收计划</DialogTitle>
           <DialogDescription>
             {preview
@@ -137,7 +137,7 @@ export function SkillUninstallDialog({
         </DialogHeader>
 
         <div className="max-h-[60vh] space-y-4 overflow-y-auto px-6 py-4">
-          <div className="rounded-lg border border-border/70 bg-background/85 p-3">
+          <div className="rounded-lg border border-border bg-surface p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="text-sm font-medium">Skill 声明依赖</span>
               <Badge variant="outline">{preview?.removedRequirements.length || 0}</Badge>
@@ -172,12 +172,12 @@ export function SkillUninstallDialog({
               hint="这些包在 Python 运行环境中被标记为手动保留。"
               items={preview?.keptByManual || []}
               emptyText="无此类保留包。"
-              className="border-amber-500/35 bg-amber-500/5"
+              className="border-warning/35 bg-warning/5"
             />
           </div>
         </div>
 
-        <DialogFooter className="border-t border-border/60 px-6 py-4">
+        <DialogFooter className="border-t border-border px-6 py-4">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={deleting}>
             取消
           </Button>

@@ -28,11 +28,9 @@ export function segmentTabId(idPrefix: string, key: string): string {
 export function segmentPanelId(idPrefix: string, key: string): string {
   return `${idPrefix}-panel-${key}`
 }
-
 /**
- * 段内次级标签：单排 pill 按钮，窄屏换行而非再套一层横向滚动（避免双层滚动）。
- * 纯受控展示组件（无内部 state），pill 样式沿用原 MCP 页导航的移动端分支。
- * 每个 tab 与段面板靠 id/aria-controls/aria-labelledby 关联，读屏能说出「这组标签控制哪块内容」。
+ * 段内次级标签：外底 surface-subtle，选中项白底 + 发丝线；窄屏换行，不再套第二层横向滚动。
+ * 纯受控展示组件（无内部 state）；焦点环由全局 :focus-visible 提供，tab 与面板靠 id/aria-controls 关联。
  */
 export function SegmentedTabs<K extends string>({
   items,
@@ -42,7 +40,7 @@ export function SegmentedTabs<K extends string>({
   idPrefix = "tab",
 }: SegmentedTabsProps<K>): JSX.Element {
   return (
-    <div className="flex flex-wrap gap-1" role="tablist" aria-label={ariaLabel}>
+    <div className="inline-flex flex-wrap gap-1 rounded-lg border border-border bg-surface-subtle p-1" role="tablist" aria-label={ariaLabel}>
       {items.map((item) => {
         const Icon = item.icon
         const isActive = item.key === active
@@ -56,17 +54,16 @@ export function SegmentedTabs<K extends string>({
             aria-selected={isActive}
             onClick={() => onChange(item.key)}
             className={cn(
-              "inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+              "inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-[13px] transition-colors duration-[160ms]",
               isActive
-                ? "border-primary/70 bg-primary/10 text-primary"
-                : "border-border bg-background/70 text-muted-foreground hover:bg-accent hover:text-foreground",
+                ? "border-border bg-surface font-medium text-foreground"
+                : "border-transparent text-ink-secondary hover:text-foreground",
             )}
           >
-            {Icon && <Icon className="h-3.5 w-3.5" />}
+            {Icon && <Icon className="h-3.5 w-3.5" aria-hidden="true" />}
             <span>{item.label}</span>
             {item.badge ? (
-              <span className="rounded-full border border-current px-1.5 text-micro">{item.badge}</span>
+              <span className="num-tabular rounded-full border border-current px-1.5 text-[11px]">{item.badge}</span>
             ) : null}
           </button>
         )

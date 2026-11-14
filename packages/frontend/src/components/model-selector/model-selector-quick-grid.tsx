@@ -25,8 +25,8 @@ export function ModelSelectorQuickGrid({
   const duplicateNames = collectDuplicateModelNames(quickModels)
 
   return (
-    <div className="border-b border-border/60 px-3 py-2.5">
-      <div className="mb-2 flex items-center justify-between text-micro text-muted-foreground">
+    <div className="border-b border-border px-3 py-2.5">
+      <div className="mb-2 flex items-center justify-between text-[11px] text-muted-foreground">
         <span className="font-medium">常用</span>
         <span>最近 / 收藏</span>
       </div>
@@ -47,8 +47,8 @@ export function ModelSelectorQuickGrid({
                 "inline-flex max-w-[210px] shrink-0 items-center gap-2 rounded-md border px-3 text-left text-xs transition-colors",
                 showDisplayName ? "min-h-9 py-1.5" : "h-9",
                 isActive
-                  ? "border-primary/45 bg-primary/8 text-primary"
-                  : "border-border/60 bg-background text-foreground hover:border-primary/35 hover:bg-primary/5"
+                  ? "border-primary/45 bg-foreground/8 text-signal"
+                  : "border-border bg-background text-foreground hover:border-primary/35 hover:bg-signal-soft"
               )}
               title={accessibleLabel}
               aria-label={accessibleLabel}
@@ -56,7 +56,7 @@ export function ModelSelectorQuickGrid({
               <span className="min-w-0">
                 <span className="block truncate font-medium">{model.name}</span>
                 {showDisplayName && (
-                  <span className="block truncate text-micro text-muted-foreground">
+                  <span className="block truncate text-[11px] text-muted-foreground">
                     {model.displayName}
                   </span>
                 )}

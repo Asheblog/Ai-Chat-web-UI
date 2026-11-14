@@ -217,7 +217,7 @@ export function DesktopComposer({
                   onToggleTrace={(checked) => onToggleTrace(Boolean(checked))}
                   effort={effort}
                   onEffortChange={(value) => onEffortChange(value as typeof effort)}
-                  contentClassName="rounded-2xl"
+                  contentClassName="rounded-lg"
                   bodyClassName="text-sm"
                   onOpenSkillPanel={openSkillPanelFromMenu}
                   onOpenAdvanced={() => {
@@ -273,10 +273,10 @@ export function DesktopComposer({
                       onClick={isStreaming ? onStop : onSend}
                       disabled={isStreaming ? false : desktopSendDisabled}
                       aria-label={isStreaming ? '停止生成' : '发送'}
-                      className={`inline-flex h-10 w-10 items-center justify-center rounded-lg shadow-[0_10px_22px_hsl(var(--primary)/0.18)] transition-colors disabled:shadow-none disabled:opacity-45 ${
+                      className={`inline-flex h-10 w-10 items-center justify-center rounded-lg  transition-colors disabled:shadow-none disabled:opacity-45 ${
                         isStreaming
                           ? 'bg-destructive text-destructive-foreground hover:opacity-90'
-                          : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                          : 'bg-foreground text-background hover:bg-[hsl(var(--foreground)/0.9)]'
                       }`}
                     >
                       {isStreaming ? <Square className="h-[18px] w-[18px]" /> : <Send className="h-[18px] w-[18px]" />}

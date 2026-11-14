@@ -62,11 +62,11 @@ const getRankDisplay = (rank: number) => {
         case 1:
             return { icon: <Trophy className="h-6 w-6 text-yellow-500" />, bg: 'bg-yellow-500/10 border-yellow-500/20' }
         case 2:
-            return { icon: <Medal className="h-6 w-6 text-muted-foreground" />, bg: 'bg-[hsl(var(--surface-hover))] border-border/70' }
+            return { icon: <Medal className="h-6 w-6 text-muted-foreground" />, bg: 'bg-[hsl(var(--surface-hover))] border-border' }
         case 3:
             return { icon: <Award className="h-6 w-6 text-amber-600" />, bg: 'bg-amber-600/10 border-amber-600/20' }
         default:
-            return { icon: <span className="text-base font-semibold text-muted-foreground">#{rank}</span>, bg: 'bg-muted/30 border-border/50' }
+            return { icon: <span className="text-base font-semibold text-muted-foreground">#{rank}</span>, bg: 'bg-surface-subtle border-border/50' }
     }
 }
 
@@ -346,7 +346,7 @@ export function ResultStep({
             {/* Share Link */}
             {shareLink && (
                 <div className="rounded-md border border-border bg-card/80 px-4 py-3 text-sm">
-                    分享链接：<a className="text-primary hover:underline ml-2" href={shareLink} target="_blank" rel="noreferrer">
+                    分享链接：<a className="text-signal hover:underline ml-2" href={shareLink} target="_blank" rel="noreferrer">
                         {shareLink}</a>
                 </div>
             )}
@@ -420,16 +420,16 @@ export function ResultStep({
                             className={cn(
                                 "rounded-md border transition-all",
                                 rank.bg,
-                                isExpanded && "shadow-sm"
+                                isExpanded && ""
                             )}
                         >
                             {/* 模型主行*/}
                             <button
-                                className="w-full flex items-center gap-4 p-4 text-left hover:bg-accent rounded-md transition-colors"
+                                className="w-full flex items-center gap-4 p-4 text-left hover:bg-surface-hover rounded-md transition-colors"
                                 onClick={() => toggleExpand(group.key)}
                             >
                                 {/* 排名 */}
-                                <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-background/80 border border-border/50">
+                                <div className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-surface border border-border/50">
                                     {rank.icon}
                                 </div>
 
@@ -476,7 +476,7 @@ export function ResultStep({
                                     {group.attempts.map((attempt) => (
                                         <div
                                             key={`${group.key}-${attempt.attemptIndex}`}
-                                            className="flex cursor-pointer items-center justify-between gap-4 rounded-md bg-card/70 px-4 py-2 transition-colors hover:bg-accent"
+                                            className="flex cursor-pointer items-center justify-between gap-4 rounded-md bg-card/70 px-4 py-2 transition-colors hover:bg-surface-hover"
                                             onClick={() => onSelectResult(attempt)}
                                         >
                                             <div className="flex items-center gap-3">

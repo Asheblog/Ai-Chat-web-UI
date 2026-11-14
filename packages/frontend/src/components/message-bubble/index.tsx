@@ -121,7 +121,7 @@ function MessageBubbleComponent({
 
   const bubbleClass = `max-w-full box-border ${
     isUser
-      ? 'ml-auto w-fit rounded-2xl bg-muted/70 px-4 py-2.5 text-left text-foreground'
+      ? 'ml-auto w-fit max-w-[520px] rounded-[14px] bg-userBubble px-3.5 py-2.5 text-left text-[14px] leading-[1.7] text-foreground'
       : isCodeOnly
         ? 'w-full p-0 bg-transparent border-0 text-foreground'
         : 'w-full px-0 py-0.5 bg-transparent text-foreground'
@@ -147,12 +147,12 @@ function MessageBubbleComponent({
     !meta.pendingSync &&
     !isStreaming
   const selectionWrapperClass = shareModeActive
-    ? `rounded-2xl border ${
+    ? `rounded-lg border ${
         shareSelected
-          ? 'border-primary/50 bg-primary/5'
+          ? 'border-signal/50 bg-signal-soft'
           : shareSelectable
-          ? 'border-dashed border-primary/40 bg-muted/40'
-          : 'border-dashed border-border/60 bg-muted/30'
+          ? 'border-dashed border-primary/40 bg-surface-subtle/40'
+          : 'border-dashed border-border bg-surface-subtle'
       } p-2 transition-colors`
     : ''
 
@@ -175,7 +175,7 @@ function MessageBubbleComponent({
           src={avatarSrc}
           alt={isUser ? '用户头像' : 'AI 头像'}
           fallback={avatarFallbackText}
-          className={`hidden h-7 w-7 flex-shrink-0 bg-muted sm:flex ${isUser ? '' : 'mt-1'}`}
+          className={`hidden h-[26px] w-[26px] flex-shrink-0 sm:flex ${isUser ? '' : 'mt-0.5'}`}
         />
 
         <div
@@ -233,7 +233,7 @@ function MessageBubbleComponent({
                 return (
                   <div
                     key={artifact.id}
-                    className="rounded-lg border border-border/70 bg-muted/25 px-3 py-2 text-xs flex items-center justify-between gap-3"
+                    className="rounded-lg border border-border bg-surface-subtle/25 px-3 py-2 text-xs flex items-center justify-between gap-3"
                   >
                     <div className="min-w-0">
                       <div className="font-medium truncate">{artifact.fileName}</div>
@@ -246,7 +246,7 @@ function MessageBubbleComponent({
                       <span className="text-muted-foreground">已过期</span>
                     ) : (
                       <a
-                        className="text-primary hover:underline whitespace-nowrap"
+                        className="text-signal hover:underline whitespace-nowrap"
                         href={artifact.downloadUrl}
                         target="_blank"
                         rel="noopener noreferrer"

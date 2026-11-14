@@ -11,8 +11,8 @@ import { RefreshCcw, Search, ChevronLeft, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const levelColors: Record<string, string> = {
-  debug: 'border border-border/70 bg-[hsl(var(--surface-hover))] text-muted-foreground',
-  info: 'border border-primary/30 bg-primary/10 text-primary',
+  debug: 'border border-border bg-[hsl(var(--surface-hover))] text-muted-foreground',
+  info: 'border border-signal/30 bg-signal-soft text-signal-text',
   warn: 'border border-[hsl(var(--warning)/0.35)] bg-[hsl(var(--warning)/0.14)] text-[hsl(var(--warning))]',
   error: 'border border-destructive/30 bg-destructive/10 text-destructive',
 }
@@ -126,7 +126,7 @@ export function SystemLogsPage() {
 
   if (!isAdmin) {
     return (
-      <div className="rounded-2xl border border-border/80 bg-card/90 p-6 text-center text-muted-foreground">
+      <div className="rounded-lg border border-border bg-surface/90 p-6 text-center text-muted-foreground">
         只有管理员可以查看系统日志
       </div>
     )
@@ -137,7 +137,7 @@ export function SystemLogsPage() {
   return (
     <div className="space-y-4">
       {/* 过滤条件 */}
-      <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-border/80 bg-card/95 p-4 shadow-sm">
+      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-surface p-4">
         <div className="flex-1 min-w-[200px]">
           <label className="text-xs text-muted-foreground mb-1 block">搜索关键词</label>
           <div className="flex gap-2">
@@ -210,7 +210,7 @@ export function SystemLogsPage() {
       </div>
 
       {/* 统计信息 */}
-      <div className="flex items-center justify-between rounded-xl border border-border/70 bg-[hsl(var(--surface))/0.55] px-4 py-2 text-sm text-muted-foreground">
+      <div className="flex items-center justify-between rounded-xl border border-border bg-[hsl(var(--surface))/0.55] px-4 py-2 text-sm text-muted-foreground">
         <span>
           共 {total} 条日志
           {items.length > 0 && ` (显示 ${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, total)})`}
@@ -239,7 +239,7 @@ export function SystemLogsPage() {
       </div>
 
       {/* 日志列表 */}
-      <div className="overflow-hidden rounded-2xl border border-border/80 bg-card/95 shadow-sm">
+      <div className="overflow-hidden rounded-lg border border-border bg-surface">
         {loading && items.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">
             加载中...
@@ -292,7 +292,7 @@ export function SystemLogsPage() {
 
                 {/* 展开的上下文 */}
                 {expandedIds.has(item.id) && item.ctx && (
-                  <div className="mt-2 ml-20 overflow-x-auto rounded-lg border border-border/70 bg-[hsl(var(--surface-hover))/0.6] p-2 text-xs font-mono">
+                  <div className="mt-2 ml-20 overflow-x-auto rounded-lg border border-border bg-[hsl(var(--surface-hover))/0.6] p-2 text-xs font-mono">
                     <pre className="whitespace-pre-wrap break-all">
                       {JSON.stringify(item.ctx, null, 2)}
                     </pre>

@@ -10,9 +10,9 @@ type StatusMeta = {
 }
 
 export const STATUS_META: Record<'PENDING' | 'ACTIVE' | 'DISABLED', StatusMeta> = {
-  PENDING: { label: '待审批', className: 'bg-blue-100/60 text-blue-700 border-blue-200' },
-  ACTIVE: { label: '已启用', className: 'bg-emerald-100/60 text-emerald-700 border-emerald-200' },
-  DISABLED: { label: '已禁用', className: 'bg-rose-100/60 text-rose-700 border-rose-200' },
+  PENDING: { label: '待审批', className: 'bg-surface-subtle text-ink-tertiary border-border' },
+  ACTIVE: { label: '已启用', className: 'bg-success/10 text-success border-success/30' },
+  DISABLED: { label: '已禁用', className: 'bg-destructive/10 text-destructive border-destructive/30' },
 }
 
 export const STATUS_OPTIONS: Array<{ value: StatusFilter; label: string }> = [

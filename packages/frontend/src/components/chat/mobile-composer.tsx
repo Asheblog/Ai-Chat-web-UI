@@ -200,7 +200,7 @@ export function MobileComposer({
               side="top"
               align="start"
               sideOffset={10}
-              className="w-[min(92vw,22rem)] rounded-2xl border-border/80 bg-popover/95 p-2 shadow-[0_18px_40px_hsl(var(--background)/0.35)] backdrop-blur-xl"
+              className="w-[min(92vw,22rem)] rounded-lg border-border bg-surface p-2 shadow-[0_8px_24px_hsl(var(--foreground)/0.08)] "
             >
               <PlusMenuContent
                 effort={effort}
@@ -255,7 +255,7 @@ export function MobileComposer({
           <Button
             type="button"
             className={`h-9 w-9 rounded-lg p-0 ${
-              isStreaming ? 'bg-destructive text-destructive-foreground' : 'bg-primary text-primary-foreground'
+              isStreaming ? 'bg-destructive text-destructive-foreground' : 'bg-foreground text-background'
             }`}
             onClick={() => {
               if (isStreaming) {
@@ -300,7 +300,7 @@ export function MobileComposer({
         <SheetContent
           side="bottom"
           dialogTitle="更多设置"
-          className="rounded-t-3xl border-border/80 bg-card/95 pb-[calc(env(safe-area-inset-bottom)+20px)]"
+          className="rounded-t-3xl border-border bg-surface pb-[calc(env(safe-area-inset-bottom)+20px)]"
         >
           <div className="px-4 pt-4 pb-2">
             <h3 className="text-base font-semibold text-foreground">更多设置</h3>

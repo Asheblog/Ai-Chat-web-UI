@@ -51,11 +51,11 @@ const getRankDisplay = (rank: number) => {
     case 1:
       return { icon: <Trophy className="h-5 w-5 text-amber-500" />, bg: 'border-primary/20 bg-surface' }
     case 2:
-      return { icon: <Medal className="h-5 w-5 text-muted-foreground" />, bg: 'border-border/70 bg-surface' }
+      return { icon: <Medal className="h-5 w-5 text-muted-foreground" />, bg: 'border-border bg-surface' }
     case 3:
-      return { icon: <Award className="h-5 w-5 text-amber-600" />, bg: 'border-border/70 bg-surface' }
+      return { icon: <Award className="h-5 w-5 text-amber-600" />, bg: 'border-border bg-surface' }
     default:
-      return { icon: <span className="text-sm font-semibold text-muted-foreground">#{rank}</span>, bg: 'border-border/70 bg-surface' }
+      return { icon: <span className="text-sm font-semibold text-muted-foreground">#{rank}</span>, bg: 'border-border bg-surface' }
   }
 }
 
@@ -390,7 +390,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
   const statusMeta = useMemo(() => {
     if (isLive) {
       return {
-        icon: <Loader2 className="h-5 w-5 text-primary animate-spin" />,
+        icon: <Loader2 className="h-5 w-5 text-signal animate-spin" />,
         label: '对战进行中',
         badge: '实时',
       }
@@ -521,19 +521,19 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
   return (
     <div className="v2-app-surface flex min-h-screen flex-col text-foreground">
       <div className="mx-auto flex w-full max-w-[72rem] flex-1 flex-col gap-4 px-4 py-4 sm:px-6">
-        <div className="flex flex-col gap-3 border-b border-border/70 px-1 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-b border-border px-1 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3 text-sm font-semibold">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-foreground text-xs font-bold text-background">
               AI
             </span>
             {brandText} Battle 分享
           </div>
           <span className="text-xs text-muted-foreground">{formatRelativeTime(shareState.createdAt)}</span>
         </div>
-        <header className="border-b border-border/60 pb-5">
+        <header className="border-b border-border pb-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div className="min-w-0 space-y-3">
-              <h1 className="text-title-l sm:text-2xl font-semibold tracking-tight text-foreground">
+              <h1 className="text-[24px] font-bold sm:text-2xl font-semibold tracking-tight text-foreground">
                 {shareState.title || '模型对战分享'}
               </h1>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
@@ -590,7 +590,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
             {showQuestion ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </button>
           {showQuestion && (
-            <div className="mt-3 space-y-3 rounded-lg border border-border/70 bg-muted/40 p-4">
+            <div className="mt-3 space-y-3 rounded-lg border border-border bg-surface-subtle/40 p-4">
               <BattleContentBlock
                 title="题目"
                 text={payload.prompt.text}
@@ -616,9 +616,9 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
                   {payload.progress.completedAttempts}/{payload.progress.totalAttempts}
                 </span>
               </div>
-              <div className="mt-2 h-2 rounded-full bg-muted overflow-hidden">
+              <div className="mt-2 h-2 rounded-full bg-surface-subtle overflow-hidden">
                 <div
-                  className="h-full bg-primary rounded-full transition-all duration-500 ease-out"
+                  className="h-full bg-foreground rounded-full transition-all duration-500 ease-out"
                   style={{ width: `${progressPercentage}%` }}
                 />
               </div>
@@ -629,12 +629,12 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
 
             <div className="grid gap-3 sm:grid-cols-4">
               {[
-                { label: '进行中', value: payload.progress.runningAttempts, color: 'text-primary' },
+                { label: '进行中', value: payload.progress.runningAttempts, color: 'text-signal' },
                 { label: '已完成', value: payload.progress.completedAttempts, color: 'text-emerald-600' },
                 { label: '等待', value: payload.progress.pendingAttempts, color: 'text-amber-600' },
                 { label: '通过', value: payload.progress.successAttempts, color: 'text-sky-600' },
               ].map(({ label, value, color }) => (
-                <div key={label} className="rounded-lg border border-border/70 bg-surface p-4">
+                <div key={label} className="rounded-lg border border-border bg-surface p-4">
                   <div className="text-xs text-muted-foreground">{label}</div>
                   <div className={cn('mt-1 text-2xl font-semibold', color)}>{value}</div>
                 </div>
@@ -661,10 +661,10 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
                 if (!latest) return null
                 const summary = getOutputSummary(latest.output || '')
                 return (
-                  <div key={modelKey} className="rounded-lg border border-border/70 bg-surface">
+                  <div key={modelKey} className="rounded-lg border border-border bg-surface">
                     <button
                       type="button"
-                      className="w-full rounded-lg text-left transition-colors hover:bg-accent"
+                      className="w-full rounded-lg text-left transition-colors hover:bg-surface-hover"
                       onClick={() => handleNodeClick(modelKey, latest.attemptIndex)}
                     >
                       <div className="p-4">
@@ -737,10 +737,10 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
               >
                 <button
                   type="button"
-                  className="flex w-full items-center gap-4 rounded-lg p-4 text-left transition-colors hover:bg-accent"
+                  className="flex w-full items-center gap-4 rounded-lg p-4 text-left transition-colors hover:bg-surface-hover"
                   onClick={() => toggleExpand(group.key)}
                 >
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-border/70 bg-muted/70">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-border bg-surface-subtle">
                     {rank.icon}
                   </div>
 
@@ -790,7 +790,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
                       <button
                         type="button"
                         key={`${attempt.modelId}-${attempt.attemptIndex}`}
-                        className="flex w-full cursor-pointer items-center justify-between gap-4 rounded-md border border-border/60 bg-muted/40 px-4 py-2 text-left transition-colors hover:bg-background"
+                        className="flex w-full cursor-pointer items-center justify-between gap-4 rounded-md border border-border bg-surface-subtle/40 px-4 py-2 text-left transition-colors hover:bg-background"
                         onClick={() => handleAttemptClick(attempt)}
                       >
                         <div className="flex items-center gap-3">
@@ -821,7 +821,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
           </div>
         )}
       </div>
-      <footer className="border-t border-border/80 py-4">
+      <footer className="border-t border-border py-4">
         <div className="mx-auto w-full max-w-[72rem] px-4 text-center text-sm text-muted-foreground md:px-6">
           由<span className="font-medium text-foreground">{brandText}</span> 生成 · {formatDate(shareState.createdAt)}
         </div>

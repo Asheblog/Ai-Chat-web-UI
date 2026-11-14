@@ -76,7 +76,7 @@ export function UserQuotaDialog({
             </div>
           )}
           {snapshot && (
-            <div className="rounded border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
+            <div className="rounded border bg-surface-subtle p-3 text-xs text-muted-foreground space-y-1">
               <div>当前每日额度：{snapshot.dailyLimit ?? '未设置'}</div>
               <div>今日已用：{snapshot.usedCount}</div>
               <div>剩余额度：{snapshot.remaining ?? '不限'}</div>

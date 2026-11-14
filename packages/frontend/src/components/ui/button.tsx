@@ -4,32 +4,31 @@ import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
 
+// Ink & Mist：主操作 = 墨黑（fg/bg 反转），AI 动作才用 signal，其余靠发丝线区分层级。
 const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-md border border-transparent text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:saturate-50",
+  "inline-flex items-center justify-center whitespace-nowrap rounded-md border border-transparent text-[13px] font-medium transition-colors duration-[160ms] disabled:pointer-events-none disabled:border-transparent disabled:bg-surface-subtle disabled:text-ink-tertiary",
   {
     variants: {
       variant: {
-        default:
-          "bg-primary text-primary-foreground shadow-[0_1px_2px_hsl(var(--primary)/0.28)] hover:bg-[hsl(var(--primary-hover))] active:translate-y-[1px]",
-        destructive:
-          "bg-destructive text-destructive-foreground shadow-[0_1px_2px_hsl(var(--destructive)/0.28)] hover:bg-destructive/90 active:translate-y-[1px]",
+        default: "bg-foreground text-background hover:bg-[hsl(var(--foreground)/0.9)]",
+        destructive: "bg-destructive text-destructive-foreground hover:bg-[hsl(var(--destructive)/0.9)]",
         outline:
-          "border-border/90 bg-[hsl(var(--surface)/0.65)] text-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground",
+          "border-border bg-transparent text-foreground hover:bg-surface-hover",
         outlineInverse:
-          "border-slate-700 bg-slate-950/30 text-slate-100 hover:bg-slate-900 hover:text-slate-50",
+          "border-borderStrong bg-transparent text-foreground hover:border-foreground/30 hover:bg-surface-hover",
         secondary:
-          "border-border/70 bg-secondary text-secondary-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground",
+          "border-border bg-surface text-foreground hover:bg-surface-subtle",
         ghost:
-          "text-muted-foreground hover:bg-[hsl(var(--surface-hover))] hover:text-foreground data-[state=open]:bg-[hsl(var(--surface-hover))]",
-        link: "border-transparent text-primary underline-offset-4 hover:text-[hsl(var(--primary-hover))] hover:underline",
+          "text-muted-foreground hover:bg-surface-hover hover:text-foreground data-[state=open]:bg-surface-hover data-[state=open]:text-foreground disabled:bg-transparent",
+        link: "text-signal underline-offset-4 hover:underline disabled:bg-transparent",
       },
       size: {
-        default: "h-10 px-4 py-2",
-        xs: "h-8 px-2.5 text-xs",
-        sm: "h-9 px-3",
-        lg: "h-11 px-8",
-        icon: "h-10 w-10",
-        "icon-xs": "h-8 w-8",
+        default: "h-9 px-4",
+        xs: "h-7 rounded-sm px-2.5 text-xs",
+        sm: "h-8 px-3",
+        lg: "h-10 px-6",
+        icon: "h-8 w-8",
+        "icon-xs": "h-7 w-7 rounded-sm",
       },
     },
     defaultVariants: {

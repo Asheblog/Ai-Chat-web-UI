@@ -8,7 +8,7 @@ interface AppShellProps {
 }
 
 const SkeletonBlock = ({ className }: { className: string }) => (
-  <div className={`animate-pulse rounded-md bg-muted ${className}`} />
+  <div className={`animate-pulse rounded-md bg-surface-subtle ${className}`} />
 )
 
 /**
@@ -25,15 +25,15 @@ export function AppShell({ ready, sidebar, toolbar, children }: AppShellProps) {
       >
         <aside
           aria-hidden="true"
-          className="hidden w-[260px] shrink-0 flex-col border-r border-border/70 bg-[hsl(var(--sidebar-bg))] px-4 py-5 lg:flex"
+          className="hidden w-[268px] shrink-0 flex-col border-r border-border bg-canvas px-3 py-3 lg:flex"
         >
           <div className="flex items-center gap-2.5">
-            <SkeletonBlock className="h-8 w-8" />
+            <SkeletonBlock className="h-[26px] w-[26px]" />
             <SkeletonBlock className="h-4 w-24" />
           </div>
-          <SkeletonBlock className="mt-6 h-11 w-full" />
-          <SkeletonBlock className="mt-2 h-10 w-full" />
-          <SkeletonBlock className="mt-2 h-10 w-full" />
+          <SkeletonBlock className="mt-4 h-9 w-full" />
+          <SkeletonBlock className="mt-1.5 h-8 w-full" />
+          <SkeletonBlock className="mt-1.5 h-8 w-full" />
           <SkeletonBlock className="mt-6 h-9 w-full" />
           <div className="mt-4 space-y-3">
             {Array.from({ length: 6 }).map((_, index) => (

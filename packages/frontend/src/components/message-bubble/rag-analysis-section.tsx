@@ -146,7 +146,7 @@ export function RAGAnalysisSection({
                     className={cn(
                       'rounded-md border p-2 text-sm',
                       'bg-[hsl(var(--surface))/0.9]',
-                      'border-border/80'
+                      'border-border'
                     )}
                   >
                     <div className="flex items-center gap-2 mb-1">
@@ -161,7 +161,7 @@ export function RAGAnalysisSection({
                             ? 'border border-[hsl(var(--success)/0.35)] bg-[hsl(var(--success)/0.15)] text-[hsl(var(--success))]'
                             : hit.score >= 0.5
                               ? 'border border-[hsl(var(--warning)/0.35)] bg-[hsl(var(--warning)/0.15)] text-[hsl(var(--warning))]'
-                              : 'border border-border/70 bg-[hsl(var(--surface-hover))] text-muted-foreground'
+                              : 'border border-border bg-[hsl(var(--surface-hover))] text-muted-foreground'
                         )}
                       >
                         {formatScore(hit.score)}

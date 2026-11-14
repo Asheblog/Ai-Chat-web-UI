@@ -127,7 +127,7 @@ export function InstallationsTab() {
               />
             </div>
             {/* 原样字段：字段名与值保持原样，只默认折叠起来，避免模板表单第一屏被 JSON 淹没 */}
-            <details className="md:col-span-2 rounded-md border border-border/60 bg-muted/20 px-3 py-2">
+            <details className="md:col-span-2 rounded-md border border-border bg-surface-subtle px-3 py-2">
               <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground">高级（原样字段）</summary>
               <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                 <McpField label="command"><Input value={form.command} onChange={(e) => setForm({ ...form, command: e.target.value })} /></McpField>
@@ -165,14 +165,14 @@ export function InstallationsTab() {
             </thead>
             <tbody>
               {items.map((item) => (
-                <tr key={item.id} className="border-b border-border/50 hover:bg-muted/30">
+                <tr key={item.id} className="border-b border-border hover:bg-surface-subtle">
                   <td className="py-2 pr-3 font-mono max-w-[140px] truncate" title={item.namespaceKey}>{item.namespaceKey}</td>
                   <td className="py-2 pr-3">{item.name}</td>
-                  <td className="py-2 pr-3"><Badge variant="outline" className="text-micro">{item.sourceType}</Badge></td>
-                  <td className="py-2 pr-3"><Badge variant="outline" className="text-micro">{item.transport}</Badge></td>
-                  <td className="py-2 pr-3"><Badge variant={item.status === 'active' ? 'default' : 'secondary'} className="text-micro">{item.status || 'unknown'}</Badge></td>
+                  <td className="py-2 pr-3"><Badge variant="outline" className="text-[11px]">{item.sourceType}</Badge></td>
+                  <td className="py-2 pr-3"><Badge variant="outline" className="text-[11px]">{item.transport}</Badge></td>
+                  <td className="py-2 pr-3"><Badge variant={item.status === 'active' ? 'default' : 'secondary'} className="text-[11px]">{item.status || 'unknown'}</Badge></td>
                   <td className="py-2 pr-3">
-                    <button type="button" onClick={() => openEdit(item)} title="编辑" className="inline-flex p-1 rounded hover:bg-accent"><Pencil className="h-3.5 w-3.5" /></button>
+                    <button type="button" onClick={() => openEdit(item)} title="编辑" className="inline-flex p-1 rounded hover:bg-surface-hover"><Pencil className="h-3.5 w-3.5" /></button>
                   </td>
                 </tr>
               ))}

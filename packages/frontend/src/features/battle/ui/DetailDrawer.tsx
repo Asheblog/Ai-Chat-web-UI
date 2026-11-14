@@ -258,7 +258,7 @@ export function DetailDrawer({
                                     {copied ? '已复制' : '复制'}
                                 </Button>
                             </div>
-                            <div className="rounded-lg bg-muted/30 p-3 overflow-x-auto">
+                            <div className="rounded-lg bg-surface-subtle p-3 overflow-x-auto">
                                 {detail.output ? (
                                     <div className="prose prose-sm max-w-none dark:prose-invert min-w-0">
                                         <MarkdownRenderer html={null} fallback={detail.output} />
@@ -275,7 +275,7 @@ export function DetailDrawer({
                                 <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
                                     <Scale className="h-4 w-4" />裁判评估
                                 </h4>
-                                <div className="rounded-lg bg-muted/30 p-3 overflow-x-auto">
+                                <div className="rounded-lg bg-surface-subtle p-3 overflow-x-auto">
                                     {/* Score bar */}
                                     <div className="flex items-center gap-3 mb-2">
                                         <div className={cn(
@@ -284,7 +284,7 @@ export function DetailDrawer({
                                         )}>
                                             {judgeReady && detail.judgeScore != null ? detail.judgeScore.toFixed(2) : '--'}
                                         </div>
-                                        <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden min-w-0">
+                                        <div className="flex-1 h-2 rounded-full bg-surface-subtle overflow-hidden min-w-0">
                                             <div
                                                 className={cn(
                                                     'h-full rounded-full transition-all',
@@ -298,7 +298,7 @@ export function DetailDrawer({
                                     {/* Reason */}
                                     {detail.judgeReason && (
                                         <div className="text-sm text-muted-foreground break-words">
-                                            <span className="text-xs text-muted-foreground/70">评判理由：</span>
+                                            <span className="text-xs text-ink-tertiary">评判理由：</span>
                                             {detail.judgeReason}
                                         </div>
                                     )}

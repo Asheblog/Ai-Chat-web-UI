@@ -76,8 +76,24 @@ const config: Config = {
         },
         surface: {
           DEFAULT: "hsl(var(--surface))",
+          subtle: "hsl(var(--surface-subtle))",
           hover: "hsl(var(--surface-hover))",
         },
+        // Ink & Mist 语义层：画布 / 发丝线 / 三级墨色 / 信号色
+        canvas: "hsl(var(--background))",
+        borderStrong: "hsl(var(--border-strong))",
+        ink: {
+          DEFAULT: "hsl(var(--foreground))",
+          secondary: "hsl(var(--muted-foreground))",
+          tertiary: "hsl(var(--ink-tertiary))",
+        },
+        signal: {
+          DEFAULT: "hsl(var(--signal))",
+          soft: "hsl(var(--signal-soft))",
+          text: "hsl(var(--signal-text))",
+        },
+        userBubble: "hsl(var(--user-bubble))",
+        codeBg: "hsl(var(--code-bg))",
       },
       borderRadius: {
         lg: "var(--radius)",

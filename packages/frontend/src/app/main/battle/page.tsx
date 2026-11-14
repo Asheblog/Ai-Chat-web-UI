@@ -15,7 +15,7 @@ export default function BattlePage() {
         </div>
 
         <div className="grid gap-4">
-          <Card className="border-border/70 bg-[hsl(var(--surface))/0.7]">
+          <Card className="border-border bg-[hsl(var(--surface))/0.7]">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Trophy className="h-5 w-5 text-yellow-500" />

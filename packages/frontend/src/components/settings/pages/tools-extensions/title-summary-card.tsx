@@ -86,7 +86,7 @@ export function TitleSummaryCard({ settings, update }: TitleSummaryCardProps) {
           title={(
             <div className="flex items-center gap-2">
               启用智能标题
-              <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">实验性</Badge>
+              <Badge className="bg-ink-tertiary/10 text-ink-tertiary">实验性</Badge>
             </div>
           )}
           description="发送首条消息时自动调用模型生成对话标题"

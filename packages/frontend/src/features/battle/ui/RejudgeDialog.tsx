@@ -276,7 +276,7 @@ export function RejudgeDialog({
               onPaste={newImages.handlePaste}
               disabled={isRejudging}
               rows={6}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none  focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
               placeholder="输入正确的期望答案（可留空，仅用图片）..."
             />
           </div>
@@ -338,9 +338,9 @@ export function RejudgeDialog({
                   {progress.completed}/{progress.total}
                 </span>
               </div>
-              <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+              <div className="h-2 w-full rounded-full bg-surface-subtle overflow-hidden">
                 <div
-                  className="h-full bg-primary transition-all duration-300 ease-out"
+                  className="h-full bg-foreground transition-all duration-300 ease-out"
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>

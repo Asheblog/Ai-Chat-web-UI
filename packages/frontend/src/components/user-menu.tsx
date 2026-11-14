@@ -75,12 +75,12 @@ export function UserMenu({ variant = 'label', className }: UserMenuProps) {
         >
           <Avatar className={cn(showLabel ? 'h-6 w-6' : 'h-7 w-7')}>
             <AvatarImage src={user?.avatarUrl || undefined} alt={user?.username || '用户头像'} />
-            <AvatarFallback className="text-xs">
+            <AvatarFallback className="text-[11px]">
               {user?.username?.charAt(0).toUpperCase() || 'U'}
             </AvatarFallback>
           </Avatar>
           {showLabel && (
-            <span className="max-w-[140px] truncate text-sm">
+            <span className="max-w-[140px] truncate text-[13px]">
               {user?.username || '未登录'}
             </span>
           )}

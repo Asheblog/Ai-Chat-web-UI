@@ -73,7 +73,7 @@ export function ReasoningConfigCard({
             placeholder="32000"
             value={reasoningMaxTokens}
             onChange={(e) => onReasoningMaxTokensChange(e.target.value)}
-            className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-32 text-right"
+            className="num-tabular w-full text-right sm:w-32"
           />
           <Button
             variant="outline"
@@ -96,7 +96,7 @@ export function ReasoningConfigCard({
             placeholder="0.7"
             value={temperatureDefault}
             onChange={(e) => onTemperatureDefaultChange(e.target.value)}
-            className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-32 text-right"
+            className="num-tabular w-full text-right sm:w-32"
           />
           <Button
             variant="outline"

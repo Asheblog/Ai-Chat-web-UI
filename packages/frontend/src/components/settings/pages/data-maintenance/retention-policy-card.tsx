@@ -100,7 +100,7 @@ export function RetentionPolicyCard({ settings, update }: RetentionPolicyCardPro
           title={(
             <div className="flex items-center gap-2">
               聊天图片保留天数
-              <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">存储优化</Badge>
+              <Badge className="bg-warning/10 text-warning">存储优化</Badge>
             </div>
           )}
           description="超过此天数的聊天图片将被自动清理（0 表示永久保留，范围 0-3650 天）"

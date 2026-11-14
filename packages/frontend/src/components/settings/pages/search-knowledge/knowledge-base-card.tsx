@@ -566,7 +566,7 @@ export function KnowledgeBaseCard({ settings, update }: KnowledgeBaseCardProps) 
                         <TableCell>
                           <span className={`text-xs px-2 py-0.5 rounded ${kb.status === 'active'
                             ? 'border border-[hsl(var(--success)/0.35)] bg-[hsl(var(--success)/0.15)] text-[hsl(var(--success))]'
-                            : 'border border-border/70 bg-[hsl(var(--surface-hover))] text-muted-foreground'
+                            : 'border border-border bg-[hsl(var(--surface-hover))] text-muted-foreground'
                             }`}>
                             {kb.status === 'active' ? '启用' : '禁用'}
                           </span>

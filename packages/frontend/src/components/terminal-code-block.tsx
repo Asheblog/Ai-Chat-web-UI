@@ -25,7 +25,7 @@ export const TerminalCodeBlock = memo(function TerminalCodeBlock({ code, languag
         <span aria-hidden className='h-3 w-3 rounded-full bg-[#ff5f56]' />
         <span aria-hidden className='h-3 w-3 rounded-full bg-[#ffbd2e]' />
         <span aria-hidden className='h-3 w-3 rounded-full bg-[#27c93f]' />
-        {!plain && <span className='ml-2 text-micro text-muted-foreground'>{normalized}</span>}
+        {!plain && <span className='ml-2 text-[11px] text-muted-foreground'>{normalized}</span>}
         <Button variant='ghost' size='icon' className='ml-auto h-6 w-6 text-muted-foreground' title='复制代码' aria-label={copied ? '已复制代码' : '复制代码'} onClick={async () => {
           try {
             await copyToClipboard(content)

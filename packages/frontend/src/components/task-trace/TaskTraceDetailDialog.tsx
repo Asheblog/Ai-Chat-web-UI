@@ -29,7 +29,7 @@ export const TaskTraceDetailDialog: FC<TaskTraceDetailDialogProps> = ({
         <DialogHeader>
           <DialogTitle>追踪详情 #{traceId}</DialogTitle>
         </DialogHeader>
-        {detailLoading && <div className="h-24 w-full animate-pulse rounded-xl bg-muted/30" />}
+        {detailLoading && <div className="h-24 w-full animate-pulse rounded-xl bg-surface-subtle" />}
         {!detailLoading && detail && (
           <div className="space-y-4 overflow-y-auto">
             <TraceMetaSection detail={detail} />

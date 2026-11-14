@@ -160,8 +160,8 @@ export function PersonalSkillsPage() {
   }
 
   return (
-    <section className="v2-panel overflow-hidden shadow-none">
-      <div className="border-b border-border/70 p-4 sm:p-5">
+    <section className="v2-panel overflow-hidden">
+      <div className="border-b border-border p-4 sm:p-5">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -173,7 +173,7 @@ export function PersonalSkillsPage() {
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="grid h-9 grid-cols-2 overflow-hidden rounded-md border border-border bg-muted sm:w-[210px]">
+            <div className="grid h-9 grid-cols-2 overflow-hidden rounded-md border border-border bg-surface-subtle sm:w-[210px]">
               {(["store", "installed"] as ViewMode[]).map((item) => (
                 <button
                   key={item}
@@ -181,7 +181,7 @@ export function PersonalSkillsPage() {
                   onClick={() => setMode(item)}
                   className={cn(
                     "text-xs font-medium transition-colors",
-                    mode === item ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:bg-background/70",
+                    mode === item ? "bg-background text-foreground" : "text-muted-foreground hover:bg-surface",
                   )}
                 >
                   {item === "store" ? "商店" : "已安装"}
@@ -204,7 +204,7 @@ export function PersonalSkillsPage() {
 
         <div className="mt-4 grid gap-2 lg:grid-cols-[minmax(0,1fr)_260px]">
           <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-tertiary" />
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -228,7 +228,7 @@ export function PersonalSkillsPage() {
         </div>
 
         {!isAuthenticated ? (
-          <Alert className="mt-4 border-amber-500/40 bg-amber-500/5">
+          <Alert className="mt-4 border-warning/40 bg-warning/5">
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>需要登录</AlertTitle>
             <AlertDescription>匿名用户可以查看商店，但不能安装或启用第三方 Skill。</AlertDescription>
@@ -249,7 +249,7 @@ export function PersonalSkillsPage() {
             const installed = Boolean(item.installed?.skillId)
             const disabled = !isAuthenticated || !item.installable || installed || Boolean(installingKey)
             return (
-              <div key={item.key} className="grid gap-3 p-4 transition-colors hover:bg-muted/25 lg:grid-cols-[minmax(0,1fr)_180px] lg:items-center">
+              <div key={item.key} className="grid gap-3 p-4 transition-colors hover:bg-surface-subtle lg:grid-cols-[minmax(0,1fr)_180px] lg:items-center">
                 <div className="min-w-0 space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="break-words text-sm font-semibold text-foreground">{item.displayName}</p>
@@ -261,7 +261,7 @@ export function PersonalSkillsPage() {
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span className="font-mono">{item.repository}/{item.subdir}</span>
                     {item.licenseName ? <span>{item.licenseName}</span> : null}
-                    <a href={item.skillUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
+                    <a href={item.skillUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-signal-text hover:underline">
                       GitHub
                       <ExternalLink className="h-3.5 w-3.5" />
                     </a>
@@ -296,7 +296,7 @@ export function PersonalSkillsPage() {
       ) : (
         <div className="divide-y divide-border/70">
           {visibleInstalled.map((skill) => (
-            <div key={skill.id} className="grid gap-3 p-4 transition-colors hover:bg-muted/25 lg:grid-cols-[minmax(0,1fr)_180px] lg:items-center">
+            <div key={skill.id} className="grid gap-3 p-4 transition-colors hover:bg-surface-subtle lg:grid-cols-[minmax(0,1fr)_180px] lg:items-center">
               <div className="min-w-0 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="break-words text-sm font-semibold text-foreground">{skill.displayName || skill.slug}</p>
@@ -310,7 +310,7 @@ export function PersonalSkillsPage() {
                   {skill.defaultVersion?.version ? <span>v{skill.defaultVersion.version}</span> : null}
                   {skill.licenseName ? <span>{skill.licenseName}</span> : null}
                   {skill.sourceUrl ? (
-                    <a href={skill.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
+                    <a href={skill.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-signal-text hover:underline">
                       来源
                       <ExternalLink className="h-3.5 w-3.5" />
                     </a>
@@ -319,7 +319,7 @@ export function PersonalSkillsPage() {
               </div>
               <div className="flex items-center justify-start gap-2 lg:justify-end">
                 <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                  <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                  <ShieldCheck className="h-4 w-4 text-success" />
                   仅当前账号
                 </span>
                 <Button

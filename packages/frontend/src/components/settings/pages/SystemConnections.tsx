@@ -310,21 +310,21 @@ export function SystemConnectionsPage() {
       />
 
       {displayError ? (
-        <div role="alert" className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+        <div role="alert" className="rounded-md border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
           {displayError}
         </div>
       ) : null}
 
       {successMessage ? (
-        <div role="status" className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+        <div role="status" className="rounded-md border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">
           {successMessage}
         </div>
       ) : null}
 
       {/* 页头 */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
         <div className="flex items-center gap-3">
-          <PlugZap className="h-5 w-5 flex-shrink-0 text-primary" />
+          <PlugZap className="h-5 w-5 flex-shrink-0 text-ink-tertiary" />
           <div className="space-y-1">
             <CardTitle>供应商与连接</CardTitle>
             <CardDescription className="text-sm text-muted-foreground">
@@ -340,8 +340,8 @@ export function SystemConnectionsPage() {
 
       {/* 模板卡网格 */}
       <section aria-label="供应商模板" data-card-key="connections:quick-connect">
-        <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+        <div className="mb-4 flex items-start gap-3 border-b border-border pb-4">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface-subtle text-ink-tertiary">
             <LayoutGrid className="h-5 w-5" />
           </span>
           <div>
@@ -375,7 +375,7 @@ export function SystemConnectionsPage() {
       <section
         aria-label="高级管理"
         data-card-key="connections:advanced"
-        className="space-y-3 border-t border-border/60 pt-5"
+        className="space-y-3 border-t border-border pt-5"
       >
         <SystemConnectionsHeader
           totalGroups={connections.length}
@@ -452,7 +452,7 @@ function SheetWizardShell({
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center gap-3 border-b border-border/70 py-4 pl-5 pr-16">
+      <div className="flex shrink-0 items-center gap-3 border-b border-border py-4 pl-5 pr-16">
         <div className="min-w-0">
           <h2 className="v2-section-title break-words">{title}</h2>
           {description ? <p className="v2-muted-line mt-0.5 text-xs">{description}</p> : null}

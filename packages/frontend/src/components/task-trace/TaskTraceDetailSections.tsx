@@ -112,19 +112,19 @@ export const TraceEvents: FC<{
   events: TaskTraceEventRecord[]
   truncated: boolean
 }> = ({ events, truncated }) => (
-  <ScrollArea className="h-[50vh] rounded-xl border bg-muted/30 p-4">
+  <ScrollArea className="h-[50vh] rounded-xl border bg-surface-subtle p-4">
     <div className="space-y-3">
       {events.map((evt) => (
         <div
           key={evt.id}
-          className="rounded-lg border bg-card p-3 transition-all hover:shadow-sm"
+          className="rounded-lg border bg-surface p-3 transition-all hover:"
         >
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span className="font-mono">#{evt.seq}</span>
             <span>{formatDateTime(evt.timestamp)}</span>
           </div>
           <div className="mt-1 font-semibold text-sm">{evt.eventType}</div>
-          <pre className="mt-2 overflow-x-auto rounded bg-muted/50 p-2 text-xs font-mono">
+          <pre className="mt-2 overflow-x-auto rounded bg-surface-subtle/50 p-2 text-xs font-mono">
             {JSON.stringify(evt.payload ?? {}, null, 2)}
           </pre>
         </div>
@@ -148,14 +148,14 @@ export const LatexEvents: FC<{
   truncated: boolean
   loading: boolean
 }> = ({ events, truncated, loading }) => (
-  <ScrollArea className="h-[50vh] rounded-xl border bg-muted/30 p-4">
+  <ScrollArea className="h-[50vh] rounded-xl border bg-surface-subtle p-4">
     {loading && <Skeleton className="h-16 w-full" />}
     {!loading && (
       <div className="space-y-3">
         {events.map((evt) => (
           <div
             key={evt.seq}
-            className="rounded-lg border bg-card p-3 transition-all hover:shadow-sm"
+            className="rounded-lg border bg-surface p-3 transition-all hover:"
           >
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span className="font-mono">#{evt.seq}</span>
@@ -165,11 +165,11 @@ export const LatexEvents: FC<{
             </div>
             <div className="mt-1 text-xs text-muted-foreground">原因：{evt.reason}</div>
             <div className="mt-2 text-xs font-semibold">原始：</div>
-            <pre className="mb-2 mt-1 overflow-x-auto rounded bg-muted/40 p-2 text-xs font-mono">
+            <pre className="mb-2 mt-1 overflow-x-auto rounded bg-surface-subtle/40 p-2 text-xs font-mono">
               {evt.raw}
             </pre>
             <div className="text-xs font-semibold">转换：</div>
-            <pre className="mt-1 overflow-x-auto rounded bg-muted/40 p-2 text-xs font-mono">
+            <pre className="mt-1 overflow-x-auto rounded bg-surface-subtle/40 p-2 text-xs font-mono">
               {evt.normalized}
             </pre>
           </div>

@@ -22,8 +22,8 @@ const iconMap = {
 const variantStyles = {
     default: {
         bg: 'from-primary/10 to-primary/5',
-        icon: 'text-primary',
-        value: 'text-primary',
+        icon: 'text-signal',
+        value: 'text-signal',
     },
     success: {
         bg: 'from-green-500/10 to-green-600/5',
@@ -79,10 +79,10 @@ export function StatisticsCard({
                 {/* Optional progress bar */}
                 {progress != null && (
                     <div className="w-16">
-                        <div className="h-2 rounded-full bg-muted/50 overflow-hidden">
+                        <div className="h-2 rounded-full bg-surface-subtle/50 overflow-hidden">
                             <div
                                 className={cn('h-full rounded-full transition-all duration-500', {
-                                    'bg-primary': variant === 'default',
+                                    'bg-foreground': variant === 'default',
                                     'bg-green-500': variant === 'success',
                                     'bg-amber-500': variant === 'warning',
                                     'bg-destructive': variant === 'error',

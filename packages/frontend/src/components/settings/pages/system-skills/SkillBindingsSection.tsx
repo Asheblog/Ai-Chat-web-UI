@@ -57,9 +57,9 @@ export function SkillBindingsSection({
   onDeleteBinding,
 }: SkillBindingsSectionProps) {
   return (
-    <section className="v2-panel p-4 shadow-none sm:p-5">
-      <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+    <section className="v2-panel p-4 sm:p-5">
+      <div className="mb-4 flex items-start gap-3 border-b border-border pb-4">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface-subtle text-ink-tertiary">
           <Link2 className="h-5 w-5" />
         </span>
         <div>
@@ -70,7 +70,7 @@ export function SkillBindingsSection({
         </div>
       </div>
       <div className="space-y-5">
-        <div className="space-y-3 rounded-lg border border-border/70 bg-muted/40 p-4">
+        <div className="space-y-3 rounded-lg border border-border bg-surface-subtle p-4">
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1">
               <Label>Skill</Label>
@@ -157,7 +157,7 @@ export function SkillBindingsSection({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-4 border-t border-border/60 pt-4">
+          <div className="flex flex-wrap items-center gap-4 border-t border-border pt-4">
             <div className="flex items-center gap-2 text-sm">
               <Switch checked={bindingEnabled} onCheckedChange={(value) => onBindingEnabledChange(Boolean(value))} />
               <span>启用绑定</span>
@@ -170,7 +170,7 @@ export function SkillBindingsSection({
 
         <div className="space-y-2">
           {bindings.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border/70 bg-muted/40 p-5 text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-border bg-surface-subtle p-5 text-sm text-muted-foreground">
               暂无绑定。
             </div>
           ) : (

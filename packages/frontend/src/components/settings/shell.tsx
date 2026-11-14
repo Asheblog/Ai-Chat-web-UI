@@ -44,8 +44,38 @@ type NestedModeProps = {
 
 export type SettingsShellProps = BaseProps & (FlatModeProps | NestedModeProps)
 
+// 导航视觉：分组标签 11 Medium/0.5 字距 ink-tertiary；条目 32 高、圆角 8；
+// 选中 = 白底 + 发丝线 + 左侧 2×14 信号条，hover 只跳一阶底色。
+const NAV_GROUP = "flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[11px] font-medium tracking-[0.5px] text-ink-tertiary transition-colors duration-[160ms] hover:text-foreground"
+const NAV_SUB = "flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] text-ink-secondary transition-colors duration-[160ms] hover:bg-surface-hover hover:text-foreground"
+const NAV_LEAF = "flex h-8 w-full items-center gap-2 rounded-lg border px-2 text-left text-[13px] transition-colors duration-[160ms]"
+const NAV_LEAF_ACTIVE = "border-border bg-surface font-medium text-foreground"
+const NAV_LEAF_IDLE = "border-transparent text-ink-secondary hover:bg-surface-hover hover:text-foreground"
+const NAV_ICON = "h-[1.125rem] w-[1.125rem] shrink-0"
+const NAV_LIST = "flex flex-col gap-0.5"
+
+/** 选中态左侧信号竖条；未选中时留同宽透明占位，切换不产生横向位移。 */
+function NavBar({ active }: { active: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn("h-3.5 w-0.5 shrink-0 rounded-full", active ? "bg-signal" : "bg-transparent")}
+    />
+  )
+}
+
+function NavChevron({ open }: { open: boolean }) {
+  return open ? (
+    <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+  ) : (
+    <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+  )
+}
+
 /**
- * SettingsShell: 统一支持扁平与树形导航的设置容器
+ * SettingsShell: 统一支持扁平与树形导航的设置容器。
+ * 外壳 = 232 宽导航列（右发丝线）+ 内容列（个人 704 / 系统 940 居中）。
+ * 导航列走画布底色、内容列走白底，卡片再靠发丝线分层——全程不用阴影。
  */
 export function SettingsShell(props: SettingsShellProps) {
   if (props.mode === "nested") {
@@ -56,7 +86,6 @@ export function SettingsShell(props: SettingsShellProps) {
 
 function SettingsShellLayout({
   title,
-  bare,
   className,
   nav,
   content,
@@ -64,7 +93,6 @@ function SettingsShellLayout({
   showNavTitle,
 }: {
   title: string
-  bare?: boolean
   className?: string
   nav: ReactNode
   content: ReactNode
@@ -72,30 +100,51 @@ function SettingsShellLayout({
   showNavTitle?: boolean
 }) {
   return (
-    <div
-      className={cn(
-        "mx-auto flex min-h-0 w-full max-w-none flex-1 bg-transparent",
-        bare ? "" : "",
-        className
-      )}
-    >
+    <div className={cn("mx-auto flex min-h-0 w-full max-w-none flex-1 bg-transparent", className)}>
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col md:flex-row">
         <aside
           className={cn(
-            "flex min-h-0 w-full shrink-0 flex-col overflow-y-auto border-b border-border bg-surface/70 px-3 py-4 md:w-[200px] md:border-b-0 md:border-r md:px-3 md:py-6",
-            asideClassName
+            "flex min-h-0 w-full shrink-0 flex-col overflow-y-auto border-b border-border px-3 py-3",
+            "md:w-[232px] md:border-b-0 md:border-r md:px-4 md:py-5",
+            asideClassName,
           )}
         >
           {showNavTitle ? (
-            <div className="mb-6 px-2 text-title-l font-semibold tracking-tight text-foreground">
-              {title}
-            </div>
+            <div className="mb-3 px-2 text-[11px] font-medium tracking-[0.5px] text-ink-tertiary">{title}</div>
           ) : null}
           {nav}
         </aside>
         {content}
       </div>
     </div>
+  )
+}
+
+/** 内容列：滚动容器通栏，内层按测量宽度居中，卡片因此落在 704 / 940 的列宽上。 */
+function SettingsContentColumn({
+  children,
+  measureClassName,
+  notice,
+  dimmed,
+}: {
+  children: ReactNode
+  measureClassName: string
+  notice?: ReactNode
+  dimmed?: boolean
+}) {
+  return (
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface">
+      {notice}
+      <div
+        className={cn(
+          "flex-1 min-h-0 overflow-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent",
+          "hover:scrollbar-thumb-muted-foreground transition-opacity",
+          dimmed && "opacity-60",
+        )}
+      >
+        <div className={cn("mx-auto w-full px-4 py-4 md:px-6 md:py-6", measureClassName)}>{children}</div>
+      </div>
+    </section>
   )
 }
 
@@ -106,45 +155,38 @@ function SettingsShellFlatImpl({
   onChange,
   children,
   className,
-  bare,
   showNavTitle,
 }: BaseProps & FlatModeProps) {
   const nav = (
-    <nav className="space-y-2">
-      {sections.map((s) => (
-        <button
-          key={s.key}
-          type="button"
-          onClick={() => onChange(s.key)}
-          className={cn(
-            "flex w-full items-center gap-3 rounded-md px-3 py-3 text-left text-sm transition-all",
-            active === s.key
-              ? "bg-accent text-foreground font-medium shadow-sm"
-              : "text-muted-foreground hover:bg-accent hover:text-foreground"
-          )}
-        >
-          {s.icon && <span className="shrink-0 w-[1.125rem] h-[1.125rem]">{s.icon}</span>}
-          <span className="flex-1 whitespace-nowrap">{s.label}</span>
-        </button>
-      ))}
+    <nav className={NAV_LIST} aria-label="设置导航">
+      {sections.map((s) => {
+        const isActive = active === s.key
+        return (
+          <button
+            key={s.key}
+            type="button"
+            data-leaf-key={s.key}
+            data-active={isActive || undefined}
+            aria-current={isActive ? "page" : undefined}
+            onClick={() => onChange(s.key)}
+            className={cn(NAV_LEAF, isActive ? NAV_LEAF_ACTIVE : NAV_LEAF_IDLE)}
+          >
+            <NavBar active={isActive} />
+            {s.icon && <span className={cn(NAV_ICON, isActive ? "text-foreground" : "text-ink-tertiary")}>{s.icon}</span>}
+            <span className="min-w-0 flex-1 truncate">{s.label}</span>
+          </button>
+        )
+      })}
     </nav>
-  )
-
-  const content = (
-    <section className="flex-1 min-h-0 min-w-0 flex flex-col">
-      <div className="flex-1 min-h-0 min-w-0 overflow-auto px-4 py-5 md:px-6 md:py-6">{children}</div>
-    </section>
   )
 
   return (
     <SettingsShellLayout
-      title={title ?? "设置"}
-      bare={bare}
+      title={title}
       className={className}
       nav={nav}
-      content={content}
       showNavTitle={showNavTitle}
-      asideClassName={showNavTitle ? "md:w-[228px] md:px-4" : undefined}
+      content={<SettingsContentColumn measureClassName="max-w-[752px]">{children}</SettingsContentColumn>}
     />
   )
 }
@@ -177,7 +219,6 @@ function SettingsShellNestedImpl({
   onFlashDone,
   children,
   className,
-  bare,
   showNavTitle,
 }: BaseProps & NestedModeProps) {
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())
@@ -227,140 +268,92 @@ function SettingsShellNestedImpl({
       const itemRootKey = depth === 0 ? item.key : rootKey
 
       if (hasChildren) {
+        // 顶级分组（depth 0）渲染成分组标签行，仍是可点击的折叠开关
         if (depth === 0) {
-          // Top-level accordion (personal / system)
           return (
             <div key={item.key}>
               <button
                 type="button"
+                aria-expanded={isExpanded}
                 onClick={() => {
-                  if (isExpanded) {
-                    setExpandedKeys((prev) => {
-                      const next = new Set(prev)
-                      next.delete(item.key)
-                      return next
-                    })
-                  } else {
-                    setExpandedKeys((prev) => {
-                      const next = new Set(prev)
-                      next.add(item.key)
-                      return next
-                    })
-                    onChangeMain(item.key)
-                  }
+                  if (!isExpanded) onChangeMain(item.key)
+                  toggleExpand(item.key)
                 }}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-3 py-3 text-left text-sm font-medium transition-all",
-                  isActiveMain
-                    ? "bg-accent text-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                )}
+                className={cn(NAV_GROUP, isActiveMain && "text-foreground")}
               >
-                {isExpanded ? (
-                  <ChevronDown className="h-4 w-4 shrink-0" />
-                ) : (
-                  <ChevronRight className="h-4 w-4 shrink-0" />
-                )}
-                {item.icon && <span className="h-[1.125rem] w-[1.125rem] shrink-0">{item.icon}</span>}
-                <span className="flex-1">{item.label}</span>
+                <NavChevron open={isExpanded} />
+                {item.icon && <span className={NAV_ICON}>{item.icon}</span>}
+                <span className="min-w-0 flex-1 truncate">{item.label}</span>
               </button>
-              {isExpanded && (
-                <div className="mt-1 space-y-1 pl-2">{renderItems(item.children || [], depth + 1, item.key)}</div>
-              )}
+              {isExpanded && <div className={cn(NAV_LIST, "mt-0.5")}>{renderItems(item.children || [], depth + 1, item.key)}</div>}
             </div>
           )
         }
-        // Workspace / group node (depth >= 1)
+        // 二级工作域（depth >= 1）：只负责展开/收起，不切页
         return (
           <div key={item.key}>
-            <button
-              type="button"
-              onClick={() => toggleExpand(item.key)}
-              className={cn(
-                "flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-sm transition-all",
-                "text-muted-foreground hover:bg-accent hover:text-foreground",
-              )}
-            >
-              {isExpanded ? (
-                <ChevronDown className="h-4 w-4 shrink-0" />
-              ) : (
-                <ChevronRight className="h-4 w-4 shrink-0" />
-              )}
-              {item.icon && <span className="h-[1.125rem] w-[1.125rem] shrink-0">{item.icon}</span>}
-              <span className="flex-1">{item.label}</span>
+            <button type="button" aria-expanded={isExpanded} onClick={() => toggleExpand(item.key)} className={NAV_SUB}>
+              <NavChevron open={isExpanded} />
+              {item.icon && <span className={cn(NAV_ICON, "text-ink-tertiary")}>{item.icon}</span>}
+              <span className="min-w-0 flex-1 truncate">{item.label}</span>
             </button>
-            {isExpanded && (
-              <div className="mt-1 space-y-1 pl-3">{renderItems(item.children || [], depth + 1, itemRootKey)}</div>
-            )}
+            {isExpanded && <div className={cn(NAV_LIST, "mt-0.5")}>{renderItems(item.children || [], depth + 1, itemRootKey)}</div>}
           </div>
         )
       }
 
-      // Leaf item
+      // 叶子：整行可点，选中态由 data-active / aria-current 标出
       const Icon = item.icon
       return (
         <button
           key={item.key}
           type="button"
           data-leaf-key={item.key}
+          data-active={isActiveLeaf || undefined}
+          aria-current={isActiveLeaf ? "page" : undefined}
           onClick={() => {
             // Sync activeMain if leaf belongs to a different root
-            if (itemRootKey && itemRootKey !== activeMain) {
-              onChangeMain(itemRootKey)
-            }
+            if (itemRootKey && itemRootKey !== activeMain) onChangeMain(itemRootKey)
             onChangeSub(item.key)
           }}
-          className={cn(
-            "flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm transition-all",
-            isActiveLeaf
-              ? "bg-primary text-primary-foreground font-medium shadow-sm"
-              : "text-muted-foreground hover:bg-accent hover:text-foreground",
-          )}
+          className={cn(NAV_LEAF, isActiveLeaf ? NAV_LEAF_ACTIVE : NAV_LEAF_IDLE)}
         >
-          {Icon && <span className="h-[1.125rem] w-[1.125rem] shrink-0">{Icon}</span>}
-          <span className="flex-1">{item.label}</span>
+          <NavBar active={isActiveLeaf} />
+          {Icon && <span className={cn(NAV_ICON, isActiveLeaf ? "text-foreground" : "text-ink-tertiary")}>{Icon}</span>}
+          <span className="min-w-0 flex-1 truncate">{item.label}</span>
         </button>
       )
     })
 
   const nav = (
-    <div ref={navRef} className="space-y-2">
+    <div ref={navRef} className="flex flex-col gap-2">
       {navTop}
-      <nav className="space-y-2">{renderItems(tree, 0)}</nav>
+      <nav className={NAV_LIST} aria-label="设置导航">{renderItems(tree, 0)}</nav>
     </div>
-  )
-
-  const content = (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-      {readOnly && (
-        <div className="border-b border-border/80 bg-muted/20 px-6 py-3 text-sm text-muted-foreground">
-          {readOnlyMessage || "当前模式下无法编辑设置，请登录后再试。"}
-        </div>
-      )}
-      <div
-        className={cn(
-          "flex-1 min-h-0 min-w-0 overflow-auto px-4 py-4 transition-opacity scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent hover:scrollbar-thumb-muted-foreground md:px-6 md:py-6",
-          readOnly ? "opacity-60" : "",
-        )}
-        aria-readonly={readOnly || undefined}
-      >
-        {children}
-      </div>
-    </section>
   )
 
   return (
     <SettingsShellLayout
-      title={title ?? "设置"}
-      bare={bare}
+      title={title}
       className={className}
       nav={nav}
-      content={content}
       showNavTitle={showNavTitle}
-      asideClassName={cn(
-        "scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent hover:scrollbar-thumb-muted-foreground",
-        showNavTitle ? "md:w-[228px] md:px-4" : "",
-      )}
+      asideClassName="scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent hover:scrollbar-thumb-muted-foreground"
+      content={
+        <SettingsContentColumn
+          measureClassName="max-w-[988px]"
+          dimmed={readOnly}
+          notice={
+            readOnly ? (
+              <div className="border-b border-border bg-surface-subtle px-5 py-2.5 text-[11.5px] leading-[1.55] text-ink-tertiary">
+                {readOnlyMessage || "当前模式下无法编辑设置，请登录后再试。"}
+              </div>
+            ) : undefined
+          }
+        >
+          <div aria-readonly={readOnly || undefined}>{children}</div>
+        </SettingsContentColumn>
+      }
     />
   )
 }

@@ -44,15 +44,15 @@ export function PersonalSecurityPage() {
   }
 
   return (
-    <section className="v2-panel overflow-hidden shadow-none">
+    <section className="v2-panel overflow-hidden">
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-accent sm:px-6"
+        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-surface-hover sm:px-6"
       >
         <span className="flex min-w-0 items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-foreground/80 ring-1 ring-primary/20">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface-subtle text-foreground/80 ">
             <Lock className="h-4 w-4" />
           </span>
           <span className="min-w-0">

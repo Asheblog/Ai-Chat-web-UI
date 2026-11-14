@@ -168,7 +168,7 @@ export function MessageBodyContent({
                 "mt-2 flex items-center justify-center gap-1.5 w-full py-2 rounded-md",
                 "text-sm font-medium",
                 "bg-foreground/5 hover:bg-foreground/10 text-foreground",
-                "border border-foreground/20 shadow-sm",
+                "border border-foreground/20 ",
                 "transition-colors duration-200",
                 "focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30"
               )}
@@ -210,9 +210,9 @@ export function MessageBodyContent({
       {shouldShowStreamingPlaceholder ? (
         <div className="flex items-center gap-1">
           <div className="flex space-x-1">
-            <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-            <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-            <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            <div className="w-2 h-2 bg-surface-subtle-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+            <div className="w-2 h-2 bg-surface-subtle-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+            <div className="w-2 h-2 bg-surface-subtle-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
           </div>
           <span className="text-sm text-muted-foreground ml-2">AI正在思考...</span>
         </div>

@@ -93,7 +93,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ html, fallback,
         : <TerminalCodeBlock key={'code-' + index} code={part.code} language={part.language} isStreaming={isStreaming} />)
         : renderedHtml ? <div dangerouslySetInnerHTML={{ __html: renderedHtml }} /> : null}
       {tail && <pre data-markdown-fallback className='my-0 whitespace-pre-wrap break-words bg-transparent p-0 font-inherit text-inherit'>{tail}</pre>}
-      {(errored || markdown.errored) && <span className='text-micro text-muted-foreground'>格式渲染暂不可用，已显示完整文本</span>}
+      {(errored || markdown.errored) && <span className='text-[11px] text-muted-foreground'>格式渲染暂不可用，已显示完整文本</span>}
     </div>
   )
 })

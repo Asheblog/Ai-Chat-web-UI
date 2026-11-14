@@ -50,7 +50,7 @@ export function DestructiveConfirmDialogContent({
             <AlertTriangle className="h-5 w-5" />
           </div>
           <AlertDialogHeader className="space-y-2 text-left">
-            <AlertDialogTitle className="text-title-l">{title}</AlertDialogTitle>
+            <AlertDialogTitle className="text-[24px] font-bold">{title}</AlertDialogTitle>
             <AlertDialogDescription className="text-sm leading-6 text-muted-foreground">
               {description}
             </AlertDialogDescription>
@@ -71,7 +71,7 @@ export function DestructiveConfirmDialogContent({
           onClick={onAction}
           disabled={actionDisabled}
           className={cn(
-            "min-w-[112px] bg-destructive text-destructive-foreground shadow-[0_10px_24px_hsl(var(--destructive)/0.33)] hover:bg-destructive/90",
+            "min-w-[112px] bg-destructive text-destructive-foreground hover:bg-[hsl(var(--destructive)/0.9)]",
             actionClassName,
           )}
         >

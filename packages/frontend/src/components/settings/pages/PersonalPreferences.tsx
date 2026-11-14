@@ -2,8 +2,10 @@
 import { useEffect, useState } from "react"
 import { useTheme } from "next-themes"
 import { Input } from "@/components/ui/input"
-import { Edit3, Moon, Monitor, Sun } from "lucide-react"
+import { Edit3, Monitor, Moon, Sun } from "lucide-react"
 import { AvatarUploadField, type AvatarUploadResult } from "../components/avatar-upload-field"
+import { SettingRow } from "../components/setting-row"
+import { SETTINGS_CARD, SETTINGS_CARD_BODY, SETTINGS_CARD_DESCRIPTION, SETTINGS_CARD_HEADER, SETTINGS_CARD_TITLE } from "../components/settings-surfaces"
 import { useAuthStore } from "@/store/auth-store"
 import { useToast } from "@/components/ui/use-toast"
 import { updatePersonalSettings } from '@/features/settings/api'
@@ -105,15 +107,19 @@ export function PersonalPreferencesPage(){
       setAvatarSaving(false)
     }
   }
+
   return (
     <div className="space-y-4">
-      <h1 className="text-title-l sm:text-2xl font-semibold tracking-tight text-foreground">个人设置</h1>
-
-      <div className="grid gap-3 lg:grid-cols-2">
-        <section className="v2-panel p-5 md:p-6">
-          <h3 className="v2-section-title">个人资料</h3>
-          <p className="mt-1 text-sm text-muted-foreground">管理你的头像、用户名与界面主题</p>
-          <div className="mt-5 grid gap-5 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-start">
+      <h1 className="text-2xl font-semibold tracking-[-0.3px] text-foreground">个人设置</h1>
+      <section className={SETTINGS_CARD}>
+        <div className={SETTINGS_CARD_HEADER}>
+          <div className="min-w-0">
+            <h2 className={SETTINGS_CARD_TITLE}>个人资料</h2>
+            <p className={SETTINGS_CARD_DESCRIPTION}>管理你的头像、用户名与界面主题</p>
+          </div>
+        </div>
+        <div className={SETTINGS_CARD_BODY + " space-y-4"}>
+          <SettingRow title="头像" align="start">
             <AvatarUploadField
               variant="profile"
               imageUrl={avatarPreview}
@@ -124,61 +130,55 @@ export function PersonalPreferencesPage(){
               onClear={handleAvatarClear}
               clearDisabled={!avatarPreview && !user?.avatarUrl}
               onError={(message) => toast({ title: '上传失败', description: message, variant: 'destructive' })}
-              avatarSize={104}
+              avatarSize={48}
+              className="items-start text-left"
             />
-            <div className="min-w-0 space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground/80">用户名</label>
-                <div className="relative">
-                  <Input
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    onBlur={() => handleUsernameSave()}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        handleUsernameSave()
-                      }
-                    }}
-                    className="h-10 bg-surface pr-10"
-                    placeholder="请输入新的用户名"
-                    disabled={!user || usernameSaving}
-                  />
-                  <Edit3 className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                </div>
-                <p className="text-xs text-muted-foreground">3-20 个字符，可包含字母、数字和下划线</p>
-                {usernameError && <p className="text-sm text-destructive">{usernameError}</p>}
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground/80">主题</label>
-                <div className="grid grid-cols-3 overflow-hidden rounded-md border border-border bg-muted">
-                  {[
-                    { value: 'light', label: '浅色', icon: Sun },
-                    { value: 'system', label: '跟随系统', icon: Monitor },
-                    { value: 'dark', label: '深色', icon: Moon },
-                  ].map((item) => {
-                    const Icon = item.icon
-                    const active = theme === item.value
-                    return (
-                      <button
-                        key={item.value}
-                        type="button"
-                        className={`flex h-10 items-center justify-center gap-1.5 whitespace-nowrap text-xs transition ${active ? 'bg-surface text-primary shadow-sm' : 'text-muted-foreground hover:bg-surface/70'}`}
-                        onClick={() => setTheme(item.value as any)}
-                      >
-                        <Icon className="h-4 w-4" />
-                        {item.label}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
+          </SettingRow>
+          <SettingRow title="用户名" description="3-20 个字符，可包含字母、数字和下划线" align="start">
+            <div className="relative w-full max-w-[320px]">
+              <Input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                onBlur={() => handleUsernameSave()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleUsernameSave()
+                  }
+                }}
+                className="h-9 pr-9 text-[13px]"
+                placeholder="请输入新的用户名"
+                disabled={!user || usernameSaving}
+                aria-label="用户名"
+                aria-invalid={usernameError ? true : undefined}
+              />
+              <Edit3 className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-tertiary" aria-hidden="true" />
             </div>
-          </div>
-        </section>
-
-        <ConversationContextCard />
-      </div>
+            {usernameError && <p className="mt-1.5 text-[11.5px] text-destructive">{usernameError}</p>}
+          </SettingRow>
+          <SettingRow title="界面主题" description="跟随系统会读取操作系统设置">
+            <div className="inline-flex gap-1 rounded-lg border border-border bg-surface-subtle p-1">
+              {[{ value: "light", label: "浅色", icon: Sun }, { value: "system", label: "跟随系统", icon: Monitor }, { value: "dark", label: "深色", icon: Moon }].map((item) => {
+                const Icon = item.icon
+                const active = theme === item.value
+                return (
+                  <button
+                    key={item.value}
+                    type="button"
+                    aria-pressed={active}
+                    className={`inline-flex h-7 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 text-[13px] transition-colors duration-[160ms] ${active ? 'border-border bg-surface font-medium text-foreground' : 'border-transparent text-ink-secondary hover:text-foreground'}`}
+                    onClick={() => setTheme(item.value as "light" | "system" | "dark")}
+                  >
+                    <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                    {item.label}
+                  </button>
+                )
+              })}
+            </div>
+          </SettingRow>
+        </div>
+      </section>
+      <ConversationContextCard />
     </div>
   )
 }

@@ -381,7 +381,7 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-border/70 px-3 py-2">
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
               <div>
                 <p className="text-sm font-medium">自动双语检索</p>
                 <p className="text-xs text-muted-foreground">提示中涉及跨语种信息时自动补充中英文查询。</p>
@@ -457,7 +457,7 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
           )}
 
           {hasRawContentEngineEnabled && (
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-border/70 px-3 py-2">
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
               <div>
                 <label className="text-sm font-medium" htmlFor="web-search-include-raw">
                   获取网页原文
@@ -484,7 +484,7 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
         </div>
       }
     >
-      <div className="space-y-3 rounded-lg border border-border/70 p-3">
+      <div className="space-y-3 rounded-lg border border-border p-3">
         <div>
           <p className="text-sm font-medium">启用搜索引擎（可多选）</p>
           <p className="text-xs text-muted-foreground">至少保留一个引擎，运行时按下方顺序优先并行调度。</p>
@@ -515,7 +515,7 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
             return (
               <label
                 key={engine.value}
-                className="flex min-h-11 cursor-pointer items-start gap-2 rounded-md border border-border/60 px-3 py-2 transition-colors hover:bg-accent/40"
+                className="flex min-h-11 cursor-pointer items-start gap-2 rounded-md border border-border px-3 py-2 transition-colors hover:bg-surface-hover"
               >
                 <Checkbox
                   checked={checked}
@@ -538,7 +538,7 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
         )}
       </div>
 
-      <div className="space-y-3 rounded-lg border border-border/70 p-3">
+      <div className="space-y-3 rounded-lg border border-border p-3">
         <div>
           <p className="text-sm font-medium">引擎优先顺序</p>
           <p className="text-xs text-muted-foreground">并行调度时优先保留前序引擎。</p>
@@ -549,7 +549,7 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
             return (
               <div
                 key={engine}
-                className="flex items-center justify-between rounded-md border border-border/60 px-3 py-2"
+                className="flex items-center justify-between rounded-md border border-border px-3 py-2"
               >
                 <span className="text-sm">
                   #{index + 1} {label}
@@ -795,7 +795,7 @@ export function WebSearchCard({ settings, update }: WebSearchCardProps) {
         </div>
       </div>
 
-      <div className="space-y-3 rounded-lg border border-border/70 p-3">
+      <div className="space-y-3 rounded-lg border border-border p-3">
         <div>
           <p className="text-sm font-medium">DeepSeek 能力与费用</p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">

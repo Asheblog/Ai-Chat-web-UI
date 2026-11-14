@@ -24,7 +24,7 @@ export function SectionHeader({
   const Icon = meta.icon
 
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/60 pb-3">
+    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
       <div className="min-w-0 space-y-1">
         <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
           <Icon className="h-4 w-4 text-muted-foreground" aria-hidden />

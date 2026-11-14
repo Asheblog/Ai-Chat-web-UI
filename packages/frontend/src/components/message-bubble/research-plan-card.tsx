@@ -156,7 +156,7 @@ export function ResearchPlanCard({
               : '等待确认'
 
   const statusClass = cn(
-    'inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-micro font-medium',
+    'inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
     event.status === 'pending' && !expired && 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
     event.status === 'success' && 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
     (event.status === 'rejected' || event.status === 'aborted' || event.status === 'error' || expired) &&
@@ -167,7 +167,7 @@ export function ResearchPlanCard({
     <div
       ref={cardRef}
       className={cn(
-        'rounded-lg border border-border/70 bg-background/70 px-3 py-3',
+        'rounded-lg border border-border bg-background/70 px-3 py-3',
         interactive && 'border-amber-400/50 ring-2 ring-amber-400/20',
       )}
     >
@@ -180,7 +180,7 @@ export function ResearchPlanCard({
                 {kind === 'search_unavailable' ? '深度研究：联网搜索不可用' : '研究计划确认'}
               </span>
               {revision > 0 && kind === 'plan' && (
-                <span className="text-micro text-muted-foreground">第 {revision + 1} 稿</span>
+                <span className="text-[11px] text-muted-foreground">第 {revision + 1} 稿</span>
               )}
             </div>
             <p className="mt-0.5 text-xs text-muted-foreground">
@@ -197,7 +197,7 @@ export function ResearchPlanCard({
       </div>
 
       {kind === 'plan' && plan && (
-        <div className="mt-3 space-y-2 border-t border-border/60 pt-2">
+        <div className="mt-3 space-y-2 border-t border-border pt-2">
           <div>
             <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               研究标题
@@ -218,7 +218,7 @@ export function ResearchPlanCard({
                     {item.keywords.map((keyword) => (
                       <span
                         key={keyword}
-                        className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-micro text-muted-foreground"
+                        className="inline-flex items-center gap-1 rounded bg-surface-subtle/60 px-1.5 py-0.5 text-[11px] text-muted-foreground"
                       >
                         <Search className="h-3 w-3" />
                         {keyword}
@@ -250,7 +250,7 @@ export function ResearchPlanCard({
       )}
 
       {interactive && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
           {kind === 'plan' ? (
             <>
               <Button
@@ -295,7 +295,7 @@ export function ResearchPlanCard({
             取消
           </Button>
           {interactive && expiresAt != null && (
-            <span className="ml-auto text-micro text-muted-foreground">
+            <span className="ml-auto text-[11px] text-muted-foreground">
               {formatCountdown(remainingMs)} 后自动过期
             </span>
           )}
@@ -303,7 +303,7 @@ export function ResearchPlanCard({
       )}
 
       {interactive && showAdjust && canAdjust && (
-        <div className="mt-2 space-y-2 border-t border-border/60 pt-2">
+        <div className="mt-2 space-y-2 border-t border-border pt-2">
           <Textarea
             value={feedback}
             onChange={(event) => setFeedback(event.target.value)}
@@ -326,7 +326,7 @@ export function ResearchPlanCard({
       {!interactive &&
         (expired || decision === 'expired' || event.status === 'aborted') &&
         kind === 'plan' && (
-        <div className="mt-3 flex items-center justify-end border-t border-border/60 pt-3">
+        <div className="mt-3 flex items-center justify-end border-t border-border pt-3">
           <Button size="sm" variant="outline" onClick={relaunch}>
             <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
             重新发起

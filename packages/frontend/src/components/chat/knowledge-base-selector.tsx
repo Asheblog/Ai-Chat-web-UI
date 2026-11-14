@@ -168,8 +168,8 @@ export function KnowledgeBaseSelector({
                                         className={cn(
                                             'flex w-full items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors text-left',
                                             isSelected
-                                                ? 'border-primary bg-primary/5'
-                                                : 'border-border hover:border-primary/50'
+                                                ? 'border-primary bg-signal-soft'
+                                                : 'border-border hover:border-signal/50'
                                         )}
                                         onClick={() => onToggle(kb.id)}
                                         aria-pressed={isSelected}
@@ -191,7 +191,7 @@ export function KnowledgeBaseSelector({
                                             </div>
                                         </div>
                                         {isSelected && (
-                                            <Check className="h-4 w-4 text-primary shrink-0" />
+                                            <Check className="h-4 w-4 text-signal shrink-0" />
                                         )}
                                     </button>
                                 )
@@ -235,7 +235,7 @@ export function KnowledgeBaseIndicator({
             {selectedKbs.slice(0, 3).map((kb) => (
                 <div
                     key={kb.id}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-signal-soft text-signal text-xs"
                 >
                     <BookOpen className="h-3 w-3" />
                     <span className="truncate max-w-[100px]">{kb.name}</span>
@@ -245,7 +245,7 @@ export function KnowledgeBaseIndicator({
                             e.stopPropagation()
                             onRemove(kb.id)
                         }}
-                        className="hover:bg-primary/20 rounded-full p-0.5"
+                        className="hover:bg-foreground/20 rounded-full p-0.5"
                     >
                         <X className="h-3 w-3" />
                     </button>
@@ -255,7 +255,7 @@ export function KnowledgeBaseIndicator({
                 <button
                     type="button"
                     onClick={onOpen}
-                    className="text-xs text-primary hover:underline"
+                    className="text-xs text-signal hover:underline"
                 >
                     +{selectedKbs.length - 3} 更多
                 </button>

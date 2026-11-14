@@ -7,13 +7,12 @@ import { DEFAULT_MAX_SYSTEM_PROMPT_LENGTH } from "@aichat/shared/api-contract"
 import { useAuthStore } from "@/store/auth-store"
 import { useToast } from "@/components/ui/use-toast"
 import { getAppInfo, updatePersonalSettings } from '@/features/settings/api'
+import { SettingRow } from "../../components/setting-row"
+import { SETTINGS_CARD, SETTINGS_CARD_BODY, SETTINGS_CARD_DESCRIPTION, SETTINGS_CARD_HEADER, SETTINGS_CARD_TITLE } from "../../components/settings-surfaces"
 
 /**
- * 个人设置 · 「对话与上下文」卡片。
- *
- * 从 `PersonalPreferences.tsx` 抽出（该文件已越过 `pnpm lint:lines` 的 300 行上限），
- * 状态与副作用随之收进本组件。DOM 结构与交互行为沿用原实现；文案按 ADR-0040 重述真实
- * 作用域，并补了 `aria-label`——不要把旧文案当作基线。
+ * 个人设置 · 「对话与上下文」卡片：状态与副作用从 PersonalPreferences 抽出（原文件已越过 lint 行数上限）。
+ * 数据与交互沿用原实现；文案按 ADR-0040 重述真实作用域，并补了 `aria-label`——不要把旧文案当作基线。
  */
 export function ConversationContextCard() {
   const { toast } = useToast()
@@ -39,14 +38,10 @@ export function ConversationContextCard() {
     getAppInfo()
       .then((info) => {
         const limit = info?.limits?.system_prompt_max_length
-        if (!cancelled && typeof limit === "number" && limit > 0) {
-          setPromptMaxLength(limit)
-        }
+        if (!cancelled && typeof limit === "number" && limit > 0) setPromptMaxLength(limit)
       })
       .catch(() => undefined)
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {
@@ -91,39 +86,42 @@ export function ConversationContextCard() {
       toast({ title: next ? '已开启对话上下文' : '已关闭对话上下文' })
     } catch (error: any) {
       setContextEnabledOptimistic(previous)
-      toast({
-        title: '更新失败',
-        description: error?.response?.data?.error || error?.message || '更新对话上下文设置失败',
-        variant: 'destructive',
-      })
+      const description = error?.response?.data?.error || error?.message || '更新对话上下文设置失败'
+      toast({ title: '更新失败', description, variant: 'destructive' })
     } finally {
       setContextEnabledSaving(false)
     }
   }
 
   return (
-    <section className="v2-panel p-5 md:p-6">
-      <h3 className="v2-section-title">对话与上下文</h3>
-      <p className="mt-1 text-sm text-muted-foreground">设置 AI 是否参考本会话历史，以及你的个人提示词</p>
-      <div className="mt-5 space-y-4">
-        <div className="flex items-center justify-between gap-4 border-b border-border pb-4">
-          <div>
-            <p className="text-sm font-medium text-foreground">记住对话上下文</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {contextEnabled
-                ? '把本会话的历史消息一并发送给 AI（不含其他会话）'
-                : '只发送当前这条消息；历史仍会保存，重新开启后可继续'}
-            </p>
-          </div>
+    <section className={SETTINGS_CARD}>
+      <div className={SETTINGS_CARD_HEADER}>
+        <div className="min-w-0">
+          <h2 className={SETTINGS_CARD_TITLE}>对话与上下文</h2>
+          <p className={SETTINGS_CARD_DESCRIPTION}>设置 AI 是否参考本会话历史，以及你的个人提示词</p>
+        </div>
+      </div>
+      <div className={SETTINGS_CARD_BODY + " space-y-4"}>
+        <SettingRow
+          title="记住对话上下文"
+          description={
+            contextEnabled
+              ? '把本会话的历史消息一并发送给 AI（不含其他会话）'
+              : '只发送当前这条消息；历史仍会保存，重新开启后可继续'
+          }
+        >
           <Switch
             aria-label="记住对话上下文"
             checked={contextEnabled}
             onCheckedChange={handleContextEnabledChange}
             disabled={!user || contextEnabledSaving}
           />
-        </div>
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-foreground/80">个人系统提示词</label>
+        </SettingRow>
+        <SettingRow
+          title="个人系统提示词"
+          description="会追加在全局提示词之后；会话自定义提示词优先级最高"
+          align="start"
+        >
           <Textarea
             value={personalPromptDraft}
             onChange={(event) => {
@@ -135,13 +133,15 @@ export function ConversationContextCard() {
             onBlur={() => handlePersonalPromptSave()}
             maxLength={promptMaxLength}
             placeholder="你是一个专业、友善且高效的 AI 助手。"
-            className="min-h-[82px] resize-none bg-surface"
+            aria-label="个人系统提示词"
+            className="min-h-[82px] resize-none text-[13px]"
             disabled={!user || personalPromptSaving}
           />
-          {personalPromptError && <p className="text-sm text-destructive">{personalPromptError}</p>}
-          <p className="text-xs text-muted-foreground">会追加在全局提示词之后；会话自定义提示词优先级最高</p>
-          <p className="text-right text-xs text-muted-foreground">{personalPromptDraft.length}/{promptMaxLength}</p>
-        </div>
+          {personalPromptError && <p className="mt-1.5 text-[11.5px] text-destructive">{personalPromptError}</p>}
+          <p className="num-tabular mt-1 text-right text-[11px] text-ink-tertiary">
+            {personalPromptDraft.length}/{promptMaxLength}
+          </p>
+        </SettingRow>
       </div>
     </section>
   )

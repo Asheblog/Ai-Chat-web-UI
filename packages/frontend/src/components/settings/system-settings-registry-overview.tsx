@@ -26,25 +26,25 @@ const overviewCards: OverviewCard[] = [
   {
     label: "模型与连接",
     value: "供应商与连接 / 模型管理",
-    tone: "text-blue-600",
+    tone: "text-ink-tertiary",
     icon: Cable,
   },
   {
     label: "功能与工具",
     value: "搜索与知识库 / 能力扩展",
-    tone: "text-emerald-600",
+    tone: "text-success",
     icon: Wrench,
   },
   {
     label: "用户与注册",
     value: "用户注册 / 用户管理",
-    tone: "text-violet-600",
+    tone: "text-ink-tertiary",
     icon: Users,
   },
   {
     label: "系统与数据",
     value: "品牌与界面 / 日志与审计 / 数据与维护",
-    tone: "text-amber-600",
+    tone: "text-warning",
     icon: Database,
   },
 ]
@@ -111,15 +111,15 @@ export function SystemOverviewContent() {
             {checklist.map((item) => (
               <li
                 key={item.key}
-                className="flex items-center justify-between gap-3 border-b border-border/60 py-3 last:border-b-0"
+                className="flex items-center justify-between gap-3 border-b border-border py-3 last:border-b-0"
               >
                 <div className="flex items-center gap-3">
                   <span className="text-sm font-medium">{item.label}</span>
                   <Badge
                     className={
                       item.done
-                        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600"
-                        : "border-border bg-muted/60 text-muted-foreground"
+                        ? "border-success/30 bg-success/10 text-success"
+                        : "border-border bg-surface-subtle text-muted-foreground"
                     }
                   >
                     {item.done ? "已完成" : "待完成"}
@@ -129,7 +129,7 @@ export function SystemOverviewContent() {
                   type="button"
                   onClick={() => goTo(item.key)}
                   aria-label={`去配置：${item.label}`}
-                  className="inline-flex cursor-pointer items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  className="inline-flex cursor-pointer items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
                 >
                   去配置
                   <ArrowRight className="h-3.5 w-3.5" />

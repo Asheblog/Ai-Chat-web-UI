@@ -29,12 +29,12 @@ export function SidebarSessionSearch({ onChange, debounceMs = 160 }: SidebarSess
 
   return (
     <div className="relative flex-1">
-      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-[15px] w-[15px] -translate-y-1/2 text-ink-tertiary" />
       <input
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
         placeholder="搜索对话"
-        className="h-9 w-full rounded-md border border-border bg-surface px-3 pl-9 text-sm outline-none transition focus-visible:border-primary/45 focus-visible:ring-2 focus-visible:ring-ring/25"
+        className="h-[34px] w-full rounded-[9px] border border-transparent bg-surface-subtle px-3 pl-9 text-[13px] text-foreground outline-none transition-colors duration-[160ms] placeholder:text-ink-tertiary focus-visible:border-signal"
         aria-label="搜索会话"
       />
     </div>

@@ -26,7 +26,7 @@ export function SkillInstallSection({
   onInstall,
 }: SkillInstallSectionProps) {
   return (
-    <section className="v2-panel p-4 shadow-none sm:p-5">
+    <section className="v2-panel p-4 sm:p-5">
       <p className="v2-muted-line mb-4">
         支持 GitHub `owner/repo@ref[:subdir]` 或 `github.com/.../(tree|blob)/...`，例如
         `anthropics/skills@main:skills/pptx`。

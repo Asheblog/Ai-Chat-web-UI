@@ -5,10 +5,10 @@ import type { CotTimelineSummary } from '@aichat/shared/cot-timeline-view'
 import { cn } from '@/lib/utils'
 
 const MASTER_BUTTON_CLASS =
-  'inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border/70 bg-background/60 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors duration-200 hover:bg-muted/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background'
+  'inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-background/60 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors duration-200 hover:bg-surface-subtle/40 hover:text-foreground focus-visible:outline-none  focus-visible:ring-offset-1 focus-visible:ring-offset-background'
 
 const ICON_BUTTON_CLASS =
-  'inline-flex h-[1.625rem] w-[1.625rem] cursor-pointer items-center justify-center rounded-md border border-border/70 bg-background/60 text-muted-foreground transition-colors duration-200 hover:bg-muted/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background'
+  'inline-flex h-[1.625rem] w-[1.625rem] cursor-pointer items-center justify-center rounded-md border border-border bg-background/60 text-muted-foreground transition-colors duration-200 hover:bg-surface-subtle/40 hover:text-foreground focus-visible:outline-none  focus-visible:ring-offset-1 focus-visible:ring-offset-background'
 
 const resolveDotClass = (summary: CotTimelineSummary) => {
   if (summary.activeCount > 0) return 'bg-blue-400 animate-pulse'
@@ -40,7 +40,7 @@ export function CotTimelineSummaryBar({
   return (
     <button
       type="button"
-      className="group flex w-full cursor-pointer items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 py-1.5 text-left transition-colors duration-200 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+      className="group flex w-full cursor-pointer items-center gap-2 rounded-lg border border-border bg-background/40 px-3 py-1.5 text-left transition-colors duration-200 hover:bg-surface-subtle/40 focus-visible:outline-none  focus-visible:ring-offset-1 focus-visible:ring-offset-background"
       onClick={onExpand}
       aria-expanded={false}
       aria-controls={bodyId}
@@ -55,7 +55,7 @@ export function CotTimelineSummaryBar({
         过程时间轴 · {summary.stepCount} 步
       </span>
       {summary.detailChips.length > 0 && (
-        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground/70">
+        <span className="min-w-0 flex-1 truncate text-xs text-ink-tertiary">
           {summary.detailChips.join(' · ')}
         </span>
       )}
@@ -64,11 +64,11 @@ export function CotTimelineSummaryBar({
         <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" aria-hidden />
       )}
       {durationText && (
-        <span className="shrink-0 text-xs tabular-nums text-muted-foreground/70">{durationText}</span>
+        <span className="shrink-0 text-xs tabular-nums text-ink-tertiary">{durationText}</span>
       )}
       <ChevronDown
         aria-hidden
-        className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-colors duration-200 group-hover:text-foreground"
+        className="h-3.5 w-3.5 shrink-0 text-ink-tertiary transition-colors duration-200 group-hover:text-foreground"
       />
     </button>
   )

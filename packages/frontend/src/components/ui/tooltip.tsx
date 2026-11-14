@@ -3,6 +3,7 @@
 import * as React from "react"
 import * as TooltipPrimitive from "@radix-ui/react-tooltip"
 import { cn } from "@/lib/utils"
+import { OVERLAY_SHADOW } from "@/components/ui/surface-styles"
 
 const TooltipProvider = TooltipPrimitive.Provider
 const Tooltip = TooltipPrimitive.Root
@@ -16,7 +17,7 @@ const TooltipContent = React.forwardRef<
     ref={ref}
     sideOffset={sideOffset}
     className={cn(
-      "z-50 overflow-hidden rounded-md border bg-popover px-2 py-1.5 text-xs text-popover-foreground shadow-md",
+      "z-50 overflow-hidden rounded-sm border border-border bg-surface px-2 py-1.5 text-xs text-foreground", OVERLAY_SHADOW,
       "data-[state=delayed-open]:data-[side=top]:animate-in data-[state=delayed-open]:data-[side=top]:fade-in-0 data-[state=delayed-open]:data-[side=top]:zoom-in-95",
       className
     )}
@@ -26,4 +27,3 @@ const TooltipContent = React.forwardRef<
 TooltipContent.displayName = TooltipPrimitive.Content.displayName
 
 export { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent }
-

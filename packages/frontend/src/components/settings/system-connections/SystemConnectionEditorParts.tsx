@@ -104,8 +104,8 @@ export function AdvancedFields({
               className={cn(
                 "inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors",
                 capabilities[key]
-                  ? "border-primary/35 bg-primary/10 text-foreground"
-                  : "border-border/70 bg-background/90 hover:bg-[hsl(var(--surface-hover))]",
+                  ? "border-border bg-surface-subtle text-foreground"
+                  : "border-border bg-surface hover:bg-[hsl(var(--surface-hover))]",
               )}
             >
               <Checkbox checked={capabilities[key]} onCheckedChange={(checked) => onToggleCapability(key, Boolean(checked))} />
@@ -134,15 +134,15 @@ export function CollapsibleEditorSection({
   children: ReactNode
 }) {
   return (
-    <section className="overflow-hidden rounded-md border border-border bg-card">
+    <section className="overflow-hidden rounded-md border border-border bg-surface">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full cursor-pointer items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-accent/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        className="flex w-full cursor-pointer items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-surface-hover"
       >
         <span className="flex min-w-0 items-center gap-3">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">{icon}</span>
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-surface-subtle text-ink-tertiary">{icon}</span>
           <span className="min-w-0">
             <span className="block text-sm font-semibold text-foreground">{title}</span>
             <span className="mt-0.5 block truncate text-xs text-muted-foreground">{summary}</span>

@@ -12,7 +12,7 @@ export type CountState = { status: "loading" | "ready" | "error"; value: number 
 /** 状态配色沿用 globals.css 的 --success / --warning 语义色，不新造配色。 */
 const TONE_ON = "border-[hsl(var(--success)/0.25)] bg-[hsl(var(--success)/0.11)] text-[hsl(var(--success))]"
 const TONE_TODO = "border-[hsl(var(--warning)/0.26)] bg-[hsl(var(--warning)/0.11)] text-[hsl(var(--warning))]"
-const TONE_IDLE = "border-border bg-muted/60 text-muted-foreground"
+const TONE_IDLE = "border-border bg-surface-subtle text-muted-foreground"
 
 /** 从 ApiResponse 信封取数组：请求失败或信封里没有数组都算未知，不静默当 0。 */
 export function readList<T>(result: PromiseSettledResult<ApiResponse<T[]>>): T[] | null {
@@ -92,7 +92,7 @@ export function CapabilityCard({
     <section className="v2-panel flex flex-col gap-2 p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2.5">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-surface-subtle text-ink-tertiary">
             <Icon className="h-4 w-4" />
           </span>
           <h2 className="truncate text-sm font-semibold text-foreground">{title}</h2>
@@ -141,7 +141,7 @@ export function PendingRow({
   const actionable = status.state === "ready" && status.actionable
 
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/60 px-4 py-3 last:border-b-0">
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-4 py-3 last:border-b-0">
       <span className="text-sm font-medium text-foreground">{text}</span>
       {status.state === "loading" ? (
         <Skeleton className="h-5 w-12 rounded-full" />

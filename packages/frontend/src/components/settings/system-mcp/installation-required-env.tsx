@@ -80,14 +80,14 @@ export function InstallationRequiredEnv({ value, onChange }: InstallationRequire
             {keys.map((name) => (
               <li
                 key={name}
-                className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-micro font-mono"
+                className="inline-flex items-center gap-1 rounded-full border border-border bg-surface-subtle px-2 py-0.5 text-[11px] font-mono"
               >
                 {name}
                 <button
                   type="button"
                   onClick={() => remove(name)}
                   aria-label={`移除 ${name}`}
-                  className="rounded-full p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  className="rounded-full p-0.5 text-muted-foreground hover:bg-surface-hover hover:text-foreground"
                 >
                   <X className="h-3 w-3" aria-hidden="true" />
                 </button>
@@ -95,7 +95,7 @@ export function InstallationRequiredEnv({ value, onChange }: InstallationRequire
             ))}
           </ul>
         ) : (
-          <p className="text-micro text-muted-foreground">还没有声明必填变量，连接页不会显示填写框。</p>
+          <p className="text-[11px] text-muted-foreground">还没有声明必填变量，连接页不会显示填写框。</p>
         )}
         <div className="flex gap-1">
           <Input
@@ -117,8 +117,8 @@ export function InstallationRequiredEnv({ value, onChange }: InstallationRequire
             添加
           </Button>
         </div>
-        {error ? <p className="text-micro text-destructive">{error}</p> : null}
-        <p className="text-micro text-muted-foreground">只写名称，不写值；值在连接页填写并加密存入 Secret Vault。</p>
+        {error ? <p className="text-[11px] text-destructive">{error}</p> : null}
+        <p className="text-[11px] text-muted-foreground">只写名称，不写值；值在连接页填写并加密存入 Secret Vault。</p>
       </div>
     </McpField>
   )

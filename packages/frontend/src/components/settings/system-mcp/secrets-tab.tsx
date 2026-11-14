@@ -122,16 +122,16 @@ export function SecretsTab() {
             </thead>
             <tbody>
               {items.map((s) => (
-                <tr key={s.id} className="border-b border-border/50 hover:bg-muted/30">
+                <tr key={s.id} className="border-b border-border hover:bg-surface-subtle">
                   <td className="py-2 pr-3 font-mono">{s.id}</td>
                   <td className="py-2 pr-3">{s.label}</td>
-                  <td className="py-2 pr-3"><Badge variant="outline" className="text-micro">{s.scope}</Badge></td>
-                  <td className="py-2 pr-3"><Badge variant="outline" className="text-micro">{s.kind}</Badge></td>
+                  <td className="py-2 pr-3"><Badge variant="outline" className="text-[11px]">{s.scope}</Badge></td>
+                  <td className="py-2 pr-3"><Badge variant="outline" className="text-[11px]">{s.kind}</Badge></td>
                   <td className="py-2 pr-3">{s.hasValue ? '是' : '否'}</td>
                   <td className="py-2 pr-3">
                     <div className="flex items-center gap-1">
-                      <button type="button" onClick={() => openEdit(s)} title="编辑" className="inline-flex p-1 rounded hover:bg-accent"><Pencil className="h-3.5 w-3.5" /></button>
-                      <button type="button" onClick={() => setDeleteId(s.id)} title="删除" className="inline-flex p-1 rounded hover:bg-accent"><Trash2 className="h-3.5 w-3.5 text-destructive/70 hover:text-destructive" /></button>
+                      <button type="button" onClick={() => openEdit(s)} title="编辑" className="inline-flex p-1 rounded hover:bg-surface-hover"><Pencil className="h-3.5 w-3.5" /></button>
+                      <button type="button" onClick={() => setDeleteId(s.id)} title="删除" className="inline-flex p-1 rounded hover:bg-surface-hover"><Trash2 className="h-3.5 w-3.5 text-destructive/70 hover:text-destructive" /></button>
                     </div>
                   </td>
                 </tr>

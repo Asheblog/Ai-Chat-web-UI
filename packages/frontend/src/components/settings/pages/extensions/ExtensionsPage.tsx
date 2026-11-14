@@ -124,9 +124,9 @@ export function ExtensionsPage({
 
   return (
     <div className="space-y-5" data-section={section} data-segment={activeSegment}>
-      <div className="flex flex-wrap items-start justify-between gap-3 pb-3 border-b border-border/60">
+      <div className="flex flex-wrap items-start justify-between gap-3 pb-3 border-b border-border">
         <div className="flex items-start gap-3">
-          <Layers className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+          <Layers className="mt-0.5 h-5 w-5 shrink-0 text-ink-tertiary" />
           <div className="space-y-1">
             <h1 className="text-lg font-semibold">能力扩展</h1>
             <p className="text-sm text-muted-foreground text-pretty">

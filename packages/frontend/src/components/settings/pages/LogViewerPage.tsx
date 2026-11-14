@@ -32,14 +32,14 @@ export function LogViewerPage() {
   return (
     <div className="min-w-0 space-y-4">
       {/* 头部横幅 */}
-      <section className="overflow-hidden rounded-2xl border border-border/80 bg-[linear-gradient(135deg,hsl(var(--surface))/0.95,hsl(var(--background-alt))/0.72)] p-5 shadow-sm">
+      <section className="overflow-hidden rounded-lg border border-border bg-surface p-5">
         <div className="flex items-start gap-3">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-primary/30 bg-primary/10 text-primary">
+          <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-signal/30 bg-signal-soft text-signal-text">
             <ActiveIcon className="h-5 w-5" />
           </span>
           <div className="space-y-1">
-            <h1 className="text-title-l font-semibold tracking-tight">{activeTabDef.label}日志</h1>
-            <p className="text-sm text-muted-foreground">{activeTabDef.description}</p>
+            <h1 className="text-[22px] font-bold tracking-[-0.3px] text-foreground">{activeTabDef.label}</h1>
+            <p className="mt-1 text-[11.5px] leading-relaxed text-ink-tertiary">{activeTabDef.description}</p>
           </div>
         </div>
       </section>
@@ -57,8 +57,8 @@ export function LogViewerPage() {
               className={cn(
                 "inline-flex min-h-9 items-center gap-2 rounded-md border px-4 text-sm font-medium transition-colors",
                 active
-                  ? "border-primary bg-primary text-primary-foreground shadow-[0_10px_22px_hsl(var(--primary)/0.18)]"
-                  : "border-border bg-background/80 text-muted-foreground hover:bg-accent hover:text-foreground",
+                  ? "border-border bg-surface font-medium text-foreground"
+                  : "border-border bg-surface text-muted-foreground hover:bg-surface-hover hover:text-foreground",
               )}
             >
               <Icon className="h-4 w-4" />

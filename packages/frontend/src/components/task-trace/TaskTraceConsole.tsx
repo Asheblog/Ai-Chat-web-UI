@@ -271,7 +271,7 @@ export function TaskTraceConsole() {
 
   if (!isAdmin) {
     return (
-      <div className="rounded-2xl border bg-card p-6 text-center text-sm text-muted-foreground">
+      <div className="rounded-lg border bg-surface p-6 text-center text-sm text-muted-foreground">
         仅管理员可以查看任务追踪日志
       </div>
     )
@@ -298,7 +298,7 @@ export function TaskTraceConsole() {
         }}
       />
 
-      <div className="rounded-2xl border bg-card transition-all hover:shadow-sm">
+      <div className="rounded-lg border bg-surface transition-all hover:">
         <div className="flex items-center justify-between border-b px-5 py-4">
           <div>
             <div className="text-sm font-semibold">追踪记录</div>

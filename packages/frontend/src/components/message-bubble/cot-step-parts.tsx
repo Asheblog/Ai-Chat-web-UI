@@ -80,11 +80,11 @@ function ToolResultBody({ event }: { event: ToolEvent }) {
   }
   return (
     <FadeScrollContainer
-      className="overflow-hidden rounded-md bg-background/80"
+      className="overflow-hidden rounded-md bg-surface"
       viewportClassName="overflow-auto"
       maxHeightClassName="max-h-64"
     >
-      <pre className="p-2 text-micro leading-4 text-foreground/80">{payload}</pre>
+      <pre className="p-2 text-[11px] leading-4 text-foreground/80">{payload}</pre>
     </FadeScrollContainer>
   )
 }
@@ -126,7 +126,7 @@ export function CotToolStep({
               ? '已中止'
               : '完成'
   const statusBadgeClass = cn(
-    'shrink-0 rounded-full px-1.5 py-0.5 text-micro font-medium',
+    'shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium',
     status === 'success' && 'bg-emerald-500/10 text-emerald-700',
     status === 'running' && 'bg-blue-500/10 text-blue-700',
     status === 'error' && 'bg-rose-500/10 text-rose-700',
@@ -149,8 +149,8 @@ export function CotToolStep({
     <div
       className={cn(
         compact
-          ? 'rounded-md px-2 py-1 transition-colors duration-200 hover:bg-muted/40'
-          : 'rounded-lg border border-border/60 bg-background/50 px-3 py-2',
+          ? 'rounded-md px-2 py-1 transition-colors duration-200 hover:bg-surface-subtle/40'
+          : 'rounded-lg border border-border bg-background/50 px-3 py-2',
       )}
     >
       <button
@@ -189,7 +189,7 @@ export function CotToolStep({
         <ChevronDown className={cn('mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
       </button>
       {open && (
-        <div className="mt-2 space-y-2 border-t border-border/60 pt-2 sm:pl-6">
+        <div className="mt-2 space-y-2 border-t border-border pt-2 sm:pl-6">
           <ToolResultBody event={event} />
         </div>
       )}
@@ -222,8 +222,8 @@ export function CotToolGroupStep({
     <div
       className={cn(
         compact
-          ? 'rounded-md px-2 py-1 transition-colors duration-200 hover:bg-muted/40'
-          : 'rounded-lg border border-border/60 bg-background/50 px-3 py-2',
+          ? 'rounded-md px-2 py-1 transition-colors duration-200 hover:bg-surface-subtle/40'
+          : 'rounded-lg border border-border bg-background/50 px-3 py-2',
       )}
     >
       <button
@@ -266,7 +266,7 @@ export function CotToolGroupStep({
         <ChevronDown className={cn('mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
       </button>
       {open && (
-        <div className="mt-2 space-y-2 border-t border-border/60 pt-2">
+        <div className="mt-2 space-y-2 border-t border-border pt-2">
           {node.events.map((event) => (
             <CotToolStep
               key={`${event.callId ?? event.id}-${event.updatedAt ?? event.createdAt}`}

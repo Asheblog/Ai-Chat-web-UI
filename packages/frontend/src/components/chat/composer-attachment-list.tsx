@@ -69,12 +69,12 @@ export function ComposerAttachmentList({
           className={cn(
             'inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm',
             file.status === 'error' && 'border-destructive/40 bg-destructive/5',
-            file.status === 'uploading' && 'border-primary/30 bg-primary/[0.03]',
-            file.status === 'ready' && 'border-border/70 bg-[hsl(var(--surface))/0.72]',
+            file.status === 'uploading' && 'border-signal/30 bg-signal-soft/40',
+            file.status === 'ready' && 'border-border bg-[hsl(var(--surface))/0.72]',
           )}
         >
           {file.status === 'uploading' ? (
-            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <Loader2 className="h-4 w-4 animate-spin text-signal" />
           ) : file.status === 'error' ? (
             <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
           ) : (
@@ -85,12 +85,12 @@ export function ComposerAttachmentList({
             {file.originalName}
           </span>
 
-          <span className="shrink-0 text-micro text-muted-foreground">
+          <span className="shrink-0 text-[11px] text-muted-foreground">
             {formatFileSize(file.fileSize)}
           </span>
 
           {file.status === 'error' && file.errorMessage && (
-            <span className="shrink-0 text-micro text-destructive/80" title={file.errorMessage}>
+            <span className="shrink-0 text-[11px] text-destructive/80" title={file.errorMessage}>
               {file.errorMessage}
             </span>
           )}

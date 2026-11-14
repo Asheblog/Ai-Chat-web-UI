@@ -42,19 +42,19 @@ export function SystemConnectionVerifyPanel({
           <p className="mt-1 text-xs leading-5 text-muted-foreground">失败项会自动展开，成功项可按需查看模型明细。</p>
         </div>
         {!verifyResult ? (
-          <div className="rounded-lg border border-dashed border-border/70 bg-muted/40 px-4 py-4 text-sm text-muted-foreground">
+          <div className="rounded-lg border border-dashed border-border bg-surface-subtle px-4 py-4 text-sm text-muted-foreground">
             还没有验证结果。
           </div>
         ) : (
           <>
             <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-              <span className="rounded-full border border-border/70 bg-[hsl(var(--surface))/0.26] px-3 py-1.5">
+              <span className="rounded-full border border-border bg-[hsl(var(--surface))/0.26] px-3 py-1.5">
                 成功 {verifyResult.successCount}
               </span>
-              <span className="rounded-full border border-border/70 bg-[hsl(var(--surface))/0.26] px-3 py-1.5">
+              <span className="rounded-full border border-border bg-[hsl(var(--surface))/0.26] px-3 py-1.5">
                 失败 {verifyResult.failureCount}
               </span>
-              <span className="rounded-full border border-border/70 bg-[hsl(var(--surface))/0.26] px-3 py-1.5">
+              <span className="rounded-full border border-border bg-[hsl(var(--surface))/0.26] px-3 py-1.5">
                 模型 {verifyResult.totalModels}
               </span>
             </div>
@@ -63,7 +63,7 @@ export function SystemConnectionVerifyPanel({
               {resultKeys.map(({ item, key: resultKey }, index) => {
                 const expanded = expandedVerifyKey === resultKey
                 return (
-                  <div key={resultKey} className="rounded-lg border border-border/70 bg-[hsl(var(--surface))/0.32]">
+                  <div key={resultKey} className="rounded-lg border border-border bg-[hsl(var(--surface))/0.32]">
                     <button
                       type="button"
                       className="flex w-full cursor-pointer items-start justify-between gap-4 px-4 py-4 text-left transition-colors hover:bg-[hsl(var(--surface-hover))/0.45]"
@@ -73,7 +73,7 @@ export function SystemConnectionVerifyPanel({
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge
                             variant={item.success ? "default" : "destructive"}
-                            className={cn("rounded-full px-2.5 py-1", item.success ? "bg-emerald-600 hover:bg-emerald-600" : "")}
+                            className={cn("rounded-full px-2.5 py-1", item.success ? "bg-success hover:bg-success" : "")}
                           >
                             {item.success ? "成功" : "失败"}
                           </Badge>
@@ -93,7 +93,7 @@ export function SystemConnectionVerifyPanel({
                     </button>
 
                     {expanded ? (
-                      <div className="overflow-hidden border-t border-border/70">
+                      <div className="overflow-hidden border-t border-border">
                         {!item.success ? (
                           <div className="space-y-3 px-4 py-4">
                             <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4">
@@ -101,19 +101,19 @@ export function SystemConnectionVerifyPanel({
                               <div className="mt-2 break-words text-sm text-foreground">{item.error || "验证失败"}</div>
                             </div>
                             {item.warning ? (
-                              <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-700">
+                              <div className="rounded-lg border border-warning/20 bg-warning/5 p-4 text-sm text-warning">
                                 {item.warning}
                               </div>
                             ) : null}
                           </div>
                         ) : item.models.length === 0 ? (
                           <div className="px-4 py-4 text-sm text-muted-foreground">
-                            {item.warning ? <div className="mb-3 text-amber-600">{item.warning}</div> : null}
+                            {item.warning ? <div className="mb-3 text-warning">{item.warning}</div> : null}
                             没有返回模型列表。若上游不支持 <span className="font-mono">/models</span>，请直接在该 Key 下填写 Model IDs。
                           </div>
                         ) : (
                           <div className="overflow-auto px-4 py-4">
-                            {item.warning ? <div className="mb-3 text-sm text-amber-600">{item.warning}</div> : null}
+                            {item.warning ? <div className="mb-3 text-sm text-warning">{item.warning}</div> : null}
                             <Table className="min-w-[720px]">
                               <TableHeader>
                                 <TableRow>

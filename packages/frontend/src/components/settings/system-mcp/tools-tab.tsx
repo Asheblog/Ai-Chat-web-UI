@@ -88,17 +88,17 @@ export function ToolsTab() {
             </thead>
             <tbody>
               {items.map((t) => (
-                <tr key={`${t.connectionId}-${t.originalName}`} className="border-b border-border/50 hover:bg-muted/30">
+                <tr key={`${t.connectionId}-${t.originalName}`} className="border-b border-border hover:bg-surface-subtle">
                   <td className="py-2 pr-3 font-mono max-w-[180px] truncate" title={t.originalName}>{t.originalName}</td>
                   <td className="py-2 pr-3">{t.connectionId}</td>
                   <td className="py-2 pr-3 max-w-[200px] truncate text-muted-foreground" title={t.description || undefined}>{t.description || '-'}</td>
                   <td className="py-2 pr-3">
-                    <button type="button" onClick={() => handleDetail(t.connectionId, t.originalName)} title="查看 schema" disabled={detailLoading} className="inline-flex p-1 rounded hover:bg-accent">
+                    <button type="button" onClick={() => handleDetail(t.connectionId, t.originalName)} title="查看 schema" disabled={detailLoading} className="inline-flex p-1 rounded hover:bg-surface-hover">
                       <FileText className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
                     </button>
                   </td>
                   <td className="py-2 pr-3">
-                    <button type="button" onClick={() => handlePin(t.connectionId, t.originalName, !!t.pinned)} title={t.pinned ? '取消固定' : '固定'} className="inline-flex p-1 rounded hover:bg-accent">
+                    <button type="button" onClick={() => handlePin(t.connectionId, t.originalName, !!t.pinned)} title={t.pinned ? '取消固定' : '固定'} className="inline-flex p-1 rounded hover:bg-surface-hover">
                       {t.pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5 text-muted-foreground" />}
                     </button>
                   </td>
@@ -111,9 +111,9 @@ export function ToolsTab() {
 
       {!loading && !error && !searched && (
         <div className="flex flex-col items-center justify-center py-14 text-center">
-          <Wrench className="h-9 w-9 text-muted-foreground/30 mb-3" />
+          <Wrench className="h-9 w-9 text-ink-tertiary mb-3" />
           <p className="text-sm font-medium text-foreground/60">搜索 MCP 工具</p>
-          <p className="mt-1 text-xs text-muted-foreground/60 max-w-[260px]">
+          <p className="mt-1 text-xs text-ink-tertiary max-w-[260px]">
             输入关键词搜索已连接 MCP 服务中的可用工具
           </p>
         </div>
@@ -121,8 +121,8 @@ export function ToolsTab() {
 
       {!loading && !error && items.length === 0 && searched && (
         <div className="flex flex-col items-center justify-center py-10 text-center">
-          <p className="text-sm text-muted-foreground/60">未找到匹配的工具</p>
-          <p className="mt-1 text-xs text-muted-foreground/40">尝试不同的关键词或确认连接已刷新</p>
+          <p className="text-sm text-ink-tertiary">未找到匹配的工具</p>
+          <p className="mt-1 text-xs text-ink-tertiary">尝试不同的关键词或确认连接已刷新</p>
         </div>
       )}
 
@@ -135,7 +135,7 @@ export function ToolsTab() {
           <div className="space-y-3">
             <div>
               <p className="text-xs font-medium text-muted-foreground mb-1">Input Schema</p>
-              <pre className="rounded-md bg-muted p-3 text-xs overflow-x-auto whitespace-pre-wrap">
+              <pre className="rounded-md bg-surface-subtle p-3 text-xs overflow-x-auto whitespace-pre-wrap">
                 {detail ? JSON.stringify(detail.inputSchema ?? null, null, 2) : '加载中...'}
               </pre>
             </div>

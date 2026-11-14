@@ -2,6 +2,13 @@
 
 import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
+import {
+  SETTINGS_FIELD_CONTROL,
+  SETTINGS_FIELD_HINT,
+  SETTINGS_FIELD_LABEL,
+  SETTINGS_FIELD_ROW,
+  SETTINGS_FIELD_TITLE,
+} from "./settings-surfaces"
 
 interface SettingRowProps {
   title: ReactNode
@@ -14,7 +21,8 @@ interface SettingRowProps {
 }
 
 /**
- * SettingRow: 统一设置项的展示布局，左侧描述固定宽度，右侧控件区保持一致的最大宽度。
+ * SettingRow: 设置项统一排布——左侧 150 宽标签列（标签 13 Medium + 说明 11.5 ink-tertiary），右侧控件区。
+ * 行自身不画框也不投影：外层卡片负责发丝线，行只用字号与间距分层，控件统一左起。
  */
 export function SettingRow({
   title,
@@ -28,30 +36,16 @@ export function SettingRow({
   return (
     <div
       className={cn(
-        "rounded-lg border border-border/70 bg-card/85 px-4 py-4 shadow-[0_10px_24px_hsl(var(--background)/0.35)] sm:px-5 sm:py-4 flex flex-col gap-4 sm:flex-row sm:gap-6",
+        SETTINGS_FIELD_ROW,
         align === "center" ? "sm:items-center" : "sm:items-start",
         className,
       )}
     >
-      <div
-        className={cn(
-          "shrink-0 w-full sm:w-[360px] text-sm text-muted-foreground",
-          descriptionWidthClassName,
-        )}
-      >
-        <div className="text-base text-foreground/90 leading-6">{title}</div>
-        {description ? (
-          <p className="mt-1 leading-relaxed text-sm">{description}</p>
-        ) : null}
+      <div className={cn(SETTINGS_FIELD_LABEL, descriptionWidthClassName)}>
+        <div className={SETTINGS_FIELD_TITLE}>{title}</div>
+        {description ? <p className={SETTINGS_FIELD_HINT}>{description}</p> : null}
       </div>
-      <div
-        className={cn(
-          "w-full flex sm:flex-1 sm:justify-end",
-          controlWidthClassName,
-        )}
-      >
-        {children}
-      </div>
+      <div className={cn(SETTINGS_FIELD_CONTROL, controlWidthClassName)}>{children}</div>
     </div>
   )
 }

@@ -32,8 +32,8 @@ export function ModelSelectorCapabilityBadges({
             key={key}
             variant="secondary"
             className={compact
-              ? "h-5 w-5 rounded-full border border-border/70 bg-muted/55 p-0 text-muted-foreground"
-              : "h-5 rounded-full border border-border/60 bg-muted/55 px-1.5 text-micro text-muted-foreground"
+              ? "h-5 w-5 rounded-full border border-border bg-surface-subtle/55 p-0 text-muted-foreground"
+              : "h-5 rounded-full border border-border bg-surface-subtle/55 px-1.5 text-[11px] text-muted-foreground"
             }
             title={config.title}
           >
@@ -43,7 +43,7 @@ export function ModelSelectorCapabilityBadges({
         )
       })}
       {compact && hiddenCount > 0 && (
-        <span className="text-micro text-muted-foreground">+{hiddenCount}</span>
+        <span className="text-[11px] text-muted-foreground">+{hiddenCount}</span>
       )}
     </div>
   )

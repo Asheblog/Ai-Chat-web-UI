@@ -6,6 +6,15 @@ import { ChevronDown } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
+import {
+  SETTINGS_CARD,
+  SETTINGS_CARD_ACTION,
+  SETTINGS_CARD_BODY,
+  SETTINGS_CARD_DESCRIPTION,
+  SETTINGS_CARD_DISCLOSURE,
+  SETTINGS_CARD_HEADER,
+  SETTINGS_CARD_TITLE,
+} from "./settings-surfaces"
 
 export interface FeatureCardProps {
   /** 卡片左上角图标（Lucide 图标组件） */
@@ -31,8 +40,8 @@ export interface FeatureCardProps {
 }
 
 /**
- * FeatureCard: 设置页通用功能卡。头部为图标瓦片 + 标题/描述 + 可选主开关，
- * 中部为 children 内容区，可折叠「更多参数」区，底部可选 footer 操作区。
+ * FeatureCard: 设置页通用功能卡。白底 + 发丝线 + 圆角 12；卡头 16/20，
+ * 图标走 ink-tertiary 不做色块瓦片；内容区/折叠区/操作区一律以 1px 上边线切分。
  */
 export function FeatureCard({
   icon: Icon,
@@ -51,50 +60,36 @@ export function FeatureCard({
   const hasSwitch = enabled !== undefined && onEnabledChange !== undefined
 
   return (
-    <section className="v2-panel flex flex-col overflow-hidden" data-card-key={cardKey}>
-      <div className="flex items-center justify-between gap-4 px-4 pt-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-            <Icon className="h-5 w-5" />
-          </span>
-          <span className="min-w-0">
-            <span className="block text-base font-semibold text-foreground">{title}</span>
-            {description ? (
-              <span className="mt-0.5 block text-sm text-muted-foreground">{description}</span>
-            ) : null}
-          </span>
+    <section className={SETTINGS_CARD} data-card-key={cardKey}>
+      <div className={SETTINGS_CARD_HEADER}>
+        <div className="flex min-w-0 items-start gap-2.5">
+          <Icon className="mt-[3px] h-4 w-4 shrink-0 text-ink-tertiary" aria-hidden="true" />
+          <div className="min-w-0">
+            <h3 className={SETTINGS_CARD_TITLE}>{title}</h3>
+            {description ? <p className={SETTINGS_CARD_DESCRIPTION}>{description}</p> : null}
+          </div>
         </div>
         {hasSwitch ? (
-          <Switch
-            checked={enabled}
-            onCheckedChange={(checked) => onEnabledChange(Boolean(checked))}
-            aria-label={`启用${title}`}
-          />
+          <Switch checked={enabled} onCheckedChange={(c) => onEnabledChange(Boolean(c))} aria-label={`启用${title}`} />
         ) : null}
       </div>
-
-      {children ? <div className="space-y-3 px-4 py-4">{children}</div> : null}
-
+      {children ? <div className={cn(SETTINGS_CARD_BODY, "space-y-4")}>{children}</div> : null}
       {more !== undefined ? (
         <button
           type="button"
           onClick={() => setMoreOpen((open) => !open)}
           aria-expanded={moreOpen}
           aria-controls={moreOpen ? moreRegionId : undefined}
-          className="flex w-full cursor-pointer items-center justify-between gap-4 px-4 py-3 text-left text-sm font-medium text-muted-foreground transition-colors duration-200 hover:bg-accent/55 hover:text-foreground"
+          className={SETTINGS_CARD_DISCLOSURE}
         >
           <span>{moreLabel}</span>
-          <ChevronDown
-            className={cn("h-4 w-4 shrink-0 transition-transform duration-200", moreOpen && "rotate-180")}
-          />
+          <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform duration-[160ms]", moreOpen && "rotate-180")} aria-hidden="true" />
         </button>
       ) : null}
-
       {moreOpen && more !== undefined ? (
-        <div id={moreRegionId} className="space-y-3 border-t border-border px-4 py-4">{more}</div>
+        <div id={moreRegionId} className={cn(SETTINGS_CARD_BODY, "space-y-4")}>{more}</div>
       ) : null}
-
-      {footer !== undefined ? <div className="border-t border-border px-4 py-3">{footer}</div> : null}
+      {footer !== undefined ? <div className={SETTINGS_CARD_ACTION}>{footer}</div> : null}
     </section>
   )
 }

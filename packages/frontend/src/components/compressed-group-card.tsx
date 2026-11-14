@@ -75,7 +75,7 @@ export function CompressedGroupCard({ meta, body }: CompressedGroupCardProps) {
   }
 
   return (
-    <div className="rounded-lg border border-dashed bg-muted/20 px-4 py-3">
+    <div className="rounded-lg border border-dashed bg-surface-subtle px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">上下文已自动压缩</span>

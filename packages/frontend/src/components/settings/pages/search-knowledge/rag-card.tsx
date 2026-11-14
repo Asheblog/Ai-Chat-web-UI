@@ -418,7 +418,7 @@ export function RagCard({ settings, update }: RagCardProps) {
           </div>
         }
       >
-        <Alert className="v2-panel-soft border-border bg-background/78">
+        <Alert className="v2-panel-soft border-border bg-surface">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
             {hasEmbeddingModels

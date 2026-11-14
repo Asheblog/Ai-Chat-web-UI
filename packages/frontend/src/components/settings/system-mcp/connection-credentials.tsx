@@ -37,9 +37,9 @@ export function ConnectionCredentialBadge({
   configured: boolean
   requiredEnv: string[]
 }): JSX.Element {
-  if (configured) return <span className="text-micro text-muted-foreground">已配置</span>
-  if (requiredEnv.length > 0) return <span className="text-micro text-destructive">缺密钥</span>
-  return <span className="text-micro text-muted-foreground">—</span>
+  if (configured) return <span className="text-[11px] text-muted-foreground">已配置</span>
+  if (requiredEnv.length > 0) return <span className="text-[11px] text-destructive">缺密钥</span>
+  return <span className="text-[11px] text-muted-foreground">—</span>
 }
 
 export function ConnectionCredentials({
@@ -51,11 +51,11 @@ export function ConnectionCredentials({
   if (requiredEnv.length === 0) return null
 
   return (
-    <div className="md:col-span-2 rounded-md border border-border/60 bg-muted/20 px-3 py-3">
+    <div className="md:col-span-2 rounded-md border border-border bg-surface-subtle px-3 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <KeyRound className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
         <p className="text-xs font-medium text-foreground">凭据</p>
-        <span className="text-micro text-muted-foreground">
+        <span className="text-[11px] text-muted-foreground">
           {configured ? '已配置，留空表示保持原值' : '该安装声明了以下密钥'}
         </span>
       </div>
@@ -73,7 +73,7 @@ export function ConnectionCredentials({
           </McpField>
         ))}
       </div>
-      <p className="mt-2 text-micro text-muted-foreground">
+      <p className="mt-2 text-[11px] text-muted-foreground">
         值加密存入 Secret Vault，运行层只接收解密后的环境变量，不写入安装模板。
       </p>
     </div>

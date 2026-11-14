@@ -81,11 +81,11 @@ export function ShareSelectionPanel({
 
   return (
     <>
-      <div className="mb-3 rounded-xl border border-primary/25 bg-primary/8 px-4 py-3 text-sm text-foreground">
+      <div className="mb-3 rounded-lg border border-border bg-surface-subtle px-4 py-3 text-[13px] text-foreground">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="font-medium text-primary">分享选择模式已开启</p>
-            <p className="text-xs text-primary/80 mt-1">
+            <p className="font-medium text-signal">分享选择模式已开启</p>
+            <p className="text-xs text-signal/80 mt-1">
               已选 {selectedCount} 条消息 · 仅当前会话可分享，切换会话将自动清空选择
             </p>
             <ShareSelectionToolSummary
@@ -114,9 +114,9 @@ export function ShareSelectionPanel({
       </div>
 
       <div className="lg:hidden fixed bottom-24 left-0 right-0 z-30 px-4 pointer-events-none">
-        <div className="pointer-events-auto flex items-center justify-between gap-3 rounded-full border border-primary/30 bg-[hsl(var(--surface))/0.95] px-4 py-3 shadow-lg backdrop-blur">
+        <div className="pointer-events-auto flex items-center justify-between gap-3 rounded-full border border-borderStrong bg-[hsl(var(--surface))/0.95] px-4 py-3  backdrop-blur">
           <span className="text-sm text-foreground">
-            已选 <span className="font-semibold text-primary">{selectedCount}</span> 条消息
+            已选 <span className="font-semibold text-signal">{selectedCount}</span> 条消息
             {blockedIds.size > 0 ? (
               <span className="ml-1 text-xs text-muted-foreground">（{blockedIds.size} 条不可分享）</span>
             ) : null}

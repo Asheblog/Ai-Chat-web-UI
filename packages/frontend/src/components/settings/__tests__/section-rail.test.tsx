@@ -98,21 +98,36 @@ describe("SectionRail", () => {
     expect(onChange).toHaveBeenCalledWith("mcp")
   })
 
-  test("全部按钮 type=button、可见焦点环，触控高度 ≥36px", () => {
+  test("全部按钮 type=button、焦点环交给全局 outline、桌面 32 高、移动端触控 ≥36px", () => {
     renderRail("mcp")
-    const buttons = [
-      ...within(desktopNav()).getAllByRole("button"),
-      ...within(mobileTablist()).getAllByRole("tab"),
-    ]
+    const desktopButtons = within(desktopNav()).getAllByRole("button")
+    const mobileButtons = within(mobileTablist()).getAllByRole("tab")
 
-    for (const button of buttons) {
+    for (const button of [...desktopButtons, ...mobileButtons]) {
       expect(button.getAttribute("type")).toBe("button")
-      expect(button.className).toContain("focus-visible:outline-none")
-      expect(button.className).toContain("focus-visible:ring-2")
-      expect(button.className).toContain("focus-visible:ring-primary")
-      expect(button.className).toContain("focus-visible:ring-offset-background")
+      // 焦点可见性由全局 :focus-visible 的 1.5px signal 描边提供：
+      // 组件不得再叠 ring（= box-shadow）或用 outline-none 把它抹掉。
+      expect(button.className).not.toContain("ring-")
+      expect(button.className).not.toContain("shadow")
+      expect(button.className).not.toContain("outline-none")
+    }
+    for (const button of desktopButtons) {
+      expect(button.className).toContain("h-8")
+    }
+    for (const button of mobileButtons) {
       expect(button.className).toContain("min-h-9")
     }
+  })
+
+  test("选中态是白底 + 发丝线 + 信号竖条，不再用 primary 实底", () => {
+    renderRail("mcp")
+    const activeButton = within(desktopNav()).getByRole("button", { name: "MCP 服务" })
+
+    expect(activeButton).toHaveAttribute("data-active", "true")
+    expect(activeButton.className).toContain("bg-surface")
+    expect(activeButton.className).toContain("border-border")
+    const bar = activeButton.querySelector('span[aria-hidden="true"]')
+    expect(bar?.className).toContain("bg-signal")
   })
 
   test("移动分支 tab 的 aria-controls 指向页面内容区，未传 panelId 时不输出该属性", () => {

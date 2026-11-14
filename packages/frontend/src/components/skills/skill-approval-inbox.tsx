@@ -226,7 +226,7 @@ export function SkillApprovalInbox() {
           </div>
 
           {active.reason ? (
-            <div className="rounded-md border border-border/70 bg-muted/20 p-3 text-xs text-muted-foreground">
+            <div className="rounded-md border border-border bg-surface-subtle p-3 text-xs text-muted-foreground">
               {active.reason}
             </div>
           ) : null}

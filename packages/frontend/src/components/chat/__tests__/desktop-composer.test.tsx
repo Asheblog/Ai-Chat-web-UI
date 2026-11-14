@@ -65,7 +65,7 @@ describe('DesktopComposer', () => {
     expect(parent.className).toContain('rounded-[var(--radius-composer)]')
     expect(parent.className).toContain('relative')
     expect(parent.className).toContain('p-4')
-    expect(parent.className).toContain('focus-within:ring-2')
+    expect(parent.className).toContain('composer-shell')
   })
 
   it('allows stopping while streaming even when send would otherwise be disabled', () => {

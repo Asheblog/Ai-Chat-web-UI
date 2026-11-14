@@ -15,7 +15,7 @@ interface ExpandEditorDialogProps {
 export function ExpandEditorDialog({ open, draft, onDraftChange, onClose, onApply }: ExpandEditorDialogProps) {
   return (
     <Dialog open={open} onOpenChange={(next) => (!next ? onClose() : undefined)}>
-      <DialogContent className="max-w-[1000px] w-[92vw] h-[80vh] max-h-[85vh] p-0 rounded-2xl sm:rounded-3xl overflow-hidden flex flex-col">
+      <DialogContent className="max-w-[1000px] w-[92vw] h-[80vh] max-h-[85vh] p-0 rounded-lg sm:rounded-3xl overflow-hidden flex flex-col">
         <DialogHeader className="sr-only">
           <DialogTitle>编辑消息</DialogTitle>
           <DialogDescription>使用全屏编辑框调整待发送内容</DialogDescription>

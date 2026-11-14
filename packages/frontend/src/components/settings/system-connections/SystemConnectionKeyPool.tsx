@@ -73,7 +73,7 @@ export function SystemConnectionKeyPool({
             return (
               <div
                 key={key.clientId}
-                className="rounded-lg border border-border/75 bg-muted/40 p-4"
+                className="rounded-lg border border-border bg-surface-subtle p-4"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <button
@@ -81,16 +81,16 @@ export function SystemConnectionKeyPool({
                     onClick={() => setExpandedKeyId(expanded ? null : key.clientId)}
                     className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 text-left"
                   >
-                    <div className="rounded-full border border-primary/20 bg-primary/10 p-2 text-primary">
+                    <div className="rounded-full border border-border bg-surface-subtle p-2 text-ink-tertiary">
                       <KeyRound className="h-4 w-4" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-sm font-medium">{key.apiKeyLabel || `Key ${index + 1}`}</span>
-                        <span className="rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-micro text-muted-foreground">
+                        <span className="rounded-full border border-border bg-surface px-2.5 py-1 text-[11px] text-muted-foreground">
                           {key.enable ? "启用中" : "已停用"}
                         </span>
-                        <span className="rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-micro text-muted-foreground">
+                        <span className="rounded-full border border-border bg-surface px-2.5 py-1 text-[11px] text-muted-foreground">
                           {modelCount > 0 ? `${modelCount} 个模型` : "自动枚举模型"}
                         </span>
                       </div>
@@ -109,7 +109,7 @@ export function SystemConnectionKeyPool({
                   </button>
 
                   <div className="flex flex-col gap-2 sm:w-auto sm:min-w-[140px]">
-                    <label className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-border/70 bg-background/70 px-3 py-1.5 text-sm">
+                    <label className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-sm">
                       <Checkbox
                         checked={key.enable}
                         onCheckedChange={(checked) =>
@@ -137,7 +137,7 @@ export function SystemConnectionKeyPool({
 
                 {expanded ? (
                   <div className="overflow-hidden">
-                    <div className="mt-5 space-y-4 border-t border-border/60 pt-5">
+                    <div className="mt-5 space-y-4 border-t border-border pt-5">
                       <div className="space-y-2">
                         <Label htmlFor={`key-label-${key.clientId}`}>Key 标签</Label>
                         <Input

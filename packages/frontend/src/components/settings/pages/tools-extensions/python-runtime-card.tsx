@@ -244,7 +244,7 @@ export function PythonRuntimeCard() {
       </div>
     ) : (
       <div className="space-y-6">
-        <div className="rounded-xl border border-border/70 bg-card/50 p-4 space-y-2">
+        <div className="rounded-xl border border-border bg-surface/50 p-4 space-y-2">
           <p className="text-sm"><span className="font-medium">解释器路径：</span>{status.pythonPath}</p>
           <p className="text-sm"><span className="font-medium">运行时目录：</span>{status.runtimeRoot}</p>
           <div className="flex items-center gap-2">
@@ -262,7 +262,7 @@ export function PythonRuntimeCard() {
           ) : null}
         </div>
 
-        <div className="rounded-xl border border-border/70 bg-card/50 p-4 space-y-3">
+        <div className="rounded-xl border border-border bg-surface/50 p-4 space-y-3">
           <p className="text-sm font-medium">索引配置</p>
           <div className="space-y-2">
             <label className="text-xs text-muted-foreground">主索引（可选）</label>
@@ -320,7 +320,7 @@ export function PythonRuntimeCard() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-xl border border-border/70 bg-card/50 p-4 space-y-3">
+          <div className="rounded-xl border border-border bg-surface/50 p-4 space-y-3">
             <p className="text-sm font-medium">安装依赖（手动）</p>
             <Textarea
               rows={5}
@@ -336,7 +336,7 @@ export function PythonRuntimeCard() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-border/70 bg-card/50 p-4 space-y-3">
+          <div className="rounded-xl border border-border bg-surface/50 p-4 space-y-3">
             <p className="text-sm font-medium">卸载包</p>
             <Textarea
               rows={5}
@@ -353,7 +353,7 @@ export function PythonRuntimeCard() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-border/70 bg-card/50 p-4 space-y-3">
+        <div className="rounded-xl border border-border bg-surface/50 p-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-medium">运行时一致性校验（Reconcile）</p>
             <Button variant="outline" onClick={handleReconcile} disabled={reconciling || !status.ready}>
@@ -376,7 +376,7 @@ export function PythonRuntimeCard() {
           </div>
         )}
 
-        <div className="rounded-xl border border-border/70 bg-card/50 p-4 space-y-3">
+        <div className="rounded-xl border border-border bg-surface/50 p-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm font-medium">已安装包（前 200 项）</p>
             <div className="flex flex-wrap items-center gap-2">
@@ -414,9 +414,9 @@ export function PythonRuntimeCard() {
               </Button>
             </div>
           </div>
-          <div className="max-h-80 overflow-auto rounded-md border border-border/60">
+          <div className="max-h-80 overflow-auto rounded-md border border-border">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-muted/80">
+              <thead className="sticky top-0 bg-surface-subtle">
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">Package</th>
                   <th className="px-3 py-2 text-left font-medium">Version</th>
@@ -427,14 +427,14 @@ export function PythonRuntimeCard() {
                 {filteredInstalledPackages.slice(0, 200).map((pkg) => {
                   const sources = packageSourceMap.get(normalizePackageName(pkg.name)) || []
                   return (
-                  <tr key={`${pkg.name}-${pkg.version}`} className="border-t border-border/50">
+                  <tr key={`${pkg.name}-${pkg.version}`} className="border-t border-border">
                     <td className="px-3 py-1.5 font-mono text-xs">{pkg.name}</td>
                     <td className="px-3 py-1.5 font-mono text-xs">{pkg.version}</td>
                     <td className="px-3 py-1.5">
                       <div className="flex flex-wrap items-center gap-1">
                         {sources.length > 0 ? (
                           sources.map((source) => (
-                            <Badge key={`${pkg.name}-${source}`} variant="outline" className="text-micro">
+                            <Badge key={`${pkg.name}-${source}`} variant="outline" className="text-[11px]">
                               {SOURCE_LABELS[source]}
                             </Badge>
                           ))

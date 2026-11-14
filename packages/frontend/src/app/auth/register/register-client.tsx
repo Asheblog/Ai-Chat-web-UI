@@ -98,7 +98,7 @@ export default function RegisterPageClient({ initialBrandText }: RegisterPageCli
         <>
           <div>
             已有账户？{' '}
-            <Link href="/auth/login" className="text-primary hover:text-[hsl(var(--primary-hover))] hover:underline">立即登录</Link>
+            <Link href="/auth/login" className="text-signal hover:text-[hsl(var(--primary-hover))] hover:underline">立即登录</Link>
           </div>
           <div>注册申请通过后可登录。</div>
         </>

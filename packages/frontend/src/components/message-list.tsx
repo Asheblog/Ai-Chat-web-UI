@@ -258,13 +258,13 @@ const MessageListComponent = forwardRef<MessageListHandle, MessageListProps>(fun
 
   if (isLoading && displayMetas.length === 0) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-[26px]">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="flex gap-3">
-            <div className="h-8 w-8 rounded-full bg-muted animate-pulse" />
+            <div className="h-8 w-8 rounded-full bg-surface-subtle animate-pulse" />
             <div className="flex-1">
-              <div className="h-4 w-40 bg-muted animate-pulse rounded" />
-              <div className="mt-3 h-20 bg-muted/70 animate-pulse rounded" />
+              <div className="h-4 w-40 bg-surface-subtle animate-pulse rounded" />
+              <div className="mt-3 h-20 bg-surface-subtle animate-pulse rounded" />
             </div>
           </div>
         ))}

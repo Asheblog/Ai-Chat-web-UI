@@ -498,7 +498,7 @@ export function BattlePageClient() {
                   ) : (
                     <div className="space-y-3 pr-4">
                       {history.map((run) => (
-                        <Card key={run.id} className="hover:border-primary/50 transition-colors">
+                        <Card key={run.id} className="hover:border-signal/50 transition-colors">
                           <CardContent className="pt-4 space-y-3">
                             <div className="flex items-start justify-between gap-2">
                               <div className="space-y-1 flex-1 min-w-0">

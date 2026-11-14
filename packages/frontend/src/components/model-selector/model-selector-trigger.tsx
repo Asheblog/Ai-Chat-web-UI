@@ -34,7 +34,7 @@ export const ModelSelectorTrigger = React.forwardRef<
       aria-expanded={open}
       aria-label="选择模型"
       className={cn(
-        "border-border/70 bg-background/95 shadow-sm transition-colors hover:border-border hover:bg-accent/45",
+        "border-border bg-background/95 shadow-sm transition-colors hover:border-border hover:bg-surface-hover/45",
         displayVariant === "inline"
           ? "h-9 w-9 rounded-lg p-0"
           : cn(defaultSizeClass, "justify-between rounded-lg"),
@@ -51,7 +51,7 @@ export const ModelSelectorTrigger = React.forwardRef<
               {selected ? selected.name : "选择模型"}
             </span>
             {selected && selectedSource && (
-              <span className="block truncate text-micro text-muted-foreground">
+              <span className="block truncate text-[11px] text-muted-foreground">
                 {selectedSource}
               </span>
             )}

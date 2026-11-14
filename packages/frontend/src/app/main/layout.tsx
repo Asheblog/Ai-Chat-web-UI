@@ -73,7 +73,7 @@ export default function MainLayout({
                   variant="ghost"
                   size="icon"
                   aria-label={sidebarCollapsed ? '展开侧边栏' : '打开侧边栏'}
-                  className="group/sidebar-toggle h-10 w-10 rounded-lg hover:bg-accent hover:text-primary"
+                  className="group/sidebar-toggle h-8 w-8 rounded-[8px] text-ink-tertiary hover:bg-surface-hover hover:text-foreground"
                   onClick={() => {
                     try {
                       if (sidebarCollapsed) {

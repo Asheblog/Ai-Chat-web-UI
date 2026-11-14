@@ -43,10 +43,10 @@ const StepBadge = ({ active, done, label }: { active: boolean; done: boolean; la
       className={cn(
         'flex items-center gap-2 rounded-full px-3 py-1 text-xs border',
         active
-          ? 'bg-primary text-primary-foreground border-primary'
+          ? 'bg-foreground text-background border-primary'
           : done
             ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900'
-            : 'bg-muted/40 text-muted-foreground border-border',
+            : 'bg-surface-subtle/40 text-muted-foreground border-border',
       )}
     >
       {done ? <CheckCircle2 className="h-3.5 w-3.5" /> : <span className="h-2 w-2 rounded-full bg-current opacity-60" />}
@@ -288,7 +288,7 @@ export function SetupWizard() {
     <>
       {reminderVisible && (
         <div className="fixed bottom-4 left-4 z-[60] max-w-[min(520px,calc(100vw-2rem))]">
-          <div className="space-y-2 rounded-xl border border-border/80 bg-[hsl(var(--surface))/0.96] p-4 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-[hsl(var(--surface))/0.84]">
+          <div className="space-y-2 rounded-xl border border-border bg-[hsl(var(--surface))/0.96] p-4 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-[hsl(var(--surface))/0.84]">
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
               <div className="flex-1 min-w-0">
@@ -335,13 +335,13 @@ export function SetupWizard() {
           }
         }}
       >
-        <DialogContent className="h-[100dvh] w-screen max-w-none border-0 bg-[hsl(var(--surface))/0.96] p-0 shadow-none sm:h-[85vh] sm:max-h-[88vh] sm:w-[92vw] sm:max-w-6xl sm:rounded-[calc(var(--radius)+0.4rem)] sm:border sm:border-border/80 sm:bg-card/95 sm:shadow-[0_30px_80px_hsl(var(--background)/0.5)] flex min-h-0 flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-          <DialogHeader className="border-b border-border/80 px-5 py-4">
+        <DialogContent className="h-[100dvh] w-screen max-w-none border-0 bg-[hsl(var(--surface))/0.96] p-0 shadow-none sm:h-[85vh] sm:max-h-[88vh] sm:w-[92vw] sm:max-w-6xl sm:rounded-[calc(var(--radius)+0.4rem)] sm:border sm:border-border sm:bg-surface sm:shadow-[0_30px_80px_hsl(var(--background)/0.5)] flex min-h-0 flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+          <DialogHeader className="border-b border-border px-5 py-4">
             <DialogTitle className="text-base sm:text-lg">{overlayTitle}</DialogTitle>
             <DialogDescription className="text-sm">{overlayDesc}</DialogDescription>
           </DialogHeader>
 
-          <div className="border-b border-border/80 bg-[hsl(var(--background-alt))/0.5] px-5 py-3">
+          <div className="border-b border-border bg-[hsl(var(--background-alt))/0.5] px-5 py-3">
             <div className="flex flex-wrap gap-2">
               {steps.map((s, idx) => (
                 <StepBadge
@@ -620,7 +620,7 @@ export function SetupWizard() {
             )}
           </div>
 
-          <div className="flex flex-col gap-2 border-t border-border/80 bg-[hsl(var(--background-alt))/0.52] p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2 border-t border-border bg-[hsl(var(--background-alt))/0.52] p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-xs text-muted-foreground">
               {statusLoading ? (
                 <span className="inline-flex items-center gap-2">

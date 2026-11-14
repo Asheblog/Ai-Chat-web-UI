@@ -98,13 +98,13 @@ export function SettingsSearch() {
   return (
     <div className="relative w-full">
       <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-tertiary" aria-hidden="true" />
         <Input
           aria-label="搜索设置"
           type="text"
           placeholder="搜索设置…"
           value={query}
-          className="pl-9"
+          className="h-8 rounded-[9px] bg-surface-subtle pl-8 text-[13px]"
           onChange={(event) => {
             setQuery(event.target.value)
             setOpen(true)
@@ -116,11 +116,11 @@ export function SettingsSearch() {
       </div>
       {showResults && (
         <div
-          className="v2-panel absolute left-0 right-0 z-50 mt-1 max-h-80 overflow-y-auto p-1.5"
+          className="v2-panel absolute left-0 right-0 z-50 mt-1 max-h-80 overflow-y-auto p-1"
           onMouseDown={(event) => event.preventDefault()}
         >
           {results.length === 0 ? (
-            <div className="px-3 py-2.5 text-sm text-muted-foreground">无匹配设置</div>
+            <div className="px-2 py-2 text-[13px] text-ink-tertiary">无匹配设置</div>
           ) : (
             <ul className="space-y-0.5" role="listbox" aria-label="搜索结果">
               {results.map((result, index) => {
@@ -135,16 +135,16 @@ export function SettingsSearch() {
                       onMouseEnter={() => setHighlightIndex(index)}
                       onClick={() => selectResult(result)}
                       className={cn(
-                        "flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-colors",
+                        "flex h-8 w-full cursor-pointer items-center gap-2 rounded-lg px-2 text-left text-[13px] transition-colors duration-[160ms]",
                         isHighlighted
-                          ? "bg-accent text-foreground"
-                          : "text-muted-foreground hover:bg-accent/70 hover:text-foreground"
+                          ? "bg-surface-hover text-foreground"
+                          : "text-ink-secondary hover:bg-surface-hover hover:text-foreground"
                       )}
                     >
                       {Icon && <Icon className="h-4 w-4 shrink-0" />}
                       <span className="min-w-0 flex-1 truncate">{result.label}</span>
                       {result.groupLabel && result.groupLabel !== result.label && (
-                        <span className="shrink-0 text-xs text-muted-foreground/80">{result.groupLabel}</span>
+                        <span className="shrink-0 text-[11px] text-ink-tertiary">{result.groupLabel}</span>
                       )}
                     </button>
                   </li>

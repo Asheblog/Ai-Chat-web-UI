@@ -2,14 +2,13 @@
 
 import { useEffect, useRef } from 'react'
 import { DEFAULT_CHAT_IMAGE_LIMITS } from '@aichat/shared/image-limits'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/use-toast'
 import { ImagePreviewList } from '@/features/chat/welcome/ImagePreviewList'
 import { useImageAttachments } from '@/features/chat/composer'
-import { ChevronLeft, FileText, ImagePlus, Rocket, Settings, Zap } from 'lucide-react'
+import { ChevronLeft, ImagePlus, Rocket, Zap } from 'lucide-react'
 import type { BattleDraftImage, JudgeConfig, ModelConfigState } from '../hooks/useBattleFlow'
 
 interface PromptStepProps {
@@ -38,6 +37,8 @@ const isSameImages = (a: BattleDraftImage[], b: BattleDraftImage[]) => {
     }
     return true
 }
+
+const chipClass = 'inline-flex h-[26px] items-center gap-1.5 rounded-full border border-border bg-surface-subtle px-2.5 text-[11.5px] text-muted-foreground'
 
 export function PromptStep({
     prompt,
@@ -117,159 +118,147 @@ export function PromptStep({
         })
     }
 
-    return (
-        <div className="w-full space-y-5">
-            <section className="v2-panel p-4 shadow-none sm:p-5">
-                <div className="mb-5 flex items-start gap-3 border-b border-border/70 pb-4">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                        <FileText className="h-5 w-5 text-primary" />
-                    </span>
-                    <div>
-                        <h2 className="v2-section-title">输入题目</h2>
-                        <p className="v2-muted-line mt-1">题目和答案支持文本、图片或组合内容。</p>
-                    </div>
-                </div>
-                <div className="space-y-5">
-                    <div className="space-y-2">
-                        <Label>题目内容</Label>
-                        <Textarea
-                            value={prompt}
-                            onChange={(e) => onPromptChange(e.target.value)}
-                            onPaste={promptAttachments.handlePaste}
-                            placeholder="输入要测试的问题，例如：请计算 1+1=?"
-                            className="min-h-[140px] resize-none"
-                        />
-                        <div className="flex items-center gap-2">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="gap-1"
-                                onClick={promptAttachments.pickImages}
-                            >
-                                <ImagePlus className="h-4 w-4" />
-                                上传题目图片
-                            </Button>
-                            <span className="text-xs text-muted-foreground">最多 4 张图</span>
-                        </div>
-                        <ImagePreviewList
-                            images={promptAttachments.selectedImages}
-                            onRemove={promptAttachments.removeImage}
-                        />
-                        <input
-                            ref={promptAttachments.fileInputRef}
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            className="hidden"
-                            onChange={promptAttachments.onFilesSelected}
-                        />
-                    </div>
+    const uploadRow = (
+        attachments: typeof promptAttachments,
+        action: string,
+        hint: string,
+    ) => (
+        <div className="flex flex-wrap items-center gap-2">
+            <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 rounded-[10px] px-2.5 text-[12.5px] shadow-none"
+                onClick={attachments.pickImages}
+            >
+                <ImagePlus className="h-3.5 w-3.5" aria-hidden />
+                {action}
+            </Button>
+            <span className="text-[11.5px] text-ink-tertiary">{hint}</span>
+        </div>
+    )
 
-                    <div className="space-y-2">
-                        <Label>期望答案</Label>
-                        <Textarea
-                            value={expectedAnswer}
-                            onChange={(e) => onExpectedAnswerChange(e.target.value)}
-                            onPaste={expectedAnswerAttachments.handlePaste}
-                            placeholder="输入正确答案，裁判模型将根据此答案评判各模型输出"
-                            className="min-h-[140px] resize-none"
-                        />
-                        <div className="flex items-center gap-2">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="gap-1"
-                                onClick={expectedAnswerAttachments.pickImages}
-                            >
-                                <ImagePlus className="h-4 w-4" />
-                                上传答案图片
-                            </Button>
-                            <span className="text-xs text-muted-foreground">最多 4 张图</span>
-                        </div>
-                        <ImagePreviewList
-                            images={expectedAnswerAttachments.selectedImages}
-                            onRemove={expectedAnswerAttachments.removeImage}
-                        />
-                        <input
-                            ref={expectedAnswerAttachments.fileInputRef}
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            className="hidden"
-                            onChange={expectedAnswerAttachments.onFilesSelected}
-                        />
-                    </div>
+    return (
+        <div className="w-full space-y-4">
+            <section className="rounded-xl border border-border bg-surface p-4 sm:p-5">
+                <div className="mb-4 flex items-baseline justify-between gap-3">
+                    <span className="text-[11px] font-medium tracking-[0.5px] text-ink-tertiary">题目</span>
+                    <span className="text-[11.5px] text-ink-tertiary">题目和答案支持文本、图片或组合内容</span>
+                </div>
+                <Label htmlFor="battle-prompt" className="sr-only">题目内容</Label>
+                <Textarea
+                    id="battle-prompt"
+                    value={prompt}
+                    onChange={(e) => onPromptChange(e.target.value)}
+                    onPaste={promptAttachments.handlePaste}
+                    placeholder="输入要测试的问题，例如：请计算 1+1=?"
+                    className="min-h-[132px] resize-none rounded-[10px] border-border bg-surface text-[14px] leading-[1.75] shadow-none"
+                />
+                <div className="mt-3 space-y-2">
+                    {uploadRow(promptAttachments, '上传题目图片', '最多 4 张图')}
+                    <ImagePreviewList
+                        images={promptAttachments.selectedImages}
+                        onRemove={promptAttachments.removeImage}
+                    />
+                    <input
+                        ref={promptAttachments.fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={promptAttachments.onFilesSelected}
+                    />
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <span className={chipClass}>配图 {promptSelectedImages.length}/4</span>
+                    <span className={chipClass}>采样 {judgeConfig.runsPerModel} 次</span>
+                    <span className={chipClass}>阈值 {judgeConfig.threshold}</span>
+                    <span className="flex-1" />
+                    <Button
+                        onClick={handleStart}
+                        disabled={!canStart || isRunning}
+                        className="h-9 min-w-[120px] gap-2 rounded-[10px] bg-foreground px-4 text-[12.5px] font-medium text-background shadow-none hover:bg-foreground/90"
+                    >
+                        {isRunning ? (
+                            <>
+                                <Zap className="h-3.5 w-3.5 animate-pulse" aria-hidden />
+                                准备中...
+                            </>
+                        ) : (
+                            <>
+                                <Rocket className="h-3.5 w-3.5" aria-hidden />
+                                开始对战
+                            </>
+                        )}
+                    </Button>
                 </div>
             </section>
 
-            <section className="v2-panel-soft p-4">
-                <div className="mb-3 flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                        <Settings className="h-4 w-4" />
-                        配置预览
+            <section className="rounded-xl border border-border bg-surface p-4 sm:p-5">
+                <div className="mb-4 flex items-baseline justify-between gap-3">
+                    <span className="text-[11px] font-medium tracking-[0.5px] text-ink-tertiary">期望答案</span>
+                    <span className="text-[11.5px] text-ink-tertiary">裁判模型将按此答案评判各模型输出</span>
                 </div>
-                <div className="space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs text-muted-foreground">参赛模型:</span>
-                        {selectedModels.map((item) => (
-                            <Badge key={item.key} variant="secondary" className="text-xs">
-                                {item.model.name}
-                            </Badge>
-                        ))}
-                    </div>
+                <Label htmlFor="battle-expected-answer" className="sr-only">期望答案</Label>
+                <Textarea
+                    id="battle-expected-answer"
+                    value={expectedAnswer}
+                    onChange={(e) => onExpectedAnswerChange(e.target.value)}
+                    onPaste={expectedAnswerAttachments.handlePaste}
+                    placeholder="输入正确答案，裁判模型将根据此答案评判各模型输出"
+                    className="min-h-[120px] resize-none rounded-[10px] border-border bg-surface text-[14px] leading-[1.75] shadow-none"
+                />
+                <div className="mt-3 space-y-2">
+                    {uploadRow(expectedAnswerAttachments, '上传答案图片', '最多 4 张图')}
+                    <ImagePreviewList
+                        images={expectedAnswerAttachments.selectedImages}
+                        onRemove={expectedAnswerAttachments.removeImage}
+                    />
+                    <input
+                        ref={expectedAnswerAttachments.fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={expectedAnswerAttachments.onFilesSelected}
+                    />
+                </div>
+            </section>
 
-                    <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                            <span>裁判:</span>
-                            <span className="font-medium text-foreground">
-                                {judgeConfig.model?.name || '未选择'}
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <span>阈值:</span>
-                            <span className="font-medium text-foreground">{judgeConfig.threshold}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <span>运行次数:</span>
-                            <span className="font-medium text-foreground">{judgeConfig.runsPerModel}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <span>pass@k:</span>
-                            <span className="font-medium text-foreground">{judgeConfig.passK}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <span>并发:</span>
-                            <span className="font-medium text-foreground">{judgeConfig.maxConcurrency}</span>
-                        </div>
+            <section className="rounded-xl border border-border bg-surface-subtle p-4">
+                <div className="mb-2 text-[11px] font-medium tracking-[0.5px] text-ink-tertiary">配置预览</div>
+                <div className="space-y-2 text-[12.5px] text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span>参赛模型:</span>
+                        {selectedModels.length === 0 ? (
+                            <span className="text-ink-tertiary">未选择</span>
+                        ) : (
+                            selectedModels.map((item) => (
+                                <span key={item.key} className="text-foreground">{item.model.name}</span>
+                            ))
+                        )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 num-tabular">
+                        <span>裁判: <span className="text-foreground">{judgeConfig.model?.name || '未选择'}</span></span>
+                        <span>运行次数: <span className="text-foreground">{judgeConfig.runsPerModel}</span></span>
+                        <span>pass@k: <span className="text-foreground">{judgeConfig.passK}</span></span>
+                        <span>并发: <span className="text-foreground">{judgeConfig.maxConcurrency}</span></span>
                     </div>
                 </div>
             </section>
 
             <div className="flex items-center justify-between gap-4">
-                <Button variant="outline" onClick={onBack} className="gap-2">
-                    <ChevronLeft className="h-4 w-4" />
+                <Button
+                    variant="outline"
+                    onClick={onBack}
+                    className="h-9 gap-1.5 rounded-[10px] px-3 text-[12.5px] shadow-none"
+                >
+                    <ChevronLeft className="h-4 w-4" aria-hidden />
                     返回配置
                 </Button>
-
-                <Button
-                    onClick={handleStart}
-                    disabled={!canStart || isRunning}
-                    size="lg"
-                    className="gap-2 min-w-[140px]"
-                >
-                    {isRunning ? (
-                        <>
-                            <Zap className="h-4 w-4 animate-pulse" />
-                            准备中...
-                        </>
-                    ) : (
-                        <>
-                            <Rocket className="h-4 w-4" />
-                            开始对战
-                        </>
-                    )}
-                </Button>
+                <span className="text-[11.5px] text-ink-tertiary">
+                    {canStart ? '题目已就绪，可开始对战' : '请先填写题目内容'}
+                </span>
             </div>
         </div>
     )

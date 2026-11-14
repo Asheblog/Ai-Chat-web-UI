@@ -50,8 +50,8 @@ export function UsersRegistrationPage() {
   return (
     <div className="space-y-5">
       {/* 页头 */}
-      <div className="flex items-center gap-3 pb-3 border-b border-border/60">
-        <UserPlus className="w-5 h-5 text-primary flex-shrink-0" />
+      <div className="flex items-center gap-3 pb-3 border-b border-border">
+        <UserPlus className="w-5 h-5 text-ink-tertiary flex-shrink-0" />
         <div className="space-y-1">
           <CardTitle>用户与注册</CardTitle>
           <CardDescription className="text-sm text-muted-foreground">
@@ -69,8 +69,8 @@ export function UsersRegistrationPage() {
 
       {/* 分区二：用户管理（原样内嵌 SystemUsersPage，状态自管） */}
       <section aria-label="用户管理" data-card-key="users-registration:users">
-        <div className="mb-4 flex items-start gap-3 border-b border-border/70 pb-4">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+        <div className="mb-4 flex items-start gap-3 border-b border-border pb-4">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface-subtle text-ink-tertiary">
             <Users className="h-5 w-5" />
           </span>
           <div>

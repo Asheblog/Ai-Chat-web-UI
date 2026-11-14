@@ -18,13 +18,13 @@ export function BattleContentBlock({ title, text, images, compact = false, class
 
   return (
     <div className={cn('space-y-2', className)}>
-      <div className="text-xs text-muted-foreground">{title}</div>
+      <div className="text-[11px] font-medium tracking-[0.5px] text-ink-tertiary">{title}</div>
       {trimmed ? (
-        <div className={cn('text-sm text-foreground leading-relaxed whitespace-pre-wrap', compact && 'line-clamp-3')}>
+        <div className={cn('whitespace-pre-wrap text-[13.5px] leading-[1.75] text-foreground', compact && 'line-clamp-3')}>
           {trimmed}
         </div>
       ) : (
-        <div className="text-sm text-muted-foreground">（无文本）</div>
+        <div className="text-[12.5px] text-ink-tertiary">（无文本）</div>
       )}
 
       {hasImages && (
@@ -33,7 +33,7 @@ export function BattleContentBlock({ title, text, images, compact = false, class
             <button
               key={`${url}-${index}`}
               type="button"
-              className="relative overflow-hidden rounded border bg-background hover:opacity-90 transition-opacity"
+              className="relative overflow-hidden rounded-[10px] border border-border bg-surface transition-colors duration-[160ms] hover:border-borderStrong"
               onClick={() => lightbox.openLightbox(images, index)}
             >
               <img

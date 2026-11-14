@@ -117,7 +117,7 @@ export function SystemConnectionEditor({
             </p>
           </div>
 
-          <div className="grid gap-4 rounded-md border border-border bg-card p-4">
+          <div className="grid gap-4 rounded-md border border-border bg-surface p-4">
             <Field label="显示名称" htmlFor="connection-display-name">
               <Input
                 id="connection-display-name"
@@ -207,7 +207,7 @@ export function SystemConnectionEditor({
             </Field>
 
             {mode === "edit" ? (
-              <div className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+              <div className="rounded-md bg-surface-subtle px-3 py-2 text-sm text-muted-foreground">
                 Key 摘要：{keySummary} · 共 {form.keys.length} 个条目
               </div>
             ) : null}
@@ -282,7 +282,7 @@ export function SystemConnectionEditor({
             </p>
           </div>
 
-          <div className="rounded-md border border-border bg-card px-4 py-3 text-sm text-muted-foreground">
+          <div className="rounded-md border border-border bg-surface px-4 py-3 text-sm text-muted-foreground">
             建议先验证连通性，再创建连接。高级配置仍可在保存前展开调整。
           </div>
 
@@ -349,10 +349,10 @@ function WizardStepIndicator({ step }: { step: WizardStep }) {
           key={item.id}
           className={
             item.id === step
-              ? "rounded-md bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
+              ? "rounded-md bg-signal-soft px-2.5 py-1 text-xs font-medium text-signal-text"
               : item.id < step
-                ? "rounded-md bg-muted px-2.5 py-1 text-xs text-foreground"
-                : "rounded-md bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground"
+                ? "rounded-md bg-surface-subtle px-2.5 py-1 text-xs text-foreground"
+                : "rounded-md bg-surface-subtle px-2.5 py-1 text-xs text-muted-foreground"
           }
         >
           {item.id}. {item.label}
@@ -377,9 +377,9 @@ function ProviderStep({ onSelect }: { onSelect: (template: ProviderTemplate) => 
               key={template.provider}
               type="button"
               onClick={() => onSelect(template)}
-              className="flex w-full cursor-pointer items-start gap-3 rounded-md border border-border bg-card px-3 py-3 text-left transition-colors hover:border-primary/40 hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="flex w-full cursor-pointer items-start gap-3 rounded-md border border-border bg-surface px-3 py-3 text-left transition-colors hover:border-border hover:bg-surface-hover"
             >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface-subtle text-ink-tertiary">
                 <Icon className="h-4 w-4" />
               </span>
               <span className="min-w-0">

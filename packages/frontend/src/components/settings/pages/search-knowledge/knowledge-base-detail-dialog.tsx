@@ -136,7 +136,7 @@ export function KnowledgeBaseDetailDialog({
             </div>
 
             {uploading && uploadingFiles.length > 0 && (
-              <div className="p-3 border rounded-lg bg-muted/50 space-y-3">
+              <div className="p-3 border rounded-lg bg-surface-subtle space-y-3">
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-medium">
                     正在上传 {uploadingFiles.length} 个文件
@@ -145,9 +145,9 @@ export function KnowledgeBaseDetailDialog({
                     {uploadProgress < 100 ? `${uploadProgress}%` : '处理中...'}
                   </span>
                 </div>
-                <div className="h-2 w-full rounded bg-muted">
+                <div className="h-2 w-full rounded bg-surface-subtle">
                   <div
-                    className="h-2 rounded bg-primary transition-all duration-300"
+                    className="h-2 rounded bg-foreground transition-all duration-300"
                     style={{ width: `${uploadProgress}%` }}
                   />
                 </div>
@@ -270,7 +270,7 @@ export function KnowledgeBaseDetailDialog({
                                   ? 'border border-[hsl(var(--warning)/0.35)] bg-[hsl(var(--warning)/0.15)] text-[hsl(var(--warning))]'
                                   : doc.status === 'error'
                                     ? 'border border-destructive/30 bg-destructive/10 text-destructive'
-                                    : 'border border-border/70 bg-[hsl(var(--surface-hover))] text-muted-foreground'
+                                    : 'border border-border bg-[hsl(var(--surface-hover))] text-muted-foreground'
                                 }`}>
                                 {doc.status === 'ready' ? '就绪' :
                                   doc.status === 'processing' ? '处理中' :
@@ -290,7 +290,7 @@ export function KnowledgeBaseDetailDialog({
                                   )}
                                 </div>
                                 {typeof doc.processingProgress === 'number' && (
-                                  <div className="h-1.5 w-20 rounded bg-muted">
+                                  <div className="h-1.5 w-20 rounded bg-surface-subtle">
                                     <div
                                       className="h-1.5 rounded bg-[hsl(var(--warning))] transition-all"
                                       style={{ width: `${Math.min(100, doc.processingProgress)}%` }}

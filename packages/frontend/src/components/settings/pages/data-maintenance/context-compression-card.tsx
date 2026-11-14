@@ -86,7 +86,7 @@ export function ContextCompressionCard({ settings, update }: ContextCompressionC
           title={(
             <div className="flex items-center gap-2">
               启用压缩
-              <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">推荐</Badge>
+              <Badge className="bg-ink-tertiary/10 text-ink-tertiary">推荐</Badge>
             </div>
           )}
           description="达到阈值后自动将较早消息压缩为摘要，减少长会话上下文占用"

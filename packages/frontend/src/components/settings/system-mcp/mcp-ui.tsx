@@ -49,9 +49,9 @@ export function McpEmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-14 text-center">
-      <Icon className="h-9 w-9 text-muted-foreground/30 mb-3" />
+      <Icon className="h-9 w-9 text-ink-tertiary mb-3" />
       <p className="text-sm font-medium text-foreground/60">{title}</p>
-      <p className="mt-1 text-xs text-muted-foreground/60 max-w-[260px]">{description}</p>
+      <p className="mt-1 text-xs text-ink-tertiary max-w-[260px]">{description}</p>
       {action && (
         <Button size="sm" variant="outline" className="mt-4" onClick={action.onClick}>
           <Plus className="mr-1 h-3.5 w-3.5" />
@@ -126,7 +126,7 @@ export function McpSelectField({
   return (
     <McpField label={label} required={required}>
       <select
-        className="h-9 w-full rounded-md border bg-background px-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+        className="h-9 w-full rounded-md border bg-background px-3 text-xs focus:outline-none focus: focus:"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
@@ -145,7 +145,7 @@ export function McpSelectField({
 
 export function McpInlineWarning({ children }: { children: ReactNode }) {
   return (
-    <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-400">
+    <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
       <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
       <span>{children}</span>
     </div>

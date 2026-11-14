@@ -65,7 +65,7 @@ describe('MobileComposer', () => {
     const mobileContainer = document.querySelector('.md\\:hidden')
     expect(mobileContainer).toBeInTheDocument()
 
-    const shellInside = mobileContainer?.querySelector('.focus-within\\:ring-offset-2')
+    const shellInside = mobileContainer?.querySelector('.composer-shell')
     expect(shellInside).toBeNull()
   })
 
@@ -75,7 +75,7 @@ describe('MobileComposer', () => {
     const mobileContainer = document.querySelector('.md\\:hidden')
     expect(mobileContainer).toBeInTheDocument()
 
-    const innerEditor = mobileContainer?.querySelector('.focus-within\\:ring-primary\\/10')
+    const innerEditor = mobileContainer?.querySelector('.composer-inner-editor')
     expect(innerEditor).toBeInTheDocument()
   })
 

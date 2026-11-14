@@ -109,29 +109,29 @@ export function SystemModelAccessPage() {
     return (
       <div
         key={key}
-        className="rounded-lg border border-muted px-4 py-3 bg-card/30 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        className="flex flex-col gap-3 rounded-lg border border-border bg-surface-subtle px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
       >
         <div className="space-y-1">
           <div className="font-semibold text-base leading-tight">{model.name || model.id}</div>
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-            <Badge variant="outline" className="text-micro font-normal">
+            <Badge variant="outline" className="text-[11px] font-normal">
               {recommendTag(model)}
             </Badge>
             {model.provider && (
-              <Badge variant="secondary" className="text-micro font-normal">
+              <Badge variant="secondary" className="text-[11px] font-normal">
                 {model.provider}
               </Badge>
             )}
             {model.capabilitySource && (
               <Badge
                 variant="secondary"
-                className="text-micro font-normal bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+                className="text-[11px] font-normal bg-warning/10 text-warning"
               >
                 覆写:{model.capabilitySource}
               </Badge>
             )}
             {model.accessDecision === "deny" && (
-              <Badge variant="destructive" className="text-micro font-normal">
+              <Badge variant="destructive" className="text-[11px] font-normal">
                 当前拒绝
               </Badge>
             )}
@@ -324,7 +324,7 @@ export function SystemModelAccessPage() {
           {loading && (
             <div className="grid gap-3 md:grid-cols-2">
               {[...Array(4)].map((_, idx) => (
-                <Card key={idx} className="shadow-none border-muted">
+                <Card key={idx}>
                   <CardContent className="pt-4 space-y-3">
                     <Skeleton className="h-4 w-40" />
                     <Skeleton className="h-3 w-28" />

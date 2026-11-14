@@ -39,9 +39,9 @@ export function ChatTurnToc({ entries, activeKey, onJump, className }: ChatTurnT
             setExpanded(false)
           }}
           className={cn(
-            'flex flex-col gap-2.5 rounded-2xl transition-[width,padding,background-color,box-shadow] duration-150 ease-out',
+            'flex flex-col gap-2.5 rounded-lg transition-[width,padding,background-color,box-shadow] duration-150 ease-out',
             expanded
-              ? 'max-h-[min(72vh,32rem)] w-[22rem] overflow-y-auto bg-[hsl(var(--background))] py-3 pl-4 pr-3 shadow-[0_8px_28px_rgba(15,23,42,0.12)] ring-1 ring-border/50'
+              ? 'max-h-[min(72vh,32rem)] w-[22rem] overflow-y-auto bg-surface py-3 pl-4 pr-3 shadow-[0_8px_28px_rgba(15,23,42,0.12)] ring-1 ring-border/50'
               : 'w-8 overflow-visible py-2 pr-1.5',
           )}
         >
@@ -58,8 +58,8 @@ export function ChatTurnToc({ entries, activeKey, onJump, className }: ChatTurnT
                   className={cn(
                     'flex min-w-0 items-center justify-end rounded-md py-0.5 text-left',
                     expanded ? 'w-full gap-3' : 'gap-0',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    active ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
+                    'focus-visible:outline-none ',
+                    active ? 'text-signal' : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
                   <span
@@ -75,7 +75,7 @@ export function ChatTurnToc({ entries, activeKey, onJump, className }: ChatTurnT
                     aria-hidden
                     className={cn(
                       'shrink-0 rounded-full transition-all duration-150',
-                      active ? 'h-0.5 w-4 bg-primary' : 'h-0.5 w-2.5 bg-border',
+                      active ? 'h-0.5 w-4 bg-signal' : 'h-0.5 w-2.5 bg-border',
                     )}
                   />
                 </button>

@@ -111,7 +111,7 @@ function ShareMessageItem({
           'flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
           isUser
             ? 'bg-[hsl(var(--surface-hover))] text-muted-foreground'
-            : 'bg-[linear-gradient(135deg,hsl(var(--primary)),hsl(var(--accent-color)))] text-primary-foreground'
+            : 'bg-[linear-gradient(135deg,hsl(var(--primary)),hsl(var(--accent-color)))] text-background'
         )}
       >
         {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
@@ -135,7 +135,7 @@ function ShareMessageItem({
           className={cn(
             'max-w-none text-sm leading-7',
             isUser &&
-              'ml-auto w-fit rounded-2xl bg-muted/70 px-4 py-2.5 text-left'
+              'ml-auto w-fit rounded-lg bg-surface-subtle px-4 py-2.5 text-left'
           )}
         >
           {richPayload ? (
@@ -154,7 +154,7 @@ function ShareMessageItem({
                 key={`${src}-${index}`}
                 src={src}
                 alt="分享图片"
-                className="max-h-48 w-full rounded-lg border border-border/70 bg-[hsl(var(--surface))] object-contain"
+                className="max-h-48 w-full rounded-lg border border-border bg-[hsl(var(--surface))] object-contain"
                 loading="lazy"
               />
             ))}
@@ -319,14 +319,14 @@ export function ShareViewer({
   return (
     <div className="v2-app-surface flex min-h-screen flex-col text-foreground">
       <header className={cn(SHARE_CONTAINER_CLASS, 'pt-4')}>
-        <div className="flex flex-col gap-3 border-b border-border/70 px-1 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-b border-border px-1 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3 font-semibold">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground text-xs font-bold text-background">
               AI
             </span>
             <span className="truncate">{brandText}</span>
             {isLive && (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-0.5 text-xs text-primary">
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/30 bg-signal-soft px-2.5 py-0.5 text-xs text-signal">
                 <Loader2 className="h-3 w-3 animate-spin" />
                 实时
               </span>
@@ -337,7 +337,7 @@ export function ShareViewer({
             <span>{formatRelativeTime(share.createdAt)}</span>
             <button
               type="button"
-              className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-background px-3 py-1.5 text-primary transition hover:bg-accent"
+              className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-background px-3 py-1.5 text-signal transition hover:bg-surface-hover"
               onClick={() => {
                 if (typeof window === 'undefined') return
                 void navigator.clipboard?.writeText(window.location.href)
@@ -353,13 +353,13 @@ export function ShareViewer({
       <div className={cn(SHARE_CONTAINER_CLASS, 'flex-1 py-2 sm:py-3')}>
         <section className="py-4 sm:py-6">
           <div className="mb-6 text-center">
-            <h1 className="mx-auto text-title-l font-semibold leading-snug tracking-tight text-foreground sm:text-2xl">
+            <h1 className="mx-auto text-[24px] font-bold font-semibold leading-snug tracking-tight text-foreground sm:text-2xl">
               {share.title || share.sessionTitle}
             </h1>
             <p className="mt-3 text-sm text-muted-foreground">公开分享 · {formatDate(share.createdAt)}</p>
           </div>
           {mergedMessages.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border/70 p-6 text-center text-muted-foreground">
+            <div className="rounded-xl border border-dashed border-border p-6 text-center text-muted-foreground">
               分享中暂无可展示的内容
             </div>
           ) : (
@@ -377,7 +377,7 @@ export function ShareViewer({
           <div className="mt-6 flex justify-center">
             <button
               type="button"
-              className="rounded-full border border-border/70 bg-[hsl(var(--surface))/0.65] px-4 py-2 text-sm hover:bg-[hsl(var(--surface-hover))]"
+              className="rounded-full border border-border bg-[hsl(var(--surface))/0.65] px-4 py-2 text-sm hover:bg-[hsl(var(--surface-hover))]"
               onClick={handleLoadMore}
               disabled={loadingMore}
             >
@@ -387,7 +387,7 @@ export function ShareViewer({
         )}
       </div>
 
-      <footer className="border-t border-border/80 py-4">
+      <footer className="border-t border-border py-4">
         <div className={cn(SHARE_CONTAINER_CLASS, 'text-center text-xs text-muted-foreground')}>
           本页面分享由 <span className="font-medium text-foreground">{brandText}</span> 系统生成
         </div>

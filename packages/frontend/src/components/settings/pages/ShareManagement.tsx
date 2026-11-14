@@ -157,7 +157,7 @@ export function ShareManagementPanel() {
   }
 
   return (
-    <section className="v2-panel p-4 shadow-none sm:p-5">
+    <section className="v2-panel p-4 sm:p-5">
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           {/* 副标题需堆叠在标题下方，而不是与搜索框并排，故 h2+副标题包在 shrink-0 容器里（勿简化回直接 h2） */}
@@ -166,7 +166,7 @@ export function ShareManagementPanel() {
             <p className="mt-1 text-sm text-muted-foreground">查看、复制或撤销你分享出去的对话</p>
           </div>
           <div className="relative w-full sm:w-[320px]">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-tertiary" />
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -187,7 +187,7 @@ export function ShareManagementPanel() {
 
       <div>
         {error && shares.length > 0 ? (
-          <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          <div className="mb-3 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
             {error}
           </div>
         ) : null}
@@ -208,7 +208,7 @@ export function ShareManagementPanel() {
           <div className="v2-table-wrap overflow-x-auto border-border">
             <table className="w-full min-w-[760px] text-left text-sm">
               <thead>
-                <tr className="border-b border-border bg-muted/60 text-xs text-muted-foreground">
+                <tr className="border-b border-border bg-surface-subtle text-xs text-muted-foreground">
                   <th className="px-4 py-3 font-medium">名称</th>
                   <th className="px-4 py-3 font-medium">分享内容</th>
                   <th className="px-4 py-3 font-medium">创建时间</th>
@@ -222,8 +222,8 @@ export function ShareManagementPanel() {
                   <tr
                     key={share.id}
                     className={cn(
-                      "border-b border-border/50 text-sm last:border-b-0",
-                      index === 0 ? "bg-primary/5" : "bg-background/70"
+                      "border-b border-border text-sm last:border-b-0",
+                      index === 0 ? "bg-signal-soft" : "bg-surface"
                     )}
                   >
                     <td className="px-4 py-3 font-medium text-foreground">

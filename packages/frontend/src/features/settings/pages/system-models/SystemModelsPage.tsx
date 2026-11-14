@@ -168,7 +168,7 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
       <div className="space-y-4">
         {!hideHeader && (
           <div className="flex items-center gap-3 pb-3 border-b">
-            <Cpu className="w-5 h-5 text-primary" />
+            <Cpu className="w-5 h-5 text-signal" />
             <div>
               <CardTitle>模型管理</CardTitle>
               <CardDescription>为模型开启/关闭能力标签:图片理解、图像生成</CardDescription>
@@ -176,7 +176,7 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
           </div>
         )}
 
-        <Card className="px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
+        <Card className="px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-borderStrong ">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2 flex-1">
               <div className="relative flex-1 max-w-sm">
@@ -254,7 +254,7 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
               <span>已开启</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-muted border"></div>
+              <div className="w-2 h-2 rounded-full bg-surface-subtle border"></div>
               <span>未开启</span>
             </div>
             <div className="ml-auto text-xs">
@@ -278,7 +278,7 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
       </div>
 
       {/* 批量能力开关 */}
-      <Card className="px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
+      <Card className="px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-borderStrong ">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="text-base">批量开关能力</CardTitle>
           <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
@@ -293,7 +293,7 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
             return (
               <div
                 key={cap}
-                className="flex items-center justify-between gap-2 rounded border bg-muted/40 px-3 py-2"
+                className="flex items-center justify-between gap-2 rounded border bg-surface-subtle/40 px-3 py-2"
               >
                 <div className="flex items-center gap-2 text-sm">
                   <Icon className="w-4 h-4" />
@@ -366,7 +366,7 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
           <CardTitle>模型列表 ({list.length})</CardTitle>
         </div>
 
-        <Card className="px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-primary/30 hover:shadow-sm">
+        <Card className="px-4 py-4 sm:px-5 sm:py-5 transition-all hover:border-borderStrong ">
           {isLoading && list.length===0 ? (
             // 骨架屏加载
             <div className="space-y-3">
@@ -394,7 +394,7 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
           ) : (
             <div className="overflow-x-auto">
               <Table className="w-full table-fixed">
-                <TableHeader className="sticky top-0 z-30 bg-muted/50">
+                <TableHeader className="sticky top-0 z-30 bg-surface-subtle/50">
                   <TableRow>
                     <TableHead className="w-12 text-center">
                       <Checkbox
@@ -403,7 +403,7 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
                       />
                     </TableHead>
                     <TableHead
-                      className="w-[200px] cursor-pointer hover:bg-muted/80 transition-colors"
+                      className="w-[200px] cursor-pointer hover:bg-surface-subtle/80 transition-colors"
                       onClick={() => toggleSort('name')}
                     >
                       模型 {sortField === 'name' && (sortOrder === 'asc' ? '↑' : '↓')}
@@ -436,7 +436,7 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
                     const key = modelKey(m)
                     const isBusy = savingKey === key
                     return (
-                      <TableRow key={key} className="hover:bg-muted/30 transition-colors">
+                      <TableRow key={key} className="hover:bg-surface-subtle transition-colors">
                         <TableCell className="text-center">
                           <Checkbox
                             checked={selectedKeys.has(key)}
@@ -451,11 +451,11 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
                             </div>
                           )}
                           <div className="mt-1 flex items-center gap-2 flex-wrap text-xs">
-                            <Badge variant="outline" className="text-micro font-normal">
+                            <Badge variant="outline" className="text-[11px] font-normal">
                               {recommendTag(m)}
                             </Badge>
                             {m.capabilitySource && (
-                              <Badge variant="secondary" className="text-micro font-normal bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+                              <Badge variant="secondary" className="text-[11px] font-normal bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
                                 {MODEL_CAP_SOURCE_LABELS[m.capabilitySource] || `来源:${m.capabilitySource}`}
                               </Badge>
                             )}

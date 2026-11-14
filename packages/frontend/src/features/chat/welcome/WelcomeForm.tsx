@@ -181,13 +181,13 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
 
   return (
     <div
-      className="relative w-full max-w-[940px]"
+      className="relative w-full max-w-[720px]"
       {...(dragHandlers ?? {})}
     >
       {/* 拖拽上传遮罩 */}
       {isDragOver && (
-        <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary/50 bg-primary/[0.04] backdrop-blur-[1px]">
-          <div className="rounded-xl bg-background/80 px-5 py-3 text-center shadow-sm backdrop-blur-sm">
+        <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center rounded-2xl border-2 border-dashed border-signal/50 bg-signal/5 ">
+          <div className="rounded-xl bg-surface px-5 py-3 text-center  ">
             <p className="text-sm font-medium text-foreground">松开以上传文件</p>
             <p className="mt-0.5 text-micro text-muted-foreground">推荐 PDF / Word / Excel / CSV / 文本 / 代码</p>
           </div>
@@ -279,7 +279,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
       </ComposerShell>
 
       {mobileQuotaNotice ? (
-        <p className="mx-auto mt-3 max-w-3xl rounded-full border border-border/70 bg-[hsl(var(--surface))/0.65] px-3 py-1.5 text-center text-xs text-muted-foreground backdrop-blur-sm md:hidden">
+        <p className="mx-auto mt-3 max-w-3xl rounded-full border border-border bg-[hsl(var(--surface))/0.65] px-3 py-1.5 text-center text-xs text-muted-foreground  md:hidden">
           {mobileQuotaNotice}
         </p>
       ) : null}
@@ -375,7 +375,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
               onChange={(event) => sessionPromptDialog.onChange(event.target.value)}
               rows={6}
               placeholder={sessionPromptDialog.placeholder}
-              className="w-full rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-sm leading-relaxed focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="w-full rounded-xl border border-border bg-surface-subtle px-3 py-2 text-sm leading-relaxed  "
             />
             <p className="text-xs text-muted-foreground">
               {'生效顺序：会话 > 个人 > 全局；支持 {day time}（自动替换为服务器当前时间）。留空继承上级，三层均为空时默认使用"今天日期是{day time}"。'}

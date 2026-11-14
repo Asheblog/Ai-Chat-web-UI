@@ -239,7 +239,7 @@ export function ShareDialog({ sessionId, sessionTitle, selectedMessageIds, open,
         ) : (
           <>
             <div className="space-y-2">
-              <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 px-3 py-2 text-sm text-primary/80">
+              <div className="rounded-lg border border-dashed border-borderStrong bg-surface-subtle px-3 py-2 text-[12.5px] text-ink-tertiary">
                 当前已选 {sortedMessageIds.length} 条消息。如需调整，请先关闭本对话框返回聊天界面。
               </div>
               {placeholderSelectionCount > 0 && (
