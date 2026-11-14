@@ -26,25 +26,25 @@ export function AuthFormLayout({
 }: AuthFormLayoutProps) {
   return (
     <div className={cn("w-full", className)}>
-      {title ? (
+      {title || description ? (
         <div className="mb-6 text-left">
-          <h2 className="text-[26px] font-bold leading-tight tracking-[-0.4px] text-foreground">{title}</h2>
+          {title ? <h2 className="break-words text-[26px] font-semibold leading-tight tracking-tight text-foreground">{title}</h2> : null}
           {description ? (
-            <p className="mt-2 text-[12.5px] leading-relaxed text-ink-tertiary">{description}</p>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{description}</p>
           ) : null}
         </div>
       ) : null}
       {error ? (
         <div
           role="alert"
-          className="mb-5 rounded-[10px] border border-destructive/30 bg-destructive/8 px-3 py-2.5 text-[12.5px] text-destructive"
+          className="mb-5 rounded-[10px] border border-destructive/30 bg-destructive/8 px-3 py-2.5 break-words text-sm leading-relaxed text-destructive [overflow-wrap:anywhere]"
         >
           {error}
         </div>
       ) : null}
       {children}
       {footer ? (
-        <div className="mt-6 space-y-2 text-center text-[11.5px] text-ink-tertiary">
+        <div className="mt-6 space-y-2 text-center text-sm text-muted-foreground">
           {footer}
         </div>
       ) : null}

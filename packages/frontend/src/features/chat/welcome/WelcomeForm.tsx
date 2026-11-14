@@ -1,139 +1,27 @@
-import React, { ChangeEvent, ClipboardEvent, KeyboardEvent, RefObject, useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Loader2, Maximize2, Send } from 'lucide-react'
+import { Maximize2 } from 'lucide-react'
 import { CustomRequestEditor } from '@/components/chat/custom-request-editor'
 import { AdvancedOptions } from './AdvancedOptions'
 import { ComposerAttachmentList } from '@/components/chat/composer-attachment-list'
 import { AttachmentUploadButton } from '@/components/chat/attachment-upload-button'
-import type { WorkspaceFile } from '@/features/chat/composer'
-import { KnowledgeBaseSelector, type KnowledgeBaseItem } from '@/components/chat/knowledge-base-selector'
+import { KnowledgeBaseSelector } from '@/components/chat/knowledge-base-selector'
 import { cn } from '@/lib/utils'
 import { COMPOSER_TEXTAREA_BASE_CLASS } from '@/components/chat/composer-shell-styles'
 import { ComposerShell } from '@/components/chat/composer-shell'
+import { ComposerModelActions } from '@/components/chat/composer-model-actions'
+import type { WelcomeFormProps } from './welcome-form-types'
 import {
   ComposerFeatureControls,
   ComposerIconButton,
   composerToolbarButtonClass,
   composerToolbarScrollClass,
-  composerToolbarSendSlotClass,
 } from '@/components/chat/composer-toolbar-primitives'
 
-type Effort = 'unset' | 'low' | 'medium' | 'high' | 'max' | 'xhigh'
 
-interface WelcomeFormProps {
-  form: {
-    query: string
-    isComposing: boolean
-    setIsComposing: (value: boolean) => void
-    textareaRef: RefObject<HTMLTextAreaElement>
-    basePlaceholder: string
-    mobilePlaceholder: string
-    mobileQuotaNotice: string | null
-    creationDisabled: boolean
-    isCreating: boolean
-    showExpand: boolean
-    isDragOver?: boolean
-    dragHandlers?: {
-      onDragEnter: (e: React.DragEvent) => void
-      onDragOver: (e: React.DragEvent) => void
-      onDragLeave: (e: React.DragEvent) => void
-      onDrop: (e: React.DragEvent) => void
-    }
-    onTextareaChange: (value: string) => void
-    onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void
-    onSubmit: () => void
-    onOpenExpand: () => void
-    expand: {
-      open: boolean
-      draft: string
-      onChange: (value: string) => void
-      onClose: () => void
-      onApply: () => void
-    }
-    attachments: {
-      selectedImages: Array<{ dataUrl: string; mime: string; size: number }>
-      onRemoveImage: (index: number) => void
-      onPaste: (event: ClipboardEvent<HTMLTextAreaElement>) => void
-      workspaceFiles: WorkspaceFile[]
-      onRemoveWorkspaceFile: (workspacePath: string) => void
-      // 统一附件上传
-      attachmentInputRef: RefObject<HTMLInputElement>
-      pickAttachments: () => void
-      onAttachmentsSelected: (event: ChangeEvent<HTMLInputElement>) => void
-    }
-    knowledgeBase: {
-      enabled: boolean
-      availableKbs: KnowledgeBaseItem[]
-      selectedKbIds: number[]
-      isLoading: boolean
-      error: string | null
-      onToggle: (id: number) => void
-      onSelectAll: () => void
-      onClearAll: () => void
-      onRefresh: () => Promise<void>
-      selectorOpen: boolean
-      onOpenSelector: () => void
-      onSelectorOpenChange: (open: boolean) => void
-    }
-    advancedOptions: {
-      disabled: boolean
-      thinkingEnabled: boolean
-      onToggleThinking: (value: boolean) => void
-      effort: Effort
-      onEffortChange: (value: Effort) => void
-      webSearchEnabled: boolean
-      onToggleWebSearch: (value: boolean) => void
-      canUseWebSearch: boolean
-      showWebSearchScope: boolean
-      webSearchScope: string
-      onWebSearchScopeChange: (value: string) => void
-      webSearchDisabledNote?: string
-      pythonToolEnabled: boolean
-      onTogglePythonTool: (value: boolean) => void
-      canUsePythonTool: boolean
-      pythonToolDisabledNote?: string
-      deepResearchEnabled: boolean
-      onToggleDeepResearch: (value: boolean) => void
-      skillOptions: Array<{
-        skillId: number
-        versionId: number | null
-        slug: string
-        label: string
-        description?: string
-        enabled: boolean
-      }>
-      onToggleSkillOption: (skillId: number, enabled: boolean) => void
-      onActivateSkillPanel?: () => void
-      onOpenAdvanced: () => void
-      onOpenSessionPrompt: () => void
-    }
-    advancedDialog: {
-      open: boolean
-      onClose: () => void
-      customHeaders: Array<{ name: string; value: string }>
-      onAddHeader: () => void
-      onHeaderChange: (index: number, field: 'name' | 'value', value: string) => void
-      onRemoveHeader: (index: number) => void
-      canAddHeader: boolean
-      customBodyInput: string
-      onCustomBodyChange: (value: string) => void
-      customBodyError: string | null
-    }
-    sessionPromptDialog: {
-      open: boolean
-      value: string
-      onChange: (value: string) => void
-      onClose: () => void
-      onConfirm: () => void
-      onClear: () => void
-      placeholder: string
-    }
-  }
-}
-
-export function WelcomeForm({ form }: WelcomeFormProps) {
+export function WelcomeForm({ form, selectedModelId, onModelChange, modelDisabled }: WelcomeFormProps) {
   const {
     query,
     isComposing,
@@ -232,7 +120,7 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
           </ComposerIconButton>
         )}
 
-        <div className="mt-2 flex items-center justify-between gap-2">
+        <div className="mt-3 grid min-w-0 grid-cols-1 items-center gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:gap-2">
           <div className={cn(composerToolbarScrollClass, 'flex-1')}>
             <AdvancedOptions {...advancedOptions} triggerClassName={composerToolbarButtonClass} />
             <AttachmentUploadButton
@@ -264,17 +152,11 @@ export function WelcomeForm({ form }: WelcomeFormProps) {
             />
           </div>
 
-          <div className={composerToolbarSendSlotClass}>
-            <Button
-              type="button"
-              onClick={onSubmit}
-              disabled={creationDisabled}
-              className="h-10 w-10 rounded-lg p-0 shadow-[0_10px_22px_hsl(var(--primary)/0.18)] disabled:shadow-none"
-              aria-label={isCreating ? '正在创建会话' : '发送'}
-            >
-              {isCreating ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <Send className="h-[18px] w-[18px]" />}
-            </Button>
-          </div>
+          <ComposerModelActions
+            selectedModelId={selectedModelId} onModelChange={onModelChange}
+            modelDisabled={modelDisabled} disabled={creationDisabled}
+            isCreating={isCreating} onSend={onSubmit}
+          />
         </div>
       </ComposerShell>
 

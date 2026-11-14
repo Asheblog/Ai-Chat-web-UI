@@ -92,13 +92,13 @@ export default function RegisterPageClient({ initialBrandText }: RegisterPageCli
   return (
     <AuthFormLayout
       title="注册"
-      description="创建账号后即可进入模型对话与设置管理。"
+      description="创建账号，审批通过后即可登录。"
       error={errorMessage}
       footer={
         <>
           <div>
             已有账户？{' '}
-            <Link href="/auth/login" className="text-signal hover:text-[hsl(var(--primary-hover))] hover:underline">立即登录</Link>
+            <Link href="/auth/login" className="inline-flex min-h-11 items-center text-signal hover:text-signal-text hover:underline">立即登录</Link>
           </div>
           <div>注册申请通过后可登录。</div>
         </>
@@ -106,14 +106,15 @@ export default function RegisterPageClient({ initialBrandText }: RegisterPageCli
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {successMessage && (
-          <div className="rounded-[calc(var(--radius)-4px)] border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-600 dark:text-emerald-300">
+          <div role="status" className="rounded-md border border-signal/25 bg-signal-soft px-3 py-3 text-sm leading-relaxed text-signal-text">
             {successMessage}
           </div>
         )}
         <div className="space-y-2">
-          <Label htmlFor="username" className="text-xs uppercase tracking-[0.08em] text-muted-foreground">用户名</Label>
+          <Label htmlFor="username" className="text-sm font-medium text-foreground">用户名</Label>
           <Input
             id="username"
+            autoComplete="username"
             type="text"
             placeholder="请输入用户名"
             value={username}
@@ -125,9 +126,12 @@ export default function RegisterPageClient({ initialBrandText }: RegisterPageCli
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="password" className="text-xs uppercase tracking-[0.08em] text-muted-foreground">密码</Label>
+          <Label htmlFor="password" className="text-sm font-medium text-foreground">密码</Label>
           <Input
             id="password"
+            autoComplete="new-password"
+            aria-invalid={Boolean(passwordError)}
+            aria-describedby={passwordError ? "password-error" : undefined}
             type="password"
             placeholder="请输入密码（至少6位）"
             value={password}
@@ -139,9 +143,12 @@ export default function RegisterPageClient({ initialBrandText }: RegisterPageCli
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="confirmPassword" className="text-xs uppercase tracking-[0.08em] text-muted-foreground">确认密码</Label>
+          <Label htmlFor="confirmPassword" className="text-sm font-medium text-foreground">确认密码</Label>
           <Input
             id="confirmPassword"
+            autoComplete="new-password"
+            aria-invalid={Boolean(passwordError)}
+            aria-describedby={passwordError ? "password-error" : undefined}
             type="password"
             placeholder="请再次输入密码"
             value={confirmPassword}
@@ -151,7 +158,7 @@ export default function RegisterPageClient({ initialBrandText }: RegisterPageCli
             className="h-11"
           />
           {passwordError && (
-            <p className="text-sm text-destructive">{passwordError}</p>
+            <p id="password-error" role="alert" className="text-sm text-destructive">{passwordError}</p>
           )}
         </div>
         <Button

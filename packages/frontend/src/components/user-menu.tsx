@@ -35,7 +35,7 @@ export function UserMenu({ variant = 'label', className }: UserMenuProps) {
         type="button"
         variant="default"
         size={variant === 'icon' ? 'sm' : 'default'}
-        className={cn(variant === 'icon' ? 'h-8 px-3' : 'h-9 px-4', className)}
+        className={cn(variant === 'icon' ? 'h-11 px-3 sm:h-8' : 'h-11 px-4 sm:h-9', className)}
         onClick={() => {
           try {
             window.location.href = '/auth/login'
@@ -68,7 +68,7 @@ export function UserMenu({ variant = 'label', className }: UserMenuProps) {
           variant="ghost"
           className={cn(
             'flex items-center gap-2',
-            showLabel ? 'h-9 px-3' : 'h-9 w-9 justify-center',
+            showLabel ? 'h-11 max-w-full px-3 sm:h-9' : 'h-11 w-11 justify-center sm:h-9 sm:w-9',
             className
           )}
           aria-label={showLabel ? undefined : '用户菜单'}

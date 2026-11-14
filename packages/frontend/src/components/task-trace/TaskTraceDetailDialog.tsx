@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { TraceMetaSection, TraceTabs, TraceEvents, LatexEvents } from './TaskTraceDetailSections'
 import type { FC } from 'react'
 import type { TaskTraceDetailDialogProps } from './TaskTraceDetail.types'
@@ -25,13 +25,15 @@ export const TaskTraceDetailDialog: FC<TaskTraceDetailDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-4xl flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>追踪详情 #{traceId}</DialogTitle>
+          <DialogDescription>查看该任务的执行状态、事件和耗时。</DialogDescription>
         </DialogHeader>
-        {detailLoading && <div className="h-24 w-full animate-pulse rounded-xl bg-surface-subtle" />}
+        {detailLoading && <div role="status" className="h-24 w-full animate-pulse rounded-lg bg-surface-subtle p-4 text-sm text-muted-foreground motion-reduce:animate-none">正在加载追踪详情…</div>}
+        {!detailLoading && !detail && <div role="status" className="rounded-lg border border-border bg-surface-subtle p-5 text-sm leading-relaxed text-muted-foreground">详情未加载，请关闭后重新打开该记录。</div>}
         {!detailLoading && detail && (
-          <div className="space-y-4 overflow-y-auto">
+          <div className="min-h-0 space-y-4 overflow-y-auto [overflow-wrap:anywhere]">
             <TraceMetaSection detail={detail} />
             <TraceTabs
               activeTab={detailTab}

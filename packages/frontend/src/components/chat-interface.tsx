@@ -25,7 +25,11 @@ export function ChatInterface() {
 
       <ChatQuotaNotice message={quotaMessage} />
 
-      <ChatComposerPanel {...composer} />
+      <ChatComposerPanel
+        {...composer}
+        selectedModelId={toolbar.selectedModelId}
+        onModelChange={toolbar.onModelChange}
+      />
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils"
 import type { SettingsNavItem } from "./nav"
 import { ChevronDown, ChevronRight } from "lucide-react"
 import { useNavFlash } from "./use-nav-flash"
+import { SettingsShellLayout, SettingsContentColumn } from "./shell-layout"
 
 export interface SettingsSection {
   key: string
@@ -46,9 +47,9 @@ export type SettingsShellProps = BaseProps & (FlatModeProps | NestedModeProps)
 
 // 导航视觉：分组标签 11 Medium/0.5 字距 ink-tertiary；条目 32 高、圆角 8；
 // 选中 = 白底 + 发丝线 + 左侧 2×14 信号条，hover 只跳一阶底色。
-const NAV_GROUP = "flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[11px] font-medium tracking-[0.5px] text-ink-tertiary transition-colors duration-[160ms] hover:text-foreground"
-const NAV_SUB = "flex h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] text-ink-secondary transition-colors duration-[160ms] hover:bg-surface-hover hover:text-foreground"
-const NAV_LEAF = "flex h-8 w-full items-center gap-2 rounded-lg border px-2 text-left text-[13px] transition-colors duration-[160ms]"
+const NAV_GROUP = "flex h-11 md:h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[11px] font-medium tracking-[0.5px] text-ink-tertiary transition-colors duration-[160ms] hover:text-foreground"
+const NAV_SUB = "flex h-11 md:h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] text-ink-secondary transition-colors duration-[160ms] hover:bg-surface-hover hover:text-foreground"
+const NAV_LEAF = "flex h-11 md:h-8 w-full items-center gap-2 rounded-lg border px-2 text-left text-[13px] transition-colors duration-[160ms]"
 const NAV_LEAF_ACTIVE = "border-border bg-surface font-medium text-foreground"
 const NAV_LEAF_IDLE = "border-transparent text-ink-secondary hover:bg-surface-hover hover:text-foreground"
 const NAV_ICON = "h-[1.125rem] w-[1.125rem] shrink-0"
@@ -74,7 +75,7 @@ function NavChevron({ open }: { open: boolean }) {
 
 /**
  * SettingsShell: 统一支持扁平与树形导航的设置容器。
- * 外壳 = 232 宽导航列（右发丝线）+ 内容列（个人 704 / 系统 940 居中）。
+ * 外壳 = 232 宽导航列（右发丝线）+ 内容列（个人 752 / 系统 988 居中）。
  * 导航列走画布底色、内容列走白底，卡片再靠发丝线分层——全程不用阴影。
  */
 export function SettingsShell(props: SettingsShellProps) {
@@ -82,70 +83,6 @@ export function SettingsShell(props: SettingsShellProps) {
     return <SettingsShellNestedImpl {...props} />
   }
   return <SettingsShellFlatImpl {...props} />
-}
-
-function SettingsShellLayout({
-  title,
-  className,
-  nav,
-  content,
-  asideClassName,
-  showNavTitle,
-}: {
-  title: string
-  className?: string
-  nav: ReactNode
-  content: ReactNode
-  asideClassName?: string
-  showNavTitle?: boolean
-}) {
-  return (
-    <div className={cn("mx-auto flex min-h-0 w-full max-w-none flex-1 bg-transparent", className)}>
-      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col md:flex-row">
-        <aside
-          className={cn(
-            "flex min-h-0 w-full shrink-0 flex-col overflow-y-auto border-b border-border px-3 py-3",
-            "md:w-[232px] md:border-b-0 md:border-r md:px-4 md:py-5",
-            asideClassName,
-          )}
-        >
-          {showNavTitle ? (
-            <div className="mb-3 px-2 text-[11px] font-medium tracking-[0.5px] text-ink-tertiary">{title}</div>
-          ) : null}
-          {nav}
-        </aside>
-        {content}
-      </div>
-    </div>
-  )
-}
-
-/** 内容列：滚动容器通栏，内层按测量宽度居中，卡片因此落在 704 / 940 的列宽上。 */
-function SettingsContentColumn({
-  children,
-  measureClassName,
-  notice,
-  dimmed,
-}: {
-  children: ReactNode
-  measureClassName: string
-  notice?: ReactNode
-  dimmed?: boolean
-}) {
-  return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface">
-      {notice}
-      <div
-        className={cn(
-          "flex-1 min-h-0 overflow-auto scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent",
-          "hover:scrollbar-thumb-muted-foreground transition-opacity",
-          dimmed && "opacity-60",
-        )}
-      >
-        <div className={cn("mx-auto w-full px-4 py-4 md:px-6 md:py-6", measureClassName)}>{children}</div>
-      </div>
-    </section>
-  )
 }
 
 function SettingsShellFlatImpl({
@@ -183,12 +120,22 @@ function SettingsShellFlatImpl({
   return (
     <SettingsShellLayout
       title={title}
+      activeKey={active}
+      activeLabel={sections.find(section => section.key === active)?.label ?? title}
       className={className}
       nav={nav}
       showNavTitle={showNavTitle}
       content={<SettingsContentColumn measureClassName="max-w-[752px]">{children}</SettingsContentColumn>}
     />
   )
+}
+
+function findNavLabel(tree: SettingsNavItem[], key: string): string | undefined {
+  for (const item of tree) {
+    if (item.key === key) return item.label
+    const label = item.children && findNavLabel(item.children, key)
+    if (label) return label
+  }
 }
 
 /** Walk the tree to find ancestor chain leading to targetKey (exclusive of target itself). */
@@ -335,6 +282,8 @@ function SettingsShellNestedImpl({
   return (
     <SettingsShellLayout
       title={title}
+      activeKey={activeSub}
+      activeLabel={findNavLabel(tree, activeSub) ?? title}
       className={className}
       nav={nav}
       showNavTitle={showNavTitle}

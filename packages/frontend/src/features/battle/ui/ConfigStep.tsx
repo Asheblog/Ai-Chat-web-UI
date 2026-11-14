@@ -122,7 +122,7 @@ export function ConfigStep({
                                     >
                                         <div className="flex items-start justify-between gap-3">
                                             <div>
-                                                <div className="font-medium text-sm">{item.model.name}</div>
+                                                <div className="break-words text-sm font-medium [overflow-wrap:anywhere]">{item.model.name}</div>
                                                 <div className="text-xs text-muted-foreground">
                                                     {formatModelSecondaryLabel(item.model)}
                                                 </div>
@@ -130,7 +130,8 @@ export function ConfigStep({
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
-                                                className="h-6 w-6"
+                                                className="h-11 w-11 shrink-0 sm:h-8 sm:w-8"
+                                                aria-label={`移除模型 ${item.model.name}`}
                                                 onClick={() => onRemoveModel(item.key)}
                                             >
                                                 <X className="h-4 w-4" />

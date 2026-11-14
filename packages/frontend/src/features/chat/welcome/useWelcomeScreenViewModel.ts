@@ -758,7 +758,7 @@ export const useWelcomeScreenViewModel = () => {
     header: {
       selectedModelId: selectedModelKey,
       onModelChange: handleModelChange,
-      disabled: creationDisabled,
+      disabled: isCreating,
       isCreating,
     },
     hero: {

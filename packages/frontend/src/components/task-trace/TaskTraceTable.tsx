@@ -59,7 +59,7 @@ export const TaskTraceTable: FC<TaskTraceTableProps> = ({
           className="cursor-pointer hover:bg-surface-subtle/40"
           onClick={() => onOpenDetail(item)}
         >
-          <TableCell>{item.id}</TableCell>
+          <TableCell><Button variant="ghost" size="sm" className="h-11 px-2 font-medium tabular-nums sm:h-8" aria-label={`查看追踪 #${item.id}`} onClick={(event) => { event.stopPropagation(); onOpenDetail(item) }}>{item.id}</Button></TableCell>
           <TableCell>{item.sessionId ?? '-'}</TableCell>
           <TableCell className="max-w-[180px] truncate text-muted-foreground">
             {item.actor}
@@ -95,7 +95,7 @@ export const TaskTraceTable: FC<TaskTraceTableProps> = ({
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-signal"
+                className="h-11 text-signal sm:h-8"
                 onClick={(e) => {
                   e.stopPropagation()
                   onExport(item.id)
@@ -107,7 +107,7 @@ export const TaskTraceTable: FC<TaskTraceTableProps> = ({
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-destructive"
+                className="h-11 text-destructive sm:h-8"
                 disabled={deletingId === item.id}
                 onClick={(e) => {
                   e.stopPropagation()

@@ -25,6 +25,18 @@ afterEach(() => {
 })
 
 describe("SectionRail", () => {
+  test("移动标签支持方向键切换并使用至少44px触控目标", () => {
+    const onChange = vi.fn()
+    renderRail("overview", onChange)
+    const tabs = within(mobileTablist()).getAllByRole("tab")
+    expect(tabs[0]).toHaveAttribute("tabindex", "0")
+    expect(tabs[1]).toHaveAttribute("tabindex", "-1")
+    expect(tabs[0]).toHaveClass("min-h-11")
+    fireEvent.keyDown(tabs[0], { key: "ArrowRight" })
+    expect(onChange).toHaveBeenCalledWith("mcp")
+    expect(tabs[1]).toHaveFocus()
+  })
+
   test("桌面竖排导航渲染全部段：图标 + label，且带 aria-label", () => {
     renderRail("mcp")
     const nav = desktopNav()
@@ -98,7 +110,7 @@ describe("SectionRail", () => {
     expect(onChange).toHaveBeenCalledWith("mcp")
   })
 
-  test("全部按钮 type=button、焦点环交给全局 outline、桌面 32 高、移动端触控 ≥36px", () => {
+  test("全部按钮 type=button、焦点环交给全局 outline、桌面 32 高、移动端触控 ≥44px", () => {
     renderRail("mcp")
     const desktopButtons = within(desktopNav()).getAllByRole("button")
     const mobileButtons = within(mobileTablist()).getAllByRole("tab")
@@ -115,7 +127,7 @@ describe("SectionRail", () => {
       expect(button.className).toContain("h-8")
     }
     for (const button of mobileButtons) {
-      expect(button.className).toContain("min-h-9")
+      expect(button.className).toContain("min-h-11")
     }
   })
 

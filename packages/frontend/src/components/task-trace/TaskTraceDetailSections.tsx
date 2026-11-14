@@ -117,7 +117,7 @@ export const TraceEvents: FC<{
       {events.map((evt) => (
         <div
           key={evt.id}
-          className="rounded-lg border bg-surface p-3 transition-all hover:"
+          className="rounded-lg border border-border bg-surface p-3"
         >
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span className="font-mono">#{evt.seq}</span>
@@ -155,7 +155,7 @@ export const LatexEvents: FC<{
         {events.map((evt) => (
           <div
             key={evt.seq}
-            className="rounded-lg border bg-surface p-3 transition-all hover:"
+            className="rounded-lg border border-border bg-surface p-3"
           >
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span className="font-mono">#{evt.seq}</span>
@@ -194,7 +194,7 @@ const MetaItem: FC<{ label: string; value: string | number | null; muted?: boole
   value,
   muted,
 }) => (
-  <div className={`truncate ${muted ? 'text-xs' : ''}`}>
+  <div className={`break-words [overflow-wrap:anywhere] ${muted ? 'text-xs' : ''}`}>
     <span className="text-muted-foreground">{label}：</span>
     <span className={muted ? 'text-xs' : ''}>{value}</span>
   </div>

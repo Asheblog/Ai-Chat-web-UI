@@ -6,7 +6,7 @@ import type { BattleShare, BattleResult, ToolEvent } from '@/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatDate } from '@/lib/utils'
-import { Trophy, Medal, Award, Check, X, ChevronDown, ChevronRight, Clock, FileText, Loader2, AlertTriangle, ArrowDown } from 'lucide-react'
+import { Check, X, ChevronDown, ChevronRight, Clock, FileText, Loader2, AlertTriangle, ArrowDown } from 'lucide-react'
 import { ModelStatsTable } from '@/features/battle/ui/ModelStatsTable'
 import { FlowGraph } from '@/features/battle/ui/FlowGraph'
 import { DetailDrawer, type BattleAttemptDetail } from '@/features/battle/ui/DetailDrawer'
@@ -46,18 +46,10 @@ const formatRelativeTime = (dateStr: string): string => {
   return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
 }
 
-const getRankDisplay = (rank: number) => {
-  switch (rank) {
-    case 1:
-      return { icon: <Trophy className="h-5 w-5 text-amber-500" />, bg: 'border-primary/20 bg-surface' }
-    case 2:
-      return { icon: <Medal className="h-5 w-5 text-muted-foreground" />, bg: 'border-border bg-surface' }
-    case 3:
-      return { icon: <Award className="h-5 w-5 text-amber-600" />, bg: 'border-border bg-surface' }
-    default:
-      return { icon: <span className="text-sm font-semibold text-muted-foreground">#{rank}</span>, bg: 'border-border bg-surface' }
-  }
-}
+const getRankDisplay = (rank: number) => ({
+  icon: <span aria-label={`第 ${rank} 名`} className="text-sm font-semibold tabular-nums text-foreground">{String(rank).padStart(2, '0')}</span>,
+  bg: 'border-border bg-surface',
+})
 
 // 截取输出内容摘要
 const getOutputSummary = (output: string | null | undefined, maxLen = 100): string => {
@@ -408,7 +400,7 @@ export function BattleShareViewer({ share, brandText ='AIChat' }: BattleShareVie
       }
     }
     return {
-      icon: <Trophy className="h-5 w-5 text-yellow-500" />,
+      icon: <Check className="h-5 w-5 text-muted-foreground" />,
       label: '对战完成',
     }
   }, [isLive, payload.status])

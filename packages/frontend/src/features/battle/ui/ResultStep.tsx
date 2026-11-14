@@ -5,9 +5,7 @@ import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import {Trophy,
-    Medal,
-    Award,
+import {
     Share2,
     RefreshCw,
     Check,
@@ -57,18 +55,10 @@ interface ResultStepProps {
 const isFiniteNumber = (value: unknown): value is number =>
     typeof value === 'number' && Number.isFinite(value)
 
-const getRankDisplay = (rank: number) => {
-    switch (rank) {
-        case 1:
-            return { icon: <Trophy className="h-6 w-6 text-yellow-500" />, bg: 'bg-yellow-500/10 border-yellow-500/20' }
-        case 2:
-            return { icon: <Medal className="h-6 w-6 text-muted-foreground" />, bg: 'bg-[hsl(var(--surface-hover))] border-border' }
-        case 3:
-            return { icon: <Award className="h-6 w-6 text-amber-600" />, bg: 'bg-amber-600/10 border-amber-600/20' }
-        default:
-            return { icon: <span className="text-base font-semibold text-muted-foreground">#{rank}</span>, bg: 'bg-surface-subtle border-border/50' }
-    }
-}
+const getRankDisplay = (rank: number) => ({
+    icon: <span aria-label={`第 ${rank} 名`} className="text-lg font-semibold tabular-nums text-foreground">{String(rank).padStart(2, '0')}</span>,
+    bg: 'bg-surface-subtle border-border',
+})
 
 // 截取输出内容摘要
 const getOutputSummary = (output: string | null | undefined, maxLen = 100): string => {
@@ -289,7 +279,7 @@ export function ResultStep({
                             ) : isError ? (
                                 <AlertTriangle className="h-5 w-5 text-destructive" />
                             ) : (
-                                <Trophy className="h-5 w-5 text-yellow-500" />
+                                <Check className="h-5 w-5 text-muted-foreground" />
                             )}
                             <span className="font-semibold text-foreground">
                                 {isCancelled ? '对战已取消' : isError ? '对战失败' : '对战完成'}

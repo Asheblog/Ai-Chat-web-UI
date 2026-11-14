@@ -432,7 +432,7 @@ export function BattlePageClient() {
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <Trophy className="h-6 w-6 text-yellow-500" />
+              <Trophy className="h-6 w-6 text-muted-foreground" />
               <h1 className="text-title-l sm:text-2xl font-semibold tracking-tight text-foreground">新建对战</h1>
             </div>
             <p className="text-sm text-muted-foreground">

@@ -4,7 +4,7 @@ import { useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
-import { Trophy, Medal, Award, Check, X, Clock, Zap } from 'lucide-react'
+import { Check, X, Clock, Zap } from 'lucide-react'
 interface BattleResultLike {
   modelId: string
   modelLabel?: string | null
@@ -52,18 +52,11 @@ interface ModelStatsTableProps {
   className?: string
 }
 
-const getRankIcon = (rank: number) => {
-  switch (rank) {
-    case 1:
-      return <Trophy className="h-4 w-4 text-yellow-500" />
-    case 2:
-      return <Medal className="h-4 w-4 text-muted-foreground" />
-    case 3:
-      return <Award className="h-4 w-4 text-amber-600" />
-    default:
-      return <span className="text-xs text-muted-foreground">#{rank}</span>
-  }
-}
+const getRankIcon = (rank: number) => (
+  <span aria-label={`第 ${rank} 名`} className="shrink-0 text-xs font-semibold tabular-nums text-muted-foreground">
+    {String(rank).padStart(2, '0')}
+  </span>
+)
 
 export function ModelStatsTable({ groupedResults, statsMap, className }: ModelStatsTableProps) {
   // 计算每个模型的详细统计数据

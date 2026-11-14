@@ -1,0 +1,100 @@
+import React from 'react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { SystemLogsPage } from '../pages/SystemLogsPage'
+const api = vi.hoisted(() => ({ logs: vi.fn(), tags: vi.fn() }))
+vi.mock('@/features/system/api', () => ({ getSystemLogs: api.logs, getSystemLogTags: api.tags }))
+vi.mock('@/store/auth-store', () => ({ useAuthStore: (selector: any) => selector({ actorState: 'authenticated', user: { role: 'ADMIN' } }) }))
+const entry = { id: 1, ts: '2026-11-14T08:00:00Z', level: 'info', tag: '超长中文模块/'.repeat(8), msg: 'https://example.com/' + 'very-long-url'.repeat(20), ctx: { request: '真实上下文' } }
+beforeEach(() => { api.logs.mockReset(); api.tags.mockResolvedValue({ data: { tags: [] } }) })
+afterEach(cleanup)
+describe('系统日志恢复与可读性', () => {
+  it('第2页失败后保留第1页，重试和再次下一页均请求第2页', async () => {
+    api.logs.mockResolvedValueOnce({ data: { items: [entry], total: 150, hasMore: true } })
+      .mockRejectedValueOnce(new Error('第2页失败'))
+      .mockRejectedValueOnce(new Error('第2页仍失败'))
+      .mockResolvedValueOnce({ data: { items: [{ ...entry, id: 2, msg: '第二页内容' }], total: 150, hasMore: true } })
+    render(<SystemLogsPage />)
+    await screen.findByText(entry.msg)
+    fireEvent.click(screen.getByRole('button', { name: '下一页' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('第2页失败')
+    expect(screen.getByText(entry.msg)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '上一页' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: '重试加载日志' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('第2页仍失败')
+    expect(api.logs).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }))
+    fireEvent.click(screen.getByRole('button', { name: '下一页' }))
+    await screen.findByText('第二页内容')
+    expect(api.logs.mock.calls.map(call => call[0].page)).toEqual([1, 2, 2, 2])
+  })
+  it('第3页向前加载第2页失败，再次上一页仍以显示的第3页为基准', async () => {
+    const response = (page: number) => ({ data: { items: [{ ...entry, id: page, msg: '页内容' + page }], total: 200, hasMore: true } })
+    api.logs.mockResolvedValueOnce(response(1)).mockResolvedValueOnce(response(2)).mockResolvedValueOnce(response(3))
+      .mockRejectedValueOnce(new Error('前页加载失败')).mockResolvedValueOnce(response(2))
+    render(<SystemLogsPage />)
+    await screen.findByText('页内容1')
+    fireEvent.click(screen.getByRole('button', { name: '下一页' }))
+    await screen.findByText('页内容2')
+    fireEvent.click(screen.getByRole('button', { name: '下一页' }))
+    await screen.findByText('页内容3')
+    fireEvent.click(screen.getByRole('button', { name: '上一页' }))
+    await screen.findByRole('alert')
+    expect(screen.getByText('页内容3')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '上一页' }))
+    await screen.findByText('页内容2')
+    expect(api.logs.mock.calls.map(call => call[0].page)).toEqual([1, 2, 3, 2, 2])
+  })
+  it('筛选分页与错误重试使用手机44px、桌面40px触控尺寸', async () => {
+    api.logs.mockRejectedValueOnce(new Error('加载失败'))
+    render(<SystemLogsPage />)
+    await screen.findByRole('alert')
+    for (const name of ['搜索关键词', '日志级别', '模块标签', '开始日期', '结束日期']) {
+      expect(screen.getByLabelText(name)).toHaveClass('h-11', 'sm:h-10')
+    }
+    for (const name of ['搜索日志', '刷新', '上一页', '下一页', '重试加载日志']) {
+      expect(screen.getByRole('button', { name })).toHaveClass('h-11', 'sm:h-10')
+    }
+    for (const name of ['搜索日志', '上一页', '下一页']) {
+      expect(screen.getByRole('button', { name })).toHaveClass('w-11', 'sm:w-10')
+    }
+  })
+  it('首次失败显示原地重试，而不是空日志', async () => {
+    api.logs.mockRejectedValueOnce(new Error('服务暂不可用')).mockResolvedValueOnce({ data: { items: [entry], total: 1, hasMore: false } })
+    render(<SystemLogsPage />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('服务暂不可用')
+    expect(screen.queryByText('暂无日志记录')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '重试加载日志' }))
+    expect(await screen.findByText(entry.msg)).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+  it('刷新失败保留旧日志并给出可恢复提示', async () => {
+    api.logs.mockResolvedValueOnce({ data: { items: [entry], total: 1, hasMore: false } }).mockRejectedValueOnce(new Error('网络中断'))
+    render(<SystemLogsPage />)
+    await screen.findByText(entry.msg)
+    fireEvent.click(screen.getByRole('button', { name: '刷新' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('保留上次成功加载的日志')
+    expect(screen.getByText(entry.msg)).toBeInTheDocument()
+  })
+  it('上下文由语义按钮展开，无上下文行不伪装为交互', async () => {
+    api.logs.mockResolvedValue({ data: { items: [entry, { ...entry, id: 2, msg: '没有上下文', ctx: null }], total: 2, hasMore: false } })
+    render(<SystemLogsPage />)
+    await screen.findByText(entry.msg)
+    const expand = screen.getByRole('button', { name: '展开日志上下文' })
+    expect(expand).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(expand)
+    const collapse = screen.getByRole('button', { name: '收起日志上下文' })
+    expect(collapse).toHaveAttribute('aria-expanded', 'true')
+    expect(document.getElementById(collapse.getAttribute('aria-controls')!)).toHaveTextContent('真实上下文')
+    expect(screen.getByText('没有上下文').closest('button')).toBeNull()
+    expect(screen.getAllByRole('button', { name: /日志上下文/ })).toHaveLength(1)
+    expect(screen.getByText(entry.msg).className).toContain('[overflow-wrap:anywhere]')
+    expect(screen.getAllByText(entry.tag)[0].className).toContain('[overflow-wrap:anywhere]')
+  })
+  it('关键词输入关联可见标签，分页动作有名称', async () => {
+    api.logs.mockResolvedValue({ data: { items: [], total: 0, hasMore: false } })
+    render(<SystemLogsPage />)
+    expect(screen.getByLabelText('搜索关键词')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '上一页' })).toBeDisabled()
+    await waitFor(() => expect(screen.getByRole('button', { name: '下一页' })).toBeDisabled())
+  })
+})

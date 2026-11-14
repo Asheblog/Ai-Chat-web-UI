@@ -25,7 +25,7 @@ export function ModelSelectorQuickGrid({
   const duplicateNames = collectDuplicateModelNames(quickModels)
 
   return (
-    <div className="border-b border-border px-3 py-2.5">
+    <div className="shrink-0 border-b border-border px-4 py-2.5">
       <div className="mb-2 flex items-center justify-between text-[11px] text-muted-foreground">
         <span className="font-medium">常用</span>
         <span>最近 / 收藏</span>
@@ -42,12 +42,14 @@ export function ModelSelectorQuickGrid({
             <button
               key={key}
               type="button"
+              data-model-select=""
+              aria-pressed={isActive}
               onClick={() => onSelectModel(model)}
               className={cn(
-                "inline-flex max-w-[210px] shrink-0 items-center gap-2 rounded-md border px-3 text-left text-xs transition-colors",
+                "inline-flex max-w-[210px] shrink-0 items-center gap-2 rounded-md border px-3 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal",
                 showDisplayName ? "min-h-9 py-1.5" : "h-9",
                 isActive
-                  ? "border-primary/45 bg-foreground/8 text-signal"
+                  ? "border-signal/25 bg-signal-soft text-signal-text"
                   : "border-border bg-background text-foreground hover:border-primary/35 hover:bg-signal-soft"
               )}
               title={accessibleLabel}

@@ -1,308 +1,86 @@
 "use client"
-import { useEffect, useState, useCallback } from "react"
+
+import { useCallback, useEffect, useRef, useState } from "react"
+import { AlertCircle, ChevronLeft, ChevronRight, ScrollText } from "lucide-react"
 import { useAuthStore } from "@/store/auth-store"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { useToast } from '@/components/ui/use-toast'
-import { getSystemLogs, getSystemLogTags, type SystemLogEntry } from '@/features/system/api'
-import { RefreshCcw, Search, ChevronLeft, ChevronRight } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { getSystemLogs, getSystemLogTags, type SystemLogEntry } from "@/features/system/api"
+import { LogEntries } from "./system-logs/log-entries"
+import { EMPTY_LOG_FILTERS, LogFilters, type LogFiltersValue } from "./system-logs/log-filters"
 
-const levelColors: Record<string, string> = {
-  debug: 'border border-border bg-[hsl(var(--surface-hover))] text-muted-foreground',
-  info: 'border border-signal/30 bg-signal-soft text-signal-text',
-  warn: 'border border-[hsl(var(--warning)/0.35)] bg-[hsl(var(--warning)/0.14)] text-[hsl(var(--warning))]',
-  error: 'border border-destructive/30 bg-destructive/10 text-destructive',
-}
-
-const levelLabels: Record<string, string> = {
-  debug: 'DEBUG',
-  info: 'INFO',
-  warn: 'WARN',
-  error: 'ERROR',
-}
+const PAGE_SIZE = 50
 
 export function SystemLogsPage() {
-  const { toast } = useToast()
-  const { user, actorState } = useAuthStore((state) => ({ user: state.user, actorState: state.actorState }))
-  const isAdmin = actorState === 'authenticated' && user?.role === 'ADMIN'
-
-  const [loading, setLoading] = useState(false)
-  const [items, setItems] = useState<SystemLogEntry[]>([])
-  const [total, setTotal] = useState(0)
-  const [hasMore, setHasMore] = useState(false)
-  const [page, setPage] = useState(1)
-  const [pageSize] = useState(50)
-
-  // 过滤条件
-  const [levelFilter, setLevelFilter] = useState<string>('')
-  const [tagFilter, setTagFilter] = useState<string>('')
-  const [searchFilter, setSearchFilter] = useState<string>('')
-  const [dateFrom, setDateFrom] = useState<string>('')
-  const [dateTo, setDateTo] = useState<string>('')
-  const [availableTags, setAvailableTags] = useState<string[]>([])
-
-  // 展开的日志项
-  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
+  const { user, actorState } = useAuthStore(state => ({ user: state.user, actorState: state.actorState }))
+  const isAdmin = actorState === "authenticated" && user?.role === "ADMIN"
+  const [query, setQuery] = useState({ filters: EMPTY_LOG_FILTERS, page: 1 })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<{ items: SystemLogEntry[]; total: number; hasMore: boolean; page: number } | null>(null)
+  const [tags, setTags] = useState<string[]>([])
+  const requestId = useRef(0)
 
   const fetchLogs = useCallback(async () => {
     if (!isAdmin) return
+    const id = ++requestId.current
     setLoading(true)
+    setError(null)
     try {
-      const params: Record<string, any> = { page, pageSize }
-      if (levelFilter) params.level = levelFilter
-      if (tagFilter) params.tag = tagFilter
-      if (searchFilter) params.search = searchFilter
-      if (dateFrom) params.dateFrom = dateFrom
-      if (dateTo) params.dateTo = dateTo
-
-      const res = await getSystemLogs(params)
-      setItems(res.data?.items ?? [])
-      setTotal(res.data?.total ?? 0)
-      setHasMore(res.data?.hasMore ?? false)
-    } catch (error: any) {
-      toast({ title: '获取日志失败', description: error?.message || '未知错误', variant: 'destructive' })
+      const { filters, page } = query
+      const response = await getSystemLogs({ page, pageSize: PAGE_SIZE, level: filters.level || undefined,
+        tag: filters.tag || undefined, search: filters.search || undefined,
+        dateFrom: filters.dateFrom || undefined, dateTo: filters.dateTo || undefined })
+      if (id !== requestId.current) return
+      if (!response.data || response.success === false) throw new Error(response.error || "日志响应为空，请重试。")
+      setResult({ items: response.data?.items ?? [], total: response.data?.total ?? 0, hasMore: response.data?.hasMore ?? false, page })
+    } catch (cause) {
+      if (id === requestId.current) setError(cause instanceof Error ? cause.message : "日志服务暂不可用，请重试。")
     } finally {
-      setLoading(false)
+      if (id === requestId.current) setLoading(false)
     }
-  }, [isAdmin, page, pageSize, levelFilter, tagFilter, searchFilter, dateFrom, dateTo, toast])
+  }, [isAdmin, query])
 
   const fetchTags = useCallback(async () => {
     if (!isAdmin) return
-    try {
-      const res = await getSystemLogTags()
-      setAvailableTags(res.data?.tags ?? [])
-    } catch {
-      // 忽略
-    }
+    try { const response = await getSystemLogTags(); setTags(response.data?.tags ?? []) } catch { /* 标签建议失败不影响日志与已有筛选。 */ }
   }, [isAdmin])
 
-  useEffect(() => {
-    fetchLogs()
-  }, [fetchLogs])
+  useEffect(() => { void fetchLogs(); return () => { requestId.current += 1 } }, [fetchLogs])
+  useEffect(() => { void fetchTags() }, [fetchTags])
 
-  useEffect(() => {
-    fetchTags()
-  }, [fetchTags])
+  if (!isAdmin) return <div className="rounded-lg border border-border bg-surface-subtle p-6 text-center text-sm text-ink-secondary">只有管理员可以查看系统日志</div>
 
-  const handleSearch = () => {
-    setPage(1)
-    fetchLogs()
-  }
-
-  const handleRefresh = () => {
-    fetchLogs()
-    fetchTags()
-  }
-
-  const toggleExpand = (id: number) => {
-    setExpandedIds(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
-  }
-
-  const formatTime = (ts: string) => {
-    try {
-      const date = new Date(ts)
-      return date.toLocaleString('zh-CN', {
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      })
-    } catch {
-      return ts
-    }
-  }
-
-  if (!isAdmin) {
-    return (
-      <div className="rounded-lg border border-border bg-surface/90 p-6 text-center text-muted-foreground">
-        只有管理员可以查看系统日志
-      </div>
-    )
-  }
-
-  const totalPages = Math.ceil(total / pageSize)
+  const items = result?.items ?? []
+  const page = result?.page ?? query.page
+  const total = result?.total ?? 0
+  const changeFilters = (filters: LogFiltersValue) => setQuery({ filters, page: 1 })
+  const range = items.length ? " · 显示 " + ((page - 1) * PAGE_SIZE + 1) + "–" + ((page - 1) * PAGE_SIZE + items.length) : ""
 
   return (
-    <div className="space-y-4">
-      {/* 过滤条件 */}
-      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-surface p-4">
-        <div className="flex-1 min-w-[200px]">
-          <label className="text-xs text-muted-foreground mb-1 block">搜索关键词</label>
-          <div className="flex gap-2">
-            <Input
-              placeholder="搜索消息内容..."
-              value={searchFilter}
-              onChange={(e) => setSearchFilter(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              className="flex-1"
-            />
-            <Button variant="outline" size="icon" onClick={handleSearch}>
-              <Search className="h-4 w-4" />
-            </Button>
-          </div>
+    <div className="min-w-0 space-y-4">
+      <LogFilters filters={query.filters} onChange={changeFilters} tags={tags} loading={loading} onRefresh={() => { void fetchLogs(); void fetchTags() }} />
+      {error ? (
+        <div role="alert" className="flex min-w-0 flex-wrap items-start gap-3 rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-sm">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+          <div className="min-w-0 flex-1 [overflow-wrap:anywhere]"><p className="font-medium text-destructive">日志加载失败</p><p className="mt-1 text-ink-secondary">{error}</p>{result ? <p className="mt-1 text-xs text-ink-tertiary">保留上次成功加载的日志，当前筛选结果尚未更新。</p> : null}</div>
+          <Button type="button" variant="outline" className="h-11 sm:h-10" aria-label="重试加载日志" onClick={() => void fetchLogs()}>重试</Button>
         </div>
-
-        <div className="w-[140px]">
-          <label className="text-xs text-muted-foreground mb-1 block">日志级别</label>
-          <Select value={levelFilter} onValueChange={(v) => { setLevelFilter(v === 'all' ? '' : v); setPage(1) }}>
-            <SelectTrigger>
-              <SelectValue placeholder="全部级别" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部级别</SelectItem>
-              <SelectItem value="debug">DEBUG</SelectItem>
-              <SelectItem value="info">INFO</SelectItem>
-              <SelectItem value="warn">WARN</SelectItem>
-              <SelectItem value="error">ERROR</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="w-[160px]">
-          <label className="text-xs text-muted-foreground mb-1 block">模块标签</label>
-          <Select value={tagFilter} onValueChange={(v) => { setTagFilter(v === 'all' ? '' : v); setPage(1) }}>
-            <SelectTrigger>
-              <SelectValue placeholder="全部模块" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部模块</SelectItem>
-              {availableTags.map(tag => (
-                <SelectItem key={tag} value={tag}>{tag}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="w-[130px]">
-          <label className="text-xs text-muted-foreground mb-1 block">开始日期</label>
-          <Input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
-          />
-        </div>
-
-        <div className="w-[130px]">
-          <label className="text-xs text-muted-foreground mb-1 block">结束日期</label>
-          <Input
-            type="date"
-            value={dateTo}
-            onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
-          />
-        </div>
-
-        <Button variant="outline" onClick={handleRefresh} disabled={loading}>
-          <RefreshCcw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
-          刷新
-        </Button>
+      ) : null}
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-ink-tertiary">
+        <p role="status" aria-live="polite">{loading ? "正在加载日志…" : result ? "共 " + total + " 条日志" + range : "尚未加载日志"}</p>
+        <nav aria-label="日志分页" className="flex items-center gap-2">
+          <Button type="button" variant="outline" size="icon" className="h-11 w-11 sm:h-10 sm:w-10" aria-label="上一页" disabled={page <= 1 || loading} onClick={() => setQuery(current => ({ ...current, page: Math.max(1, page - 1) }))}><ChevronLeft className="h-4 w-4" aria-hidden="true" /></Button>
+          <span className="tabular-nums">{page} / {Math.max(1, Math.ceil(total / PAGE_SIZE))}</span>
+          <Button type="button" variant="outline" size="icon" className="h-11 w-11 sm:h-10 sm:w-10" aria-label="下一页" disabled={!result?.hasMore || loading} onClick={() => setQuery(current => ({ ...current, page: page + 1 }))}><ChevronRight className="h-4 w-4" aria-hidden="true" /></Button>
+        </nav>
       </div>
-
-      {/* 统计信息 */}
-      <div className="flex items-center justify-between rounded-xl border border-border bg-[hsl(var(--surface))/0.55] px-4 py-2 text-sm text-muted-foreground">
-        <span>
-          共 {total} 条日志
-          {items.length > 0 && ` (显示 ${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, total)})`}
-        </span>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1 || loading}
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="text-xs">
-            {page} / {totalPages || 1}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!hasMore || loading}
-            onClick={() => setPage(p => p + 1)}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+      {items.length ? <LogEntries items={items} /> : !error ? (
+        <div className="flex min-h-44 flex-col items-center justify-center gap-2 rounded-lg border border-border bg-surface-subtle px-5 py-8 text-center">
+          <ScrollText className="mb-1 h-6 w-6 text-ink-tertiary" aria-hidden="true" />
+          <p className="text-sm font-medium text-foreground">{loading ? "加载中…" : "暂无日志记录"}</p>
+          {!loading ? <p className="text-xs text-ink-tertiary">试着调整关键词、日志级别或日期范围。</p> : null}
         </div>
-      </div>
-
-      {/* 日志列表 */}
-      <div className="overflow-hidden rounded-lg border border-border bg-surface">
-        {loading && items.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground">
-            加载中...
-          </div>
-        ) : items.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground">
-            暂无日志记录
-          </div>
-        ) : (
-          <div className="divide-y divide-border/70">
-            {items.map((item) => (
-              <div
-                key={item.id}
-                className={cn(
-                  "cursor-pointer px-4 py-2 transition-colors hover:bg-[hsl(var(--surface-hover))/0.7]",
-                  expandedIds.has(item.id) && "bg-[hsl(var(--surface-hover))/0.5]"
-                )}
-                onClick={() => toggleExpand(item.id)}
-              >
-                <div className="flex items-start gap-3">
-                  {/* 时间 */}
-                  <span className="text-xs text-muted-foreground font-mono whitespace-nowrap">
-                    {formatTime(item.ts)}
-                  </span>
-
-                  {/* 级别 */}
-                  <Badge
-                    variant="secondary"
-                    className={cn("text-xs font-mono px-1.5 py-0", levelColors[item.level])}
-                  >
-                    {levelLabels[item.level] || item.level.toUpperCase()}
-                  </Badge>
-
-                  {/* 标签 */}
-                  {item.tag && (
-                    <Badge variant="outline" className="text-xs font-mono">
-                      {item.tag}
-                    </Badge>
-                  )}
-
-                  {/* 消息 */}
-                  <span className={cn(
-                    "flex-1 text-sm",
-                    item.level === 'error' && "text-destructive",
-                    item.level === 'warn' && "text-[hsl(var(--warning))]"
-                  )}>
-                    {item.msg}
-                  </span>
-                </div>
-
-                {/* 展开的上下文 */}
-                {expandedIds.has(item.id) && item.ctx && (
-                  <div className="mt-2 ml-20 overflow-x-auto rounded-lg border border-border bg-[hsl(var(--surface-hover))/0.6] p-2 text-xs font-mono">
-                    <pre className="whitespace-pre-wrap break-all">
-                      {JSON.stringify(item.ctx, null, 2)}
-                    </pre>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      ) : null}
     </div>
   )
 }

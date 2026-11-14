@@ -2,12 +2,11 @@
 
 import type { ClipboardEventHandler, KeyboardEventHandler, MutableRefObject } from 'react'
 import { useState } from 'react'
-import { Maximize2, Plus, Send, Square } from 'lucide-react'
+import { Maximize2, Plus } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import type { WorkspaceFile } from '@/features/chat/composer'
 import { Textarea } from '@/components/ui/textarea'
 import { DropdownMenu, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { ComposerAttachmentList } from './composer-attachment-list'
 import { AttachmentUploadButton } from './attachment-upload-button'
 import { PlusMenuContent } from '@/components/plus-menu-content'
@@ -15,6 +14,7 @@ import type { ComposerSkillOption } from './composer-types'
 import type { McpConnectionOption, McpToolView } from '@/hooks/use-mcp-session-bindings'
 import { SkillPanelSheet } from './skill-panel-sheet'
 import { cn } from '@/lib/utils'
+import { ComposerModelActions, type ComposerModelControlProps } from './composer-model-actions'
 import { COMPOSER_TEXTAREA_BASE_CLASS } from './composer-shell-styles'
 import { ComposerShell } from './composer-shell'
 import {
@@ -23,10 +23,9 @@ import {
   composerToolbarButtonClass,
   composerToolbarIconClass,
   composerToolbarScrollClass,
-  composerToolbarSendSlotClass,
 } from './composer-toolbar-primitives'
 
-interface DesktopComposerProps {
+interface DesktopComposerProps extends ComposerModelControlProps {
   input: string
   textareaRef: MutableRefObject<HTMLTextAreaElement | null>
   onInputChange: (value: string) => void
@@ -92,6 +91,8 @@ interface DesktopComposerProps {
 
 export function DesktopComposer({
   input,
+  selectedModelId,
+  onModelChange,
   textareaRef,
   onInputChange,
   onKeyDown,
@@ -160,8 +161,8 @@ export function DesktopComposer({
   }
 
   return (
-    <div className="hidden md:block">
-      <div className="mx-auto w-full max-w-[min(var(--chat-max-width),calc(100vw-20rem))] px-4 pb-5 pt-3 sm:px-5 md:px-6">
+    <div className="hidden px-4 pb-5 pt-3 md:block md:px-6">
+      <div className="mx-auto w-full max-w-[760px]">
         <ComposerAttachmentList
           images={selectedImages}
           onRemoveImage={onRemoveImage}
@@ -200,7 +201,7 @@ export function DesktopComposer({
             </ComposerIconButton>
           )}
 
-          <div className="mt-2 flex items-center justify-between gap-2">
+          <div className="mt-3 grid min-w-0 grid-cols-1 items-center gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:gap-2">
             <div className={cn(composerToolbarScrollClass, 'min-w-0 flex-1')}>
               <DropdownMenu open={plusOpen} onOpenChange={setPlusOpen}>
                 <DropdownMenuTrigger asChild>
@@ -264,28 +265,12 @@ export function DesktopComposer({
               />
             </div>
 
-            <div className={composerToolbarSendSlotClass}>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={isStreaming ? onStop : onSend}
-                      disabled={isStreaming ? false : desktopSendDisabled}
-                      aria-label={isStreaming ? '停止生成' : '发送'}
-                      className={`inline-flex h-10 w-10 items-center justify-center rounded-lg  transition-colors disabled:shadow-none disabled:opacity-45 ${
-                        isStreaming
-                          ? 'bg-destructive text-destructive-foreground hover:opacity-90'
-                          : 'bg-foreground text-background hover:bg-[hsl(var(--foreground)/0.9)]'
-                      }`}
-                    >
-                      {isStreaming ? <Square className="h-[18px] w-[18px]" /> : <Send className="h-[18px] w-[18px]" />}
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>{sendTooltip}</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
+            <ComposerModelActions
+              selectedModelId={selectedModelId} onModelChange={onModelChange}
+              modelDisabled={isStreaming} isStreaming={isStreaming}
+              disabled={desktopSendDisabled} onSend={onSend} onStop={onStop}
+              stopLabel="停止生成" sendTitle={sendTooltip}
+            />
           </div>
         </ComposerShell>
 

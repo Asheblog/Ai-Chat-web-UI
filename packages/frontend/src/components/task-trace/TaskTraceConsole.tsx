@@ -298,17 +298,17 @@ export function TaskTraceConsole() {
         }}
       />
 
-      <div className="rounded-lg border bg-surface transition-all hover:">
-        <div className="flex items-center justify-between border-b px-5 py-4">
+      <div className="rounded-lg border border-border bg-surface">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-4 sm:px-5">
           <div>
             <div className="text-sm font-semibold">追踪记录</div>
             <div className="text-xs text-muted-foreground">共 {total} 条</div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={fetchList} disabled={loading}>
+            <Button variant="ghost" size="icon" className="h-11 w-11 sm:h-8 sm:w-8" aria-label="刷新追踪记录" onClick={fetchList} disabled={loading}>
               <RefreshCcw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </Button>
-            <Button variant="destructive" size="sm" disabled={loading || clearingAll} onClick={requestDeleteAll}>
+            <Button variant="destructive" size="sm" className="h-11 sm:h-8" disabled={loading || clearingAll} onClick={requestDeleteAll}>
               <Trash2 className="mr-1 h-4 w-4" />
               {clearingAll ? '清空中' : '清空全部'}
             </Button>

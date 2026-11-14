@@ -18,6 +18,7 @@ interface SettingRowProps {
   align?: "start" | "center"
   descriptionWidthClassName?: string
   controlWidthClassName?: string
+  htmlFor?: string
 }
 
 /**
@@ -32,6 +33,7 @@ export function SettingRow({
   align = "center",
   descriptionWidthClassName,
   controlWidthClassName,
+  htmlFor,
 }: SettingRowProps) {
   return (
     <div
@@ -42,7 +44,7 @@ export function SettingRow({
       )}
     >
       <div className={cn(SETTINGS_FIELD_LABEL, descriptionWidthClassName)}>
-        <div className={SETTINGS_FIELD_TITLE}>{title}</div>
+        {htmlFor ? <label htmlFor={htmlFor} className={cn("block", SETTINGS_FIELD_TITLE)}>{title}</label> : <div className={SETTINGS_FIELD_TITLE}>{title}</div>}
         {description ? <p className={SETTINGS_FIELD_HINT}>{description}</p> : null}
       </div>
       <div className={cn(SETTINGS_FIELD_CONTROL, controlWidthClassName)}>{children}</div>

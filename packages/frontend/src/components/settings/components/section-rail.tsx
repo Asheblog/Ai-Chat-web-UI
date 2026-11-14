@@ -1,5 +1,6 @@
 "use client"
 
+import { useRef } from "react"
 import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -23,7 +24,7 @@ export type SectionRailProps<K extends string = string> = {
 const desktopItemBase =
   "flex h-8 w-full items-center gap-2 rounded-lg border px-2 text-left text-[13px] transition-colors duration-[160ms]"
 const mobileItemBase =
-  "inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-[13px] font-medium transition-colors duration-[160ms]"
+  "inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-[13px] font-medium transition-colors duration-[160ms]"
 
 /**
  * 分段导航：桌面左侧竖排段列表，移动端折成一行可横向滚动的分段按钮。
@@ -38,6 +39,7 @@ export function SectionRail<K extends string>({
   ariaLabel,
   panelId,
 }: SectionRailProps<K>): JSX.Element {
+  const mobileRefs = useRef<Array<HTMLButtonElement | null>>([])
   return (
     <>
       {/* 桌面：左侧竖排段导航 */}
@@ -69,8 +71,8 @@ export function SectionRail<K extends string>({
       </nav>
 
       {/* 移动端：横向滚动的分段按钮，文案用 shortLabel */}
-      <div className="flex md:hidden overflow-x-auto gap-1 p-1 -mx-1" role="tablist" aria-label={ariaLabel}>
-        {items.map((item) => {
+      <div className="flex max-w-full md:hidden overflow-x-auto gap-1 p-1 -mx-1" role="tablist" aria-label={ariaLabel}>
+        {items.map((item, index) => {
           const Icon = item.icon
           const isActive = item.key === active
           return (
@@ -78,6 +80,12 @@ export function SectionRail<K extends string>({
               key={item.key}
               type="button"
               role="tab"
+              ref={element => { mobileRefs.current[index] = element }}
+              tabIndex={isActive ? 0 : -1}
+              onKeyDown={event => {
+                const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : event.key === "ArrowRight" ? (index + 1) % items.length : event.key === "ArrowLeft" ? (index + items.length - 1) % items.length : null
+                if (next !== null) { event.preventDefault(); onChange(items[next].key); mobileRefs.current[next]?.focus() }
+              }}
               aria-selected={isActive}
               aria-controls={panelId}
               onClick={() => onChange(item.key)}

@@ -325,7 +325,7 @@ export function Sidebar() {
             variant="ghost"
             size="icon"
             aria-label="收起侧边栏"
-            className="group/sidebar-toggle hidden h-7 w-7 rounded-[8px] text-ink-tertiary hover:bg-surface-hover hover:text-foreground lg:inline-flex"
+            className="group/sidebar-toggle hidden h-8 w-8 rounded-[8px] text-ink-tertiary hover:bg-surface-hover hover:text-foreground lg:inline-flex"
             onClick={() => setSidebarCollapsed(true)}
           >
             <SidebarCollapseIcon className="h-5 w-5" />
@@ -337,7 +337,7 @@ export function Sidebar() {
       <div className="space-y-1.5 px-3 pb-3">
         <Button
           onClick={handleNewChat}
-          className="h-9 w-full justify-center gap-2 rounded-md bg-foreground text-[13px] font-medium text-background hover:bg-[hsl(var(--foreground)/0.9)]"
+          className="h-11 w-full justify-start gap-2 rounded-md bg-foreground sm:h-9 text-[13px] font-medium text-background hover:bg-[hsl(var(--foreground)/0.9)]"
           disabled={isCreating || quotaExhausted}
           aria-busy={isCreating}
         >
@@ -348,25 +348,6 @@ export function Sidebar() {
             <Plus className="h-4 w-4" />
           )}
           新建聊天
-        </Button>
-        <Button
-          onClick={() => {
-            router.push('/main/battle')
-            setIsMobileMenuOpen(false)
-          }}
-          className="h-8 w-full justify-center gap-2 rounded-md border border-border bg-surface text-[12.5px] text-foreground hover:bg-surface-subtle"
-          variant="outline"
-        >
-          <Trophy className="mr-2 h-4 w-4" />
-          模型对战
-        </Button>
-        <Button
-          onClick={openSettings}
-          className="h-8 w-full justify-center gap-2 rounded-md border border-border bg-surface text-[12.5px] text-foreground hover:bg-surface-subtle"
-          variant="outline"
-        >
-          <Settings className="mr-2 h-4 w-4" />
-          设置
         </Button>
       </div>
       {quotaExhausted && (
@@ -400,7 +381,7 @@ export function Sidebar() {
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-9 w-9 shrink-0 rounded-[8px] text-ink-tertiary hover:bg-destructive/10 hover:text-destructive"
+                    className="h-11 w-11 shrink-0 rounded-[8px] text-ink-tertiary hover:bg-destructive/10 hover:text-destructive sm:h-8 sm:w-8"
                     aria-label="清空聊天记录"
                     onClick={() => {
                       setIncludePinned(false)
@@ -495,7 +476,7 @@ export function Sidebar() {
                           <Button
                             size="icon-xs"
                             variant="ghost"
-                            className="text-ink-tertiary opacity-70 transition hover:bg-surface-hover hover:text-foreground sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
+                            className="text-ink-tertiary opacity-70 transition hover:bg-surface-hover hover:text-foreground h-11 w-11 shrink-0 sm:h-8 sm:w-8 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
                             onClick={(e) => {
                               e.stopPropagation()
                               toggleSessionPin(session.id, !session.pinnedAt)
@@ -519,7 +500,7 @@ export function Sidebar() {
                           <Button
                             size="icon-xs"
                             variant="ghost"
-                            className="text-ink-tertiary opacity-70 transition hover:bg-destructive/10 hover:text-destructive sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-100"
+                            className="text-ink-tertiary opacity-70 transition hover:bg-destructive/10 hover:text-destructive h-11 w-11 shrink-0 sm:h-8 sm:w-8 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
                             onClick={(e) => requestDeleteSession(session.id, e)}
                             aria-label="删除会话"
                           >
@@ -537,13 +518,17 @@ export function Sidebar() {
         </div>
       </ScrollArea>
 
-      <div className="border-t border-border bg-canvas px-3 pb-4 pt-3">
+      <div className="border-t border-border bg-canvas px-3 pb-3 pt-2">
+        <nav aria-label="主导航" className="mb-2 space-y-0.5">
+          <Button variant="ghost" className="h-11 w-full justify-start gap-2 px-2.5 text-[13px] font-normal text-muted-foreground hover:text-foreground sm:h-8" onClick={() => { router.push('/main/battle'); setIsMobileMenuOpen(false) }}><Trophy aria-hidden="true" className="h-4 w-4" />模型对战</Button>
+          <Button variant="ghost" className="h-11 w-full justify-start gap-2 px-2.5 text-[13px] font-normal text-muted-foreground hover:text-foreground sm:h-8" onClick={openSettings}><Settings aria-hidden="true" className="h-4 w-4" />设置</Button>
+        </nav>
         <Link
           href={PROJECT_URL}
           target="_blank"
           rel="noreferrer"
           aria-label={`${PROJECT_NAME} 项目地址`}
-          className="group flex items-center justify-between gap-3 rounded-[10px] border border-border bg-surface-subtle px-3 py-2.5 transition-colors hover:border-borderStrong hover:bg-surface-hover"
+          className="group flex min-h-11 items-center justify-between gap-3 rounded-md px-2.5 py-2 text-muted-foreground transition-colors hover:bg-surface-hover sm:min-h-8"
         >
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-foreground">{PROJECT_NAME}</p>
@@ -601,6 +586,10 @@ export function Sidebar() {
           </Tooltip>
         </TooltipProvider>
 
+      </div>
+
+      {/* 底部：次级导航与项目链接 */}
+      <div className="flex flex-col items-center gap-1.5">
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -634,10 +623,7 @@ export function Sidebar() {
             <TooltipContent side="right">系统设置</TooltipContent>
           </Tooltip>
         </TooltipProvider>
-      </div>
 
-      {/* 底部：GitHub链接 */}
-      <div className="flex flex-col items-center">
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>

@@ -33,12 +33,13 @@ export const TaskTraceFilters: FC<Props> = ({
   onReset,
 }) => (
   <Card className="px-5 py-5">
-    <div className="flex flex-col gap-3 md:flex-row md:items-end">
+    <form role="search" onSubmit={(event) => { event.preventDefault(); onSearch() }} className="flex flex-col gap-3 md:flex-row md:items-end">
       <div className="flex-1 space-y-1">
         <label className="text-sm text-muted-foreground" htmlFor="sessionFilter">
           会话 ID
         </label>
         <Input
+          className="h-11 sm:h-9"
           id="sessionFilter"
           value={sessionFilter}
           onChange={(e) => onSessionFilterChange(e.target.value)}
@@ -50,6 +51,7 @@ export const TaskTraceFilters: FC<Props> = ({
           关键字
         </label>
         <Input
+          className="h-11 sm:h-9"
           id="keyword"
           value={keyword}
           onChange={(e) => onKeywordChange(e.target.value)}
@@ -62,7 +64,7 @@ export const TaskTraceFilters: FC<Props> = ({
           value={status || undefined}
           onValueChange={(value) => onStatusChange(value === '__all' ? '' : value)}
         >
-          <SelectTrigger>
+          <SelectTrigger aria-label="状态" className="h-11 sm:h-9">
             <SelectValue placeholder="全部" />
           </SelectTrigger>
           <SelectContent>
@@ -75,14 +77,14 @@ export const TaskTraceFilters: FC<Props> = ({
         </Select>
       </div>
       <div className="flex gap-2">
-        <Button className="flex items-center gap-2" onClick={onSearch}>
+        <Button type="submit" className="flex h-11 items-center gap-2 sm:h-9">
           <Search className="h-4 w-4" />
           搜索
         </Button>
-        <Button variant="outline" onClick={onReset}>
+        <Button type="button" variant="outline" className="h-11 sm:h-9" onClick={onReset}>
           重置
         </Button>
       </div>
-    </div>
+    </form>
   </Card>
 )

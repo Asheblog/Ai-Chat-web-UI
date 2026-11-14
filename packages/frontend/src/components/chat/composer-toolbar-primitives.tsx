@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 export const composerInnerEditorClass =
   'composer-inner-editor relative overflow-hidden rounded-[var(--radius-composer)] border border-borderStrong bg-surface transition-colors duration-[160ms] focus-within:border-signal'
 
-/** Named container + scroll fallback; sizes come from `.composer-toolbar*` in globals.css */
+/** Scroll tools independently; target sizes come from `.composer-toolbar*` in globals.css. */
 export const composerToolbarScrollClass =
   'composer-toolbar flex min-w-0 max-w-full flex-nowrap items-center overflow-x-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
 

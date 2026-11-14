@@ -2,10 +2,9 @@
 
 import type { ClipboardEventHandler, KeyboardEventHandler, MutableRefObject } from 'react'
 import { useState } from 'react'
-import { Plus, Send, Square } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import type { WorkspaceFile } from '@/features/chat/composer'
-import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -16,6 +15,7 @@ import type { ComposerSkillOption } from './composer-types'
 import type { McpConnectionOption, McpToolView } from '@/hooks/use-mcp-session-bindings'
 import { SkillPanelSheet } from './skill-panel-sheet'
 import { cn } from '@/lib/utils'
+import { ComposerModelActions, type ComposerModelControlProps } from './composer-model-actions'
 import { COMPOSER_TEXTAREA_BASE_CLASS } from './composer-shell-styles'
 import {
   ComposerFeatureControls,
@@ -24,10 +24,9 @@ import {
   composerToolbarButtonClass,
   composerToolbarIconClass,
   composerToolbarScrollClass,
-  composerToolbarSendSlotClass,
 } from './composer-toolbar-primitives'
 
-interface MobileComposerProps {
+interface MobileComposerProps extends ComposerModelControlProps {
   input: string
   textareaRef: MutableRefObject<HTMLTextAreaElement | null>
   onInputChange: (value: string) => void
@@ -90,6 +89,8 @@ interface MobileComposerProps {
 
 export function MobileComposer({
   input,
+  selectedModelId,
+  onModelChange,
   textareaRef,
   onInputChange,
   onKeyDown,
@@ -163,7 +164,7 @@ export function MobileComposer({
   }
 
   return (
-    <div className="px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-2 md:hidden">
+    <div className="min-w-0 px-4 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-2 md:hidden">
       <ComposerAttachmentList
         images={selectedImages}
         onRemoveImage={onRemoveImage}
@@ -171,7 +172,7 @@ export function MobileComposer({
         onRemoveWorkspaceFile={onRemoveWorkspaceFile}
         className="mb-2"
       />
-      <div className={composerInnerEditorClass}>
+      <div className={cn(composerInnerEditorClass, 'p-3.5')}>
         <Textarea
           ref={textareaRef}
           placeholder={placeholder}
@@ -182,13 +183,12 @@ export function MobileComposer({
           onPaste={onPaste}
           onCompositionStart={onCompositionStart}
           onCompositionEnd={onCompositionEnd}
-          className={cn(COMPOSER_TEXTAREA_BASE_CLASS, 'min-h-[64px] max-h-[220px] w-full px-3 py-3 text-sm')}
+          className={cn(COMPOSER_TEXTAREA_BASE_CLASS, 'min-h-[64px] max-h-[220px] w-full px-0 py-0 text-sm')}
           rows={1}
           disabled={isStreaming}
         />
-      </div>
 
-      <div className="mt-2 flex items-center justify-between gap-2">
+      <div className="mt-3 grid min-w-0 grid-cols-1 items-center gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:gap-2">
         <div className={cn(composerToolbarScrollClass, 'flex-1')}>
           <Popover open={plusOpen} onOpenChange={setPlusOpen}>
             <PopoverTrigger asChild>
@@ -251,26 +251,13 @@ export function MobileComposer({
           />
         </div>
 
-        <div className={composerToolbarSendSlotClass}>
-          <Button
-            type="button"
-            className={`h-9 w-9 rounded-lg p-0 ${
-              isStreaming ? 'bg-destructive text-destructive-foreground' : 'bg-foreground text-background'
-            }`}
-            onClick={() => {
-              if (isStreaming) {
-                onStop()
-              } else {
-                onSend()
-              }
-            }}
-            disabled={isStreaming ? false : disabled}
-            title={!isStreaming && sendLocked && sendLockedReason ? sendLockedReason : undefined}
-            aria-label={isStreaming ? '停止' : '发送'}
-          >
-            {isStreaming ? <Square className="h-[18px] w-[18px]" /> : <Send className="h-[18px] w-[18px]" />}
-          </Button>
-        </div>
+        <ComposerModelActions
+          selectedModelId={selectedModelId} onModelChange={onModelChange}
+          modelDisabled={isStreaming} isStreaming={isStreaming}
+          disabled={disabled} onSend={onSend} onStop={onStop}
+          sendTitle={!isStreaming && sendLocked ? sendLockedReason ?? undefined : undefined}
+        />
+      </div>
       </div>
 
       <SkillPanelSheet

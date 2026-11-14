@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { useId, useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/use-toast"
@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 
 export function PersonalSecurityPage() {
   const { toast } = useToast()
+  const id = useId()
   const [open, setOpen] = useState(false)
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
@@ -48,6 +49,7 @@ export function PersonalSecurityPage() {
       <button
         type="button"
         aria-expanded={open}
+        aria-controls={id + "-panel"}
         onClick={() => setOpen((value) => !value)}
         className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-surface-hover sm:px-6"
       >
@@ -57,7 +59,7 @@ export function PersonalSecurityPage() {
           </span>
           <span className="min-w-0">
             <span className="block text-sm font-semibold text-foreground">安全设置（密码与登录）</span>
-            <span className="mt-0.5 block text-xs text-muted-foreground">修改密码、管理登录设备等</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">更新当前账号的登录密码</span>
           </span>
         </span>
         <ChevronDown
@@ -69,7 +71,7 @@ export function PersonalSecurityPage() {
       </button>
 
       {open ? (
-        <div className="border-t border-border px-5 py-5 sm:px-6">
+        <div id={id + "-panel"} className="border-t border-border px-5 py-5 sm:px-6">
           <div className="mb-4">
             <h2 className="v2-section-title">修改密码</h2>
             <p className="v2-muted-line mt-1">提交后立即更新账号密码，请使用包含字母与数字的新密码。</p>
@@ -78,57 +80,66 @@ export function PersonalSecurityPage() {
           <form onSubmit={onSubmit} className="space-y-3">
             <SettingRow
               title="当前密码"
+              htmlFor={id + "-currentPassword"}
               description="用于验证当前身份，请输入正在使用的密码"
               align="start"
             >
               <Input
-                id="currentPassword"
+                id={id + "-currentPassword"}
+                autoComplete="current-password"
+                aria-describedby={error ? id + "-error" : undefined}
                 type="password"
                 value={currentPassword}
                 onChange={(e)=>setCurrentPassword(e.target.value)}
                 required
                 disabled={submitting}
                 placeholder="请输入当前密码"
-                className="w-full sm:w-[320px]"
+                className="h-11 w-full min-w-0 text-base sm:h-10 sm:max-w-[320px] sm:text-sm"
               />
             </SettingRow>
 
             <SettingRow
               title="新密码"
+              htmlFor={id + "-newPassword"}
               description="至少 8 位，并包含字母与数字"
               align="start"
             >
               <Input
-                id="newPassword"
+                id={id + "-newPassword"}
+                autoComplete="new-password"
+                aria-describedby={error ? id + "-error" : undefined}
                 type="password"
                 value={newPassword}
                 onChange={(e)=>setNewPassword(e.target.value)}
                 required
                 disabled={submitting}
                 placeholder="至少8位，且包含字母与数字"
-                className="w-full sm:w-[320px]"
+                className="h-11 w-full min-w-0 text-base sm:h-10 sm:max-w-[320px] sm:text-sm"
               />
             </SettingRow>
 
             <SettingRow
               title="确认新密码"
+              htmlFor={id + "-confirmPassword"}
               description="再次输入，确保没有输入错误"
               align="start"
             >
               <Input
-                id="confirmPassword"
+                id={id + "-confirmPassword"}
+                autoComplete="new-password"
+                aria-describedby={error ? id + "-error" : undefined}
                 type="password"
                 value={confirmPassword}
                 onChange={(e)=>setConfirmPassword(e.target.value)}
                 required
                 disabled={submitting}
                 placeholder="再次输入新密码"
-                className="w-full sm:w-[320px]"
+                className="h-11 w-full min-w-0 text-base sm:h-10 sm:max-w-[320px] sm:text-sm"
               />
             </SettingRow>
 
             {error && (
-              <div className="flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              <div id={id + "-error"} role="alert" className="flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 {error}
               </div>
@@ -138,7 +149,7 @@ export function PersonalSecurityPage() {
               title="保存更改"
               description="提交后立即更新您的账号密码"
             >
-              <Button type="submit" disabled={submitting} className="w-full justify-center sm:w-[200px]">
+              <Button type="submit" disabled={submitting} className="h-11 w-full justify-center sm:h-9 sm:w-[200px]">
                 {submitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -7,7 +7,8 @@ import { CotTimeline } from '@/components/message-bubble/cot-timeline'
 import { RichMessageRenderer } from '@/components/message-content/rich-message-renderer'
 import { cn, formatDate } from '@/lib/utils'
 import { mergeAndSortToolEvents } from '@aichat/shared/tool-events'
-import { User, Bot, Copy, Loader2 } from 'lucide-react'
+import { User, Bot } from 'lucide-react'
+import { SharePageHeader, SharePageFooter, SHARE_CONTAINER_CLASS } from './share-page-chrome'
 
 interface ShareViewerProps {
   share: ChatShare
@@ -20,25 +21,6 @@ interface ShareViewerProps {
     totalPages: number
   }
   brandText?: string
-}
-
-const SHARE_CONTAINER_CLASS = 'mx-auto w-full max-w-[var(--chat-max-width)] px-3 sm:px-5'
-
-/** 格式化相对时间 */
-function formatRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMs / 3600000)
-  const diffDays = Math.floor(diffMs / 86400000)
-
-  if (diffMins < 1) return '刚刚'
-  if (diffMins < 60) return `${diffMins} 分钟前`
-  if (diffHours < 24) return `${diffHours} 小时前`
-  if (diffDays < 7) return `${diffDays} 天前`
-
-  return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
 }
 
 function mergeRichPayloadText(
@@ -111,13 +93,13 @@ function ShareMessageItem({
           'flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
           isUser
             ? 'bg-[hsl(var(--surface-hover))] text-muted-foreground'
-            : 'bg-[linear-gradient(135deg,hsl(var(--primary)),hsl(var(--accent-color)))] text-background'
+            : 'bg-foreground text-background'
         )}
       >
         {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
       </div>
       <div className="min-w-0 flex-1 space-y-3">
-        <div className={cn('flex items-center gap-2 text-xs', isUser ? 'justify-end' : 'justify-start')}>
+        <div className={cn('flex flex-wrap items-center gap-x-2 gap-y-1 text-xs', isUser ? 'justify-end' : 'justify-start')}>
           <span className="font-medium uppercase tracking-[0.08em] text-muted-foreground">{isUser ? '用户' : 'AI 助手'}</span>
           <span className="text-muted-foreground/80">{formatDate(msg.createdAt)}</span>
         </div>
@@ -133,7 +115,7 @@ function ShareMessageItem({
 
         <div
           className={cn(
-            'max-w-none text-sm leading-7',
+            'max-w-none break-words text-sm leading-7 [overflow-wrap:anywhere]',
             isUser &&
               'ml-auto w-fit rounded-lg bg-surface-subtle px-4 py-2.5 text-left'
           )}
@@ -175,6 +157,7 @@ export function ShareViewer({
   const [messages, setMessages] = useState<ShareMessage[]>(initialMessages)
   const [pagination, setPagination] = useState(initialPagination)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [loadError, setLoadError] = useState(false)
   const [liveDeltas, setLiveDeltas] = useState<Map<number, { content: string; reasoning: string }>>(new Map())
   const [liveToolEvents, setLiveToolEvents] = useState<Map<number, ToolEvent[]>>(new Map())
   const [isLive, setIsLive] = useState(share.isLive ?? false)
@@ -300,63 +283,36 @@ export function ShareViewer({
   const handleLoadMore = async () => {
     if (loadingMore || !hasMore) return
     setLoadingMore(true)
+    setLoadError(false)
     try {
       const nextPage = pagination.page + 1
       const response = await fetch(`/api/shares/${encodeURIComponent(token)}/messages?page=${nextPage}&limit=${pagination.limit}`, {
         headers: { Accept: 'application/json' },
         cache: 'no-store',
       })
-      if (!response.ok) return
+      if (!response.ok) throw new Error('share-pagination')
       const payload = (await response.json()) as ApiResponse<ShareMessagesPage>
-      if (!payload.success || !payload.data) return
+      if (!payload.success || !payload.data) throw new Error('share-pagination')
       setMessages((prev) => [...prev, ...payload.data!.messages])
       setPagination(payload.data.pagination)
+    } catch {
+      setLoadError(true)
     } finally {
       setLoadingMore(false)
     }
   }
 
   return (
-    <div className="v2-app-surface flex min-h-screen flex-col text-foreground">
-      <header className={cn(SHARE_CONTAINER_CLASS, 'pt-4')}>
-        <div className="flex flex-col gap-3 border-b border-border px-1 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-center gap-3 font-semibold">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground text-xs font-bold text-background">
-              AI
-            </span>
-            <span className="truncate">{brandText}</span>
-            {isLive && (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/30 bg-signal-soft px-2.5 py-0.5 text-xs text-signal">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                实时
-              </span>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-2 self-start text-xs text-muted-foreground sm:self-auto">
-            <span className="rounded-md bg-[hsl(var(--surface-hover))] px-2.5 py-1">{share.messageCount} 条消息</span>
-            <span>{formatRelativeTime(share.createdAt)}</span>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-background px-3 py-1.5 text-signal transition hover:bg-surface-hover"
-              onClick={() => {
-                if (typeof window === 'undefined') return
-                void navigator.clipboard?.writeText(window.location.href)
-              }}
-            >
-              <Copy className="h-3.5 w-3.5" />
-              复制分享链接
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="v2-app-surface flex min-h-dvh flex-col text-foreground">
+      <SharePageHeader brandText={brandText} isLive={isLive} />
 
       <div className={cn(SHARE_CONTAINER_CLASS, 'flex-1 py-2 sm:py-3')}>
         <section className="py-4 sm:py-6">
-          <div className="mb-6 text-center">
-            <h1 className="mx-auto text-[24px] font-bold font-semibold leading-snug tracking-tight text-foreground sm:text-2xl">
+          <div className="mb-7 space-y-3 text-left">
+            <h1 className="break-words text-2xl font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere] sm:text-[30px]">
               {share.title || share.sessionTitle}
             </h1>
-            <p className="mt-3 text-sm text-muted-foreground">公开分享 · {formatDate(share.createdAt)}</p>
+            <p className="text-xs leading-relaxed text-muted-foreground">公开分享 · {formatDate(share.createdAt)} · {share.messageCount} 条消息</p>
           </div>
           {mergedMessages.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border p-6 text-center text-muted-foreground">
@@ -374,24 +330,21 @@ export function ShareViewer({
           )}
         </section>
         {hasMore && (
-          <div className="mt-6 flex justify-center">
+          <div className="mt-6 flex flex-col items-center gap-3">
+            {loadError && <p role="alert" className="text-sm text-destructive">消息加载失败，请重试</p>}
             <button
               type="button"
-              className="rounded-full border border-border bg-[hsl(var(--surface))/0.65] px-4 py-2 text-sm hover:bg-[hsl(var(--surface-hover))]"
+              className="min-h-11 rounded-md border border-border bg-surface px-4 py-2 text-sm transition-colors hover:bg-surface-hover disabled:cursor-wait disabled:text-muted-foreground"
               onClick={handleLoadMore}
               disabled={loadingMore}
             >
-              {loadingMore ? '加载中...' : '加载更多'}
+              {loadingMore ? '加载中...' : loadError ? '重试加载' : '加载更多'}
             </button>
           </div>
         )}
       </div>
 
-      <footer className="border-t border-border py-4">
-        <div className={cn(SHARE_CONTAINER_CLASS, 'text-center text-xs text-muted-foreground')}>
-          本页面分享由 <span className="font-medium text-foreground">{brandText}</span> 系统生成
-        </div>
-      </footer>
+      <SharePageFooter brandText={brandText} />
     </div>
   )
 }

@@ -74,7 +74,7 @@ function ConnectionRow({
       <button
         type="button"
         onClick={onEdit}
-        className="flex min-w-0 flex-1 basis-56 cursor-pointer items-center gap-3 text-left"
+        className="flex min-w-0 max-w-full flex-1 basis-56 cursor-pointer items-center gap-3 text-left"
       >
         <span
           className={cn(
@@ -94,19 +94,19 @@ function ConnectionRow({
             <Server aria-hidden className="h-4 w-4" />
           )}
         </span>
-        <span className="min-w-0">
+        <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2">
-            <span className="truncate text-sm font-semibold text-foreground">{group.displayName}</span>
-            {group.prefixId ? <span className="v2-status">{group.prefixId}</span> : null}
+            <span className="min-w-0 text-sm font-semibold text-foreground [overflow-wrap:anywhere]">{group.displayName}</span>
+            {group.prefixId ? <span className="v2-status min-w-0 max-w-full whitespace-normal [overflow-wrap:anywhere]">{group.prefixId}</span> : null}
             {tags.length > 0
               ? tags.map((tag) => (
-                  <span key={tag} className="text-xs text-muted-foreground">
+                  <span key={tag} className="min-w-0 max-w-full text-xs text-muted-foreground [overflow-wrap:anywhere]">
                     #{tag}
                   </span>
                 ))
               : null}
           </span>
-          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+          <span className="mt-0.5 block text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
             {connectionSecondaryLine(group)}
           </span>
         </span>

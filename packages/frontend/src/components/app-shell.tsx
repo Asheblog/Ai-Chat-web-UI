@@ -8,7 +8,7 @@ interface AppShellProps {
 }
 
 const SkeletonBlock = ({ className }: { className: string }) => (
-  <div className={`animate-pulse rounded-md bg-surface-subtle ${className}`} />
+  <div className={`animate-pulse rounded-md motion-reduce:animate-none bg-surface-subtle ${className}`} />
 )
 
 /**
@@ -19,7 +19,7 @@ export function AppShell({ ready, sidebar, toolbar, children }: AppShellProps) {
   if (!ready) {
     return (
       <div
-        className="flex h-screen min-h-0 w-full min-w-0 overflow-x-hidden bg-background"
+        className="flex h-screen supports-[height:100dvh]:h-dvh min-h-0 w-full min-w-0 overflow-x-hidden bg-background"
         aria-busy="true"
         data-app-shell="loading"
       >
@@ -59,7 +59,7 @@ export function AppShell({ ready, sidebar, toolbar, children }: AppShellProps) {
   }
 
   return (
-    <div className="flex h-screen min-h-0 w-full min-w-0 overflow-x-hidden bg-background" data-app-shell="ready">
+    <div className="flex h-screen supports-[height:100dvh]:h-dvh min-h-0 w-full min-w-0 overflow-x-hidden bg-background" data-app-shell="ready">
       {sidebar}
       <main className="v2-app-surface relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col">

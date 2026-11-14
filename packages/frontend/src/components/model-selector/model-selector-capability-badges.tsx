@@ -1,50 +1,16 @@
-import type { ModelItem } from "@/store/models-store"
-import { Badge } from "@/components/ui/badge"
-import { CAPABILITY_ICONS } from "./model-selector-types"
+import type { ModelItem } from '@/store/models-store'
+import { CAPABILITY_ICONS } from './model-selector-types'
 
-interface ModelSelectorCapabilityBadgesProps {
-  model: ModelItem
-  compact?: boolean
-}
-
-export function ModelSelectorCapabilityBadges({
-  model,
-  compact = false,
-}: ModelSelectorCapabilityBadgesProps) {
+export function ModelSelectorCapabilityBadges({ model, compact = false }: { model: ModelItem; compact?: boolean }) {
   const capabilities = model.capabilities || {}
-  const activeCapabilities = Object.entries(CAPABILITY_ICONS).filter(
-    ([key]) => capabilities[key as keyof typeof capabilities]
-  )
-
-  if (activeCapabilities.length === 0) {
-    return null
-  }
-
-  const visibleCapabilities = compact ? activeCapabilities.slice(0, 3) : activeCapabilities
-  const hiddenCount = activeCapabilities.length - visibleCapabilities.length
-
+  const active = Object.entries(CAPABILITY_ICONS).filter(([key]) => capabilities[key as keyof typeof capabilities])
+  if (!active.length) return null
   return (
-    <div className="flex items-center gap-1">
-      {visibleCapabilities.map(([key, config]) => {
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      {active.map(([key, config]) => {
         const Icon = config.icon
-        return (
-          <Badge
-            key={key}
-            variant="secondary"
-            className={compact
-              ? "h-5 w-5 rounded-full border border-border bg-surface-subtle/55 p-0 text-muted-foreground"
-              : "h-5 rounded-full border border-border bg-surface-subtle/55 px-1.5 text-[11px] text-muted-foreground"
-            }
-            title={config.title}
-          >
-            <Icon className="h-3 w-3" />
-            {!compact && <span className="ml-1">{config.label}</span>}
-          </Badge>
-        )
+        return <span key={key} title={config.title} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground"><Icon aria-hidden="true" className="h-3 w-3 shrink-0" />{!compact && <span>{key === 'vision' ? '视觉' : '绘图'}</span>}{compact && <span className="sr-only">{config.title}</span>}</span>
       })}
-      {compact && hiddenCount > 0 && (
-        <span className="text-[11px] text-muted-foreground">+{hiddenCount}</span>
-      )}
-    </div>
+    </span>
   )
 }

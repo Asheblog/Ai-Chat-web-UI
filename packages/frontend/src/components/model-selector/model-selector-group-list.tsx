@@ -1,12 +1,9 @@
-import type { MouseEvent } from "react"
-import { Check, Star } from "lucide-react"
-import type { ModelItem } from "@/store/models-store"
-import { cn } from "@/lib/utils"
-import { formatModelOptionLabel, formatModelSecondaryLabel } from "@/lib/model-display"
-import { modelKeyFor } from "@/store/model-preference-store"
-import { Skeleton } from "@/components/ui/skeleton"
-import { formatContextWindow } from "./model-selector-utils"
-import { ModelSelectorCapabilityBadges } from "./model-selector-capability-badges"
+import type { MouseEvent } from 'react'
+import type { ModelItem } from '@/store/models-store'
+import { cn } from '@/lib/utils'
+import { modelKeyFor } from '@/store/model-preference-store'
+import { Skeleton } from '@/components/ui/skeleton'
+import { ModelSelectorRow } from './model-selector-row'
 
 interface ModelSelectorGroupListProps {
   loading: boolean
@@ -18,30 +15,23 @@ interface ModelSelectorGroupListProps {
   onSelectModel: (model: ModelItem) => void
   onToggleFavorite: (modelId: string, event: MouseEvent<HTMLButtonElement>) => void
   emptyText: string
-  layout?: "desktop" | "mobile"
+  layout?: 'desktop' | 'mobile'
 }
 
 export function ModelSelectorGroupList({
-  loading,
-  groupedModels,
-  activeGroup,
-  onActiveGroupChange,
-  isModelSelected,
-  favoriteModelKeys,
-  onSelectModel,
-  onToggleFavorite,
-  emptyText,
-  layout = "desktop",
+  loading, groupedModels, activeGroup, onActiveGroupChange, isModelSelected,
+  favoriteModelKeys, onSelectModel, onToggleFavorite, emptyText, layout = 'desktop',
 }: ModelSelectorGroupListProps) {
   const groupNames = Object.keys(groupedModels)
-  const resolvedActiveGroup = activeGroup && groupedModels[activeGroup] ? activeGroup : groupNames[0] ?? null
-  const activeModels = resolvedActiveGroup ? groupedModels[resolvedActiveGroup] ?? [] : []
+  const resolvedGroup = activeGroup && groupedModels[activeGroup] ? activeGroup : groupNames[0] ?? null
+  const activeModels = resolvedGroup ? groupedModels[resolvedGroup] ?? [] : []
+  const mobile = layout === 'mobile'
 
   if (loading) {
     return (
-      <div className="space-y-2 p-3">
-        {Array.from({ length: 5 }).map((_, index) => (
-          <div key={index} className="rounded-md border border-border/50 p-3">
+      <div role="status" aria-label="正在加载模型" className="min-h-0 flex-1 space-y-2 overflow-hidden p-3">
+        {Array.from({ length: 5 }, (_, index) => (
+          <div key={index} className="rounded-lg border border-border p-3">
             <Skeleton className="h-4 w-44" />
             <Skeleton className="mt-2 h-3 w-28" />
           </div>
@@ -49,188 +39,58 @@ export function ModelSelectorGroupList({
       </div>
     )
   }
-
-  if (groupNames.length === 0) {
-    return (
-      <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-        {emptyText}
-      </div>
-    )
-  }
-
-  if (layout === "mobile") {
-    return (
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <div className="flex items-center gap-2 overflow-x-auto border-b border-border px-3 py-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {groupNames.map((group) => (
-            <button
-              key={group}
-              type="button"
-              className={cn(
-                "h-9 shrink-0 rounded-md px-3 text-sm font-medium transition-colors",
-                resolvedActiveGroup === group
-                  ? "bg-foreground text-background"
-                  : "text-muted-foreground hover:bg-surface-subtle hover:text-foreground"
-              )}
-              onClick={() => onActiveGroupChange(group)}
-            >
-              {group}
-            </button>
-          ))}
-        </div>
-        <ModelRows
-          models={activeModels}
-          groupName={resolvedActiveGroup}
-          isModelSelected={isModelSelected}
-          favoriteModelKeys={favoriteModelKeys}
-          onSelectModel={onSelectModel}
-          onToggleFavorite={onToggleFavorite}
-          compact
-        />
-      </div>
-    )
+  if (!groupNames.length) {
+    return <div role="status" className="px-4 py-12 text-center text-sm text-muted-foreground">{emptyText}</div>
   }
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-[164px_minmax(0,1fr)] overflow-hidden">
-      <div className="min-h-0 border-r border-border bg-surface-subtle">
-        <div className="max-h-[min(48dvh,430px)] overflow-y-auto p-2">
-          {groupNames.map((group) => (
-            <button
-              key={group}
-              type="button"
-              className={cn(
-                "flex h-9 w-full items-center justify-between rounded-md px-2.5 text-left text-sm transition-colors",
-                resolvedActiveGroup === group
-                  ? "bg-signal-soft text-signal"
-                  : "text-muted-foreground hover:bg-background hover:text-foreground"
-              )}
-              onClick={() => onActiveGroupChange(group)}
-              aria-pressed={resolvedActiveGroup === group}
-            >
-              <span className="truncate font-medium">{group}</span>
-              <span className="ml-2 shrink-0 text-xs">{groupedModels[group]?.length ?? 0}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="min-h-0 overflow-hidden bg-background">
-        <div className="flex h-10 items-center justify-between border-b border-border px-3">
-          <div className="min-w-0 text-sm">
-            <span className="font-semibold text-foreground">{resolvedActiveGroup}</span>
-            <span className="ml-2 text-xs text-muted-foreground">{activeModels.length} 个模型</span>
-          </div>
-        </div>
-        <ModelRows
-          models={activeModels}
-          groupName={resolvedActiveGroup}
-          isModelSelected={isModelSelected}
-          favoriteModelKeys={favoriteModelKeys}
-          onSelectModel={onSelectModel}
-          onToggleFavorite={onToggleFavorite}
-        />
-      </div>
-    </div>
-  )
-}
-
-interface ModelRowsProps {
-  models: ModelItem[]
-  groupName: string | null
-  isModelSelected: (model: ModelItem) => boolean
-  favoriteModelKeys: Set<string>
-  onSelectModel: (model: ModelItem) => void
-  onToggleFavorite: (modelId: string, event: MouseEvent<HTMLButtonElement>) => void
-  compact?: boolean
-}
-
-function ModelRows({
-  models,
-  groupName,
-  isModelSelected,
-  favoriteModelKeys,
-  onSelectModel,
-  onToggleFavorite,
-  compact,
-}: ModelRowsProps) {
-  if (models.length === 0) {
-    return (
-      <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-        {groupName ? "该分组暂无可用模型" : "暂无可用模型"}
-      </div>
-    )
-  }
-
-  return (
-    <div
-      className={cn(
-        "min-h-0 overflow-y-auto overscroll-contain",
-        compact ? "max-h-[calc(82dvh-190px)] px-3 py-2" : "max-h-[min(48dvh,430px)] p-2"
-      )}
-    >
-      {models.map((model) => {
-        const key = modelKeyFor(model)
-        const isActive = isModelSelected(model)
-        const isFavorite = favoriteModelKeys.has(key)
-        const secondary = formatModelSecondaryLabel(model)
-        const accessibleLabel = formatModelOptionLabel(model)
-        const contextTokens =
-          typeof model.contextWindow === "number" && model.contextWindow > 0
-            ? formatContextWindow(model.contextWindow)
-            : null
-
-        return (
-          <div
-            key={key}
-            role="option"
-            aria-selected={isActive}
+    <div className={cn('min-h-0 flex-1 overflow-hidden', mobile ? 'flex flex-col' : 'grid grid-cols-[144px_minmax(0,1fr)]')}>
+      <div
+        aria-label="模型家族"
+        className={cn(mobile
+          ? 'flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border px-3 py-2'
+          : 'min-h-0 overflow-y-auto border-r border-border bg-surface-subtle p-2',
+        )}
+      >
+        {groupNames.map(group => (
+          <button
+            key={group}
+            type="button"
+            data-model-group=""
+            onClick={() => onActiveGroupChange(group)}
+            aria-pressed={resolvedGroup === group}
+            title={group}
             className={cn(
-              "group/model-row mb-1 flex items-center rounded-md border transition-colors",
-              compact ? "min-h-[58px] px-2.5 py-2" : "min-h-[58px] px-2.5 py-2",
-              isActive
-                ? "border-primary/45 bg-foreground/8"
-                : "border-transparent hover:border-border hover:bg-surface-subtle/35"
+              'flex items-center justify-between gap-2 rounded-lg px-2.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal',
+              mobile ? 'h-11 shrink-0' : 'mb-1 h-9 w-full',
+              resolvedGroup === group ? 'bg-signal-soft text-signal-text' : 'text-muted-foreground hover:bg-surface-hover hover:text-foreground',
             )}
           >
-            <button
-              type="button"
-              className="min-w-0 flex-1 text-left outline-none"
-              onClick={() => onSelectModel(model)}
-              title={accessibleLabel}
-              aria-label={accessibleLabel}
-            >
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="truncate text-sm font-semibold leading-5 text-foreground">
-                  {model.name}
-                </span>
-                {isActive && <Check className="h-3.5 w-3.5 shrink-0 text-signal" />}
-              </div>
-              {secondary && (
-                <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
-                  <span className="truncate">{secondary}</span>
-                </div>
-              )}
-            </button>
-
-            <div className="ml-2 flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-              <ModelSelectorCapabilityBadges model={model} compact />
-              {contextTokens && <span className="tabular-nums">{contextTokens}</span>}
-              <button
-                type="button"
-                onClick={(event) => onToggleFavorite(key, event)}
-                className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-surface-subtle",
-                  isFavorite ? "text-amber-500" : "text-muted-foreground"
-                )}
-                aria-label={isFavorite ? "取消收藏" : "收藏"}
-              >
-                <Star className={cn("h-4 w-4", isFavorite && "fill-current")} />
-              </button>
-            </div>
+            <span className="truncate font-medium">{group}</span>
+            <span className="shrink-0 text-[11px] tabular-nums">{groupedModels[group].length}</span>
+          </button>
+        ))}
+      </div>
+      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-surface">
+        {!mobile && (
+          <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-4">
+            <span className="truncate text-xs font-semibold text-foreground">{resolvedGroup}</span>
+            <span className="text-[11px] tabular-nums text-muted-foreground">{activeModels.length} 个模型</span>
           </div>
-        )
-      })}
+        )}
+        <div role="list" aria-label={resolvedGroup ? resolvedGroup + ' 模型' : '模型'} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
+          {activeModels.map(model => (
+            <ModelSelectorRow
+              key={modelKeyFor(model)}
+              model={model}
+              selected={isModelSelected(model)}
+              favorite={favoriteModelKeys.has(modelKeyFor(model))}
+              onSelect={onSelectModel}
+              onToggleFavorite={onToggleFavorite}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

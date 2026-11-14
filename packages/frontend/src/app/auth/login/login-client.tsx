@@ -123,7 +123,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
         <>
           <div>
             还没有账户？{' '}
-            <Link href="/auth/register" className="text-signal hover:text-[hsl(var(--primary-hover))] hover:underline">立即注册</Link>
+            <Link href="/auth/register" className="inline-flex min-h-11 items-center text-signal hover:text-signal-text hover:underline">立即注册</Link>
           </div>
         </>
       }
@@ -135,6 +135,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
             <User className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
             <Input
               id="username"
+              autoComplete="username"
               type="text"
               placeholder="请输入用户名"
               value={username}
@@ -151,6 +152,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
             <Lock className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
             <Input
               id="password"
+              autoComplete="current-password"
               type={passwordVisible ? 'text' : 'password'}
               placeholder="请输入密码"
               value={password}
@@ -161,7 +163,7 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
             />
             <button
               type="button"
-              className="absolute right-3 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition hover:bg-surface-hover hover:text-foreground"
+              className="absolute right-1 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition hover:bg-surface-hover hover:text-foreground"
               onClick={() => setPasswordVisible((value) => !value)}
               aria-label={passwordVisible ? '隐藏密码' : '显示密码'}
               disabled={isLoading}
@@ -171,18 +173,18 @@ export function LoginPageClient({ initialBrandText }: LoginPageClientProps) {
           </div>
         </div>
         <div className="flex items-center justify-between">
-          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+          <label className="flex min-h-11 items-center gap-2 text-sm cursor-pointer select-none">
             <Checkbox id="rememberLogin" checked={rememberLogin} onChange={(e) => setRememberLogin(e.currentTarget.checked)} />
             <span>记住登录</span>
           </label>
-          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+          <label className="flex min-h-11 items-center gap-2 text-sm cursor-pointer select-none">
             <Checkbox id="savePassword" checked={savePassword} onChange={(e) => setSavePassword(e.currentTarget.checked)} />
             <span>保存密码</span>
           </label>
         </div>
         <Button
           type="submit"
-          className="h-12 w-full rounded-md text-base shadow-[0_12px_24px_hsl(var(--primary)/0.22)]"
+          className="h-12 w-full rounded-md text-base"
           disabled={isLoading || !username || !password}
         >
           {isLoading ? (
