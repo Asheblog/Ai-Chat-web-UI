@@ -7,11 +7,7 @@ import {
   getSystemSettings as fetchSystemSettingsApi,
   updateSystemSettings as updateSystemSettingsApi,
 } from '@/features/settings/api'
-import {
-  isAvatarImageLoaded,
-  normalizeAvatarUrl,
-  preloadAvatarImage,
-} from '@/lib/avatar-image-cache'
+import { normalizeAvatarUrl, preloadAvatarImage } from '@/lib/avatar-image-cache'
 
 type AvatarUploadPayload = { data: string; mime: string }
 type SystemSettingsUpdatePayload = Partial<SystemSettings> & {
@@ -88,42 +84,14 @@ const themeFromPublicBranding = (data?: {
 export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set, get) => {
-      const ensureAssistantAvatarReady = (url?: string | null) => {
-        if (typeof window === 'undefined') return
-        const normalized = normalizeAvatarUrl(url)
-        if (!normalized) {
-          set((state) => {
-            if (!state.assistantAvatarReady && state.assistantAvatarReadyFor === null) {
-              return state
-            }
-            return { ...state, assistantAvatarReady: false, assistantAvatarReadyFor: null }
-          })
-          return
-        }
-        set((state) => {
-          if (state.assistantAvatarReadyFor === normalized && state.assistantAvatarReady) {
-            return state
-          }
-          if (state.assistantAvatarReadyFor === normalized && !state.assistantAvatarReady) {
-            return state
-          }
-          return { ...state, assistantAvatarReady: false, assistantAvatarReadyFor: normalized }
-        })
-        if (isAvatarImageLoaded(normalized)) {
-          set((state) => {
-            if (state.assistantAvatarReadyFor !== normalized) return state
-            if (state.assistantAvatarReady) return state
-            return { ...state, assistantAvatarReady: true }
-          })
-          return
-        }
-        preloadAvatarImage(normalized).then((success) => {
-          set((state) => {
-            if (state.assistantAvatarReadyFor !== normalized) return state
-            if (state.assistantAvatarReady === success) return state
-            return { ...state, assistantAvatarReady: success }
-          })
-        })
+      const syncAssistantAvatar = (url?: string | null) => {
+        const normalized = normalizeAvatarUrl(url) || null
+        set((state) =>
+          state.assistantAvatarUrl === normalized ? state : { ...state, assistantAvatarUrl: normalized },
+        )
+        if (!normalized || typeof window === 'undefined') return
+        // 预热到浏览器缓存，气泡挂载时 Radix 的探测图就能同步命中，不必再等一次网络往返。
+        void preloadAvatarImage(normalized)
       }
       let systemSettingsInFlight: Promise<void> | null = null
       let publicBrandingInFlight: Promise<boolean> | null = null
@@ -135,8 +103,7 @@ export const useSettingsStore = create<SettingsStore>()(
         error: null,
         publicBrandText: null,
         publicBrandTheme: null,
-        assistantAvatarReady: false,
-        assistantAvatarReadyFor: null,
+        assistantAvatarUrl: null,
 
         fetchSystemSettings: async () => {
           if (systemSettingsInFlight) return systemSettingsInFlight
@@ -153,7 +120,7 @@ export const useSettingsStore = create<SettingsStore>()(
                 publicBrandTheme: themeFromSystemSettings(merged),
                 isLoading: false,
               }))
-              ensureAssistantAvatarReady(merged.assistantAvatarUrl)
+              syncAssistantAvatar(merged.assistantAvatarUrl)
             } catch (error: any) {
               set({
                 error: error.response?.data?.error || error.message || '获取系统设置失败',
@@ -180,7 +147,7 @@ export const useSettingsStore = create<SettingsStore>()(
             publicBrandTheme: themeFromSystemSettings(updatedSettings),
             isLoading: false,
           }))
-            ensureAssistantAvatarReady(updatedSettings.assistantAvatarUrl)
+            syncAssistantAvatar(updatedSettings.assistantAvatarUrl)
           } catch (error: any) {
             set({
               error: error.response?.data?.error || error.message || '更新系统设置失败',
@@ -253,7 +220,7 @@ export const useSettingsStore = create<SettingsStore>()(
       // 上下文开关已迁到 users.contextEnabled（账号级单一真源）。
       // zustand 会把持久化值 merge 回 state，所以必须显式剥掉旧键，
       // 否则 localStorage 里的历史值会作为没人读的脏字段长期留在内存里。
-      version: 1,
+      version: 2,
       migrate: (persisted: any) => {
         if (!persisted || typeof persisted !== 'object') return persisted
         const { contextEnabled: _c, newConversationContextEnabled: _n, ...rest } = persisted
@@ -261,6 +228,9 @@ export const useSettingsStore = create<SettingsStore>()(
       },
       partialize: (state) => ({
         sidebarCollapsed: state.sidebarCollapsed,
+        // 头像 URL 必须跟着持久化：否则每次整页加载都要等 /api/settings 回来才有 <img src>，
+        // 图片缓存再好也省不掉那一跳。
+        assistantAvatarUrl: state.assistantAvatarUrl,
       }),
     }
   )

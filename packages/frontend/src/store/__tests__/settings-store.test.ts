@@ -31,4 +31,32 @@ describe('settings-store persist 迁移', () => {
     expect(Object.prototype.hasOwnProperty.call(state, 'contextEnabled')).toBe(false)
     expect(Object.prototype.hasOwnProperty.call(state, 'newConversationContextEnabled')).toBe(false)
   })
+
+  it('persist 落 assistantAvatarUrl，systemSettings 不落盘', async () => {
+    const { useSettingsStore } = await import('@/store/settings-store')
+    const avatarUrl = '/chat-images/profiles/2026/11/14/a.png'
+    useSettingsStore.setState({ assistantAvatarUrl: avatarUrl })
+    useSettingsStore.setState({
+      systemSettings: { assistantAvatarUrl: avatarUrl } as never,
+    })
+
+    const raw = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || '{}')
+
+    expect(raw.state.assistantAvatarUrl).toBe(avatarUrl)
+    expect(raw.state.systemSettings).toBeUndefined()
+  })
+
+  it('rehydrate 恢复 assistantAvatarUrl，首帧就有可用 src', async () => {
+    const { useSettingsStore } = await import('@/store/settings-store')
+    const avatarUrl = '/chat-images/profiles/2026/11/14/b.png'
+    useSettingsStore.setState({ assistantAvatarUrl: null })
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ state: { sidebarCollapsed: false, assistantAvatarUrl: avatarUrl }, version: 2 }),
+    )
+
+    await useSettingsStore.persist.rehydrate()
+
+    expect(useSettingsStore.getState().assistantAvatarUrl).toBe(avatarUrl)
+  })
 })

@@ -74,6 +74,6 @@ export interface SettingsState {
   error: string | null;
   publicBrandText: string | null;
   publicBrandTheme: BrandThemeColors | null;
-  assistantAvatarReady: boolean;
-  assistantAvatarReadyFor: string | null;
+  /** AI 头像 URL：随 persist 落盘，整页加载首帧即可渲染 <img src>。 */
+  assistantAvatarUrl: string | null;
 }

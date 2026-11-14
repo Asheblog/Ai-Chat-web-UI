@@ -6,6 +6,7 @@ jest.mock('../config/storage', () => {
   }
 })
 
+import os from 'node:os'
 import type { Request } from 'undici'
 import { determineChatImageBaseUrl } from './chat-images'
 
@@ -42,5 +43,41 @@ describe('determineChatImageBaseUrl', () => {
     })
 
     expect(determineChatImageBaseUrl({ request, siteBaseUrl: null })).toBe('https://edge.example.com:443')
+  })
+
+  it('keeps the request host unchanged by default (no LAN rewrite)', () => {
+    const request = buildRequest('http://localhost:3000/api/settings', { host: 'localhost:3000' })
+
+    expect(determineChatImageBaseUrl({ request, siteBaseUrl: null })).toBe('http://localhost:3000')
+  })
+
+  it('rewrites localhost to a LAN IPv4 only when CHAT_IMAGE_FORCE_LAN=true', () => {
+    const previous = process.env.CHAT_IMAGE_FORCE_LAN
+    process.env.CHAT_IMAGE_FORCE_LAN = 'true'
+    const spy = jest.spyOn(os, 'networkInterfaces').mockReturnValue({
+      eth0: [
+        {
+          address: '192.168.1.50',
+          family: 'IPv4',
+          internal: false,
+          mac: '00:00:00:00:00:00',
+          netmask: '255.255.255.0',
+          cidr: '192.168.1.50/24',
+        },
+      ],
+    } as any)
+
+    try {
+      const request = buildRequest('http://localhost:3000/api/settings', { host: 'localhost:3000' })
+
+      expect(determineChatImageBaseUrl({ request, siteBaseUrl: null })).toBe('http://192.168.1.50:3000')
+    } finally {
+      spy.mockRestore()
+      if (previous === undefined) {
+        delete process.env.CHAT_IMAGE_FORCE_LAN
+      } else {
+        process.env.CHAT_IMAGE_FORCE_LAN = previous
+      }
+    }
   })
 })

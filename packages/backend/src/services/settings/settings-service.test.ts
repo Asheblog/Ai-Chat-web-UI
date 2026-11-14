@@ -210,6 +210,57 @@ describe('SettingsService', () => {
     )
   })
 
+  it('returns a same-origin relative assistant avatar url when no base url is configured', async () => {
+    const previousBase = process.env.CHAT_IMAGE_BASE_URL
+    delete process.env.CHAT_IMAGE_BASE_URL
+    try {
+      const { service, prisma } = buildService()
+      const adminActor = {
+        type: 'user',
+        id: 1,
+        username: 'admin',
+        role: 'ADMIN',
+        status: 'ACTIVE',
+        identifier: 'user:1',
+      } as any
+      prisma.systemSetting.findMany.mockResolvedValueOnce([
+        { key: 'assistant_avatar_path', value: 'profiles/2026/11/14/abc.png' },
+      ])
+
+      const settings = await service.getSystemSettings(adminActor)
+
+      expect(settings.assistant_avatar_url).toBe('/chat-images/profiles/2026/11/14/abc.png')
+    } finally {
+      if (previousBase === undefined) {
+        delete process.env.CHAT_IMAGE_BASE_URL
+      } else {
+        process.env.CHAT_IMAGE_BASE_URL = previousBase
+      }
+    }
+  })
+
+  it('prefixes the configured site base url on assistant avatar url', async () => {
+    const { service, prisma } = buildService()
+    const adminActor = {
+      type: 'user',
+      id: 1,
+      username: 'admin',
+      role: 'ADMIN',
+      status: 'ACTIVE',
+      identifier: 'user:1',
+    } as any
+    prisma.systemSetting.findMany.mockResolvedValueOnce([
+      { key: 'assistant_avatar_path', value: 'profiles/2026/11/14/abc.png' },
+      { key: 'site_base_url', value: 'https://chat.example.com' },
+    ])
+
+    const settings = await service.getSystemSettings(adminActor)
+
+    expect(settings.assistant_avatar_url).toBe(
+      'https://chat.example.com/chat-images/profiles/2026/11/14/abc.png',
+    )
+  })
+
   it('reads battle_retention_days with db/env/default fallback', async () => {
     const previous = process.env.BATTLE_RETENTION_DAYS
     process.env.BATTLE_RETENTION_DAYS = '21'

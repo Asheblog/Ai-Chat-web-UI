@@ -1,7 +1,7 @@
 'use client'
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { MessageAvatar } from './message-avatar'
 import { useToast } from '@/components/ui/use-toast'
 import { copyToClipboard, formatDate } from '@/lib/utils'
 import { formatFileSize } from '@/lib/format'
@@ -10,8 +10,6 @@ import { useChatStore } from '@/store/chat-store'
 import type { MessageBody, MessageMeta, MessageRenderCacheEntry, MessageStreamMetrics } from '@/types'
 import { useSettingsStore } from '@/store/settings-store'
 import { useAuthStore } from '@/store/auth-store'
-import { useAvatarImageReady } from '@/hooks/use-avatar-image-ready'
-import { syncAvatarLoadingStatus } from '@/lib/avatar-image-cache'
 import { ExpandEditorDialog } from '@/components/chat/expand-editor-dialog'
 import { MessageBodyContent } from './message-body-content'
 import { MessageHeader } from './message-header'
@@ -59,10 +57,9 @@ function MessageBubbleComponent({
   const applyRenderedContent = useChatStore((state) => state.applyRenderedContent)
   const editLastUserMessage = useChatStore((state) => state.editLastUserMessage)
   const currentUser = useAuthStore((state) => state.user)
-  const { assistantAvatarUrl, assistantAvatarReady } = useSettingsStore((state) => ({
-    assistantAvatarUrl: state.systemSettings?.assistantAvatarUrl ?? null,
-    assistantAvatarReady: state.assistantAvatarReady,
-  }))
+  const assistantAvatarUrl = useSettingsStore(
+    (state) => state.assistantAvatarUrl ?? state.systemSettings?.assistantAvatarUrl ?? null,
+  )
   const [isCopied, setIsCopied] = useState(false)
 
   const [editOpen, setEditOpen] = useState(false)
@@ -133,20 +130,9 @@ function MessageBubbleComponent({
   }`
 
   const avatarSrc = isUser ? currentUser?.avatarUrl ?? undefined : assistantAvatarUrl ?? undefined
-  const avatarHasImage = Boolean(avatarSrc)
   const avatarFallbackText = isUser
     ? currentUser?.username?.charAt(0).toUpperCase() || 'U'
     : 'A'
-  const avatarImageReady = useAvatarImageReady(avatarSrc)
-  const assistantImageReady = !isUser && assistantAvatarReady && Boolean(assistantAvatarUrl)
-  const avatarReady = avatarImageReady || assistantImageReady
-  const avatarFallbackHidden = avatarHasImage && avatarReady
-  const handleAvatarLoadingStatusChange = useCallback(
-    (status: 'idle' | 'loading' | 'loaded' | 'error') => {
-      syncAvatarLoadingStatus(avatarSrc, status)
-    },
-    [avatarSrc],
-  )
   const showVariantControls = Boolean(variantInfo)
   const showVariantNavigation = Boolean(variantInfo && variantInfo.total > 1)
   const shareableMessageId = typeof meta.id === 'number' ? meta.id : null
@@ -187,22 +173,12 @@ function MessageBubbleComponent({
   return (
     <div className={`relative ${selectionWrapperClass}`}>
       <div className={`flex items-start gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
-        <Avatar
+        <MessageAvatar
+          src={avatarSrc}
+          alt={isUser ? '用户头像' : 'AI 头像'}
+          fallback={avatarFallbackText}
           className={`hidden h-7 w-7 flex-shrink-0 bg-muted sm:flex ${isUser ? '' : 'mt-1'}`}
-        >
-          <AvatarImage
-            src={avatarSrc}
-            alt={isUser ? '用户头像' : 'AI 头像'}
-            onLoadingStatusChange={handleAvatarLoadingStatusChange}
-          />
-          <AvatarFallback
-            delayMs={avatarHasImage && !avatarReady ? 180 : 0}
-            className={`text-muted-foreground ${avatarFallbackHidden ? 'opacity-0' : ''}`}
-            aria-hidden={avatarFallbackHidden ? 'true' : undefined}
-          >
-            {avatarFallbackText}
-          </AvatarFallback>
-        </Avatar>
+        />
 
         <div
           className={`min-w-0 max-w-full flex-1 text-left ${

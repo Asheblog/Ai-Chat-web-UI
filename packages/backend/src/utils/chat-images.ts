@@ -374,14 +374,19 @@ export function determineChatImageBaseUrl(options: { request: Request; siteBaseU
     }
   }
 
+  // 局域网改写默认关闭：同一张图在不同入口下必须解析出同一个 origin，
+  // 否则浏览器缓存会按 URL 分桶、跨源请求也会变慢。需要局域网直连域名时才显式开启。
+  const allowLanRewrite = process.env.CHAT_IMAGE_FORCE_LAN === 'true'
+
   if (host) {
     const hostInfo = parseHostInfo(protocol, host)
     const bareHost = hostInfo.hostname
     const shouldSwapToLan =
-      !bareHost ||
-      bareHost === 'localhost' ||
-      bareHost === '127.0.0.1' ||
-      bareHost === '::1'
+      allowLanRewrite &&
+      (!bareHost ||
+        bareHost === 'localhost' ||
+        bareHost === '127.0.0.1' ||
+        bareHost === '::1')
     if (shouldSwapToLan) {
       const lan = pickLanIPv4()
       if (lan) {
@@ -392,7 +397,7 @@ export function determineChatImageBaseUrl(options: { request: Request; siteBaseU
     return `${protocol}://${host}`.replace(/\/+$/, '')
   }
 
-  const lan = pickLanIPv4()
+  const lan = allowLanRewrite ? pickLanIPv4() : null
   if (lan) {
     const fallbackProtocol = url.protocol === 'https:' ? 'https' : 'http'
     const port = url.port || (fallbackProtocol === 'https' ? '443' : '80')
