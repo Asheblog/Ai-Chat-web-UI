@@ -108,11 +108,17 @@
 
   body {
     @apply text-foreground;
-    --font-ui: var(--font-source-sans);
+    /* 字体栈唯一事实源（ADR-0041）：拉丁用自托管 Source Sans 3，中文与其余字符交给系统 UI 字体。
+       中文不使用 webfont——CJK 全字集无法在首帧前就绪，任何 CJK webfont 都会退化为「跳字 / 闪白 / 首访降级」三选一。 */
+    --font-ui: var(--font-source-sans), "PingFang SC", "Hiragino Sans GB",
+      "Microsoft YaHei UI", "Microsoft YaHei", "HarmonyOS Sans SC",
+      "Noto Sans CJK SC", "Source Han Sans SC", "WenQuanYi Micro Hei",
+      -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas,
+      "Liberation Mono", "Courier New", monospace;
     background: hsl(var(--background));
-    font-family: var(--font-ui, "Source Sans 3"), var(--font-noto-sc), "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "HarmonyOS Sans", "Segoe UI", "Helvetica Neue", system-ui, -apple-system, sans-serif;
+    font-family: var(--font-ui);
     -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
   }
 
   ::selection {
@@ -243,7 +249,7 @@
 
   .v2-section-title {
     font-size: 1rem;
-    font-weight: 650;
+    font-weight: 600;
     letter-spacing: 0;
     color: hsl(var(--foreground));
   }
@@ -547,11 +553,11 @@ textarea.rounded-3xl::-webkit-scrollbar-track {
   border-radius: 0.4rem;
   padding: 0.15rem 0.4rem;
   font-size: 0.85em;
-  font-family: "JetBrains Mono", "Fira Code", "Menlo", "Consolas", monospace;
+  font-family: var(--font-mono);
 }
 
 .markdown-body code {
-  font-family: "JetBrains Mono", "Fira Code", "Menlo", "Consolas", monospace;
+  font-family: var(--font-mono);
 }
 
 .markdown-body .md-pre {

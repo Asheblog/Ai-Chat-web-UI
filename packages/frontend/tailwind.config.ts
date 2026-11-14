@@ -18,24 +18,15 @@ const config: Config = {
       },
     },
     extend: {
+      // 字体栈只在 globals.css 定义一次（body 上的 --font-ui / --font-mono），这里只引用变量。
       fontFamily: {
-        sans: [
-          "var(--font-ui)",
-          "var(--font-noto-sc)",
-          "Noto Sans SC",
-          "PingFang SC",
-          "Microsoft YaHei",
-          "HarmonyOS Sans",
-          "Segoe UI",
-          "Helvetica Neue",
-          "system-ui",
-          "sans-serif",
-        ],
+        sans: ["var(--font-ui)"],
+        mono: ["var(--font-mono)"],
       },
       fontSize: {
         micro: ["0.75rem", { lineHeight: "1.25" }],
         caption: ["0.75rem", { lineHeight: "1.35" }],
-        "title-s": ["1rem", { lineHeight: "1.35", fontWeight: "650" }],
+        "title-s": ["1rem", { lineHeight: "1.35", fontWeight: "600" }],
         "title-m": ["1.125rem", { lineHeight: "1.35", fontWeight: "600" }],
         "title-l": ["1.25rem", { lineHeight: "1.3", fontWeight: "600" }],
         display: ["1.75rem", { lineHeight: "1.15", fontWeight: "600" }],

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Source_Sans_3, Noto_Sans_SC } from 'next/font/google'
+import { Source_Sans_3 } from 'next/font/google'
 // KaTeX 样式与字体随应用本地打包：公式不再依赖 jsDelivr 等第三方 CDN。
 import 'katex/dist/katex.min.css'
 import './globals.css'
@@ -15,24 +15,6 @@ const sourceSans = Source_Sans_3({
   display: 'optional',
   preload: true,
   variable: '--font-source-sans',
-})
-
-const notoSansSC = Noto_Sans_SC({
-  weight: ['400', '500', '600', '700'],
-  subsets: ['latin'],
-  display: 'optional',
-  preload: true,
-  variable: '--font-noto-sc',
-  fallback: [
-    'PingFang SC',
-    'Microsoft YaHei',
-    'HarmonyOS Sans',
-    'Noto Sans SC',
-    'Segoe UI',
-    'Helvetica Neue',
-    'Arial',
-    'sans-serif',
-  ],
 })
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -61,7 +43,7 @@ export default async function RootLayout({
   const branding = await getServerBranding()
   return (
     <html lang="zh-CN" suppressHydrationWarning>
-      <body className={`${sourceSans.variable} ${notoSansSC.variable} antialiased`}>
+      <body className={`${sourceSans.variable} antialiased`}>
         <ConsoleSilencer />
         <ThemeProvider
           attribute="class"
