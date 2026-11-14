@@ -61,6 +61,7 @@ const DEFAULT_MODEL_SNIPPET_CHARS = 360
 const DEFAULT_MODEL_SUMMARY_CHARS = 3200
 const DEFAULT_MODEL_EVIDENCE_ITEMS = 2
 const DEFAULT_MODEL_EVIDENCE_ITEM_CHARS = 900
+const MAX_MODEL_EVIDENCE_IMAGES = 4
 const DEFAULT_PARALLEL_MAX_ENGINES = 5
 const DEFAULT_PARALLEL_MAX_QUERIES = 2
 const DEFAULT_PARALLEL_TIMEOUT_MS = 12000
@@ -582,7 +583,7 @@ const buildSummaryForModel = (
       lines.push(`   正文摘录: ${truncateText(item.content, DEFAULT_MODEL_EVIDENCE_CHARS)}`)
     }
     if (item.images?.length) {
-      lines.push(`   图片证据: ${item.images.slice(0, 4).map((img) => img.url).join(' | ')}`)
+      lines.push(`   图片证据: ${item.images.slice(0, MAX_MODEL_EVIDENCE_IMAGES).map((img) => img.url).join(' | ')}`)
     }
   }
 
@@ -617,7 +618,7 @@ const slimEvidenceForModel = (items: AutoReadEvidenceItem[]) =>
     title: item.title,
     excerpt: item.excerpt ? truncateText(item.excerpt, DEFAULT_MODEL_SNIPPET_CHARS) : undefined,
     content: item.content ? truncateText(item.content, DEFAULT_MODEL_EVIDENCE_ITEM_CHARS) : undefined,
-    images: Array.isArray(item.images) ? item.images.slice(0, 4) : undefined,
+    images: Array.isArray(item.images) ? item.images.slice(0, MAX_MODEL_EVIDENCE_IMAGES) : undefined,
     siteName: item.siteName,
     byline: item.byline,
     wordCount: item.wordCount,

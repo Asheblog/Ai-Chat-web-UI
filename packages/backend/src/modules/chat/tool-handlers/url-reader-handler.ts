@@ -268,7 +268,7 @@ export class UrlReaderToolHandler implements IToolHandler {
       })
 
       // 联网图片证据直接给原始 URL；formatUrlContentForModel 内部按「有无图片」决定是否输出该段
-      const formatted = formatUrlContentForModel(result, { includeRawImageEvidence: true })
+      const formatted = formatUrlContentForModel(result)
       return {
         toolCallId: callId,
         toolName: this.toolName,

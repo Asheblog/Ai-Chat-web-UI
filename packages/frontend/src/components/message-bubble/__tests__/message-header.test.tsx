@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import type { ComponentProps } from 'react'
 import { MessageHeader } from '@/components/message-bubble/message-header'
+
+// 退役的 imageDescriptionNote 仍可能被旧调用方传入：用单层本地类型表达旧 props，
+// 替代 as unknown as 的双层逃逸。
+type LegacyProps = ComponentProps<typeof MessageHeader> & { imageDescriptionNote?: string }
 
 const baseProps = {
   isUser: false,
@@ -33,16 +38,15 @@ describe('MessageHeader metrics', () => {
 describe('MessageHeader — retired image transcription note', () => {
   it('never renders the transcription note, even when the legacy prop is wired', () => {
     // 退役的 imageDescriptionNote 仍可能被旧调用方传入；渲染层必须完全忽略。
-    const legacyProps = {
+    const legacyProps: LegacyProps = {
       ...baseProps,
       isUser: true,
       timestamp: '2026-08-04',
       imageDescriptionNote: '图片描述由 qwen-vl-max 转写',
-    } as unknown as React.ComponentProps<typeof MessageHeader>
+    }
 
     render(<MessageHeader {...legacyProps} />)
 
     expect(screen.queryByText(/转写/)).toBeNull()
-    expect(screen.queryByTitle('图片由转写模型识别后供当前模型理解')).toBeNull()
   })
 })

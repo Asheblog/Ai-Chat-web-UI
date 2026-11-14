@@ -1,4 +1,15 @@
-jest.mock('../../../../db', () => ({ prisma: { $transaction: jest.fn() } }))
+// message 表是占位消息写回的必经入口（assistant-message-service 直接用真实 prisma）；
+// 缺失会让 upsert 抛错并被产品代码吞成 console.warn，掩盖 mock 缺口
+jest.mock('../../../../db', () => ({
+  prisma: {
+    $transaction: jest.fn(),
+    message: {
+      upsert: jest.fn().mockResolvedValue({ id: 1 }),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
+  },
+}))
 
 // Mock message-service to control createUserMessageWithQuota (called before prepare())
 jest.mock('../../services/message-service', () => ({
@@ -57,6 +68,11 @@ jest.mock('../../../chat/stream-state', () => ({
   buildPendingCancelKeyByMessageId: jest.fn().mockReturnValue('key'),
   clearPendingCancelMarkers: jest.fn(),
   deriveAssistantClientMessageId: jest.fn().mockReturnValue('assistant-client-id'),
+  // assistant-message-service 在创建/更新占位消息时调用；缺失会在每个用例里抛
+  // TypeError 并被产品代码吞成 console.warn，从而掩盖 mock 缺口
+  ensureAssistantClientMessageId: jest.fn((value?: string | null) =>
+    typeof value === 'string' && value.trim().length > 0 ? value.trim() : 'assistant-client-id',
+  ),
   hasPendingStreamCancelKey: jest.fn().mockReturnValue(false),
   registerStreamMeta: jest.fn().mockReturnValue({ streamKey: 'test', cancelled: false }),
   releaseStreamMeta: jest.fn(),
@@ -205,19 +221,17 @@ const createMinimalDeps = (overrides: Record<string, unknown> = {}) => {
 }
 
 describe('createChatStreamHandler error handling', () => {
-  // 本文件用例都在错误路径上跑（prepare 抛错、provider 失败），产品代码会把这些预期错误打到 console。
-  // 统一吞掉才能让套件输出干净；断言失败仍由 jest 报出。用 beforeAll/afterAll 是为了覆盖
-  // 流式失败在 await handler(c) 之后才打印的异步尾部，并在文件结束后还原，避免影响同 worker 的其它套件。
-  let consoleSpies: jest.SpyInstance[]
+  // 只静音本文件预期的错误路径日志（用例故意让 prepare / provider 失败，产品代码会打
+  // "Streaming error" 一类错误）；mock 缺口不再靠这里掩盖——占位消息写回所需的
+  // stream-state 与 db 导出都已补全。断言失败仍由 jest 报出。
+  let consoleErrorSpy: jest.SpyInstance
 
   beforeAll(() => {
-    consoleSpies = (['log', 'warn', 'error'] as const).map((method) =>
-      jest.spyOn(console, method).mockImplementation(() => {}),
-    )
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
   })
 
   afterAll(() => {
-    consoleSpies.forEach((spy) => spy.mockRestore())
+    consoleErrorSpy.mockRestore()
   })
 
   beforeEach(() => {
