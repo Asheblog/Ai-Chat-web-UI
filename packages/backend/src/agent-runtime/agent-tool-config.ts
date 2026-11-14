@@ -11,7 +11,11 @@ import {
 } from '../utils/parsers';
 import { BUILTIN_SKILL_SLUGS } from '../modules/skills/types';
 import type { RequestedSkillsPayload } from '../modules/skills/types';
-import { WEB_SEARCH_ENGINE_IDS, type WebSearchEngine } from '@aichat/shared/web-search-contract';
+import {
+  WEB_SEARCH_ENGINE_IDS,
+  WEB_SEARCH_SCOPE_IDS,
+  type WebSearchEngine,
+} from '@aichat/shared/web-search-contract';
 
 /**
  * Web 搜索配置
@@ -89,7 +93,7 @@ export interface AgentWorkspaceToolConfig {
   gitCloneTimeoutMs: number;
 }
 
-const WEB_SEARCH_SCOPES = ['webpage', 'document', 'paper', 'image', 'video', 'podcast'] as const;
+const WEB_SEARCH_SCOPES = WEB_SEARCH_SCOPE_IDS;
 const WEB_SEARCH_ENGINES: readonly AgentWebSearchEngine[] = WEB_SEARCH_ENGINE_IDS;
 
 const parseEngineList = (

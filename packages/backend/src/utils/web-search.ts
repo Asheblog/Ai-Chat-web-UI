@@ -18,6 +18,12 @@ export interface WebSearchHit {
   rank?: number
   sourceEngines?: string[]
   mergeScore?: number
+  /** 发布/更新时间，来自各引擎文档化字段（Tavily published_date、Brave page_age、Exa publishedDate、DeepSeek date）。 */
+  publishedDate?: string
+  /** 站点名，来自文档化字段（Brave profile.name、DeepSeek site_name）。 */
+  siteName?: string
+  /** DeepSeek 权威性评分（0-4，-1 未知）。 */
+  authority?: number
 }
 
 export interface WebSearchOptions {
@@ -30,6 +36,8 @@ export interface WebSearchOptions {
   includeSummary?: boolean
   includeRawContent?: boolean
   deepseekNeedContent?: boolean
+  /** 触发检索的用户原始问题，供支持 ori_question 的引擎理解意图（DeepSeek）。 */
+  oriQuestion?: string
   signal?: AbortSignal
 }
 
@@ -63,6 +71,8 @@ export interface WebSearchParallelOptions {
   apiKeys: Partial<Record<string, string>>
   queries: WebSearchParallelQuery[]
   queryPlans?: WebSearchParallelQueryPlan[]
+  /** 用户原始问题，供支持 ori_question 的引擎理解意图；不参与路由与合并。 */
+  originalQuery?: string
   limit: number
   domains?: string[]
   endpoint?: string
@@ -85,7 +95,38 @@ const DEFAULT_LIMIT = 4
 const DEFAULT_PARALLEL_TIMEOUT_MS = 12_000
 const SUPPORTED_ENGINES = WEB_SEARCH_ENGINE_IDS
 type SupportedSearchEngine = WebSearchEngine
-export const METASO_SCOPE_WHITELIST = new Set(['webpage', 'document', 'paper', 'scholar', 'image', 'video', 'podcast'])
+
+const TAVILY_SEARCH_ENDPOINT = 'https://api.tavily.com/search'
+const TAVILY_MAX_DOMAINS = 300
+const TAVILY_CHUNKS_PER_SOURCE = 3
+const BRAVE_WEB_SEARCH_ENDPOINT = 'https://api.search.brave.com/res/v1/web/search'
+const BRAVE_IMAGE_SEARCH_ENDPOINT = 'https://api.search.brave.com/res/v1/images/search'
+const METASO_SEARCH_ENDPOINT = 'https://metaso.cn/api/v1/search'
+const EXA_SEARCH_ENDPOINT = 'https://api.exa.ai/search'
+const EXA_RAW_TEXT_MAX_CHARS = 4000
+
+/**
+ * Metaso 官方 Search API 只接受这六个 scope（见 metaso.cn/search-api/playground）。
+ * 项目词汇里的 paper 表示论文/文献，映射到官方 scholar。
+ */
+export const METASO_SCOPE_IDS = ['webpage', 'document', 'scholar', 'image', 'video', 'podcast'] as const
+export type MetasoScope = (typeof METASO_SCOPE_IDS)[number]
+
+const METASO_SCOPE_BY_PROJECT_SCOPE: Record<string, MetasoScope> = {
+  webpage: 'webpage',
+  web: 'webpage',
+  document: 'document',
+  paper: 'scholar',
+  scholar: 'scholar',
+  image: 'image',
+  video: 'video',
+  podcast: 'podcast',
+}
+
+export const resolveMetasoScope = (scope?: string): MetasoScope => {
+  const normalized = (scope || '').trim().toLowerCase()
+  return METASO_SCOPE_BY_PROJECT_SCOPE[normalized] || 'webpage'
+}
 
 const clampLimit = (value?: number) => {
   if (!value || Number.isNaN(value)) return DEFAULT_LIMIT
@@ -172,6 +213,69 @@ const pickThumbnailUrl = (item: any): string | undefined =>
     item?.images?.[0]?.url,
   )
 
+/**
+ * 失败错误：只保留状态码与 Retry-After 提示，不回显上游响应体。
+ * 上游错误体可能原样包含 API Key（各引擎都会出现），已有测试把「不泄露上游正文」定为契约。
+ */
+const buildHttpError = (label: string, response: Response): Error => {
+  const retryAfter = response.headers.get('retry-after')
+  const retryHint = retryAfter ? ` (retry after ${retryAfter}s)` : ''
+  return new Error(`${label} failed: ${response.status}${retryHint}`)
+}
+
+/** 把用户填写的域名/URL 归一成主机名，供白名单匹配与站点操作符复用。 */
+const normalizeDomainHost = (value: string): string => {
+  let normalized = (value || '').trim().toLowerCase()
+  if (!normalized) return ''
+  if (normalized.startsWith('*.')) normalized = normalized.slice(2)
+  if (/^https?:\/\//i.test(normalized)) {
+    try {
+      normalized = new URL(normalized).hostname
+    } catch {
+      return ''
+    }
+  }
+  return normalized.split('/')[0]?.split(':')[0]?.replace(/^\.+|\.+$/g, '') || ''
+}
+
+const normalizeDomainHosts = (domains?: string[]): string[] =>
+  Array.from(new Set(normalizeDomains(domains).map(normalizeDomainHost).filter(Boolean)))
+
+const isHostnameWithinDomains = (hostname: string, domains: string[]): boolean =>
+  domains.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`))
+
+/** 对没有服务端域名参数的引擎做统一白名单收口，保持与 UI「域名白名单」同义。 */
+const filterHitsByDomains = (hits: WebSearchHit[], domains: string[]): WebSearchHit[] => {
+  if (domains.length === 0) return hits
+  return hits.filter((hit) => {
+    if (!hit.url) return false
+    try {
+      return isHostnameWithinDomains(new URL(hit.url).hostname.toLowerCase(), domains)
+    } catch {
+      return false
+    }
+  })
+}
+
+/** Brave 官方支持 site: 与 OR 操作符（大写），用它表达域名白名单。 */
+const buildBraveSiteFilter = (domains: string[]): string => {
+  if (domains.length === 0) return ''
+  return domains.map((domain) => `site:${domain}`).join(' OR ')
+}
+
+const buildUrlWithParams = (endpoint: string, params: Record<string, string>): string => {
+  try {
+    const url = new URL(endpoint)
+    for (const [key, value] of Object.entries(params)) {
+      url.searchParams.set(key, value)
+    }
+    return url.toString()
+  } catch {
+    const search = new URLSearchParams(params).toString()
+    return `${endpoint}${endpoint.includes('?') ? '&' : '?'}${search}`
+  }
+}
+
 const normalizeUrlForDedupe = (rawUrl: string): string => {
   if (!rawUrl) return ''
   try {
@@ -236,8 +340,15 @@ export const formatHitsForModel = (query: string, hits: WebSearchHit[]): string 
         ? `Engine: ${hit.engine}`
         : 'Engine: unknown'
     const languageText = `QueryLang: ${hit.queryLanguage || 'unknown'}`
+    const metaText = [
+      hit.siteName ? `Site: ${hit.siteName}` : '',
+      hit.publishedDate ? `Published: ${hit.publishedDate}` : '',
+      typeof hit.authority === 'number' && hit.authority >= 0 ? `Authority: ${hit.authority}` : '',
+    ]
+      .filter(Boolean)
+      .join(' | ')
     const imageText = (hit.imageUrl || hit.thumbnailUrl) ? `Image: ${hit.imageUrl || hit.thumbnailUrl}` : ''
-    const top = `${idx + 1}. ${hit.title || 'Untitled'}\nURL: ${hit.url}\n${engineText} | ${languageText}\nSummary: ${snippet}`
+    const top = `${idx + 1}. ${hit.title || 'Untitled'}\nURL: ${hit.url}\n${engineText} | ${languageText}${metaText ? ` | ${metaText}` : ''}\nSummary: ${snippet}`
     return imageText ? `${top}\n${imageText}`.trim() : top.trim()
   })
   return `Web search results for "${query}":\n\n${lines.join('\n\n')}`
@@ -250,34 +361,46 @@ const runTavilySearch = async (query: string, opts: WebSearchOptions): Promise<W
   if (!opts.apiKey) {
     throw new Error('Tavily API key is not configured')
   }
-  const endpoint = opts.endpoint || 'https://api.tavily.com/search'
+  const endpoint = opts.endpoint || TAVILY_SEARCH_ENDPOINT
   const isImageScope = isImageScopeOption(opts.scope)
+  const wantRawContent = Boolean(opts.includeRawContent)
   const payload: Record<string, unknown> = {
-    api_key: opts.apiKey,
     query,
     max_results: clampLimit(opts.limit),
     include_answer: false,
     // 官方默认 false；显式打开后每条 result 可带页面关联图，并在响应顶层返回 query 相关图片
     include_images: true,
+    // 官方 beta 字段：每条 result 附 published_date，供证据时效判断
+    include_published_date: true,
     search_depth: 'advanced',
+  }
+  if (wantRawContent) {
+    // 官方文档：markdown 返回清洗后的正文（raw_content），可直接作为网页证据复用
+    payload.include_raw_content = 'markdown'
+  } else {
+    // 不取正文时显式保留 3 段语义片段，避免上游默认值变化影响 content 质量
+    payload.chunks_per_source = TAVILY_CHUNKS_PER_SOURCE
   }
   if (isImageScope) {
     payload.include_image_descriptions = true
   }
-  const domains = normalizeDomains(opts.domains)
+  const domains = normalizeDomainHosts(opts.domains).slice(0, TAVILY_MAX_DOMAINS)
   if (domains.length > 0) {
     payload.include_domains = domains
   }
 
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      // 官方 OpenAPI 的鉴权方式：Authorization: Bearer <api key>
+      Authorization: `Bearer ${opts.apiKey}`,
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify(payload),
     signal: opts.signal,
   })
   if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`Tavily search failed: ${response.status} ${text}`)
+    throw buildHttpError('Tavily search', response)
   }
   const data = await response.json() as any
 
@@ -315,25 +438,35 @@ const runTavilySearch = async (query: string, opts: WebSearchOptions): Promise<W
   }
 
   const results = Array.isArray(data?.results) ? data.results : []
-  return results.map((item: any) => ({
-    title: item?.title || item?.url || 'Untitled',
-    url: item?.url || '',
-    snippet: item?.content || item?.snippet || '',
-    content: item?.content,
-    imageUrl: pickImageUrl(item),
-    thumbnailUrl: pickThumbnailUrl(item),
-  }))
+  return results.map((item: any) => {
+    const snippet = pickFirstString(item?.content, item?.snippet) || ''
+    const rawContent = pickFirstString(item?.raw_content) || ''
+    return {
+      title: item?.title || item?.url || 'Untitled',
+      url: item?.url || '',
+      snippet,
+      content: rawContent || item?.content || snippet,
+      imageUrl: pickImageUrl(item),
+      thumbnailUrl: pickThumbnailUrl(item),
+      publishedDate: pickFirstString(item?.published_date),
+    } satisfies WebSearchHit
+  })
 }
 
 const runBraveSearch = async (query: string, opts: WebSearchOptions): Promise<WebSearchHit[]> => {
   if (!opts.apiKey) {
     throw new Error('Brave Search API key is not configured')
   }
-  const endpoint =
-    opts.endpoint ||
-    `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${clampLimit(
-      opts.limit,
-    )}`
+  const domains = normalizeDomainHosts(opts.domains)
+  const siteFilter = buildBraveSiteFilter(domains)
+  const endpoint = buildUrlWithParams(opts.endpoint || BRAVE_WEB_SEARCH_ENDPOINT, {
+    q: siteFilter ? `${query} (${siteFilter})` : query,
+    count: String(clampLimit(opts.limit)),
+    // 官方默认 true 会在 description 里插入高亮标记字符，模型读到的是噪音
+    text_decorations: 'false',
+    // 每条结果再给 5 段备选摘录，用作 snippet 之外的正文线索
+    extra_snippets: 'true',
+  })
   const response = await fetch(endpoint, {
     method: 'GET',
     headers: {
@@ -343,28 +476,40 @@ const runBraveSearch = async (query: string, opts: WebSearchOptions): Promise<We
     signal: opts.signal,
   })
   if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`Brave search failed: ${response.status} ${text}`)
+    throw buildHttpError('Brave search', response)
   }
   const data = await response.json() as any
   const results = Array.isArray(data?.web?.results) ? data.web.results : []
-  return results.map((item: any) => ({
-    title: item?.title || item?.url || 'Untitled',
-    url: item?.url || '',
-    snippet: item?.description || item?.snippet || '',
-    content: item?.description,
-    imageUrl: pickImageUrl(item),
-    thumbnailUrl: pickThumbnailUrl(item),
-  }))
+  return results.map((item: any): WebSearchHit => {
+    const extraSnippets = Array.isArray(item?.extra_snippets)
+      ? item.extra_snippets.filter(
+          (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0,
+        )
+      : []
+    const description = pickFirstString(item?.description) || ''
+    const snippet = pickFirstString(description, extraSnippets[0]) || ''
+    const content = [description, ...extraSnippets].filter(Boolean).join('\n\n')
+    return {
+      title: item?.title || item?.url || 'Untitled',
+      url: item?.url || '',
+      snippet,
+      content: content || snippet,
+      imageUrl: pickFirstString(item?.thumbnail?.original, item?.thumbnail?.src) || pickImageUrl(item),
+      thumbnailUrl: pickThumbnailUrl(item),
+      publishedDate: pickFirstString(item?.page_age),
+      siteName: pickFirstString(item?.profile?.name),
+    }
+  })
 }
 
 const runBraveImageSearch = async (query: string, opts: WebSearchOptions): Promise<WebSearchHit[]> => {
   if (!opts.apiKey) {
     throw new Error('Brave Search API key is not configured')
   }
-  const endpoint =
-    opts.endpoint ||
-    `https://api.search.brave.com/res/v1/images/search?q=${encodeURIComponent(query)}&count=${clampLimit(opts.limit)}`
+  const endpoint = buildUrlWithParams(opts.endpoint || BRAVE_IMAGE_SEARCH_ENDPOINT, {
+    q: query,
+    count: String(clampLimit(opts.limit)),
+  })
   const response = await fetch(endpoint, {
     method: 'GET',
     headers: {
@@ -374,54 +519,52 @@ const runBraveImageSearch = async (query: string, opts: WebSearchOptions): Promi
     signal: opts.signal,
   })
   if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`Brave image search failed: ${response.status} ${text}`)
+    throw buildHttpError('Brave image search', response)
   }
   const data = await response.json() as any
   const results = Array.isArray(data?.results) ? data.results : []
-  return results.map((item: any) => {
+  return results.map((item: any): WebSearchHit => {
+    // 官方图片结果：properties.url 是原图地址，thumbnail.src 是 Brave 缓存缩略图
     const directImage =
       pickFirstString(
+        item?.properties?.url,
         item?.imageUrl,
         item?.image_url,
         typeof item?.image === 'string' ? item.image : undefined,
-        item?.thumbnail?.src,
         item?.thumbnail?.original,
+        item?.thumbnail?.src,
         item?.thumb,
       ) || pickImageUrl(item)
+    const description = pickFirstString(item?.description, item?.snippet) || ''
     return {
       title: item?.title || item?.url || 'Untitled',
-      url: item?.url || item?.pageUrl || item?.page_url || '',
-      snippet: item?.description || item?.snippet || '',
-      content: item?.description,
+      url: item?.url || item?.pageUrl || item?.page_url || directImage || '',
+      snippet: description,
+      content: description,
       imageUrl: directImage,
       thumbnailUrl: pickThumbnailUrl(item) || directImage,
     }
   })
 }
 
-const sanitizeMetasoScope = (scope?: string) => {
-  if (!scope) return 'webpage'
-  const normalized = scope.trim().toLowerCase()
-  return METASO_SCOPE_WHITELIST.has(normalized) ? normalized : 'webpage'
-}
-
 const runMetasoSearch = async (query: string, opts: WebSearchOptions): Promise<WebSearchHit[]> => {
   if (!opts.apiKey) {
     throw new Error('Metaso API key is not configured')
   }
-  const endpoint = opts.endpoint || 'https://metaso.cn/api/v1/search'
-  const scope = sanitizeMetasoScope(opts.scope)
+  const endpoint = opts.endpoint || METASO_SEARCH_ENDPOINT
+  const scope = resolveMetasoScope(opts.scope)
+  const domains = normalizeDomainHosts(opts.domains)
+  // 官方搜索请求体只有这些字段；stream/output/format 属于问答与读页接口，不属于搜索接口
   const payload: Record<string, unknown> = {
     q: query,
     scope,
     includeSummary: Boolean(opts.includeSummary),
-    includeRawContent: Boolean(opts.includeRawContent),
     size: clampLimit(opts.limit),
     conciseSnippet: false,
-    stream: false,
-    output: 'json',
-    format: 'chat_completions',
+  }
+  if (scope === 'webpage') {
+    // 官方说明：includeRawContent 只在网页范围内生效
+    payload.includeRawContent = Boolean(opts.includeRawContent)
   }
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -434,15 +577,13 @@ const runMetasoSearch = async (query: string, opts: WebSearchOptions): Promise<W
     signal: opts.signal,
   })
   if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`Metaso search failed: ${response.status} ${text}`)
+    throw buildHttpError('Metaso search', response)
   }
   const data = await response.json() as any
   const scopeCandidates: Record<string, any[] | undefined> = {
-    webpage: data?.results || data?.data?.results,
+    webpage: data?.webpages || data?.results || data?.data?.webpages || data?.data?.results,
     document: data?.documents || data?.data?.documents,
-    paper: data?.papers || data?.data?.papers,
-    scholar: data?.scholars || data?.data?.scholars,
+    scholar: data?.scholars || data?.papers || data?.data?.scholars || data?.data?.papers,
     image: data?.images || data?.data?.images,
     video: data?.videos || data?.data?.videos,
     podcast: data?.podcasts || data?.data?.podcasts,
@@ -463,34 +604,48 @@ const runMetasoSearch = async (query: string, opts: WebSearchOptions): Promise<W
     data?.data?.items,
   ]
   const results = (candidateArrays.find((item) => Array.isArray(item)) as any[]) || []
-  return results.map((item: any) => ({
-    title: item?.title || item?.name || item?.url || 'Untitled',
-    url: item?.url || item?.link || item?.imageUrl || '',
-    snippet: item?.summary || item?.description || item?.snippet || '',
-    content: item?.content || item?.summary || item?.description,
-    imageUrl: pickImageUrl(item),
-    thumbnailUrl: pickThumbnailUrl(item),
-  }))
+  const hits = results.map((item: any): WebSearchHit => {
+    const snippet = pickFirstString(item?.summary, item?.description, item?.snippet) || ''
+    return {
+      title: item?.title || item?.name || item?.url || 'Untitled',
+      url: item?.url || item?.link || item?.imageUrl || '',
+      snippet,
+      content: pickFirstString(item?.content, snippet),
+      imageUrl: pickImageUrl(item),
+      thumbnailUrl: pickThumbnailUrl(item),
+    }
+  })
+  // Metaso 搜索接口没有域名参数，用统一白名单在这里收口
+  return filterHitsByDomains(hits, domains)
 }
 
 const runExaSearch = async (query: string, opts: WebSearchOptions): Promise<WebSearchHit[]> => {
   if (!opts.apiKey) {
     throw new Error('Exa API key is not configured')
   }
-  const endpoint = opts.endpoint || 'https://api.exa.ai/search'
+  const endpoint = opts.endpoint || EXA_SEARCH_ENDPOINT
   const isImageScope = isImageScopeOption(opts.scope)
   const imageLinksCount = isImageScope ? 10 : 5
+  const contents: Record<string, unknown> = {
+    highlights: true,
+    // Exa：代表图 image/favicon 随 contents 返回；再抽若干页内图片链接
+    extras: { imageLinks: imageLinksCount },
+  }
+  if (opts.includeRawContent) {
+    // 官方 contents.text 控制正文返回长度；不传则没有 text 字段
+    contents.text = { maxCharacters: EXA_RAW_TEXT_MAX_CHARS }
+  }
+  if (opts.includeSummary) {
+    // 官方 contents.summary 需要对象形式，query 用来指导摘要角度
+    contents.summary = { query }
+  }
   const payload: Record<string, unknown> = {
     query,
     numResults: clampLimit(opts.limit),
     type: 'auto',
-    contents: {
-      highlights: true,
-      // Exa：代表图 image/favicon 随 contents 返回；再抽若干页内图片链接
-      extras: { imageLinks: imageLinksCount },
-    },
+    contents,
   }
-  const domains = normalizeDomains(opts.domains)
+  const domains = normalizeDomainHosts(opts.domains)
   if (domains.length > 0) {
     payload.includeDomains = domains
   }
@@ -505,8 +660,7 @@ const runExaSearch = async (query: string, opts: WebSearchOptions): Promise<WebS
     signal: opts.signal,
   })
   if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`Exa search failed: ${response.status} ${text}`)
+    throw buildHttpError('Exa search', response)
   }
   const data = await response.json() as any
   const results = Array.isArray(data?.results) ? data.results : []
@@ -540,16 +694,18 @@ const runExaSearch = async (query: string, opts: WebSearchOptions): Promise<WebS
     return flattened.slice(0, clampLimit(opts.limit))
   }
 
-  return results.map((item: any) => {
+  return results.map((item: any): WebSearchHit => {
     const highlights = Array.isArray(item?.highlights) ? item.highlights : []
     const text = typeof item?.text === 'string' ? item.text : ''
+    const summary = pickFirstString(item?.summary) || ''
     return {
       title: item?.title || item?.url || 'Untitled',
       url: item?.url || '',
-      snippet: highlights[0] || text.slice(0, 300) || '',
-      content: text || highlights.join('\n') || item?.summary || '',
+      snippet: pickFirstString(highlights[0], summary) || text.slice(0, 300) || '',
+      content: pickFirstString(text, highlights.join('\n'), summary) || '',
       imageUrl: pickImageUrl(item),
       thumbnailUrl: pickThumbnailUrl(item) || item?.favicon || '',
+      publishedDate: pickFirstString(item?.publishedDate),
     }
   })
 }
@@ -579,6 +735,7 @@ export const runWebSearch = async (query: string, opts: WebSearchOptions): Promi
         domains: opts.domains,
         scope: opts.scope,
         includeRawContent: Boolean(opts.includeRawContent || opts.deepseekNeedContent),
+        oriQuestion: opts.oriQuestion,
         signal: opts.signal,
       })
     default:
@@ -778,6 +935,7 @@ export const runWebSearchParallel = async (
           includeSummary: opts.includeSummary,
           includeRawContent: opts.includeRawContent,
           deepseekNeedContent: opts.deepseekNeedContent,
+          oriQuestion: opts.originalQuery,
           signal: combinedSignal.signal,
         })
 
