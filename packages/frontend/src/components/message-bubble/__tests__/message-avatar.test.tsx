@@ -51,8 +51,12 @@ describe('MessageAvatar', () => {
     try {
       render(<MessageAvatar src="/chat-images/profiles/a.png" alt="AI 头像" fallback="A" />)
 
-      expect(screen.getByRole('img').getAttribute('src')).toBe('/chat-images/profiles/a.png')
+      const img = screen.getByRole('img')
+      expect(img.getAttribute('src')).toBe('/chat-images/profiles/a.png')
       expect(screen.queryByText('A')).toBeNull()
+      // 回归守卫：占位在 loaded 那一帧就卸载，图片层若从 opacity 0 起播会重新变成透明空窗。
+      expect(img.className).not.toContain('opacity-0')
+      expect(img.className).not.toContain('fade-in-0')
     } finally {
       restore()
     }
