@@ -96,15 +96,8 @@ describe('ShareService', () => {
             query: 'hello',
             createdAt: Date.now(),
             details: {
-              assessedImages: [
-                {
-                  url: 'https://example.com/cover.png',
-                  title: 'Web Result',
-                  sourceUrl: 'https://example.com',
-                  confidence: 'high',
-                  description: '封面图',
-                },
-              ],
+              leadImageUrl: 'https://example.com/cover.png',
+              images: [{ url: 'https://example.com/cover.png' }],
             },
           },
         ]),
@@ -185,6 +178,9 @@ describe('ShareService', () => {
     expect(persistedPayload?.messages?.[0]?.richPayload?.parts).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ source: 'external' })]),
     )
+    const persistedToolDetails = persistedPayload?.messages?.[0]?.toolEvents?.[0]?.details
+    expect(persistedToolDetails?.images).toEqual([{ url: 'https://example.com/cover.png' }])
+    // 分享面原样透传历史 tool details，不剥离旧字段；本用例只锁正向透传。
     expect(result.title).toBe('Custom Title')
     expect(result.messageCount).toBe(1)
     const resultRichPayload = (result.messages[0] as any).richPayload

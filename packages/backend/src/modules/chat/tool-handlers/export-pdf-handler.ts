@@ -130,7 +130,7 @@ export class ExportPdfToolHandler implements IToolHandler {
             },
             images: {
               type: 'array',
-              description: 'Optional evidence images already filtered by the vision transcription proxy in this research. The backend only embeds images listed here, and the image URLs must match those returned by web_search/read_url. Do not invent URLs.',
+              description: 'Optional evidence images for this research, as the raw image URLs returned by web_search/read_url. No relevance filtering is applied by the backend, so pick the images that actually support your text. The backend only embeds images listed here, and the image URLs must match those returned by web_search/read_url. Do not invent URLs.',
               items: {
                 type: 'object',
                 properties: {

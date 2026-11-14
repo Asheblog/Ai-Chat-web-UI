@@ -20,16 +20,12 @@ describe('classifyFiles', () => {
     expect(result.others).toHaveLength(1)
   })
 
-  it('routes images to images when vision is disabled but canAttachImages is true (vision proxy ready)', () => {
+  it('ignores the retired canAttachImages option when vision is disabled', () => {
     const files = [new File([''], 'photo.jpg', { type: 'image/jpeg' })]
-    const result = classifyFiles(files, { isVisionEnabled: false, canAttachImages: true })
-    expect(result.images).toHaveLength(1)
-    expect(result.others).toHaveLength(0)
-  })
-
-  it('routes images to others when canAttachImages is false even if vision enabled flag passes', () => {
-    const files = [new File([''], 'photo.jpg', { type: 'image/jpeg' })]
-    const result = classifyFiles(files, { isVisionEnabled: true, canAttachImages: false })
+    const legacyOptions = { isVisionEnabled: false, canAttachImages: true } as Parameters<
+      typeof classifyFiles
+    >[1]
+    const result = classifyFiles(files, legacyOptions)
     expect(result.images).toHaveLength(0)
     expect(result.others).toHaveLength(1)
   })

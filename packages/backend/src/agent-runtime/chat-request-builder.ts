@@ -18,7 +18,6 @@ import {
 import { buildChatProviderRequest } from '../utils/chat-provider'
 import type { RequestGenerationOptions } from './request-options'
 import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills, type RequestedSkillsPayload } from '../modules/skills/types'
-import { buildVisionAttachmentHint, type ImageDescription } from '../services/vision/vision-proxy-service'
 import { buildTaskPlanningPrompt } from './task-planning'
 import {
   loadSystemSettingsMap,
@@ -78,17 +77,6 @@ export interface PrepareChatRequestParams {
   systemSettings?: SystemSettingsMap | null
   /** 同 turn 历史快照，避免重复扫消息 */
   historySnapshot?: PreStreamHistorySnapshot | null
-  /** 主模型是否支持识图（未知视为 true，保持既有行为） */
-  mainModelVision?: boolean
-  /** 当前轮次图片转写描述前缀（自动转写注入） */
-  visionTranscriptionPrefix?: string
-  /**
-   * 工具流下本轮附件图片张数；>0 时注入「请先调用 analyze_visual_media」提醒。
-   * 仅编排层在 visionProxyToolFlow 时传入。
-   */
-  visionAttachmentImageCount?: number
-  /** 历史用户消息 id → 图片描述（仅主模型无 vision 时注入） */
-  historyImageDescriptions?: Map<number, ImageDescription[]> | null
 }
 
 export interface ChatRequestBuilderDeps {
@@ -136,9 +124,6 @@ export class ChatRequestBuilder {
     }
     assertSupportedProvider(params.session.connection.provider)
     const contextEnabled = params.contextEnabled ?? true
-    const mainModelVision = params.mainModelVision !== false
-    const visionTranscriptionPrefix = params.visionTranscriptionPrefix || ''
-    const visionAttachmentHint = buildVisionAttachmentHint(params.visionAttachmentImageCount ?? 0)
     const systemSettings = params.systemSettings ?? (await loadSystemSettingsMap(this.prisma))
     this.scheduleImageCleanup(systemSettings)
 
@@ -189,7 +174,7 @@ export class ChatRequestBuilder {
         role: 'system',
         content:
           params.deepResearchWebSearchActive === true
-            ? '你现在处于深度研究（Deep Research）模式。第一步必须调用 research_plan 工具，把完整研究计划提交给用户确认；在收到用户批准之前，绝对不要调用 web_search、read_url 或任何其它工具。研究计划必须包含：title、objective、3-6 个 sub_questions（每个子问题附 1-3 个搜索 keywords）、estimated_tool_rounds 范围、deliverable 固定为 markdown_report_with_citations_pdf。用户批准计划后，交替使用 web_search 和 read_url 收集证据；至少读取若干篇搜索结果原文，并对冲突信息做交叉验证。搜索和读网页时，注意工具返回的图片证据（URL、描述、相关性），优先选择经识图筛选为“相关或弱相关”的图片。若某个子问题需要新闻配图或现场图，可主动调用 web_search 并设置 scope="image" 来补充图片检索；图片搜索结果同样会经过识图相关性筛选。所有关键事实必须记录来源，并在最终报告中用 [1]、[2] 等编号逐段引用。报告必须使用 Markdown 写成完整文档，结构为：标题、摘要、研究背景、分节正文、结论、参考来源列表。应在相应小节使用 Markdown 图片语法插入 1-2 张最相关图片，例如 `![图片描述](图片URL)`；只能使用工具返回的图片 URL，不得编造或外链无关图片。报告完成后，必须调用 export_pdf，把完整 Markdown 报告、标题以及报告所用图片（images 参数）传给该工具生成 PDF；PDF 生成成功后在回答中告知用户可下载。'
+            ? '你现在处于深度研究（Deep Research）模式。第一步必须调用 research_plan 工具，把完整研究计划提交给用户确认；在收到用户批准之前，绝对不要调用 web_search、read_url 或任何其它工具。研究计划必须包含：title、objective、3-6 个 sub_questions（每个子问题附 1-3 个搜索 keywords）、estimated_tool_rounds 范围、deliverable 固定为 markdown_report_with_citations_pdf。用户批准计划后，交替使用 web_search 和 read_url 收集证据；至少读取若干篇搜索结果原文，并对冲突信息做交叉验证。工具返回的图片证据都只有图片 URL，不含任何识图描述，也不代表图片与正文的实际相关性：搜索结果的图片会附上引擎给出的标题/摘要，read_url 读取网页时图片段只有图片 URL（可能附带页面 alt 文本）。是否需要配图、配哪一张，要你结合标题/摘要（若有）与正文自行判断，拿不准就不要插入。若某个子问题需要新闻配图或现场图，可主动调用 web_search 并设置 scope="image" 来补充图片检索，返回的同样是图片 URL 与引擎标题/摘要。所有关键事实必须记录来源，并在最终报告中用 [1]、[2] 等编号逐段引用。报告必须使用 Markdown 写成完整文档，结构为：标题、摘要、研究背景、分节正文、结论、参考来源列表。应在相应小节使用 Markdown 图片语法插入 1-2 张最相关图片，例如 `![图片描述](图片URL)`；只能使用工具返回的图片 URL，不得编造或外链无关图片。报告完成后，必须调用 export_pdf，把完整 Markdown 报告、标题以及报告所用图片（images 参数）传给该工具生成 PDF；PDF 生成成功后在回答中告知用户可下载。'
             : '你现在处于深度研究（Deep Research）模式，但当前没有可用的联网搜索工具。不要调用 research_plan、web_search 或 read_url。请直接基于对话上下文和已有知识完成研究报告；报告必须使用 Markdown 写成完整文档，结构为：标题、摘要、研究背景、分节正文、结论、参考来源列表，并且必须在显著位置明确标注“本报告未经联网验证，基于模型已有知识生成”。报告完成后，调用 export_pdf 生成 PDF 并在回答中告知用户可下载。'
       })
     }
@@ -242,8 +227,6 @@ export class ChatRequestBuilder {
       contextEnabled,
       historyUpperBound: params.historyUpperBound ?? null,
       pinnedSystemMessages: cleanedSystemPrompts,
-      mainModelVision,
-      historyImageDescriptions: params.historyImageDescriptions ?? null,
     })
 
     const contextMessages = contextInfo.truncatedContext
@@ -251,19 +234,13 @@ export class ChatRequestBuilder {
     const messagesPayload = this.buildMessagesPayload(
       contextMessages,
       params.content,
-      mainModelVision ? (params.images ?? []) : [],
+      params.images ?? [],
     )
 
     // 注入当前日期时间和 RAG 上下文到用户消息前缀
     // 放在 system prompt 之后、用户内容之前，不影响 DeepSeek 前缀缓存命中
     const dateString = templateVariables['day time']
-    const cacheSafePrefix =
-      ragUserPrefix +
-      (visionTranscriptionPrefix
-        ? `[图片转写描述]\n${visionTranscriptionPrefix}\n\n`
-        : '') +
-      (visionAttachmentHint ? `${visionAttachmentHint}\n\n` : '') +
-      `[当前时间: ${dateString}]`
+    const cacheSafePrefix = ragUserPrefix + `[当前时间: ${dateString}]`
     if (messagesPayload.length > 0) {
       this.prependUserContent(messagesPayload, cacheSafePrefix)
     }
@@ -327,8 +304,6 @@ export class ChatRequestBuilder {
     historyUpperBound: Date | null
     historySnapshot?: PreStreamHistorySnapshot | null
     pinnedSystemMessages: Array<{ role: 'system'; content: string }>
-    mainModelVision: boolean
-    historyImageDescriptions: Map<number, ImageDescription[]> | null
   }) {
     const contextLimit = await this.resolveContextLimit({
       connectionId: params.connectionId,
@@ -341,20 +316,6 @@ export class ChatRequestBuilder {
       ? await this.tokenizer.countConversationTokens(pinned)
       : 0
     const remainingBudget = Math.max(0, contextLimit - pinnedTokens)
-
-    // 历史消息图片描述注入：仅在编排层提供了 historyImageDescriptions 时生效
-    const injectHistoryDescriptions = (
-      messages: Array<{ id: number; content: string }>,
-    ) => {
-      if (!params.historyImageDescriptions) return
-      for (const msg of messages) {
-        const descs = params.historyImageDescriptions.get(msg.id)
-        if (descs && descs.length > 0) {
-          const text = descs.map((d) => d.description).join('\n')
-          msg.content = `${msg.content}\n\n[图片转写描述]\n${text}`
-        }
-      }
-    }
 
     let truncatedConversation: Array<{ role: string; content: string }>
     let compressionSummaries: Array<{ role: string; content: string }> = []
@@ -372,7 +333,6 @@ export class ChatRequestBuilder {
             content: msg.content,
             createdAt: msg.createdAt,
           }))
-        injectHistoryDescriptions(ungroupedMessages)
         groupedMessageRefs = params.historySnapshot.messages
           .filter((msg) => typeof msg.messageGroupId === 'number')
           .map((msg) => ({
@@ -415,7 +375,6 @@ export class ChatRequestBuilder {
           }) as Promise<Array<{ id: number; messageGroupId: number | null; createdAt: Date }>>,
         ])
         ungroupedMessages = loadedUngrouped
-        injectHistoryDescriptions(ungroupedMessages)
         groupedMessageRefs = loadedGroupedRefs
 
         const groupedIds = Array.from(

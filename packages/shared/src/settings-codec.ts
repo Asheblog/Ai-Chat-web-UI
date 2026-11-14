@@ -111,12 +111,6 @@ export interface SystemSettings {
   titleSummaryModelSource?: 'current' | 'specified'
   titleSummaryConnectionId?: number | null
   titleSummaryModelId?: string | null
-  // 图片转写设置
-  imageTranscriptionEnabled?: boolean
-  imageTranscriptionConnectionId?: number | null
-  imageTranscriptionModelId?: string | null
-  imageTranscriptionReasoningEnabled?: boolean
-  imageTranscriptionReasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | '' | 'unset'
   // RAG 文档解析设置
   ragEnabled?: boolean
   ragEmbeddingConnectionId?: number | null
@@ -514,21 +508,6 @@ export const parseSystemSettingsPayload = (
     if (typeof v === 'string' && v.trim().length > 0) return v
     return null
   })()
-  // 图片转写设置
-  const imageTranscriptionEnabled = Boolean(raw.image_transcription_enabled ?? false)
-  const imageTranscriptionConnectionId = (() => {
-    const v = raw.image_transcription_connection_id
-    if (typeof v === 'number' && v > 0) return v
-    return null
-  })()
-  const imageTranscriptionModelId = (() => {
-    const v = raw.image_transcription_model_id
-    if (typeof v === 'string' && v.trim().length > 0) return v
-    return null
-  })()
-  const imageTranscriptionReasoningEnabled = Boolean(raw.image_transcription_reasoning_enabled ?? false)
-  const imageTranscriptionReasoningEffort = (raw.image_transcription_reasoning_effort ?? 'unset') as any
-
   return {
     allowRegistration,
     brandText,
@@ -618,12 +597,6 @@ export const parseSystemSettingsPayload = (
     titleSummaryModelSource,
     titleSummaryConnectionId,
     titleSummaryModelId,
-    // 图片转写设置
-    imageTranscriptionEnabled,
-    imageTranscriptionConnectionId,
-    imageTranscriptionModelId,
-    imageTranscriptionReasoningEnabled,
-    imageTranscriptionReasoningEffort,
     // RAG 设置
     ragEnabled: Boolean(raw.rag_enabled ?? false),
     ragEmbeddingConnectionId: (() => {

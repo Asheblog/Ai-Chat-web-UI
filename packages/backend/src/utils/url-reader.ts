@@ -2361,11 +2361,7 @@ export async function readUrlContent(
 /**
  * 格式化读取结果供模型使用
  */
-export function formatUrlContentForModel(
-  result: UrlReadResult,
-  options: { includeRawImageEvidence?: boolean } = {},
-): string {
-  const includeRawImageEvidence = options.includeRawImageEvidence !== false
+export function formatUrlContentForModel(result: UrlReadResult): string {
   if (result.error) {
     const suffix = [
       result.errorCode ? `错误码: ${result.errorCode}` : null,
@@ -2446,7 +2442,7 @@ export function formatUrlContentForModel(
   }
 
   const images = Array.isArray(result.images) ? result.images : []
-  if (includeRawImageEvidence && (result.leadImageUrl || images.length > 0)) {
+  if (result.leadImageUrl || images.length > 0) {
     parts.push('')
     parts.push('## 图片证据')
     if (result.leadImageUrl) {

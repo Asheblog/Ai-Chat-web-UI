@@ -191,20 +191,6 @@ export const updateSystemSettings = async (
   if (Object.prototype.hasOwnProperty.call(rest, 'titleSummaryModelId')) {
     patch.titleSummaryModelId = rest.titleSummaryModelId ?? null
   }
-  // 图片转写设置
-  if (typeof rest.imageTranscriptionEnabled === 'boolean') patch.imageTranscriptionEnabled = rest.imageTranscriptionEnabled
-  if (Object.prototype.hasOwnProperty.call(rest, 'imageTranscriptionConnectionId')) {
-    patch.imageTranscriptionConnectionId = rest.imageTranscriptionConnectionId ?? null
-  }
-  if (Object.prototype.hasOwnProperty.call(rest, 'imageTranscriptionModelId')) {
-    patch.imageTranscriptionModelId = rest.imageTranscriptionModelId ?? null
-  }
-  if (typeof rest.imageTranscriptionReasoningEnabled === 'boolean') {
-    patch.imageTranscriptionReasoningEnabled = rest.imageTranscriptionReasoningEnabled
-  }
-  if (typeof rest.imageTranscriptionReasoningEffort === 'string') {
-    patch.imageTranscriptionReasoningEffort = rest.imageTranscriptionReasoningEffort
-  }
   // RAG 设置
   if (typeof rest.ragEnabled === 'boolean') patch.ragEnabled = rest.ragEnabled
   if (Object.prototype.hasOwnProperty.call(rest, 'ragEmbeddingConnectionId')) {
@@ -341,35 +327,6 @@ export const uninstallPythonRuntimePackages = async (payload: { packages: string
 
 export const reconcilePythonRuntime = async () => {
   const response = await client.post<ApiResponse>('/settings/python-runtime/reconcile')
-  return response.data
-}
-
-export type ImageTranscriptionProbeStepName = 'transcribe' | 'relevance'
-
-export type ImageTranscriptionProbeStep = {
-  name: ImageTranscriptionProbeStepName
-  ok: boolean
-  durationMs: number
-  detail?: string
-  error?: string
-}
-
-export type ImageTranscriptionProbeResult = {
-  ok: boolean
-  steps: ImageTranscriptionProbeStep[]
-}
-
-export const IMAGE_TRANSCRIPTION_PROBE_TIMEOUT_MS = 50_000
-
-export const probeImageTranscription = async (payload?: {
-  imageBase64?: string
-  mime?: string
-}) => {
-  const response = await client.post<ApiResponse<ImageTranscriptionProbeResult>>(
-    '/settings/image-transcription/probe',
-    payload ?? {},
-    { timeout: IMAGE_TRANSCRIPTION_PROBE_TIMEOUT_MS },
-  )
   return response.data
 }
 

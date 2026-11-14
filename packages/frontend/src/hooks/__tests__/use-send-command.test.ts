@@ -21,7 +21,6 @@ const makeBaseParams = () => ({
   maxConcurrentStreams: 1,
   clearError: mockClearError,
   isVisionEnabled: false,
-  visionProxyEnabled: false,
   selectedImages: [],
   setSelectedImages: mockSetSelectedImages,
   buildRequestPayload: mockBuildRequestPayload,
@@ -270,7 +269,7 @@ describe('useSendCommand without workspace files', () => {
   })
 })
 
-describe('useSendCommand with vision proxy images', () => {
+describe('useSendCommand images', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -279,12 +278,11 @@ describe('useSendCommand with vision proxy images', () => {
     { dataUrl: 'data:image/png;base64,aGVsbG8=', mime: 'image/png', size: 10 },
   ]
 
-  it('sends images when vision proxy is enabled even if vision model is off', async () => {
+  it('sends images when the model supports vision', async () => {
     const params = {
       ...makeBaseParams(),
       input: '看看这张图',
-      isVisionEnabled: false,
-      visionProxyEnabled: true,
+      isVisionEnabled: true,
       selectedImages: mockImages,
     }
     const { result } = renderHook(() => useSendCommand(params))
@@ -298,15 +296,33 @@ describe('useSendCommand with vision proxy images', () => {
     expect(images).toEqual([{ data: 'aGVsbG8=', mime: 'image/png' }])
   })
 
-  it('does not send images when both vision and vision proxy are disabled', async () => {
+  it('does not send images when the model does not support vision', async () => {
     const params = {
       ...makeBaseParams(),
       input: '看看这张图',
       isVisionEnabled: false,
-      visionProxyEnabled: false,
       selectedImages: mockImages,
     }
     const { result } = renderHook(() => useSendCommand(params))
+
+    await act(async () => {
+      await result.current()
+    })
+
+    expect(mockStreamMessage).toHaveBeenCalledOnce()
+    const [, , images] = mockStreamMessage.mock.calls[0]
+    expect(images).toBeUndefined()
+  })
+
+  it('ignores the retired vision proxy flag instead of sending images', async () => {
+    const legacyParams = {
+      ...makeBaseParams(),
+      input: '看看这张图',
+      isVisionEnabled: false,
+      visionProxyEnabled: true,
+      selectedImages: mockImages,
+    } as unknown as Parameters<typeof useSendCommand>[0]
+    const { result } = renderHook(() => useSendCommand(legacyParams))
 
     await act(async () => {
       await result.current()

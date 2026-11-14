@@ -322,11 +322,6 @@ function MessageBubbleComponent({
               showVariantNavigation={showVariantNavigation}
               variantInfo={variantInfo}
               isStreaming={Boolean(isStreaming)}
-              imageDescriptionNote={
-                meta.imageDescriptions?.length
-                  ? `图片描述由 ${meta.imageDescriptions[0].modelRawId} 转写`
-                  : null
-              }
             />
           )}
           {!isUser && meta.pendingSync && (

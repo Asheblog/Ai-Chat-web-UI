@@ -64,16 +64,7 @@ import {
   detectChatReasoningSignal,
   isResponsesUnsupportedFallback,
 } from '../services/reasoning-protocol-utils';
-import { resolveModelCapabilitiesForSession } from '../../../utils/model-capabilities';
 import {
-  VisionProxyServiceError,
-  isVisionProxyReady,
-  loadHistoryImageDescriptions,
-  parseStoredImageDescriptions,
-  type VisionProxyService,
-} from '../services/vision-proxy-service';
-import {
-  buildAgentVisionProxyConfig,
   computeAgentToolFlags,
   detectExtensionSourceInMessage,
   isExtensionInstallToolEnabled,
@@ -136,7 +127,6 @@ export interface ChatStreamRoutesDeps {
   streamTraceService: StreamTraceService
   streamSseService: StreamSseService
   conversationCompressionService: ConversationCompressionService
-  visionProxyService: VisionProxyService
   mcpService?: McpService
   extensionInstallService?: ExtensionInstallServiceLike
 }
@@ -154,7 +144,6 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
     streamTraceService,
     streamSseService,
     conversationCompressionService,
-    visionProxyService,
   } = deps
   const requestValidation = new ChatStreamRequestValidation({ chatService })
   const providerStreamEngine = new ProviderStreamEngine({
@@ -475,92 +464,14 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         agentWebSearchConfig.enabled &&
         (agentWebSearchConfig.engines || []).some((engine) => Boolean(agentWebSearchConfig.apiKeys?.[engine]))
 
-      // ===== 图片转写代理（Vision Transcription Proxy）=====
-      // 主模型无 vision 且有图时：工具流 → 注入视觉分析工具由主模型自主调用；
-      // 标准流（无工具）→ 后端自动转写，描述注入用户消息前缀并持久化（转写一次）
       // 扩展安装意图：消息里带 GitHub 链接时才激活工具流，避免普通聊天被拖进工具循环
       const extensionInstallEnabledFlag = isExtensionInstallToolEnabled(turnContext.systemSettings)
       const extensionSourceDetectedFlag = detectExtensionSourceInMessage(content || '')
-
-      const visionProxyConfig = buildAgentVisionProxyConfig(turnContext.systemSettings)
-      const hasImages = Array.isArray(images) && images.length > 0
-      // F4: 仅在发图时才查询模型能力，避免每请求一次 catalog 查询；mainModelVision 语义不变
-      // （无图时视为 vision 支持，无关紧要；有图时行为与先前一致）
-      const mainModelCapabilities = hasImages
-        ? await resolveModelCapabilitiesForSession(prisma, session)
-        : null
-      const mainModelVision = mainModelCapabilities?.vision !== false
-      const visionProxyRequested = isVisionProxyReady(visionProxyConfig) && hasImages && !mainModelVision
-      const preAgentToolFlags = visionProxyRequested
-        ? computeAgentToolFlags({
-            sysMap: turnContext.systemSettings,
-            requestedSkills,
-            hasKnowledgeBases,
-            webSearchConfig: agentWebSearchConfig,
-            pythonToolConfig,
-            workspaceToolConfig,
-            urlReaderConfig,
-            extensionInstallEnabled: extensionInstallEnabledFlag,
-            extensionSourceDetected: extensionSourceDetectedFlag,
-          })
-        : null
-      const visionProxyToolFlow = visionProxyRequested && Boolean(preAgentToolFlags?.agentToolsActive)
-      const visionProxyAutoTranscribe = visionProxyRequested && !visionProxyToolFlow
-
-      let visionTranscriptionPrefix = ''
-      let payloadImages = images
-      let historyImageDescriptions: Map<number, { description: string; modelRawId: string }[]> | null = null
-      if (visionProxyRequested) {
-        historyImageDescriptions = await loadHistoryImageDescriptions(prisma, sessionId, historyUpperBound)
-        // F5: 消息复用/重发时当前消息已有 imageDescriptionsJson，其描述会经
-        // visionTranscriptionPrefix 注入当前轮次；从历史 map 中剔除，避免双重注入
-        if (userMessageRecord && historyImageDescriptions) {
-          historyImageDescriptions.delete(userMessageRecord.id)
-        }
-      }
-      if (visionProxyAutoTranscribe) {
-        const stored = userMessageRecord ? parseStoredImageDescriptions((userMessageRecord as any).imageDescriptionsJson) : null
-        if (stored && stored.length > 0) {
-          // 已转写过（消息复用/重发）：直接复用，不重复调用视觉模型
-          visionTranscriptionPrefix = stored[0].description
-          payloadImages = []
-        } else {
-          try {
-            const { description, modelRawId } = await visionProxyService.transcribeImages(
-              images!,
-              content,
-              visionProxyConfig,
-            )
-            visionTranscriptionPrefix = description
-            payloadImages = []
-            if (userMessageRecord) {
-              await prisma.message.update({
-                where: { id: userMessageRecord.id },
-                data: {
-                  imageDescriptionsJson: JSON.stringify([{ description, modelRawId }]),
-                },
-              })
-            }
-          } catch (error) {
-            if (error instanceof VisionProxyServiceError) {
-              return c.json<ApiResponse>({
-                success: false,
-                error: `图片转写失败：${error.message}`,
-              }, error.statusCode as any)
-            }
-            throw error
-          }
-        }
-      } else if (visionProxyToolFlow) {
-        // 工具流：图片不发给主模型，由 analyze_visual_media 工具按需读取附件
-        payloadImages = []
-      }
-
       const preparedRequest = await chatRequestBuilder.prepare({
         session,
         payload,
         content,
-        images: payloadImages,
+        images,
         mode: 'stream',
         historyUpperBound,
         personalPrompt: actor.type === 'user' ? actor.personalPrompt ?? null : null,
@@ -570,10 +481,6 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         ragContext,
         systemSettings: turnContext.systemSettings,
         historySnapshot: turnContext.history,
-        mainModelVision,
-        visionTranscriptionPrefix: visionTranscriptionPrefix || undefined,
-        visionAttachmentImageCount: visionProxyToolFlow ? images!.length : undefined,
-        historyImageDescriptions,
       });
 
       const promptTokens = preparedRequest.promptTokens;
@@ -832,7 +739,6 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
             urlReader: agentToolFlags.urlReaderActive,
             document: agentToolFlags.documentToolsActive,
             knowledgeBase: agentToolFlags.knowledgeBaseToolsActive,
-            visionProxy: visionProxyToolFlow,
             pdfExport: agentToolFlags.pdfExportActive,
             deepResearch: agentToolFlags.deepResearchSkillRequested,
             extensionInstall: agentToolFlags.extensionInstallActive,
@@ -840,8 +746,6 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
           mcpService: deps.mcpService,
           extensionInstallService: deps.extensionInstallService,
           allowDynamicRuntime: agentToolFlags.dynamicSkillRuntimeEnabled,
-          visionProxyConfig: isVisionProxyReady(visionProxyConfig) ? visionProxyConfig : null,
-          visionProxyService,
           provider,
           baseUrl,
           authHeader,

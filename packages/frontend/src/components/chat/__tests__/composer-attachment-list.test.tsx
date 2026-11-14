@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import type { ComponentProps } from 'react'
 import { ComposerAttachmentList } from '@/components/chat/composer-attachment-list'
 import type { WorkspaceFile } from '@/features/chat/composer'
 
@@ -148,19 +149,21 @@ describe('ComposerAttachmentList', () => {
     expect(screen.getByText('doc.pdf')).toBeInTheDocument()
   })
 
-  it('renders vision proxy hint when images present', async () => {
-    const onRemoveImage = vi.fn()
-    const onRemoveWorkspaceFile = vi.fn()
-    render(
+  it('never renders the retired transcription hint, even when a legacy prop is passed', () => {
+    const legacyProps = { visionProxyHint: 'qwen-vl-max' } as Partial<
+      ComponentProps<typeof ComposerAttachmentList>
+    >
+    const { container } = render(
       <ComposerAttachmentList
         images={[{ dataUrl: 'data:image/png;base64,abc', mime: 'image/png', size: 1024 }]}
-        onRemoveImage={onRemoveImage}
+        onRemoveImage={vi.fn()}
         workspaceFiles={[]}
-        onRemoveWorkspaceFile={onRemoveWorkspaceFile}
-        visionProxyHint="qwen-vl-max"
+        onRemoveWorkspaceFile={vi.fn()}
+        {...legacyProps}
       />,
     )
 
-    expect(screen.getByText(/图片将由 qwen-vl-max 转写/)).toBeInTheDocument()
+    expect(screen.queryAllByText(/图片将由/)).toHaveLength(0)
+    expect(container.textContent).not.toContain('转写')
   })
 })

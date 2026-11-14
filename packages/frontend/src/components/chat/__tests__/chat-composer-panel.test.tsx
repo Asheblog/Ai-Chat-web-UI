@@ -26,7 +26,6 @@ const createProps = (
   onToggleDeepResearch: vi.fn(),
   skillOptions: [],
   onToggleSkillOption: vi.fn(),
-  isVisionEnabled: true,
   traceEnabled: false,
   canUseTrace: true,
   effort: 'unset',
@@ -132,22 +131,6 @@ describe('ChatComposerPanel — send button disabled with only error workspace f
     }
   })
 
-  it('renders vision proxy hint when proxy props are wired through panel', () => {
-    render(
-      <ChatComposerPanel
-        {...createProps({
-          selectedImages: [{ dataUrl: 'data:image/png;base64,abc', mime: 'image/png', size: 1024 }],
-          isVisionEnabled: false,
-          visionProxyEnabled: true,
-          visionProxyModelId: 'qwen-vl-max',
-        })}
-      />,
-    )
-
-    // mobile 与 desktop 两处 composer 均渲染附件列表，提示条应出现
-    expect(screen.getAllByText(/图片将由 qwen-vl-max 转写/).length).toBeGreaterThan(0)
-  })
-
   it('gives the shared textarea ref to the visible composer only', () => {
     const textareaRef = { current: null as HTMLTextAreaElement | null }
     const { container, rerender } = render(
@@ -174,6 +157,25 @@ describe('ChatComposerPanel — send button disabled with only error workspace f
     // 切回移动端时，桌面节点的解绑不能清空刚挂上的移动节点。
     rerender(<ChatComposerPanel {...createProps({ textareaRef, isDesktopComposer: false })} />)
     expect(textareaRef.current).toBe(mobileTextarea)
+  })
+})
+
+describe('ChatComposerPanel — retired image transcription UI', () => {
+  it('never renders the transcription hint, even when legacy proxy props are wired', () => {
+    // 退役的转写代理 props 仍可能被旧调用方传入；渲染层必须完全忽略。
+    const legacyProps = {
+      ...createProps({
+        selectedImages: [{ dataUrl: 'data:image/png;base64,abc', mime: 'image/png', size: 1024 }],
+      }),
+      isVisionEnabled: false,
+      visionProxyEnabled: true,
+      visionProxyModelId: 'qwen-vl-max',
+    } as unknown as React.ComponentProps<typeof ChatComposerPanel>
+
+    const { container } = render(<ChatComposerPanel {...legacyProps} />)
+
+    expect(screen.queryAllByText(/图片将由/)).toHaveLength(0)
+    expect(container.textContent).not.toContain('转写')
   })
 })
 

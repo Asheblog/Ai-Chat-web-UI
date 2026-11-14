@@ -5,9 +5,10 @@ import { SettingsDialog } from "../settings-dialog"
 
 // 稳定引用：SettingsDialog 的初始化 effect 依赖 toast/useAuthStore 返回值，
 // mock 若每次调用返回新引用会导致 effect 无限重跑（worker 崩溃）。
+type AuthStateFixture = { actorState: string; user: { role: string } | null }
 const { toastMock, authStateMock } = vi.hoisted(() => ({
   toastMock: vi.fn(),
-  authStateMock: { actorState: "authenticated", user: { role: "ADMIN" } },
+  authStateMock: { actorState: "authenticated", user: { role: "ADMIN" } } as AuthStateFixture,
 }))
 
 vi.mock("next/navigation", () => ({
@@ -96,5 +97,60 @@ describe("SettingsDialog 搜索接入", () => {
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(screen.queryByTestId("leaf-models")).not.toBeInTheDocument()
     expect(screen.queryByText(/已定位到/)).not.toBeInTheDocument()
+  })
+})
+
+describe("SettingsDialog 深链：权限提示与陈旧回退", () => {
+  beforeEach(() => {
+    searchParamsMock.delete("main")
+    searchParamsMock.delete("sub")
+    toastMock.mockClear()
+    authStateMock.actorState = "authenticated"
+    authStateMock.user = { role: "ADMIN" }
+  })
+
+  test("陈旧 sub（注册表已无此叶子）静默回落到默认叶子，不弹无权提示", async () => {
+    // 旧书签示例：sub=image-transcription 对应的叶子已随能力删除
+    searchParamsMock.set("main", "system")
+    searchParamsMock.set("sub", "image-transcription")
+
+    render(<SettingsDialog open onOpenChange={vi.fn()} defaultTab="system" />)
+
+    await waitFor(() => expect(screen.getByTestId("leaf-overview")).toBeInTheDocument())
+    expect(toastMock).not.toHaveBeenCalled()
+  })
+
+  test("存在但被角色过滤的 sub 仍提示无权访问", async () => {
+    authStateMock.actorState = "anonymous"
+    authStateMock.user = null
+    searchParamsMock.set("main", "personal")
+    searchParamsMock.set("sub", "personal.security")
+
+    render(<SettingsDialog open onOpenChange={vi.fn()} defaultTab="personal" />)
+
+    await waitFor(() =>
+      expect(toastMock).toHaveBeenCalledWith({
+        title: "当前账户无法访问该设置",
+        variant: "destructive",
+      }),
+    )
+  })
+
+  test("匿名 + 只带 ?sub=（叶子所属 adminOnly 分组被整体过滤）仍提示无权访问", async () => {
+    authStateMock.actorState = "anonymous"
+    authStateMock.user = null
+    // 只带 sub、不带 main：models 属于 adminOnly 的 system 分组，匿名的可见树里根本没有 system，
+    // 但该叶子仍在全量注册表中，属于「存在但当前角色看不到」，必须提示而不是静默回落。
+    searchParamsMock.set("sub", "models")
+
+    render(<SettingsDialog open onOpenChange={vi.fn()} defaultTab="personal" />)
+
+    await waitFor(() =>
+      expect(toastMock).toHaveBeenCalledWith({
+        title: "当前账户无法访问该设置",
+        variant: "destructive",
+      }),
+    )
+    expect(toastMock).toHaveBeenCalledTimes(1)
   })
 })

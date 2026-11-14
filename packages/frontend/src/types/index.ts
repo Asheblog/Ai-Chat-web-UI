@@ -23,7 +23,6 @@ export type { GeneratedImage } from '@aichat/shared/api-contract'
 export type { WorkspaceArtifact } from '@aichat/shared/api-contract'
 
 export type {
-  RichMessageEvidenceConfidence,
   RichMessageEvidenceKind,
   RichMessageImagePart,
   RichMessageImageSource,

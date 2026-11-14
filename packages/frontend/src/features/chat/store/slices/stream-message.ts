@@ -88,7 +88,6 @@ export const createStreamMessageAction = (
         images: images?.length
           ? images.map((img) => `data:${img.mime};base64,${img.data}`)
           : undefined,
-        imageDescriptions: null,
       }
 
   const settingsSnapshot = useSettingsStore.getState()

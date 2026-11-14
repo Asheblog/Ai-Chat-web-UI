@@ -85,7 +85,6 @@ export interface Message {
 }
 
 export type {
-  RichMessageEvidenceConfidence,
   RichMessageEvidenceKind,
   RichMessageImagePart,
   RichMessageImageSource,

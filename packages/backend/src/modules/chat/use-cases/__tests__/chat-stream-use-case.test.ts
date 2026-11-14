@@ -1,4 +1,15 @@
-jest.mock('../../../../db', () => ({ prisma: { $transaction: jest.fn() } }))
+// message 表是占位消息写回的必经入口（assistant-message-service 直接用真实 prisma）；
+// 缺失会让 upsert 抛错并被产品代码吞成 console.warn，掩盖 mock 缺口
+jest.mock('../../../../db', () => ({
+  prisma: {
+    $transaction: jest.fn(),
+    message: {
+      upsert: jest.fn().mockResolvedValue({ id: 1 }),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
+  },
+}))
 
 // Mock message-service to control createUserMessageWithQuota (called before prepare())
 jest.mock('../../services/message-service', () => ({
@@ -41,6 +52,8 @@ jest.mock('../../../../utils/task-trace', () => ({
     }),
   },
   summarizeSseLine: jest.fn(),
+  // 编排层在 trace 事件参数里调用 truncateString：缺它会在 prepare 之后抛 TypeError
+  truncateString: jest.fn((value: string) => value),
 }))
 
 jest.mock('../../../../services/task-trace/legacy-utils', () => ({
@@ -55,6 +68,11 @@ jest.mock('../../../chat/stream-state', () => ({
   buildPendingCancelKeyByMessageId: jest.fn().mockReturnValue('key'),
   clearPendingCancelMarkers: jest.fn(),
   deriveAssistantClientMessageId: jest.fn().mockReturnValue('assistant-client-id'),
+  // assistant-message-service 在创建/更新占位消息时调用；缺失会在每个用例里抛
+  // TypeError 并被产品代码吞成 console.warn，从而掩盖 mock 缺口
+  ensureAssistantClientMessageId: jest.fn((value?: string | null) =>
+    typeof value === 'string' && value.trim().length > 0 ? value.trim() : 'assistant-client-id',
+  ),
   hasPendingStreamCancelKey: jest.fn().mockReturnValue(false),
   registerStreamMeta: jest.fn().mockReturnValue({ streamKey: 'test', cancelled: false }),
   releaseStreamMeta: jest.fn(),
@@ -106,46 +124,8 @@ jest.mock('../../../chat/image-generation-response', () => ({
   checkImageGenerationCapability: jest.fn().mockResolvedValue(false),
 }))
 
-// Mock vision-proxy-service（canonical path：agent-tool-config 已迁移至 agent-runtime）
-jest.mock('../../../../services/vision/vision-proxy-service', () => ({
-  __esModule: true,
-  VisionProxyServiceError: class VisionProxyServiceError extends Error {
-    statusCode = 500
-  },
-  isVisionProxyReady: jest.fn().mockReturnValue(false),
-  loadHistoryImageDescriptions: jest.fn().mockResolvedValue(new Map()),
-  parseStoredImageDescriptions: jest.fn().mockReturnValue(null),
-  loadVisionProxyConfig: jest.fn(),
-}))
-
-jest.mock('../../../../agent-runtime/agent-tool-config', () => {
-  const actual = jest.requireActual('../../../../agent-runtime/agent-tool-config')
-  return {
-    __esModule: true,
-    ...actual,
-    computeAgentToolFlags: jest.fn((...args: unknown[]) => actual.computeAgentToolFlags(...args)),
-  }
-})
-
-// Mock model-capabilities
-jest.mock('../../../../utils/model-capabilities', () => ({
-  __esModule: true,
-  resolveModelCapabilitiesForSession: jest.fn().mockResolvedValue({ vision: true }),
-}))
-
 import { createChatStreamHandler } from '../chat-stream-use-case'
 import { ConnectionServiceError } from '../../../../services/connections/connection-service'
-import {
-  isVisionProxyReady,
-  loadHistoryImageDescriptions,
-  loadVisionProxyConfig,
-  parseStoredImageDescriptions,
-} from '../../../../services/vision/vision-proxy-service'
-import { resolveModelCapabilitiesForSession } from '../../../../utils/model-capabilities'
-import { computeAgentToolFlags } from '../../../../agent-runtime/agent-tool-config'
-
-// visionProxyService 实例：deps 构造与用例断言共用同一 mock
-const visionProxyService = { transcribeImages: jest.fn() }
 
 const createMockContext = (actorOverrides: Record<string, unknown> = {}) => {
   const jsonMock = jest.fn()
@@ -236,23 +216,26 @@ const createMinimalDeps = (overrides: Record<string, unknown> = {}) => {
     conversationCompressionService: {
       compressIfNeeded: jest.fn().mockResolvedValue({ applied: false, payload: null }),
     } as any,
-    visionProxyService: visionProxyService as any,
     ...(overrides.depsOverrides ?? {}),
   }
 }
 
 describe('createChatStreamHandler error handling', () => {
+  // 只静音本文件预期的错误路径日志（用例故意让 prepare / provider 失败，产品代码会打
+  // "Streaming error" 一类错误）；mock 缺口不再靠这里掩盖——占位消息写回所需的
+  // stream-state 与 db 导出都已补全。断言失败仍由 jest 报出。
+  let consoleErrorSpy: jest.SpyInstance
+
+  beforeAll(() => {
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+  })
+
+  afterAll(() => {
+    consoleErrorSpy.mockRestore()
+  })
+
   beforeEach(() => {
     jest.clearAllMocks()
-    ;(isVisionProxyReady as jest.Mock).mockReturnValue(false)
-    ;(resolveModelCapabilitiesForSession as jest.Mock).mockResolvedValue({ vision: true })
-    ;(loadHistoryImageDescriptions as jest.Mock).mockResolvedValue(new Map())
-    ;(parseStoredImageDescriptions as jest.Mock).mockReturnValue(null)
-    ;(computeAgentToolFlags as jest.Mock).mockImplementation(
-      (...args: unknown[]) =>
-        jest.requireActual('../../../../agent-runtime/agent-tool-config').computeAgentToolFlags(...args),
-    )
-    visionProxyService.transcribeImages.mockReset()
   })
 
   it('returns 400 JSON when chatRequestBuilder.prepare() throws ConnectionServiceError with statusCode 400', async () => {
@@ -310,17 +293,7 @@ describe('createChatStreamHandler error handling', () => {
     expect(jsonCallArgs[1]).toBe(500)
   })
 
-  it('auto-transcribes images for non-vision main model in standard flow', async () => {
-    ;(isVisionProxyReady as jest.Mock).mockReturnValue(true)
-    ;(resolveModelCapabilitiesForSession as jest.Mock).mockResolvedValue({ vision: false })
-    ;(loadVisionProxyConfig as jest.Mock).mockReturnValue({
-      enabled: true,
-      connectionId: 2,
-      modelId: 'gemini-2.5-flash',
-      reasoningEnabled: false,
-      reasoningEffort: '',
-    })
-    ;(visionProxyService.transcribeImages as jest.Mock).mockResolvedValue({ description: '图里有一只猫', modelRawId: 'm' })
+  it('passes images straight into prepare without any vision fields (interface contract)', async () => {
     const mockPrepare = jest.fn().mockResolvedValue({
       promptTokens: 10,
       contextLimit: 100,
@@ -360,174 +333,19 @@ describe('createChatStreamHandler error handling', () => {
       sessionId: 1,
       content: 'hello',
       clientMessageId: 'test-client-id',
-      images: [{ data: 'aW1n', mime: 'image/png' }],
+      images: [{ data: 'aGk=', mime: 'image/png' }],
     }))
 
     const handler = createChatStreamHandler(deps)
     await handler(c)
 
-    // 自动转写：图片不随消息发出，转写描述作为前缀注入
-    expect(mockPrepare).toHaveBeenCalledWith(expect.objectContaining({
-      images: [],
-      mainModelVision: false,
-      visionTranscriptionPrefix: '图里有一只猫',
-      historyImageDescriptions: expect.any(Map),
-    }))
-    const autoPrepareArg = mockPrepare.mock.calls[0][0]
-    expect(autoPrepareArg.visionAttachmentImageCount).toBeUndefined()
-    // 转写调用携带原始图片、用户问题与转写代理配置
-    expect(visionProxyService.transcribeImages).toHaveBeenCalledWith(
-      [{ data: 'aW1n', mime: 'image/png' }],
-      'hello',
-      expect.objectContaining({ enabled: true, connectionId: 2 }),
-    )
-    // 历史图片描述加载：仅主模型无 vision 且转写就绪时触发
-    expect(loadHistoryImageDescriptions).toHaveBeenCalledWith((deps as any).prisma, 1, expect.any(Date))
-    // 转写结果持久化到用户消息
-    expect((deps as any).prisma.message.update).toHaveBeenCalledWith({
-      where: { id: 100 },
-      data: { imageDescriptionsJson: JSON.stringify([{ description: '图里有一只猫', modelRawId: 'm' }]) },
-    })
-  })
-
-  it('passes visionAttachmentImageCount in tool flow without auto-transcribing', async () => {
-    ;(isVisionProxyReady as jest.Mock).mockReturnValue(true)
-    ;(resolveModelCapabilitiesForSession as jest.Mock).mockResolvedValue({ vision: false })
-    ;(loadVisionProxyConfig as jest.Mock).mockReturnValue({
-      enabled: true,
-      connectionId: 2,
-      modelId: 'gemini-2.5-flash',
-      reasoningEnabled: false,
-      reasoningEffort: '',
-    })
-    ;(computeAgentToolFlags as jest.Mock).mockReturnValue({
-      agentToolsActive: true,
-      agentWebSearchActive: true,
-      pythonToolActive: false,
-      workspaceToolsActive: false,
-      urlReaderActive: true,
-      documentToolsActive: false,
-      knowledgeBaseToolsActive: false,
-      dynamicSkillRequested: false,
-    })
-    const mockPrepare = jest.fn().mockResolvedValue({
-      promptTokens: 10,
-      contextLimit: 100,
-      contextRemaining: 90,
-      contextEnabled: true,
-      systemSettings: {},
-      messagesPayload: [],
-      baseRequestBody: {},
-      providerRequest: {
-        providerLabel: 'openai',
-        authHeader: {},
-        extraHeaders: {},
-        providerHost: 'api.example.com',
-        timeoutMs: 60000,
-      },
-      reasoning: { enabled: false, effort: 'medium' },
-    })
-    const deps = createMinimalDeps({
-      mockPrepare,
-      depsOverrides: {
-        assistantProgressService: {
-          persistProgress: jest.fn().mockResolvedValue({ recovered: false, messageId: null }),
-        } as any,
-        nonStreamFallbackService: {
-          execute: jest.fn().mockResolvedValue(null),
-        } as any,
-        providerRequester: {
-          requestWithBackoff: jest.fn().mockRejectedValue(new Error('provider error')),
-          executeFallback: jest.fn(),
-        } as any,
-      },
-    })
-    const { c } = createMockContext()
-    c.req.valid = jest.fn(() => ({
-      sessionId: 1,
-      content: '不对啊',
-      clientMessageId: 'test-client-id',
-      images: [
-        { data: 'aW1n', mime: 'image/png' },
-        { data: 'aW1nMg==', mime: 'image/jpeg' },
-      ],
-    }))
-
-    const handler = createChatStreamHandler(deps)
-    await handler(c)
-
-    expect(visionProxyService.transcribeImages).not.toHaveBeenCalled()
-    expect(mockPrepare).toHaveBeenCalledWith(
-      expect.objectContaining({
-        images: [],
-        mainModelVision: false,
-        visionAttachmentImageCount: 2,
-      }),
-    )
+    // 契约用例：验证 prepare 的入参形状（图片原样透传、四个转写字段不存在），不声称覆盖写回路径；
+    // 对旧实现的区分力由下面四条 not.toHaveProperty 承担
     const prepareArg = mockPrepare.mock.calls[0][0]
-    expect(prepareArg.visionTranscriptionPrefix).toBeFalsy()
-  })
-
-  it('does not pass visionAttachmentImageCount when main model has vision', async () => {
-    ;(isVisionProxyReady as jest.Mock).mockReturnValue(true)
-    ;(resolveModelCapabilitiesForSession as jest.Mock).mockResolvedValue({ vision: true })
-    ;(loadVisionProxyConfig as jest.Mock).mockReturnValue({
-      enabled: true,
-      connectionId: 2,
-      modelId: 'gemini-2.5-flash',
-      reasoningEnabled: false,
-      reasoningEffort: '',
-    })
-    const mockPrepare = jest.fn().mockResolvedValue({
-      promptTokens: 10,
-      contextLimit: 100,
-      contextRemaining: 90,
-      contextEnabled: true,
-      systemSettings: {},
-      messagesPayload: [],
-      baseRequestBody: {},
-      providerRequest: {
-        providerLabel: 'openai',
-        authHeader: {},
-        extraHeaders: {},
-        providerHost: 'api.example.com',
-        timeoutMs: 60000,
-      },
-      reasoning: { enabled: false, effort: 'medium' },
-    })
-    const deps = createMinimalDeps({
-      mockPrepare,
-      depsOverrides: {
-        assistantProgressService: {
-          persistProgress: jest.fn().mockResolvedValue({ recovered: false, messageId: null }),
-        } as any,
-        nonStreamFallbackService: {
-          execute: jest.fn().mockResolvedValue(null),
-        } as any,
-        providerRequester: {
-          requestWithBackoff: jest.fn().mockRejectedValue(new Error('provider error')),
-          executeFallback: jest.fn(),
-        } as any,
-      },
-    })
-    const { c } = createMockContext()
-    c.req.valid = jest.fn(() => ({
-      sessionId: 1,
-      content: '看看图',
-      clientMessageId: 'test-client-id',
-      images: [{ data: 'aW1n', mime: 'image/png' }],
-    }))
-
-    const handler = createChatStreamHandler(deps)
-    await handler(c)
-
-    expect(visionProxyService.transcribeImages).not.toHaveBeenCalled()
-    expect(mockPrepare).toHaveBeenCalledWith(
-      expect.objectContaining({
-        mainModelVision: true,
-        images: [{ data: 'aW1n', mime: 'image/png' }],
-      }),
-    )
-    expect(mockPrepare.mock.calls[0][0].visionAttachmentImageCount).toBeUndefined()
+    expect(prepareArg.images).toEqual([{ data: 'aGk=', mime: 'image/png' }])
+    expect(prepareArg).not.toHaveProperty('mainModelVision')
+    expect(prepareArg).not.toHaveProperty('visionTranscriptionPrefix')
+    expect(prepareArg).not.toHaveProperty('visionAttachmentImageCount')
+    expect(prepareArg).not.toHaveProperty('historyImageDescriptions')
   })
 })

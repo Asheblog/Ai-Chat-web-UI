@@ -193,9 +193,6 @@ export function ToolCallCard({ event, open, onOpenChange }: ToolCallCardProps) {
   const eventTitle = pickString(event.details?.title) || eventUrl
   const leadImageUrl = pickString(event.details?.leadImageUrl)
   const imageCount = Array.isArray(event.details?.images) ? event.details.images.length : 0
-  const assessedImageCount = Array.isArray(event.details?.assessedImages)
-    ? event.details.assessedImages.length
-    : 0
   const engine = pickString(event.details?.engine)
   const language = toLanguageLabel(pickString(event.details?.queryLanguage))
   const taskType = pickString(event.details?.taskType)
@@ -204,7 +201,6 @@ export function ToolCallCard({ event, open, onOpenChange }: ToolCallCardProps) {
   const duration = formatDuration(event.details?.durationMs)
   const contextTags = [
     scope === 'image' ? '范围: 图片' : null,
-    scope === 'image' && assessedImageCount > 0 ? `识图 ${assessedImageCount} 张` : null,
     engine ? `引擎: ${engine}` : null,
     language ? `语言: ${language}` : null,
     taskType ? `任务: ${taskType}` : null,

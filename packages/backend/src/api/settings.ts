@@ -14,25 +14,15 @@ import {
 } from '../services/python-runtime'
 import { RAG_SYSTEM_SETTINGS_KEYS } from '@aichat/shared'
 import { WEB_SEARCH_ENGINE_IDS } from '@aichat/shared/web-search-contract'
-import type { VisionProxyService } from '../services/vision/vision-proxy-service'
-import {
-  ImageTranscriptionProbeService,
-  type ProbeResult,
-} from '../services/settings/image-transcription-probe-service'
 
 export interface SettingsApiDeps {
   settingsFacade: SettingsFacade
   pythonRuntimeService: PythonRuntimeService
-  visionProxyService: VisionProxyService
-  imageTranscriptionProbeService?: Pick<ImageTranscriptionProbeService, 'probe'>
 }
 
 export const createSettingsApi = (deps: SettingsApiDeps) => {
   const facade = deps.settingsFacade
   const pythonRuntimeService = deps.pythonRuntimeService
-  const imageTranscriptionProbeService =
-    deps.imageTranscriptionProbeService ??
-    new ImageTranscriptionProbeService({ visionProxy: deps.visionProxyService })
   const settings = new Hono();
 
   const handleServiceError = (
@@ -218,12 +208,6 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
     title_summary_model_source: z.enum(['current', 'specified']).optional(),
     title_summary_connection_id: z.number().int().positive().nullable().optional(),
     title_summary_model_id: z.string().min(1).nullable().optional(),
-    // 图片转写代理设置
-    image_transcription_enabled: z.boolean().optional(),
-    image_transcription_connection_id: z.number().int().positive().nullable().optional(),
-    image_transcription_model_id: z.string().min(1).nullable().optional(),
-    image_transcription_reasoning_enabled: z.boolean().optional(),
-    image_transcription_reasoning_effort: z.enum(['low', 'medium', 'high', 'max', 'xhigh', 'unset']).optional(),
     // RAG 文档解析设置
     rag_enabled: z.boolean().optional(),
     rag_embedding_connection_id: z.number().int().positive().nullable().optional(),
@@ -265,11 +249,6 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
 
   const pythonRuntimeUninstallSchema = z.object({
     packages: z.array(z.string().min(1).max(128)).min(1).max(128),
-  })
-
-  const imageTranscriptionProbeSchema = z.object({
-    imageBase64: z.string().min(1).optional(),
-    mime: z.string().min(1).optional(),
   })
 
   const modelPreferenceSchema = z.object({
@@ -334,18 +313,6 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
       }, 500);
     }
   });
-
-  settings.post(
-    '/image-transcription/probe',
-    actorMiddleware,
-    requireUserActor,
-    adminOnlyMiddleware,
-    zValidator('json', imageTranscriptionProbeSchema),
-    async (c) => {
-      const result: ProbeResult = await imageTranscriptionProbeService.probe(c.req.valid('json'))
-      return c.json<ApiResponse>({ success: true, data: result })
-    },
-  )
 
   settings.get('/python-runtime', actorMiddleware, requireUserActor, adminOnlyMiddleware, async (c) => {
     try {

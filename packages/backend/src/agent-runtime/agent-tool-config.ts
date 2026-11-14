@@ -11,7 +11,6 @@ import {
 } from '../utils/parsers';
 import { BUILTIN_SKILL_SLUGS } from '../modules/skills/types';
 import type { RequestedSkillsPayload } from '../modules/skills/types';
-import { loadVisionProxyConfig, type VisionProxyConfig } from '../services/vision/vision-proxy-service';
 import { WEB_SEARCH_ENGINE_IDS, type WebSearchEngine } from '@aichat/shared/web-search-contract';
 
 /**
@@ -453,15 +452,6 @@ export const buildAgentWorkspaceToolConfig = (
     gitCloneTimeoutMs,
   };
 };
-
-/**
- * 图片转写代理配置（vision 代理模型）
- */
-export interface AgentVisionProxyConfig extends VisionProxyConfig {}
-
-export function buildAgentVisionProxyConfig(sysMap: Record<string, string>): AgentVisionProxyConfig {
-  return loadVisionProxyConfig(sysMap)
-}
 
 /** 扩展安装工具开关：系统设置优先，其次环境变量，默认开启。 */
 export function isExtensionInstallToolEnabled(

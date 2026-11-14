@@ -183,7 +183,6 @@ describe("ShareViewer", () => {
               sourceKind: "web",
               title: "证据图 1",
               sourceUrl: "https://example.com/source",
-              confidence: "high",
               refId: "img-1",
             },
           ],

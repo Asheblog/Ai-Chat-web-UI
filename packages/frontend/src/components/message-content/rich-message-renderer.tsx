@@ -6,7 +6,6 @@ import { MarkdownRenderer } from '@/components/markdown-renderer'
 import { cn } from '@/lib/utils'
 import type {
   RichMessageEvidenceKind,
-  RichMessageEvidenceConfidence,
   RichMessageImagePart,
   RichMessagePayload,
 } from '@/types'
@@ -30,12 +29,6 @@ const evidenceKindLabelMap: Record<RichMessageEvidenceKind, string> = {
   unknown: '证据',
 }
 
-const trustConfidenceLabelMap: Record<RichMessageEvidenceConfidence, string> = {
-  high: '可信度 高',
-  medium: '可信度 中',
-  low: '可信度 低',
-}
-
 const normalizeLayout = (
   preferredLayout: RichMessagePayload['layout'],
   hasText: boolean,
@@ -57,11 +50,6 @@ const toImageAlt = (image: RichMessageImagePart, index: number) =>
 const toEvidenceKindLabel = (kind?: RichMessageEvidenceKind) =>
   evidenceKindLabelMap[kind || 'unknown'] || evidenceKindLabelMap.unknown
 
-const toConfidenceLabel = (image: RichMessageImagePart) => {
-  if (!image.confidence) return null
-  return trustConfidenceLabelMap[image.confidence]
-}
-
 const isLikelyImageUrl = (url: string) =>
   /^https?:\/\/.+\.(?:png|jpe?g|gif|webp|svg|bmp|avif)(?:[?#].*)?$/i.test(url)
 
@@ -80,7 +68,6 @@ interface EvidenceImageCardProps {
 }
 
 function EvidenceImageCard({ image, index }: EvidenceImageCardProps) {
-  const confidenceLabel = toConfidenceLabel(image)
   const sourceLinkVisible = hasValidSourceUrl(image)
 
   return (
@@ -103,9 +90,6 @@ function EvidenceImageCard({ image, index }: EvidenceImageCardProps) {
       </a>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-micro text-muted-foreground">
         <span className="rounded-full border border-border/70 px-2 py-0.5">{toEvidenceKindLabel(image.sourceKind)}</span>
-        {confidenceLabel && (
-          <span className="rounded-full border border-border/70 px-2 py-0.5">{confidenceLabel}</span>
-        )}
         {image.refId && <span className="rounded-full border border-border/70 px-2 py-0.5">{image.refId}</span>}
       </div>
       {image.title && (

@@ -38,7 +38,6 @@ const makeApp = () => {
       streamTraceService: {},
       streamSseService: {},
       conversationCompressionService: {},
-      visionProxyService: {},
     } as any,
   )
   return app

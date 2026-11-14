@@ -7,7 +7,6 @@
 export type RichMessageLayout = 'auto' | 'side-by-side' | 'stack'
 export type RichMessageImageSource = 'generated' | 'attachment' | 'external'
 export type RichMessageEvidenceKind = 'web' | 'document' | 'generated' | 'upload' | 'unknown'
-export type RichMessageEvidenceConfidence = 'high' | 'medium' | 'low'
 
 export interface RichMessageTextPart {
   type: 'text'
@@ -26,7 +25,6 @@ export interface RichMessageImagePart {
   title?: string
   sourceUrl?: string
   sourceLabel?: string
-  confidence?: RichMessageEvidenceConfidence
   refId?: string
   meta?: Record<string, unknown>
 }

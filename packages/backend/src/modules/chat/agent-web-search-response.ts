@@ -80,7 +80,6 @@ import { resolveModelCapabilitiesForSession } from '../../utils/model-capabiliti
 import { createSkillRegistry } from '../skills/skill-registry';
 import type { RequestedSkillsPayload } from '../skills/types';
 import type { McpService } from '../../services/mcp/mcp-service';
-import type { VisionProxyConfig, VisionProxyService } from './services/vision-proxy-service';
 import type { ResolvedConnection } from '../../repositories/model-resolver-repository';
 // Re-export for backwards compatibility
 export {
@@ -121,15 +120,12 @@ export type AgentResponseParams = {
     document?: boolean;
     knowledgeBase?: boolean;
     workspace?: boolean;
-    visionProxy?: boolean;
     pdfExport?: boolean;
     deepResearch?: boolean;
     extensionInstall?: boolean;
   };
   requestedSkills: RequestedSkillsPayload;
   knowledgeBaseIds?: number[];
-  visionProxyConfig?: VisionProxyConfig | null
-  visionProxyService?: VisionProxyService
   provider: string;
   baseUrl: string;
   authHeader: Record<string, string>;
@@ -695,7 +691,6 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           knowledgeBase: ragService && toolFlags.knowledgeBase
             ? { enabled: true, knowledgeBaseIds, ragService }
             : null,
-          visionProxy: params.visionProxyConfig ?? null,
           pdfExport: toolFlags.pdfExport && pdfExportConfig
             ? pdfExportConfig
             : null,
@@ -706,7 +701,6 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         },
         allowDynamicRuntime: allowDynamicRuntime === true,
         mcpService: params.mcpService,
-        visionProxyService: params.visionProxyService,
       });
       const toolDefinitions = toolRegistry.getToolDefinitions();
       const allowedToolNames = toolRegistry.getAllowedToolNames();

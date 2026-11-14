@@ -45,7 +45,6 @@ const messageSelectFields = {
   reasoning: true,
   reasoningDurationSeconds: true,
   toolLogsJson: true,
-  imageDescriptionsJson: true,
   createdAt: true,
   updatedAt: true,
   streamStatus: true,
@@ -98,7 +97,6 @@ type RawMessage = {
   reasoning?: string | null
   reasoningDurationSeconds?: number | null
   toolLogsJson?: string | null
-  imageDescriptionsJson?: string | null
   createdAt: Date
   updatedAt: Date
   streamStatus?: string | null
@@ -140,7 +138,6 @@ export interface NormalizedMessage {
   streamReasoning: string | null
   streamError: string | null
   images: string[]
-  imageDescriptions?: Array<{ description: string; modelRawId: string }> | null
   richPayload?: RichMessagePayload | null
   toolEvents?: ToolLogEntry[]
   metrics?: {
@@ -493,20 +490,7 @@ export class ChatMessageQueryService {
     baseUrl: string,
     options?: { toolLogsMode?: 'full' | 'history-list' },
   ): NormalizedMessage {
-    const { attachments, toolLogsJson, usageMetrics, imageDescriptionsJson } = raw as RawMessage & {
-      attachments?: Array<{ relativePath: string }>
-      generatedImages?: GeneratedImageRecord[]
-      toolLogsJson?: string | null
-      usageMetrics?: Array<{
-        promptTokens: number
-        completionTokens: number
-        totalTokens: number
-        firstTokenLatencyMs: number | null
-        responseTimeMs: number | null
-        tokensPerSecond: number | null
-      }>
-      imageDescriptionsJson?: string | null
-    }
+    const { attachments, toolLogsJson, usageMetrics } = raw
     const usage = Array.isArray(usageMetrics) && usageMetrics.length > 0 ? usageMetrics[0] : null
     const rel = Array.isArray(attachments) ? attachments.map((att) => att.relativePath) : []
     const toolEvents = this.parseToolLogsJson(toolLogsJson, {
@@ -536,15 +520,6 @@ export class ChatMessageQueryService {
       streamReasoning: raw.streamReasoning ?? null,
       streamError: raw.streamError ?? null,
       images: this.resolveChatImageUrls(rel, baseUrl),
-      imageDescriptions: (() => {
-        if (!imageDescriptionsJson) return null
-        try {
-          const parsed = JSON.parse(imageDescriptionsJson)
-          return Array.isArray(parsed) && parsed.length > 0 ? parsed : null
-        } catch {
-          return null
-        }
-      })(),
       richPayload,
       toolEvents,
       metrics: usage

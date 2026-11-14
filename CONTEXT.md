@@ -59,12 +59,12 @@
 - **DeepSeek Fetch Fallback（付费读页回退）**：默认关闭的第三方网页读取能力，仅在管理员显式开启、有搜索凭据且本地网页读取失败时使用。图片和文档资源仍使用各自的读取路径。一次读页的本地尝试与 Fetch 共用总超时预算；调用方取消或预算耗尽后停止后续尝试。
 - **Search Credential（搜索凭据）**：由管理员配置、专用于联网搜索与可选读页回退的系统凭据，与聊天模型连接凭据相互独立；以加密方式保存，仅返回是否已配置。
 
-- **Web Search（联网搜索）**：通过外部搜索引擎（tavily、brave、exa、metaso、deepseek）检索网页；在各引擎能力范围内默认请求/解析结果配图（Tavily `include_images`、Exa `contents.extras.imageLinks`、Brave `thumbnail`、Metaso `imageUrl`/`thumbnail`），再经识图筛选；支持可选 `scope`（含 `image`）：Metaso 走图片域、Brave 调用独立图片搜索 API；Tavily 在 `scope=image` 时开启 `include_image_descriptions` 并把响应顶层 `images`（query 相关图）合成为图片 hit；Exa 在 `scope=image` 时加大 `imageLinks` 并把页面代表图/页内图展平成图片 hit；`scope=image` 时跳过自动读正文，但仍对 hit 配图做识图相关性筛选并把相关/弱相关图回传模型；CoT/工具卡对 `scope=image` 展示为「图片检索」并标注「范围: 图片」
-- **Read URL（网页读取）**：抓取并解析指定 URL 的正文内容；会抽取页面候选图，并在图片转写代理就绪时做识图相关性判定
-- **Auto Read（自动读取）**：搜索完成后自动收集结果网页正文，可复用搜索引擎返回的有效正文或读取网页。在 UI 中归入所属搜索合并组；实际读页时同样走网页图识图筛选
-- **Web Evidence Image（联网证据图）**：经识图判定为「相关 / 弱相关」的网页配图；来源包括搜索 hit 配图、图片域搜索结果与读页抽取图。已从助手正文移除：不再进入 Rich Payload / 答案区，仅保留在工具卡展示与深度研究报告的 Markdown 配图选择中
+- **Web Search（联网搜索）**：通过外部搜索引擎（tavily、brave、exa、metaso、deepseek）检索网页；在各引擎能力范围内默认请求/解析结果配图（Tavily `include_images`、Exa `contents.extras.imageLinks`、Brave `thumbnail`、Metaso `imageUrl`/`thumbnail`）；支持可选 `scope`（含 `image`）：Metaso 走图片域、Brave 调用独立图片搜索 API；Tavily 在 `scope=image` 时开启 `include_image_descriptions` 并把响应顶层 `images`（query 相关图）合成为图片 hit；Exa 在 `scope=image` 时加大 `imageLinks` 并把页面代表图/页内图展平成图片 hit；`scope=image` 时跳过自动读正文，hit 配图按原始 URL 随工具结果回传模型；CoT/工具卡对 `scope=image` 展示为「图片检索」并标注「范围: 图片」
+- **Read URL（网页读取）**：抓取并解析指定 URL 的正文内容；会抽取页面候选图；主模型支持识图时把抽到的主图与至多 3 张候选图直接附给主模型，否则只在工具结果里给出原始图片 URL 列表
+- **Auto Read（自动读取）**：搜索完成后自动收集结果网页正文，可复用搜索引擎返回的有效正文或读取网页。在 UI 中归入所属搜索合并组；实际读页时图片只按原始 URL 随工具结果回传证据
+- **Web Evidence Image（联网证据图）**：网页里抽取到的候选图（来源：搜索 hit 配图、图片域搜索结果与读页抽取图），以原始 URL 随工具结果回传并保留在工具卡展示，不进入 Rich Payload / 答案区；深度研究报告的正文配图由模型自行从这些 URL 中挑选并交给 `export_pdf` 内嵌
 - **Evidence Stack Layout（上文下图）**：已下线。助手正文不再展示联网证据图；AI 生图与附件图仍可用侧栏并排
-- **Illustrated Research Report（图文研究报告）**：深度研究最终 Markdown 可在正文嵌入经筛选的证据图；`export_pdf` 可选 `images` 参数仅下载模型声明的公网图片 URL，内嵌为 `data:` URL 写入 HTML/PDF（figure/figcaption），禁止 PDF 渲染时任意外联远程图
+- **Illustrated Research Report（图文研究报告）**：深度研究最终 Markdown 可在正文嵌入证据图；`export_pdf` 可选 `images` 参数仅下载模型声明的公网图片 URL，内嵌为 `data:` URL 写入 HTML/PDF（figure/figcaption），禁止 PDF 渲染时任意外联远程图
 - **Playwright-managed Chromium（托管 Chromium）**：`export_pdf` 与可选的 URL Reader 浏览器回退使用与 `playwright-core` 版本匹配的 Chromium（镜像内 `PLAYWRIGHT_BROWSERS_PATH`）；不默认依赖发行版 apt `/usr/bin/chromium`（容器中常因 CDP 不兼容而启动失败）；仅在显式配置非系统路径或 Playwright 浏览器缺失时回退系统 Chrome/Chromium
 - **搜索批次**：同一轮搜索任务下发起的搜索调用集合，在工具区块内合并展示
 - **并行搜索**：多个搜索引擎同时查询，属于同一批次
@@ -113,13 +113,9 @@ _Avoid_：用最小 Key 行 ID 冒充连接组身份；用 channelName / prefixI
 - **Personal Settings Section（个人设置分区）**：独立个人设置页以既有 URL hash 表达资料、Skill、分享、安全分区，支持浏览器前进/后退，只挂载当前分区。设置弹窗使用独立局部导航，不改写独立页 hash；弹窗和叶子在首次访问时加载。
 - **System Settings（系统设置）**：仅管理员可访问的系统级配置集合，用于管理模型、连接、能力、运行策略、治理审计和维护项
 - **Settings Top-Level Group（设置顶级分组）**：系统设置左侧导航的顶级条目，含 4 个分组（模型与连接 / 功能与工具 / 系统与数据 / 高级设置）与 2 个顶级叶子（概览、用户与注册），把相关设置页面组织在同一操作语境下；原「成员与安全」分组只剩「用户与注册」一项，已拍平为顶级叶子
-- **Settings Page（设置页面）**：顶级分组下的具体配置页面，是右侧内容区渲染的最小页面单位；共 11 个（概览、供应商与连接、模型管理、图片转写、搜索与知识库、能力扩展、用户与注册、品牌与界面、日志与审计、数据与维护、推理与网络）
+- **Settings Page（设置页面）**：顶级分组下的具体配置页面，是右侧内容区渲染的最小页面单位；共 10 个（概览、供应商与连接、模型管理、搜索与知识库、能力扩展、用户与注册、品牌与界面、日志与审计、数据与维护、推理与网络）
 - **Extensions Center（能力扩展）**：把 MCP 服务、Skill、内置工具与对话增强四类能力收敛在同一系统设置页（叶子 key `extensions`），页内以段导航分「总览 / MCP 服务 / Skill / 内置工具 / 对话增强」，MCP 与 Skill 段内部再用次级标签复用原区块；三个总开关各只有一个控制点：`mcpGlobalEnabled` 在 MCP 段页头、`chatDynamicSkillRuntimeEnabled` 在 Skill 段页头、`pythonToolEnable` 在 Python 工具卡主开关，总览只显示状态与入口、不放开关。原「工具与扩展」「MCP 管理」「Skill 治理」三个叶子页已删除，Skill 治理不再单独成页
 - **Feature Card（功能卡）**：设置页内的白话化配置卡片（图标 + 标题 + 白话描述 + 主开关 + 常用项 + 「更多参数」折叠），默认折叠高级参数；来自 `components/settings/components/feature-card.tsx`
-- **Vision Transcription Proxy（图片转写代理）**：主模型不支持识图（vision）时，将用户消息中的图片自动交给管理员指定的识图模型转写为文字描述的系统能力；由系统设置「图片转写代理」开关（默认关闭）+ 连接 + 模型配置，作用于所有用户；同一转写模型也用于联网证据图的相关性判定（相关 / 弱相关 / 无关）；设置页提供管理员探针（转写 + 相关性）；转写调用可选 reasoning/effort（默认关）
-- **Image Transcription（图片转写）**：指定识图模型将图片附件转换为文字描述的过程；结果持久化到用户消息的 imageDescriptions 字段，后续轮次直接复用（转写一次）
-- **Visual Analysis Tool（视觉分析工具）**：内置工具 `analyze_visual_media`，仅在主聊天流处于工具流且主模型无 vision 时注入；主模型可自主多次调用，描述以工具结果回传并随工具事件持久化；工具流下会向前缀注入「用户附件」提醒（含张数），引导主模型先调用该工具再回答
-- **Web Image Relevance Filter（网页图相关性筛选）**：爬虫/搜索抽到候选图后，先启发式去掉 logo/过小图，再调用识图模型判定与页面/查询上下文是否相关；仅相关与弱相关写入 `assessedImages`，供工具卡展示与深度研究报告选图，不再进入正文 Rich Payload / 答案区；判定失败 warn 日志后跳过该图
 
 ## 深度研究计划确认
 

@@ -11,7 +11,7 @@ import { createSettingsApi } from '../settings'
 describe('DeepSeek system settings HTTP boundary', () => {
   const setup = () => {
     const updateSystemSettings = jest.fn(async () => undefined)
-    const app = createSettingsApi({ settingsFacade: { updateSystemSettings } as any, pythonRuntimeService: {} as any, visionProxyService: {} as any })
+    const app = createSettingsApi({ settingsFacade: { updateSystemSettings } as any, pythonRuntimeService: {} as any })
     return { app, updateSystemSettings }
   }
 

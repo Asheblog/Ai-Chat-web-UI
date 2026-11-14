@@ -69,6 +69,18 @@ function findFirstLeaf(items: SettingsNavItem[]): string | undefined {
   return undefined
 }
 
+/**
+ * 全量导航树（未按角色过滤）里每个叶子所属的顶级分组。
+ * 用于区分「注册表里已不存在的陈旧链接」与「存在但当前角色看不到」：
+ * 只有后者才该提示无权访问。
+ */
+const LEAF_OWNER_MAIN = new Map<string, string>(
+  settingsNav.flatMap((item) =>
+    getAllLeafKeys(item.children ?? []).map((leafKey) => [leafKey, item.key] as const),
+  ),
+)
+const ALL_MAIN_KEYS = new Set(settingsNav.map((item) => item.key))
+
 export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: SettingsDialogProps) {
   const { toast } = useToast()
   const { actorState, user } = useAuthStore((state) => ({
@@ -170,7 +182,8 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
     let nextMain = (urlMain || memMain || roleDefaultMain) as string
     const availableMains = filteredTree.map((item) => item.key)
     if (!availableMains.includes(nextMain)) {
-      if (!denialNotifiedRef.current && urlMain) {
+      // 只有「注册表里有、但当前角色看不到」才算无权；陈旧的 main 静默回落默认分组
+      if (!denialNotifiedRef.current && urlMain && ALL_MAIN_KEYS.has(urlMain)) {
         toast({
           title: urlMain === 'system' ? '你无权打开该功能' : '当前账户无法访问该设置',
           variant: 'destructive',
@@ -189,7 +202,17 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
         : (isAuthenticated ? 'personal.preferences' : 'personal.about')
     let nextSub = (urlSub || memSub || roleDefaultSub || subLeaves[0] || '') as string
     if (nextSub && !subLeaves.includes(nextSub)) {
-      if (!denialNotifiedRef.current && (urlSub || urlMain)) {
+      // 「存在但看不到」才提示无权：按叶子在当前角色可见树里是否存在判定，而不是比对所属 main。
+      // 叶子所属 main 被整体过滤时（例：匿名打开 ?sub=<system 叶子>）该叶子同样不在可见树中，
+      // 必须提示；注册表里已不存在的陈旧深链（如已删除的 sub=image-transcription）静默回落，
+      // 否则「无法访问」会让用户误以为是权限问题。
+      const visibleLeafKeys = new Set(getAllLeafKeys(filteredTree))
+      if (
+        !denialNotifiedRef.current &&
+        LEAF_OWNER_MAIN.has(nextSub) &&
+        !visibleLeafKeys.has(nextSub) &&
+        (urlSub || urlMain)
+      ) {
         toast({
           title: '当前账户无法访问该设置',
           variant: 'destructive',

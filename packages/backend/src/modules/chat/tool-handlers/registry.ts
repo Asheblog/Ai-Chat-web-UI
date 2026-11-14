@@ -25,11 +25,9 @@ import {
   KnowledgeBaseToolHandlerAdapter,
   kbToolNames,
 } from './knowledge-base-handler-adapter'
-import { VisionProxyToolHandler } from './vision-proxy-handler'
 import { ExportPdfToolHandler } from './export-pdf-handler'
 import { ResearchPlanToolHandler } from './research-plan-handler'
 import { InstallExtensionToolHandler } from './install-extension-handler'
-import type { VisionProxyService } from '../services/vision-proxy-service'
 import { McpToolAdapter } from '../../../services/mcp/mcp-tool-adapter'
 
 /**
@@ -191,30 +189,17 @@ export class ToolHandlerRegistry {
 /**
  * 创建工具处理器注册表
  */
-export function createToolHandlerRegistry(
-  params: ToolHandlerFactoryParams,
-  deps: { visionProxyService?: VisionProxyService } = {}
-): ToolHandlerRegistry {
+export function createToolHandlerRegistry(params: ToolHandlerFactoryParams): ToolHandlerRegistry {
   const registry = new ToolHandlerRegistry()
 
   // 注册 Web 搜索处理器
   if (params.webSearch?.enabled) {
-    registry.register(
-      new WebSearchToolHandler(params.webSearch, {
-        visionProxy: params.visionProxy,
-        visionProxyService: deps.visionProxyService,
-      }),
-    )
+    registry.register(new WebSearchToolHandler(params.webSearch))
   }
 
   // 注册 URL Reader 处理器
   if (params.urlReader) {
-    registry.register(
-      new UrlReaderToolHandler(params.urlReader, {
-        visionProxy: params.visionProxy,
-        visionProxyService: deps.visionProxyService,
-      }),
-    )
+    registry.register(new UrlReaderToolHandler(params.urlReader))
   }
 
   // 注册 Python 处理器
@@ -241,11 +226,6 @@ export function createToolHandlerRegistry(
     params.knowledgeBase.knowledgeBaseIds?.length > 0
   ) {
     registry.register(new KnowledgeBaseToolHandlerAdapter(params.knowledgeBase))
-  }
-
-  // 注册视觉分析工具处理器（图片转写代理）
-  if (params.visionProxy?.enabled) {
-    registry.register(new VisionProxyToolHandler(params.visionProxy, deps.visionProxyService))
   }
 
   // 注册深度研究报告 PDF 导出处理器

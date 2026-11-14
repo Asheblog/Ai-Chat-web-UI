@@ -30,7 +30,6 @@ describe('RichMessageRenderer', () => {
               sourceKind: 'web',
               title: '证据图 1',
               sourceUrl: 'https://example.com/article-1',
-              confidence: 'high',
               refId: 'img-1',
             },
           ],
@@ -67,7 +66,6 @@ describe('RichMessageRenderer', () => {
               source: 'external',
               sourceKind: 'web',
               title: '证据图 1',
-              confidence: 'high',
             },
           ],
         }}

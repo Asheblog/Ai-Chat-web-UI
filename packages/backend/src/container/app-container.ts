@@ -64,7 +64,6 @@ import { ConversationCompressionService } from '../modules/chat/services/convers
 import { ChatMessageQueryService } from '../modules/chat/services/message-query-service'
 import { NonStreamChatService } from '../modules/chat/services/non-stream-chat-service'
 import { TitleSummaryService } from '../modules/chat/services/title-summary-service'
-import { VisionProxyService } from '../services/vision/vision-proxy-service'
 
 import { AuthUtils } from '../utils/auth'
 import {
@@ -152,7 +151,6 @@ export interface AppContainerDeps {
   chatMessageQueryService?: ChatMessageQueryService
   nonStreamChatService?: NonStreamChatService
   titleSummaryService?: TitleSummaryService
-  visionProxyService?: VisionProxyService
 }
 
 export class AppContainer {
@@ -205,7 +203,6 @@ export class AppContainer {
   readonly chatMessageQueryService: ChatMessageQueryService
   readonly nonStreamChatService: NonStreamChatService
   readonly titleSummaryService: TitleSummaryService
-  readonly visionProxyService: VisionProxyService
 
   // Phase 3: New Utils-layer Services
   readonly systemSettingsService: SystemSettingsService
@@ -316,11 +313,6 @@ export class AppContainer {
       deps.titleSummaryService ??
       new TitleSummaryService({ prisma: this.context.prisma, secretVault: this.secretVault })
     registry.register(SERVICE_KEYS.titleSummaryService, this.titleSummaryService)
-
-    this.visionProxyService =
-      deps.visionProxyService ??
-      new VisionProxyService({ secretVault: this.secretVault })
-    registry.register(SERVICE_KEYS.visionProxyService, this.visionProxyService)
 
     this.skillInstaller =
       deps.skillInstaller ?? new SkillInstaller({ prisma: this.context.prisma })
