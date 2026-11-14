@@ -1,4 +1,10 @@
-const avatarPreloadTasks = new Map<string, Promise<boolean>>()
+/**
+ * 头像 URL 工具：只做 URL 规范化与预热去重，**不保存**「某个 URL 已加载」这类渲染状态。
+ *
+ * 渲染是否就绪由 Radix Avatar 自己的探测图决定（命中缓存时它会在同一帧返回 loaded），
+ * 用全局标志去控制占位可见性只会制造与元素实际状态脱节的空圈。
+ */
+const avatarPreloadTasks = new Map<string, Promise<void>>()
 
 export const normalizeAvatarUrl = (value?: string | null) => {
   const normalized = typeof value === 'string' ? value.trim() : ''
@@ -25,19 +31,19 @@ export const normalizeAvatarUrl = (value?: string | null) => {
  * 当帧就是 `loaded`，气泡挂载即可直接出图。这里只做 in-flight 去重，不维护「已加载」全局
  * 状态——那个状态只说明某个 URL 曾被别处加载过，与当前元素能否绘制无关。
  */
-export const preloadAvatarImage = async (url?: string | null): Promise<boolean> => {
+export const preloadAvatarImage = async (url?: string | null): Promise<void> => {
   const normalized = normalizeAvatarUrl(url)
-  if (!normalized) return false
-  if (typeof window === 'undefined') return false
+  if (!normalized) return
+  if (typeof window === 'undefined') return
 
   const inFlight = avatarPreloadTasks.get(normalized)
   if (inFlight) return inFlight
 
-  const task = new Promise<boolean>((resolve) => {
+  const task = new Promise<void>((resolve) => {
     const image = new window.Image()
     image.decoding = 'async'
-    image.onload = () => resolve(true)
-    image.onerror = () => resolve(false)
+    image.onload = () => resolve()
+    image.onerror = () => resolve()
     image.src = normalized
   }).finally(() => {
     avatarPreloadTasks.delete(normalized)

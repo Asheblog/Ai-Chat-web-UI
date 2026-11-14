@@ -87,7 +87,7 @@ export const useSettingsStore = create<SettingsStore>()(
       const syncAssistantAvatar = (url?: string | null) => {
         const normalized = normalizeAvatarUrl(url) || null
         set((state) =>
-          state.assistantAvatarUrl === normalized ? state : { ...state, assistantAvatarUrl: normalized },
+          state.assistantAvatarUrl === normalized ? state : { assistantAvatarUrl: normalized },
         )
         if (!normalized || typeof window === 'undefined') return
         // 预热到浏览器缓存，气泡挂载时 Radix 的探测图就能同步命中，不必再等一次网络往返。

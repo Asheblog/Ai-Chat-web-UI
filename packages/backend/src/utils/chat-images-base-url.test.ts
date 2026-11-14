@@ -51,6 +51,36 @@ describe('determineChatImageBaseUrl', () => {
     expect(determineChatImageBaseUrl({ request, siteBaseUrl: null })).toBe('http://localhost:3000')
   })
 
+  it('accepts "1" as CHAT_IMAGE_FORCE_LAN', () => {
+    const previous = process.env.CHAT_IMAGE_FORCE_LAN
+    process.env.CHAT_IMAGE_FORCE_LAN = '1'
+    const spy = jest.spyOn(os, 'networkInterfaces').mockReturnValue({
+      eth0: [
+        {
+          address: '10.0.0.7',
+          family: 'IPv4',
+          internal: false,
+          mac: '00:00:00:00:00:00',
+          netmask: '255.0.0.0',
+          cidr: '10.0.0.7/8',
+        },
+      ],
+    } as any)
+
+    try {
+      const request = buildRequest('http://127.0.0.1:8001/api/chat', { host: '127.0.0.1:8001' })
+
+      expect(determineChatImageBaseUrl({ request, siteBaseUrl: null })).toBe('http://10.0.0.7:8001')
+    } finally {
+      spy.mockRestore()
+      if (previous === undefined) {
+        delete process.env.CHAT_IMAGE_FORCE_LAN
+      } else {
+        process.env.CHAT_IMAGE_FORCE_LAN = previous
+      }
+    }
+  })
+
   it('rewrites localhost to a LAN IPv4 only when CHAT_IMAGE_FORCE_LAN=true', () => {
     const previous = process.env.CHAT_IMAGE_FORCE_LAN
     process.env.CHAT_IMAGE_FORCE_LAN = 'true'

@@ -57,9 +57,7 @@ function MessageBubbleComponent({
   const applyRenderedContent = useChatStore((state) => state.applyRenderedContent)
   const editLastUserMessage = useChatStore((state) => state.editLastUserMessage)
   const currentUser = useAuthStore((state) => state.user)
-  const assistantAvatarUrl = useSettingsStore(
-    (state) => state.assistantAvatarUrl ?? state.systemSettings?.assistantAvatarUrl ?? null,
-  )
+  const assistantAvatarUrl = useSettingsStore((state) => state.assistantAvatarUrl)
   const [isCopied, setIsCopied] = useState(false)
 
   const [editOpen, setEditOpen] = useState(false)

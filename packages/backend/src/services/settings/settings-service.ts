@@ -13,6 +13,7 @@ import { syncSharedAnonymousQuota as defaultSyncSharedAnonymousQuota } from '../
 import {
   replaceProfileImage as defaultReplaceProfileImage,
   resolveProfileImageUrl,
+  resolveConfiguredProfileImageBaseUrl,
 } from '../../utils/profile-images'
 import type { Actor } from '../../types'
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../../config/storage'
@@ -494,10 +495,10 @@ export class SettingsService {
       knowledge_base_allow_users: this.parseBoolean(settingsObj.knowledge_base_allow_users, 'true'),
     }
 
-    // 只接受显式配置的基址；未配置时输出同源相对路径（/chat-images/...），由浏览器按当前
-    // 页面 origin 解析。此前用伪请求 new Request('http://localhost') 推导基址，会把 localhost
-    // 改写成局域网（甚至 APIPA）地址且丢掉端口，结果是跨源、慢且缓存分桶。
-    const assistantAvatarBase = (formatted.site_base_url || process.env.CHAT_IMAGE_BASE_URL || '').trim()
+    // 只接受显式配置的基址（含协议补全与校验）；未配置时输出同源相对路径（/chat-images/...），
+    // 由浏览器按当前页面 origin 解析。此前用伪请求 new Request('http://localhost') 推导基址，
+    // 会把 localhost 改写成局域网（甚至 APIPA）地址且丢掉端口，结果是跨源、慢且缓存分桶。
+    const assistantAvatarBase = resolveConfiguredProfileImageBaseUrl(formatted.site_base_url)
     formatted.assistant_avatar_url = resolveProfileImageUrl(formatted.assistant_avatar_path, assistantAvatarBase)
 
     if (!isAdmin) {

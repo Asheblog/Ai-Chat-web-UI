@@ -2,6 +2,11 @@ jest.mock('../../db', () => ({
   prisma: {},
 }))
 
+jest.mock('../../config/storage', () => {
+  const actual = jest.requireActual('../../config/storage')
+  return { ...actual, CHAT_IMAGE_BASE_URL: '' }
+})
+
 import { SettingsService, type SettingsServiceDeps } from './settings-service'
 
 const buildService = (overrides: Partial<SettingsServiceDeps> = {}) => {
@@ -64,6 +69,15 @@ const buildService = (overrides: Partial<SettingsServiceDeps> = {}) => {
     service,
   }
 }
+
+const adminActor = {
+  type: 'user',
+  id: 1,
+  username: 'admin',
+  role: 'ADMIN',
+  status: 'ACTIVE',
+  identifier: 'user:1',
+} as any
 
 describe('SettingsService', () => {
   test.each([true, false])('excludes retired connections and models from setup diagnostics (enabled=%s)', async (enable) => {
@@ -211,47 +225,35 @@ describe('SettingsService', () => {
   })
 
   it('returns a same-origin relative assistant avatar url when no base url is configured', async () => {
-    const previousBase = process.env.CHAT_IMAGE_BASE_URL
-    delete process.env.CHAT_IMAGE_BASE_URL
-    try {
-      const { service, prisma } = buildService()
-      const adminActor = {
-        type: 'user',
-        id: 1,
-        username: 'admin',
-        role: 'ADMIN',
-        status: 'ACTIVE',
-        identifier: 'user:1',
-      } as any
-      prisma.systemSetting.findMany.mockResolvedValueOnce([
-        { key: 'assistant_avatar_path', value: 'profiles/2026/11/14/abc.png' },
-      ])
+    const { service, prisma } = buildService()
+    prisma.systemSetting.findMany.mockResolvedValueOnce([
+      { key: 'assistant_avatar_path', value: 'profiles/2026/11/14/abc.png' },
+    ])
 
-      const settings = await service.getSystemSettings(adminActor)
+    const settings = await service.getSystemSettings(adminActor)
 
-      expect(settings.assistant_avatar_url).toBe('/chat-images/profiles/2026/11/14/abc.png')
-    } finally {
-      if (previousBase === undefined) {
-        delete process.env.CHAT_IMAGE_BASE_URL
-      } else {
-        process.env.CHAT_IMAGE_BASE_URL = previousBase
-      }
-    }
+    expect(settings.assistant_avatar_url).toBe('/chat-images/profiles/2026/11/14/abc.png')
   })
 
   it('prefixes the configured site base url on assistant avatar url', async () => {
     const { service, prisma } = buildService()
-    const adminActor = {
-      type: 'user',
-      id: 1,
-      username: 'admin',
-      role: 'ADMIN',
-      status: 'ACTIVE',
-      identifier: 'user:1',
-    } as any
     prisma.systemSetting.findMany.mockResolvedValueOnce([
       { key: 'assistant_avatar_path', value: 'profiles/2026/11/14/abc.png' },
       { key: 'site_base_url', value: 'https://chat.example.com' },
+    ])
+
+    const settings = await service.getSystemSettings(adminActor)
+
+    expect(settings.assistant_avatar_url).toBe(
+      'https://chat.example.com/chat-images/profiles/2026/11/14/abc.png',
+    )
+  })
+
+  it('completes a protocol-less site base url so the avatar url stays absolute', async () => {
+    const { service, prisma } = buildService()
+    prisma.systemSetting.findMany.mockResolvedValueOnce([
+      { key: 'assistant_avatar_path', value: 'profiles/2026/11/14/abc.png' },
+      { key: 'site_base_url', value: 'chat.example.com' },
     ])
 
     const settings = await service.getSystemSettings(adminActor)
@@ -267,15 +269,6 @@ describe('SettingsService', () => {
     try {
       const { service, prisma } = buildService()
       prisma.systemSetting.findMany.mockResolvedValueOnce([])
-
-      const adminActor = {
-        type: 'user',
-        id: 1,
-        username: 'admin',
-        role: 'ADMIN',
-        status: 'ACTIVE',
-        identifier: 'user:1',
-      } as any
 
       const first = await service.getSystemSettings(adminActor)
       expect(first.battle_retention_days).toBe(21)

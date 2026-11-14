@@ -38,8 +38,8 @@ const nextConfig = {
         destination: `${proxyOrigin}/v1/:path*`,
       },
       {
-        // 头像/聊天图片由后端静态目录提供。走同源代理后浏览器拿到的 URL 是相对路径
-        // （/chat-images/...），不依赖 site_base_url，也不会跨源，缓存按同源 URL 命中。
+        // 图片由后端静态目录提供。AI 头像使用同源相对路径（/chat-images/...），必须经此代理才能取图；
+        // 聊天图片仍按请求 origin 输出绝对地址，走这条代理同样可用。响应头（含 immutable）原样透传。
         source: '/chat-images/:path*',
         destination: `${proxyOrigin}/chat-images/:path*`,
       },

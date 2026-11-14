@@ -1,4 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('@/features/settings/api', () => ({
+  getSystemSettings: vi.fn(),
+  getPublicBranding: vi.fn(),
+  updateSystemSettings: vi.fn(),
+}))
 
 const STORAGE_KEY = 'settings-storage'
 
@@ -58,5 +64,23 @@ describe('settings-store persist 迁移', () => {
     await useSettingsStore.persist.rehydrate()
 
     expect(useSettingsStore.getState().assistantAvatarUrl).toBe(avatarUrl)
+  })
+
+  it('fetchSystemSettings 写入 assistantAvatarUrl，清空时归零', async () => {
+    const api = await import('@/features/settings/api')
+    const { useSettingsStore } = await import('@/store/settings-store')
+    const avatarUrl = '/chat-images/profiles/2026/11/14/c.png'
+
+    vi.mocked(api.getSystemSettings).mockResolvedValueOnce({
+      data: { assistantAvatarUrl: avatarUrl },
+    } as never)
+    await useSettingsStore.getState().fetchSystemSettings()
+    expect(useSettingsStore.getState().assistantAvatarUrl).toBe(avatarUrl)
+
+    vi.mocked(api.getSystemSettings).mockResolvedValueOnce({
+      data: { assistantAvatarUrl: null },
+    } as never)
+    await useSettingsStore.getState().fetchSystemSettings()
+    expect(useSettingsStore.getState().assistantAvatarUrl).toBeNull()
   })
 })
