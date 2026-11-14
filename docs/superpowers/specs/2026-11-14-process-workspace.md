@@ -8,6 +8,7 @@ Approved 2026-11-14. This is the implementation contract for the Web redesign, r
 2. Open process, sources and artifacts in one message-scoped workspace. Keep model-visible reasoning separate from tool records.
 3. Use a 440px sidebar at widths ≥1440px, an overlay at 768–1439px, and a full-screen panel below 768px. Closing restores focus and reading context; the reading outline returns when the workspace closes.
 4. Battle output details use a collapsed inline process panel, not a second modal. Public shares and Battle are read-only consumers of the same operation projection.
+5. In chat, show the waiting indicator with a loading icon below the compact process entry while no answer content is available. Once text or rich content appears, show that content instead. Keep the account avatar in the top bar; omit duplicate user avatars from message bubbles. User bubbles stay within the available chat column, capped at 520px.
 
 ## Tool records and coverage
 

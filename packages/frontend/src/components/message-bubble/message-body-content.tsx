@@ -25,7 +25,7 @@ const resolveGeneratedImageUrl = (image: GeneratedImage): string | null => {
   return null
 }
 
-const buildAssistantRichPayload = (
+export const buildAssistantRichPayload = (
   meta: MessageMeta,
   content: string,
 ): RichMessagePayload | null => {
@@ -73,7 +73,6 @@ interface MessageBodyContentProps {
   contentHtml: string
   renderedSource?: string
   content: string
-  shouldShowStreamingPlaceholder: boolean
   isStreaming: boolean
   isRendering: boolean
   renderErrored?: boolean
@@ -86,7 +85,6 @@ export function MessageBodyContent({
   contentHtml,
   renderedSource,
   content,
-  shouldShowStreamingPlaceholder,
   isStreaming,
   isRendering,
   renderErrored = false,
@@ -207,18 +205,7 @@ export function MessageBodyContent({
 
   return (
     <div className={bubbleClass}>
-      {shouldShowStreamingPlaceholder ? (
-        <div className="flex items-center gap-1">
-          <div className="flex space-x-1">
-            <div className="w-2 h-2 bg-surface-subtle-foreground rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-            <div className="w-2 h-2 bg-surface-subtle-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-            <div className="w-2 h-2 bg-surface-subtle-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-          </div>
-          <span className="text-sm text-muted-foreground ml-2">AI正在思考...</span>
-        </div>
-      ) : (
-        <MarkdownRenderer html={contentHtml} source={renderedSource} managed errored={renderErrored} fallback={content} isStreaming={isStreaming} isRendering={isRendering} />
-      )}
+      <MarkdownRenderer html={contentHtml} source={renderedSource} managed errored={renderErrored} fallback={content} isStreaming={isStreaming} isRendering={isRendering} />
     </div>
   )
 }

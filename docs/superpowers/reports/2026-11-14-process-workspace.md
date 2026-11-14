@@ -30,6 +30,14 @@ Task-level review fixes include failure filtering, ancestor context in the ledge
 
 Recorded nonblocking follow-ups: centralize stop-reason literals/guards; unify the two equivalent terminal-event arbiters; deepen the boundary between call-ledger and process-workspace; consolidate remaining backend log-id parsing. These are maintainability tasks, not claims of completed refactoring. Existing large-file, hook-dependency and image lint warnings remain visible in build output.
 
+## Message-layout follow-up
+
+The chat waiting indicator now follows the compact process entry and includes a loading icon. It disappears when text, a rich payload or a generated image can be displayed; unusable image metadata keeps the waiting feedback visible. Reduced-motion preferences stop the icon animation, and process activity remains the only live announcement in the message.
+
+User avatars are omitted from message bubbles while top-bar identity and assistant avatars remain. User bubbles are capped at the smaller of 520px and their chat column. Copy, edit and share actions retain their existing entry points. Layout regression coverage includes waiting order, text arrival, stream completion, image-only and rich answers, invalid image metadata, and message actions. The final focused run passed 12 tests across three files. The complete final frontend run passed 159 files / 951 tests. Frontend type checking passed after removing the temporary preview route and its stale generated Next type.
+
+Real-browser acceptance verified 1600px and 385px views with a closed or open navigation sidebar, plus light and dark themes. The long user bubble measured 520px in a 1328px chat column and 345px in a 345px column; page horizontal overflow was zero. The loading icon appeared below the summary with a 12px gap, disappeared after answer content arrived, and did not add a second live region. Top-bar user identity remained, message user avatars were absent, and assistant avatars remained. Browser console and page errors were zero. Actor and branding reads used the same read-only mocks as the original component acceptance. Final key captures are `output/playwright/process-workspace-layout-check-1600-light.png` and `output/playwright/process-workspace-layout-check-385-closed-light.png`. The temporary message-layout-check route was removed after acceptance.
+
 ## Migration
 
 Direct UI replacement; no database-column migration. Existing `toolLogsJson` values remain readable. No API compatibility wrapper is kept for the removed no-effect `/api/chat/stop` route. The existing cancel route remains the whole-run cancel entry point.

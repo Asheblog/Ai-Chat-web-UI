@@ -9,9 +9,9 @@ import { useMarkdownRender } from '@/hooks/use-markdown-render'
 import { useChatStore } from '@/store/chat-store'
 import type { MessageBody, MessageMeta, MessageRenderCacheEntry, MessageStreamMetrics } from '@/types'
 import { useSettingsStore } from '@/store/settings-store'
-import { useAuthStore } from '@/store/auth-store'
+import { TypingIndicator } from '@/components/typing-indicator'
 import { ExpandEditorDialog } from '@/components/chat/expand-editor-dialog'
-import { MessageBodyContent } from './message-body-content'
+import { buildAssistantRichPayload, MessageBodyContent } from './message-body-content'
 import { MessageHeader } from './message-header'
 import { ShareBadge } from './share-badge'
 import { normalizeMetricMs, normalizeMetricNumber } from './message-metrics'
@@ -58,7 +58,6 @@ function MessageBubbleComponent({
   const processCommands = useProcessCommands(meta.sessionId, variantInfo?.onRegenerate, meta.id)
   const applyRenderedContent = useChatStore((state) => state.applyRenderedContent)
   const editLastUserMessage = useChatStore((state) => state.editLastUserMessage)
-  const currentUser = useAuthStore((state) => state.user)
   const assistantAvatarUrl = useSettingsStore((state) => state.assistantAvatarUrl)
   const [isCopied, setIsCopied] = useState(false)
 
@@ -78,7 +77,7 @@ function MessageBubbleComponent({
   const isCodeOnly = !isUser && content.includes('```') && outsideText === ''
   const hasContent = content.length > 0
   const shouldShowStreamingPlaceholder = Boolean(
-    isStreaming && !hasContent && meta.role === 'assistant',
+    isStreaming && !hasContent && meta.role === 'assistant' && !buildAssistantRichPayload(meta, content),
   )
   const { timeline: toolTimeline } = useToolTimeline({
     sessionId: meta.sessionId,
@@ -121,18 +120,14 @@ function MessageBubbleComponent({
     }
   }, [content, toast])
 
-  const bubbleClass = `max-w-full box-border ${
+  const bubbleClass = `box-border ${
     isUser
-      ? 'ml-auto w-fit max-w-[520px] rounded-[14px] bg-userBubble px-3.5 py-2.5 text-left text-[14px] leading-[1.7] text-foreground'
+      ? 'ml-auto w-fit max-w-[min(100%,520px)] rounded-[14px] bg-userBubble px-3.5 py-2.5 text-left text-[14px] leading-[1.7] text-foreground'
       : isCodeOnly
-        ? 'w-full p-0 bg-transparent border-0 text-foreground'
-        : 'w-full px-0 py-0.5 bg-transparent text-foreground'
+        ? 'max-w-full w-full p-0 bg-transparent border-0 text-foreground'
+        : 'max-w-full w-full px-0 py-0.5 bg-transparent text-foreground'
   }`
 
-  const avatarSrc = isUser ? currentUser?.avatarUrl ?? undefined : assistantAvatarUrl ?? undefined
-  const avatarFallbackText = isUser
-    ? currentUser?.username?.charAt(0).toUpperCase() || 'U'
-    : 'A'
   const showVariantControls = Boolean(variantInfo)
   const showVariantNavigation = Boolean(variantInfo && variantInfo.total > 1)
   const shareableMessageId = typeof meta.id === 'number' ? meta.id : null
@@ -172,13 +167,13 @@ function MessageBubbleComponent({
 
   return (
     <div className={`relative ${selectionWrapperClass}`}>
-      <div className={`flex items-start gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
-        <MessageAvatar
-          src={avatarSrc}
-          alt={isUser ? '用户头像' : 'AI 头像'}
-          fallback={avatarFallbackText}
-          className={`hidden h-[26px] w-[26px] flex-shrink-0 sm:flex ${isUser ? '' : 'mt-0.5'}`}
-        />
+      <div className="flex items-start gap-3">
+        {!isUser && <MessageAvatar
+          src={assistantAvatarUrl ?? undefined}
+          alt="AI 头像"
+          fallback="A"
+          className="mt-0.5 hidden h-[26px] w-[26px] shrink-0 sm:flex"
+        />}
 
         <div
           className={`min-w-0 max-w-full flex-1 text-left ${
@@ -204,18 +199,17 @@ function MessageBubbleComponent({
               }}
             />
           )}
-          <MessageBodyContent
+          {!shouldShowStreamingPlaceholder && <MessageBodyContent
             isUser={isUser}
             meta={meta}
             bubbleClass={bubbleClass}
             contentHtml={contentHtml}
             renderedSource={markdown.html != null ? markdown.source : cacheUsable ? cachedSource : undefined}
             content={content}
-            shouldShowStreamingPlaceholder={shouldShowStreamingPlaceholder}
             isStreaming={Boolean(isStreaming)}
             isRendering={isRendering}
             renderErrored={markdown.errored}
-          />
+          />}
 
           {!isUser && <CotTimeline
             meta={meta}
@@ -229,6 +223,8 @@ function MessageBubbleComponent({
             readOnly={false}
             commands={processCommands}
           />}
+
+          {shouldShowStreamingPlaceholder && <TypingIndicator announce={false} />}
 
           {!isUser && artifacts.length > 0 && (
             <div className="mt-2 space-y-2">
