@@ -81,7 +81,8 @@ describe('过程工作区（原 CoT 时间轴）', () => {
     expect(processRows()).toHaveLength(1)
     expect(within(processRows()[0]).getByRole('button')).toHaveAttribute('aria-expanded', 'false')
     expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByText('想法')).toBeNull()
+    expect(reasoningButtons()[0]).toHaveTextContent('想法')
+    expect(screen.queryByText('想法', { selector: 'div' })).toBeNull()
   })
 
   it('Esc 与关闭按钮都回到一行摘要，并把焦点还给触发控件', async () => {
@@ -174,7 +175,7 @@ describe('过程工作区（原 CoT 时间轴）', () => {
 
     expect(workspace()).toBeInTheDocument()
     expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByText('展开的思考内容')).toBeInTheDocument()
+    expect(screen.getByText('展开的思考内容', { selector: 'div' })).toBeInTheDocument()
   })
 
   it('思考步不展示工具进度污染文案', () => {
@@ -188,7 +189,7 @@ describe('过程工作区（原 CoT 时间轴）', () => {
       />,
     )
 
-    expect(screen.getByText(/模型计划/)).toBeInTheDocument()
+    expect(screen.getByText(/模型计划/, { selector: 'div' })).toBeInTheDocument()
     expect(screen.queryByText(/联网搜索：污染行/)).toBeNull()
   })
 
@@ -200,7 +201,7 @@ describe('过程工作区（原 CoT 时间轴）', () => {
     expect(button).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(button)
     expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByText('思考内容')).toBeInTheDocument()
+    expect(screen.getByText('思考内容', { selector: 'div' })).toBeInTheDocument()
     first.unmount()
 
     render(<CotTimeline meta={createMeta()} reasoningRaw="思考内容" toolEvents={[]} coverage={completeCoverage} />)

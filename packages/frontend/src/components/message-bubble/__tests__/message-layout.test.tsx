@@ -27,6 +27,17 @@ describe('message layout', () => {
     expect(label.closest('[aria-live]')).toBeNull()
   })
 
+  it('keeps the process entry above both streaming and completed answers', () => {
+    const { rerender } = render(<MessageBubble meta={meta} body={{ ...body, content: '正文已经开始' }} isStreaming />)
+    const expectProcessBeforeAnswer = () => {
+      const entry = screen.getByRole('button', { name: /查看过程/ })
+      expect(entry.compareDocumentPosition(screen.getByText('正文已经开始'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    }
+    expectProcessBeforeAnswer()
+    rerender(<MessageBubble meta={meta} body={{ ...body, content: '正文已经开始' }} />)
+    expectProcessBeforeAnswer()
+  })
+
   it('removes the waiting indicator once answer text arrives', () => {
     const { rerender } = render(<MessageBubble meta={meta} body={body} isStreaming />)
     rerender(<MessageBubble meta={meta} body={{ ...body, content: '开始回答', version: 2 }} isStreaming />)

@@ -94,7 +94,7 @@ describe("ShareViewer", () => {
     expect(reasoningButton).toBeInTheDocument()
     expect(reasoningButton).toHaveAttribute("aria-expanded", "false")
     fireEvent.click(reasoningButton)
-    expect(screen.getByText("这是思维链内容")).toBeInTheDocument()
+    expect(screen.getByText("这是思维链内容", { selector: "div" })).toBeInTheDocument()
   })
 
   it("renders tool summary when toolEvents are present", () => {

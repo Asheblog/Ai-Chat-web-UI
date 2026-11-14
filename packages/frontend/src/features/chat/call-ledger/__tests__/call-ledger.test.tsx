@@ -131,7 +131,7 @@ describe('CallLedger 全宽台账', () => {
     expect(onReturn).toHaveBeenCalledTimes(1)
   })
 
-  it('持久化记录不完整与列表视图精简分开说明', async () => {
+  it('隐藏持久化与缺失快照提示，保留列表精简提示', async () => {
     render(
       <CallLedger
         meta={meta}
@@ -144,7 +144,9 @@ describe('CallLedger 全宽台账', () => {
         onReturn={vi.fn()}
       />,
     )
-    expect(await screen.findByText(/持久化记录不完整：丢弃 12 条记录/)).toBeInTheDocument()
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+    expect(screen.queryByText(/持久化记录/)).toBeNull()
+    expect(screen.queryByText('无原始运行链路快照')).toBeNull()
     expect(screen.getByText('列表视图已精简，打开详情查看')).toBeInTheDocument()
   })
 

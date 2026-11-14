@@ -136,7 +136,7 @@ describe('来源与产物', () => {
 })
 
 describe('覆盖与终态', () => {
-  it('持久化不完整与列表视图精简分开说明，未知不显示成 0', async () => {
+  it('隐藏持久化与缺失快照提示，列表精简仍可见且未知不写成 0', async () => {
     const user = userEvent.setup()
     render(
       <ProcessWorkspaceEntry
@@ -149,7 +149,8 @@ describe('覆盖与终态', () => {
       />,
     )
     await user.click(screen.getByRole('button', { name: /查看过程/ }))
-    expect(screen.getByText(/持久化记录不完整：丢弃 454 条记录，裁剪 12 个字段/)).toBeInTheDocument()
+    expect(screen.queryByText(/持久化记录/)).toBeNull()
+    expect(screen.queryByText('无原始运行链路快照')).toBeNull()
     expect(screen.getByText('列表视图已精简，打开详情查看')).toBeInTheDocument()
     expect(screen.queryByText(/0 条/)).not.toBeInTheDocument()
   })

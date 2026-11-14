@@ -4,11 +4,11 @@ Approved 2026-11-14. This is the implementation contract for the Web redesign, r
 
 ## Reading hierarchy
 
-1. Keep the final answer first. Follow it with a compact process entry and retain artifact download access.
-2. Open process, sources and artifacts in one message-scoped workspace. Keep model-visible reasoning separate from tool records.
+1. Keep the final answer readable and place the compact process entry immediately above the answer body. The entry remains the gateway to the full process workspace, while the answer keeps artifact download access.
+2. Open process, sources and artifacts in one message-scoped workspace. Keep model-visible reasoning separate from tool records. Each reasoning segment has a locally extracted content title of at most 30 Unicode code points, including any ellipsis; clicking it reveals the full original segment and preserves the existing disclosure preference. Short segments may use their full text as the title. Code-only segments use the first nonempty code line; segments with no usable content use a numbered placeholder.
 3. Use a 440px sidebar at widths ≥1440px, an overlay at 768–1439px, and a full-screen panel below 768px. Closing restores focus and reading context; the reading outline returns when the workspace closes.
 4. Battle output details use a collapsed inline process panel, not a second modal. Public shares and Battle are read-only consumers of the same operation projection.
-5. In chat, show the waiting indicator with a loading icon below the compact process entry while no answer content is available. Once text or rich content appears, show that content instead. Keep the account avatar in the top bar; omit duplicate user avatars from message bubbles. User bubbles stay within the available chat column, capped at 520px.
+5. In chat, place the compact process entry immediately above the answer body. While no answer content is available, show the waiting indicator with a loading icon below that entry; once text or rich content appears, show the answer below the entry. Keep the account avatar in the top bar; omit duplicate user avatars from message bubbles. User bubbles stay within the available chat column, capped at 520px. The process workspace keeps detailed coverage metadata internally, but does not surface persistence-loss or missing-snapshot banners in the process panel or call ledger.
 
 ## Tool records and coverage
 

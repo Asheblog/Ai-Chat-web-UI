@@ -2,7 +2,8 @@
  * 覆盖归一化与文案 —— 三层覆盖的形状直接来自共享契约。
  *
  * trace 无证据就是 unknown；persisted.partial 是真正的记录丢失或字段裁剪；
- * projection.partial 只表示当前列表视图精简，不代表原记录丢失。两者文案必须分开。
+ * projection.partial 只表示当前列表视图精简，不代表原记录丢失。
+ * 展示只保留列表精简与明确运行缺口；持久化状态和未知快照保留在数据层。
  */
 import {
   buildToolLogCoverage,
@@ -20,7 +21,7 @@ export const normalizeProcessCoverage = (input?: ProcessCoverage): NormalizedPro
 export type ProcessCoverageTone = 'neutral' | 'warning' | 'danger'
 
 export interface ProcessCoverageNote {
-  layer: 'trace' | 'persisted' | 'projection'
+  layer: 'trace' | 'projection'
   tone: ProcessCoverageTone
   text: string
 }
@@ -41,18 +42,6 @@ const countText = (layer: ToolLogCoverageLayer): string => {
 export const describeProcessCoverage = (coverage: NormalizedProcessCoverage): ProcessCoverageNote[] => {
   const notes: ProcessCoverageNote[] = []
 
-  if (coverage.persisted.status === 'partial') {
-    // 没有正计数时只说"尚不完整"，不凭空断言已经丢了记录
-    const detail = countText(coverage.persisted)
-    notes.push({
-      layer: 'persisted',
-      tone: 'warning',
-      text: detail ? `持久化记录不完整：${detail}` : '持久化记录尚不完整',
-    })
-  } else if (coverage.persisted.status === 'unknown') {
-    notes.push({ layer: 'persisted', tone: 'neutral', text: '持久化记录状态未知' })
-  }
-
   if (coverage.projection.status === 'partial') {
     notes.push({ layer: 'projection', tone: 'neutral', text: '列表视图已精简，打开详情查看' })
   }
@@ -64,9 +53,6 @@ export const describeProcessCoverage = (coverage: NormalizedProcessCoverage): Pr
       tone: 'warning',
       text: detail ? `本次运行链路有缺口：${detail}` : '本次运行链路有缺口',
     })
-  } else if (coverage.trace.status === 'unknown') {
-    // 流式过程中 trace 也是 unknown：只说没有快照，不声称本轮已经结束
-    notes.push({ layer: 'trace', tone: 'neutral', text: '无原始运行链路快照' })
   }
 
   return notes

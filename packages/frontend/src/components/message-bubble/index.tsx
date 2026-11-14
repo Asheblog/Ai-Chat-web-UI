@@ -199,18 +199,6 @@ function MessageBubbleComponent({
               }}
             />
           )}
-          {!shouldShowStreamingPlaceholder && <MessageBodyContent
-            isUser={isUser}
-            meta={meta}
-            bubbleClass={bubbleClass}
-            contentHtml={contentHtml}
-            renderedSource={markdown.html != null ? markdown.source : cacheUsable ? cachedSource : undefined}
-            content={content}
-            isStreaming={Boolean(isStreaming)}
-            isRendering={isRendering}
-            renderErrored={markdown.errored}
-          />}
-
           {!isUser && <CotTimeline
             meta={meta}
             reasoningRaw={reasoningRaw}
@@ -225,6 +213,18 @@ function MessageBubbleComponent({
           />}
 
           {shouldShowStreamingPlaceholder && <TypingIndicator announce={false} />}
+
+          {!shouldShowStreamingPlaceholder && <MessageBodyContent
+            isUser={isUser}
+            meta={meta}
+            bubbleClass={bubbleClass}
+            contentHtml={contentHtml}
+            renderedSource={markdown.html != null ? markdown.source : cacheUsable ? cachedSource : undefined}
+            content={content}
+            isStreaming={Boolean(isStreaming)}
+            isRendering={isRendering}
+            renderErrored={markdown.errored}
+          />}
 
           {!isUser && artifacts.length > 0 && (
             <div className="mt-2 space-y-2">

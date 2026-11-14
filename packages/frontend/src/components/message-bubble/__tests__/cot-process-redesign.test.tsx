@@ -96,13 +96,13 @@ describe('CoT 按需查看过程（工作区语义）', () => {
     )
     fireEvent.click(summaryBar())
     fireEvent.click(reasoningToggle())
-    expect(screen.getByText('原始思考')).toBeInTheDocument()
+    expect(screen.getByText('原始思考', { selector: 'div' })).toBeInTheDocument()
 
     rerender(<CotTimeline meta={meta} reasoningRaw="原始思考" toolEvents={[]} coverage={completeCoverage} />)
 
     expect(workspace()).toBeInTheDocument()
     expect(reasoningToggle()).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByText('原始思考')).toBeInTheDocument()
+    expect(screen.getByText('原始思考', { selector: 'div' })).toBeInTheDocument()
   })
 
   it('失败通过异常分组直接定位，原始错误可追溯，成功记录不被删除', () => {
@@ -194,7 +194,7 @@ describe('CoT 按需查看过程（工作区语义）', () => {
 
     expect(workspace()).toBeInTheDocument()
     expect(processRows()).toHaveLength(9)
-    expect(screen.getByText('Battle推理')).toBeInTheDocument()
+    expect(screen.getByText('Battle推理', { selector: 'div' })).toBeInTheDocument()
     expect(screen.getByText('详情-9')).toBeInTheDocument()
     expect(screen.getByText('Battle 只读')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /显示其余/ })).toBeNull()
