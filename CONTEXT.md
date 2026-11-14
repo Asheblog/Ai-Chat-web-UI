@@ -60,6 +60,7 @@
 - **Search Credential（搜索凭据）**：由管理员配置、专用于联网搜索与可选读页回退的系统凭据，与聊天模型连接凭据相互独立；以加密方式保存，仅返回是否已配置。
 
 - **Web Search（联网搜索）**：通过外部搜索引擎（tavily、brave、exa、metaso、deepseek）检索网页；在各引擎能力范围内默认请求/解析结果配图（Tavily `include_images`、Exa `contents.extras.imageLinks`、Brave `thumbnail`、Metaso `imageUrl`/`thumbnail`）；支持可选 `scope`（含 `image`）：Metaso 走图片域、Brave 调用独立图片搜索 API；Tavily 在 `scope=image` 时开启 `include_image_descriptions` 并把响应顶层 `images`（query 相关图）合成为图片 hit；Exa 在 `scope=image` 时加大 `imageLinks` 并把页面代表图/页内图展平成图片 hit；`scope=image` 时跳过自动读正文，hit 配图按原始 URL 随工具结果回传模型；CoT/工具卡对 `scope=image` 展示为「图片检索」并标注「范围: 图片」
+- **Provider Conformance（引擎接口对齐）**：五个引擎的适配层按各自官方文档构造请求、映射响应。Tavily 用 Bearer 鉴权，支持 `include_raw_content`（markdown 正文）、`chunks_per_source`、`published_date`；Brave 关闭 `text_decorations`、启用 `extra_snippets`，图片结果取 `properties.url` 作原图；Metaso 只发送搜索接口字段，项目 `paper` 映射官方 `scholar`，`includeRawContent` 仅网页范围生效；Exa 支持 `contents.text` 与 `contents.summary`；DeepSeek 支持 `ori_question` 并映射 `date`/`site_name`/`authority`。统一范围词汇为 `@aichat/shared/web-search-contract` 的 `WEB_SEARCH_SCOPE_IDS`。域名白名单优先用引擎原生参数，Brave 用 `site:` 操作符，Metaso 在适配层本地过滤。失败只暴露状态码与 Retry-After，不回显上游响应体（可能含 API Key）。
 - **Read URL（网页读取）**：抓取并解析指定 URL 的正文内容；会抽取页面候选图；主模型支持识图时把抽到的主图与至多 3 张候选图直接附给主模型，否则只在工具结果里给出原始图片 URL 列表
 - **Auto Read（自动读取）**：搜索完成后自动收集结果网页正文，可复用搜索引擎返回的有效正文或读取网页。在 UI 中归入所属搜索合并组；实际读页时图片只按原始 URL 随工具结果回传证据
 - **Web Evidence Image（联网证据图）**：网页里抽取到的候选图（来源：搜索 hit 配图、图片域搜索结果与读页抽取图），以原始 URL 随工具结果回传并保留在工具卡展示，不进入 Rich Payload / 答案区；深度研究报告的正文配图由模型自行从这些 URL 中挑选并交给 `export_pdf` 内嵌
