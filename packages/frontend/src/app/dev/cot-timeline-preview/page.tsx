@@ -40,7 +40,7 @@ export default function CotTimelinePreviewPage() {
         <header className="space-y-1">
           <h1 className="text-title-l">过程时间轴 · 三段折叠预览</h1>
           <p className="text-sm text-muted-foreground">
-            L0 一行摘要 → L1 提纲（限高滚动，可单步下钻）→ L2 全部展开。仅 dev 可见。
+            完成后收成一行摘要；展开后先看 7 步，按需查看更多或查看单步详情。仅 dev 可见。
           </p>
         </header>
 

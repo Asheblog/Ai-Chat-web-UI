@@ -2,6 +2,10 @@ import { fireEvent, render, screen } from "@testing-library/react"
 import { ShareViewer } from "./share-viewer"
 
 describe("ShareViewer", () => {
+  beforeEach(() => {
+    localStorage.clear()
+    sessionStorage.clear()
+  })
   it("renders shared messages with simplified header", () => {
     const now = new Date().toISOString()
     const initialMessages = [
@@ -85,10 +89,12 @@ describe("ShareViewer", () => {
     )
 
     // 时间轴默认折成一行，点开后才是每步一行
-    fireEvent.click(screen.getByRole('button', { name: /过程时间轴，共/ }))
+    fireEvent.click(screen.getByRole('button', { name: /查看过程/ }))
     const reasoningButton = screen.getByRole('button', { name: /深度思考/ })
     expect(reasoningButton).toBeInTheDocument()
     expect(reasoningButton).toHaveAttribute("aria-expanded", "false")
+    fireEvent.click(reasoningButton)
+    expect(screen.getByText("这是思维链内容")).toBeInTheDocument()
   })
 
   it("renders tool summary when toolEvents are present", () => {
@@ -105,6 +111,7 @@ describe("ShareViewer", () => {
             sessionId: 10,
             messageId: 1,
             tool: "web_search",
+            resultText: "保留搜索结果详情",
             stage: "result",
             status: "success",
             createdAt: Date.now(),
@@ -132,11 +139,13 @@ describe("ShareViewer", () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /过程时间轴，共/ }))
+    fireEvent.click(screen.getByRole('button', { name: /查看过程/ }))
     const toolButton = screen.getByRole('button', { name: /联网搜索/ })
     expect(toolButton).toBeInTheDocument()
     expect(toolButton).toHaveAttribute('aria-expanded', 'false')
     expect(screen.getByText('完成')).toBeInTheDocument()
+    fireEvent.click(toolButton)
+    expect(screen.getByText('保留搜索结果详情')).toBeInTheDocument()
   })
 
   it("uses default brand text when not provided", () => {

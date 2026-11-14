@@ -24,12 +24,10 @@ const tool = (override: Partial<ToolEvent> & Pick<ToolEvent, 'id' | 'tool'>): To
 
 const reasoningButtons = () => screen.getAllByRole('button', { name: /深度思考/ })
 const toolButton = () => screen.getByRole('button', { name: /联网搜索：今日新闻/ })
-const summaryBar = () => screen.getByRole('button', { name: /过程时间轴，共/ })
+const summaryBar = () => screen.getByRole('button', { name: /查看过程|查看失败步骤/ })
 const timelineBody = () => screen.queryByTestId('cot-timeline-body')
 const openOutline = () => fireEvent.click(summaryBar())
-const expandAllButton = () => screen.getByRole('button', { name: /全部展开/ })
-const collapseAllButton = () => screen.getByRole('button', { name: /全部折叠/ })
-const collapseButton = () => screen.getByRole('button', { name: '收起过程时间轴' })
+const collapseButton = () => screen.getByRole('button', { name: '收起' })
 
 describe('CotTimeline', () => {
   beforeEach(() => {
@@ -61,12 +59,12 @@ describe('CotTimeline', () => {
       />,
     )
 
-    expect(screen.getByText('过程时间轴 · 2 步')).toBeInTheDocument()
+    expect(screen.getByText('已完成')).toBeInTheDocument()
     expect(timelineBody()).toBeNull()
     expect(screen.queryByRole('button', { name: /深度思考/ })).toBeNull()
   })
 
-  it('一行摘要带上工具统计细节', () => {
+  it('一行摘要不再堆叠工具统计细节', () => {
     render(
       <CotTimeline
         meta={createMeta()}
@@ -83,8 +81,8 @@ describe('CotTimeline', () => {
       />,
     )
 
-    expect(screen.getByText(/搜索 1 次/)).toBeInTheDocument()
-    expect(screen.getByText(/命中 3 条/)).toBeInTheDocument()
+    expect(screen.queryByText(/搜索 1 次/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/命中 3 条/)).not.toBeInTheDocument()
   })
 
   it('点一行条进入提纲层：卡片都在，但每张都折叠', () => {
@@ -111,7 +109,7 @@ describe('CotTimeline', () => {
     expect(toolButton()).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('提纲层「全部展开」进入细节层，「全部折叠」回到提纲层，「收起」回到一行', () => {
+  it('展开过程后仅保留收起操作，收起回到一行', () => {
     render(
       <CotTimeline
         meta={createMeta()}
@@ -129,20 +127,11 @@ describe('CotTimeline', () => {
     )
 
     openOutline()
-    fireEvent.click(expandAllButton())
-
-    expect(timelineBody()).toHaveAttribute('data-level', 'expanded')
-    expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'true')
-    expect(toolButton()).toHaveAttribute('aria-expanded', 'true')
-
-    fireEvent.click(collapseAllButton())
-    expect(timelineBody()).toHaveAttribute('data-level', 'outline')
-    expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'false')
-    expect(toolButton()).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('button', { name: '全部展开' })).toBeNull()
 
     fireEvent.click(collapseButton())
     expect(timelineBody()).toBeNull()
-    expect(screen.getByText('过程时间轴 · 2 步')).toBeInTheDocument()
+    expect(screen.getByText('已完成')).toBeInTheDocument()
   })
 
   it('提纲层可以单步下钻，且不改变整条级别', () => {
@@ -171,11 +160,12 @@ describe('CotTimeline', () => {
     expect(timelineBody()).toHaveAttribute('data-level', 'outline')
   })
 
-  it('细节层点单张卡会退回提纲层', () => {
+  it('调用方显式细节层点单张卡会退回提纲层', () => {
     render(
       <CotTimeline
         meta={createMeta()}
         reasoningRaw="想法"
+        defaultExpanded
         toolEvents={[
           tool({
             id: 't6',
@@ -188,8 +178,6 @@ describe('CotTimeline', () => {
       />,
     )
 
-    openOutline()
-    fireEvent.click(expandAllButton())
     expect(timelineBody()).toHaveAttribute('data-level', 'expanded')
 
     fireEvent.click(toolButton())
@@ -199,13 +187,12 @@ describe('CotTimeline', () => {
   it('用户手选的级别只记住这条消息，不污染其他消息', async () => {
     const first = render(<CotTimeline meta={createMeta()} reasoningRaw="想法" toolEvents={[]} />)
     openOutline()
-    fireEvent.click(expandAllButton())
-    expect(timelineBody()).toHaveAttribute('data-level', 'expanded')
+    expect(timelineBody()).toHaveAttribute('data-level', 'outline')
     first.unmount()
 
     const second = render(<CotTimeline meta={createMeta()} reasoningRaw="想法" toolEvents={[]} />)
     await waitFor(() => {
-      expect(timelineBody()).toHaveAttribute('data-level', 'expanded')
+      expect(timelineBody()).toHaveAttribute('data-level', 'outline')
     })
     second.unmount()
 
@@ -278,7 +265,7 @@ describe('CotTimeline', () => {
       />,
     )
 
-    // 流式默认提纲层且末段折叠为单行滚屏，点击后才展开播放打字机
+    // 流式默认提纲层，点击单步后才播放打字机
     expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(reasoningButtons()[0])
     expect(reasoningButtons()[0]).toHaveAttribute('aria-expanded', 'true')
@@ -421,7 +408,7 @@ describe('CotTimeline', () => {
     expect(screen.getByText(/推理第399行/)).toBeInTheDocument()
   })
 
-  it('流式超长推理的单行滚动只保留相邻行 DOM', () => {
+  it('流式超长推理默认只展示活动，不挂载原始文本', () => {
     const huge = Array.from({ length: 400 }, (_, index) => `推理第${index}行`).join('\n')
     render(
       <CotTimeline
@@ -433,8 +420,8 @@ describe('CotTimeline', () => {
       />,
     )
 
-    const scroller = screen.getByTestId('cot-vertical-line-scroller')
-    expect(scroller).toHaveAttribute('data-line-count', '400')
-    expect(scroller.querySelectorAll('[data-cot-line]').length).toBeLessThanOrEqual(3)
+    expect(screen.getByRole('status')).toHaveTextContent('正在思考')
+    expect(screen.queryByTestId('cot-vertical-line-scroller')).toBeNull()
+    expect(screen.queryByText(/推理第0行/)).not.toBeInTheDocument()
   })
 })

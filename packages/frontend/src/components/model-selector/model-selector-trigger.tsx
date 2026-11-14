@@ -2,7 +2,8 @@ import * as React from 'react'
 import { ChevronDown } from 'lucide-react'
 import type { ModelItem } from '@/store/models-store'
 import { cn } from '@/lib/utils'
-import { formatModelOptionLabel, formatModelSecondaryLabel } from '@/lib/model-display'
+import { formatModelOptionLabel } from '@/lib/model-display'
+import { formatModelSelectorSource } from './model-selector-utils'
 import { Button } from '@/components/ui/button'
 
 interface ModelSelectorTriggerProps extends Omit<React.ComponentPropsWithoutRef<typeof Button>, 'variant' | 'children'> {
@@ -14,7 +15,7 @@ interface ModelSelectorTriggerProps extends Omit<React.ComponentPropsWithoutRef<
 
 export const ModelSelectorTrigger = React.forwardRef<React.ElementRef<typeof Button>, ModelSelectorTriggerProps>(
   ({ open, selected, className, displayVariant, selectorSize, ...buttonProps }, ref) => {
-    const source = selected ? formatModelSecondaryLabel(selected) : null
+    const source = selected ? formatModelSelectorSource(selected) : null
     const inline = displayVariant === 'inline'
     const sizeClass = selectorSize === 'sm' ? 'h-11 w-[180px] px-2.5 md:h-9'
       : selectorSize === 'lg' ? 'h-12 w-[280px] px-4' : 'h-11 w-[240px] px-3'

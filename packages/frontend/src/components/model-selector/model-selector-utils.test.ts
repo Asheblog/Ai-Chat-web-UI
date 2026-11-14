@@ -5,7 +5,7 @@ import {
   formatModelOptionLabel,
   formatModelSecondaryLabel,
 } from '@/lib/model-display'
-import { isModelSelected, matchesStoredModelId } from './model-selector-utils'
+import { isModelSelected } from './model-selector-utils'
 
 const makeModel = (override: Partial<ModelItem>): ModelItem => ({
   id: 'gpt-4o',
@@ -29,15 +29,6 @@ describe('model-selector-utils', () => {
     expect(isModelSelected(modelB, selectedKey)).toBe(false)
     expect(isModelSelected(modelA, modelA.id)).toBe(false)
     expect(isModelSelected(modelA, modelA.rawId)).toBe(false)
-  })
-
-  it('matches stored model ids by key only', () => {
-    const model = makeModel({ connectionId: 7, id: 'claude-3-7-sonnet', rawId: 'claude-3-7-sonnet' })
-    const key = modelKeyFor(model)
-
-    expect(matchesStoredModelId(model, key)).toBe(true)
-    expect(matchesStoredModelId(model, model.id)).toBe(false)
-    expect(matchesStoredModelId(model, model.rawId)).toBe(false)
   })
 
   it('builds modelKey as connectionId:rawId (group-scoped)', () => {

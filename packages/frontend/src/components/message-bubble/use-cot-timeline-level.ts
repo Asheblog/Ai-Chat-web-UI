@@ -99,3 +99,38 @@ export function useCotTimelineLevel({
 
   return { level, setLevel, resetLevel, preference }
 }
+
+/** 披露到第几步也是消息查看状态，虚拟列表卸载后和单步展开记忆一起恢复。 */
+export function useCotTimelineDisclosure(itemKey: string, initialCount: number) {
+  const storageKey = itemKey ? 'aichat.cot_timeline_steps:' + itemKey : ''
+  const [disclosure, setDisclosure] = useState({ key: itemKey, count: initialCount })
+
+  useEffect(() => {
+    let count = initialCount
+    if (storageKey) {
+      try {
+        const raw = window.sessionStorage.getItem(storageKey)
+        const stored = raw ? Number(raw) : null
+        if (stored !== null && Number.isSafeInteger(stored) && stored >= initialCount) count = stored
+      } catch {
+        // 与级别偏好一致：存储受限时保留本次挂载状态。
+      }
+    }
+    setDisclosure({ key: itemKey, count })
+  }, [itemKey, storageKey, initialCount])
+
+  const setVisibleCount = useCallback((count: number) => {
+    setDisclosure({ key: itemKey, count })
+    if (!storageKey) return
+    try {
+      window.sessionStorage.setItem(storageKey, String(count))
+    } catch {
+      // 本次点击的内存态仍然生效。
+    }
+  }, [itemKey, storageKey])
+
+  return {
+    visibleCount: disclosure.key === itemKey ? disclosure.count : initialCount,
+    setVisibleCount,
+  }
+}

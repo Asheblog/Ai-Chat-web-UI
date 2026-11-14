@@ -83,6 +83,6 @@ describe('Welcome model discovery recovery', () => {
     expect(trigger).toBeEnabled()
     expect(screen.getByRole('button', { name: /^发送$/ })).toBeDisabled()
     await user.click(trigger)
-    expect(await screen.findByPlaceholderText('搜索模型 / 厂商 / 能力')).toBeVisible()
+    expect(await screen.findByRole('textbox', { name: '搜索模型或供应商' })).toBeVisible()
   })
 })

@@ -1,134 +1,72 @@
 'use client'
 
-import { ChevronDown, ChevronUp, ChevronsUpDown, Loader2 } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Clock3, AlertTriangle } from 'lucide-react'
 import type { CotTimelineSummary } from '@aichat/shared/cot-timeline-view'
 import { cn } from '@/lib/utils'
-
-const MASTER_BUTTON_CLASS =
-  'inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-background/60 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors duration-200 hover:bg-surface-subtle/40 hover:text-foreground focus-visible:outline-none  focus-visible:ring-offset-1 focus-visible:ring-offset-background'
-
-const ICON_BUTTON_CLASS =
-  'inline-flex h-[1.625rem] w-[1.625rem] cursor-pointer items-center justify-center rounded-md border border-border bg-background/60 text-muted-foreground transition-colors duration-200 hover:bg-surface-subtle/40 hover:text-foreground focus-visible:outline-none  focus-visible:ring-offset-1 focus-visible:ring-offset-background'
-
-const resolveDotClass = (summary: CotTimelineSummary) => {
-  if (summary.activeCount > 0) return 'bg-blue-400 animate-pulse'
-  if (summary.failedCount > 0) return 'bg-amber-500'
-  return 'bg-emerald-400'
-}
 
 interface CotTimelineSummaryBarProps {
   summary: CotTimelineSummary
   durationText: string | null
   isStreaming: boolean
+  activityText?: string | null
   bodyId: string
   onExpand: () => void
 }
 
-/**
- * L0：整条时间轴压成一行。
- * 完成后默认就是这一行，正文可以立刻进入视线；点击进入提纲层。
- */
 export function CotTimelineSummaryBar({
-  summary,
-  durationText,
-  isStreaming,
-  bodyId,
-  onExpand,
+  summary, durationText, isStreaming, activityText, bodyId, onExpand,
 }: CotTimelineSummaryBarProps) {
-  const ariaLabel = `${summary.ariaLabel}${durationText ? `，耗时 ${durationText}` : ''}，展开查看每一步`
+  const hasFailures = summary.failedCount > 0
+  const label = isStreaming ? activityText || '正在整理回答' : hasFailures ? summary.failedCount + ' 个步骤失败' : '已完成'
+  const action = hasFailures && !isStreaming ? '查看失败步骤' : '查看过程'
+  const Icon = isStreaming ? Clock3 : hasFailures ? AlertTriangle : Check
 
   return (
     <button
       type="button"
-      className="group flex w-full cursor-pointer items-center gap-2 rounded-lg border border-border bg-background/40 px-3 py-1.5 text-left transition-colors duration-200 hover:bg-surface-subtle/40 focus-visible:outline-none  focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+      className="group flex min-h-11 w-full cursor-pointer items-center gap-2 rounded-lg bg-surface px-3 py-2 text-left transition-colors duration-200 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       onClick={onExpand}
       aria-expanded={false}
       aria-controls={bodyId}
-      aria-label={ariaLabel}
-      title="展开过程时间轴"
+      aria-label={label + (durationText ? '，耗时 ' + durationText : '') + '，' + action}
     >
-      <span
-        aria-hidden
-        className={cn('h-1.5 w-1.5 shrink-0 rounded-full', resolveDotClass(summary))}
-      />
-      <span className="shrink-0 text-xs font-medium text-muted-foreground">
-        过程时间轴 · {summary.stepCount} 步
-      </span>
-      {summary.detailChips.length > 0 && (
-        <span className="min-w-0 flex-1 truncate text-xs text-ink-tertiary">
-          {summary.detailChips.join(' · ')}
-        </span>
-      )}
-      {summary.detailChips.length === 0 && <span className="min-w-0 flex-1" />}
-      {isStreaming && (
-        <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" aria-hidden />
-      )}
-      {durationText && (
-        <span className="shrink-0 text-xs tabular-nums text-ink-tertiary">{durationText}</span>
-      )}
-      <ChevronDown
-        aria-hidden
-        className="h-3.5 w-3.5 shrink-0 text-ink-tertiary transition-colors duration-200 group-hover:text-foreground"
-      />
+      <Icon aria-hidden className={cn('h-4 w-4 shrink-0', hasFailures ? 'text-destructive' : 'text-primary')} />
+      <span className={cn('min-w-0 flex-1 truncate text-sm font-medium sm:flex-none', hasFailures ? 'text-destructive' : 'text-primary')} title={label}>{label}</span>
+      {durationText && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{durationText}</span>}
+      <span className="ml-auto shrink-0 text-xs text-muted-foreground">{action}</span>
+      <ChevronDown aria-hidden className="h-4 w-4 shrink-0 text-muted-foreground" />
     </button>
   )
 }
 
 interface CotTimelineHeaderProps {
-  level: 'outline' | 'expanded'
   stepCount: number
+  durationText: string | null
+  activityText: string | null
+  isStreaming: boolean
+  failedCount: number
   bodyId: string
-  onExpandAll: () => void
-  onCollapseAll: () => void
   onCollapse: () => void
 }
 
-/** L1 / L2 的标题行：左侧步骤总数，右侧「全部展开 / 全部折叠」与「收起」 */
 export function CotTimelineHeader({
-  level,
-  stepCount,
-  bodyId,
-  onExpandAll,
-  onCollapseAll,
-  onCollapse,
+  stepCount, durationText, activityText, isStreaming, failedCount, bodyId, onCollapse,
 }: CotTimelineHeaderProps) {
   return (
-    <div className="mb-2 flex items-center justify-between gap-2">
-      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        过程时间轴 · {stepCount} 步
-      </span>
-      <div className="flex shrink-0 items-center gap-1.5">
-        {level === 'outline' ? (
-          <button
-            type="button"
-            className={MASTER_BUTTON_CLASS}
-            onClick={onExpandAll}
-            aria-controls={bodyId}
-          >
-            <ChevronsUpDown className="h-3.5 w-3.5" aria-hidden />
-            全部展开
-          </button>
-        ) : (
-          <button
-            type="button"
-            className={MASTER_BUTTON_CLASS}
-            onClick={onCollapseAll}
-            aria-controls={bodyId}
-          >
-            <ChevronsUpDown className="h-3.5 w-3.5" aria-hidden />
-            全部折叠
-          </button>
-        )}
-        <button
-          type="button"
-          className={ICON_BUTTON_CLASS}
-          onClick={onCollapse}
-          aria-label="收起过程时间轴"
-          title="收起"
-        >
-          <ChevronUp className="h-3.5 w-3.5" aria-hidden />
-        </button>
+    <div className={cn('flex items-center justify-between gap-3 border-b border-border px-4 py-2', isStreaming && 'bg-primary/5')}>
+      <div className="min-w-0 py-1">
+        <div role={isStreaming ? 'status' : undefined} className={cn('flex items-center gap-2 text-sm font-medium', isStreaming && 'text-primary')}>
+          {isStreaming && <Clock3 aria-hidden className="h-4 w-4 shrink-0" />}
+          <span className="min-w-0 truncate" title={activityText || undefined}>{isStreaming ? activityText || '正在整理回答' : '过程记录'}</span>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {stepCount} 步{durationText ? ' · ' + durationText : ''}
+          {failedCount > 0 && <span className="ml-2 text-destructive">{failedCount} 个步骤失败</span>}
+        </p>
       </div>
+      <button type="button" className="inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-expanded aria-controls={bodyId} onClick={onCollapse}>
+        收起<ChevronUp aria-hidden className="h-4 w-4" />
+      </button>
     </div>
   )
 }

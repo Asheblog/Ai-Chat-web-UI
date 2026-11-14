@@ -79,7 +79,7 @@ describe('Welcome composer model action', () => {
     expect(tools).not.toContainElement(trigger)
     expect(tools).not.toContainElement(send)
     await user.click(trigger)
-    expect(await screen.findByPlaceholderText('搜索模型 / 厂商 / 能力')).toBeVisible()
+    expect(await screen.findByRole('textbox', { name: '搜索模型或供应商' })).toBeVisible()
     expect(onSubmit).not.toHaveBeenCalled()
     expect(onModelChange).not.toHaveBeenCalled()
     expect(modelKeyFor(selectedModel)).toBe('31:gpt-4.1')

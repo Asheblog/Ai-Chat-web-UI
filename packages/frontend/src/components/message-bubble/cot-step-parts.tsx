@@ -1,16 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { BookOpen, ChevronDown, Clock3, Code2, FileText, Globe, Lightbulb, Search, Wrench } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { TypewriterReasoning } from '@/components/typewriter-reasoning'
-import { FadeScrollContainer } from './fade-scroll-container'
 import { SingleLineScroller } from './single-line-scroller'
 import type { CotTimelineNode, ToolDisplayIconKey } from '@aichat/shared/cot-timeline'
 import { buildToolStepTitle, resolveToolDisplay } from '@aichat/shared/cot-timeline'
 import { resolveEventStatus } from '@aichat/shared/tool-events'
 import type { ToolEvent } from '@/types'
 import { cn } from '@/lib/utils'
+import { isFailedCotToolEvent } from './cot-timeline-failure'
 
 const ICON_MAP: Record<ToolDisplayIconKey, LucideIcon> = {
   lightbulb: Lightbulb,
@@ -79,13 +79,10 @@ function ToolResultBody({ event }: { event: ToolEvent }) {
     return <p className="text-xs text-muted-foreground">暂无结果详情</p>
   }
   return (
-    <FadeScrollContainer
-      className="overflow-hidden rounded-md bg-surface"
-      viewportClassName="overflow-auto"
-      maxHeightClassName="max-h-64"
-    >
-      <pre className="p-2 text-[11px] leading-4 text-foreground/80">{payload}</pre>
-    </FadeScrollContainer>
+    <div className="min-w-0 rounded-md bg-surface p-3">
+      {event.error && event.error !== payload && <p className="mb-2 whitespace-pre-wrap break-words text-sm text-destructive">{event.error}</p>}
+      <pre className="whitespace-pre-wrap break-words text-xs leading-5 text-foreground/80 [overflow-wrap:anywhere]">{payload}</pre>
+    </div>
   )
 }
 
@@ -94,6 +91,7 @@ export function CotToolStep({
   open: controlledOpen,
   onOpenChange,
   compact = false,
+  revealFailureRequest,
 }: {
   event: ToolEvent
   /** 受控展开态：由外层时间轴/持久化 hook 接管 */
@@ -101,8 +99,13 @@ export function CotToolStep({
   onOpenChange?: (open: boolean) => void
   /** 提纲层的紧凑单行：去掉卡片边框与摘要滚动行 */
   compact?: boolean
+  revealFailureRequest?: number
 }) {
+  const bodyId = useId()
   const [internalOpen, setInternalOpen] = useState(false)
+  useEffect(() => {
+    if (revealFailureRequest !== undefined) setInternalOpen(true)
+  }, [revealFailureRequest])
   const open = controlledOpen ?? internalOpen
   const setOpen = (next: boolean) => {
     if (onOpenChange) onOpenChange(next)
@@ -149,15 +152,16 @@ export function CotToolStep({
     <div
       className={cn(
         compact
-          ? 'rounded-md px-2 py-1 transition-colors duration-200 hover:bg-surface-subtle/40'
+          ? 'rounded-md px-2 transition-colors duration-200 hover:bg-surface-subtle/40'
           : 'rounded-lg border border-border bg-background/50 px-3 py-2',
       )}
     >
       <button
         type="button"
-        className="flex w-full cursor-pointer items-start justify-between gap-2 text-left"
+        className="flex min-h-11 w-full cursor-pointer items-center justify-between gap-2 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
+        aria-controls={bodyId}
       >
         {open ? (
           <div className="min-w-0 flex-1">
@@ -189,7 +193,7 @@ export function CotToolStep({
         <ChevronDown className={cn('mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
       </button>
       {open && (
-        <div className="mt-2 space-y-2 border-t border-border pt-2 sm:pl-6">
+        <div id={bodyId} className="mt-2 min-w-0 space-y-2 border-t border-border pt-2">
           <ToolResultBody event={event} />
         </div>
       )}
@@ -202,19 +206,31 @@ export function CotToolGroupStep({
   open: controlledOpen,
   onOpenChange,
   compact = false,
+  revealFailureRequest,
 }: {
   node: Extract<CotTimelineNode, { type: 'toolGroup' }>
   open?: boolean
   onOpenChange?: (open: boolean) => void
   /** 提纲层的紧凑单行：去掉卡片边框，摘要压成一行 */
   compact?: boolean
+  revealFailureRequest?: number
 }) {
+  const bodyId = useId()
   const [internalOpen, setInternalOpen] = useState(false)
+  useEffect(() => {
+    if (revealFailureRequest !== undefined) setInternalOpen(true)
+  }, [revealFailureRequest])
   const open = controlledOpen ?? internalOpen
   const setOpen = (next: boolean) => {
     if (onOpenChange) onOpenChange(next)
     else setInternalOpen(next)
   }
+  const firstFailureIndex = node.events.findIndex(isFailedCotToolEvent)
+  const failureCount = node.events.filter(isFailedCotToolEvent).length
+  const completedCount = node.events.filter(event => resolveEventStatus(event) === 'success').length
+  const groupSummary = failureCount > 0
+    ? completedCount + ' 个完成 · ' + failureCount + ' 个失败'
+    : node.summaryText
   const display = resolveToolDisplay(node.toolType)
   const Icon = ICON_MAP[display.iconKey] || Wrench
 
@@ -222,15 +238,16 @@ export function CotToolGroupStep({
     <div
       className={cn(
         compact
-          ? 'rounded-md px-2 py-1 transition-colors duration-200 hover:bg-surface-subtle/40'
+          ? 'rounded-md px-2 transition-colors duration-200 hover:bg-surface-subtle/40'
           : 'rounded-lg border border-border bg-background/50 px-3 py-2',
       )}
     >
       <button
         type="button"
-        className="flex w-full cursor-pointer items-start justify-between gap-2 text-left"
+        className="flex min-h-11 w-full cursor-pointer items-center justify-between gap-2 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
+        aria-controls={bodyId}
       >
         {open ? (
           <div className="min-w-0 flex-1">
@@ -239,14 +256,14 @@ export function CotToolGroupStep({
               <span>{display.label}</span>
               <span className="text-xs font-normal text-muted-foreground">{node.events.length} 个调用</span>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground sm:pl-6">{node.summaryText}</p>
+            <p className="mt-1 text-xs text-muted-foreground sm:pl-6">{groupSummary}</p>
           </div>
         ) : compact ? (
           <div className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium text-foreground">
             <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             <span className="shrink-0">{display.label}</span>
             <span className="min-w-0 flex-1 truncate text-xs font-normal text-muted-foreground">
-              {node.summaryText}
+              {groupSummary}
             </span>
           </div>
         ) : (
@@ -257,7 +274,7 @@ export function CotToolGroupStep({
               {node.events.length} 个调用
             </span>
             <SingleLineScroller
-              text={node.summaryText}
+              text={groupSummary}
               className="min-w-0 flex-1 text-xs font-normal text-muted-foreground"
               active={node.status === 'running'}
             />
@@ -266,11 +283,12 @@ export function CotToolGroupStep({
         <ChevronDown className={cn('mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
       </button>
       {open && (
-        <div className="mt-2 space-y-2 border-t border-border pt-2">
-          {node.events.map((event) => (
+        <div id={bodyId} className="mt-2 min-w-0 space-y-2 border-t border-border pt-2">
+          {node.events.map((event, index) => (
             <CotToolStep
-              key={`${event.callId ?? event.id}-${event.updatedAt ?? event.createdAt}`}
+              key={event.callId ?? event.id}
               event={event}
+              revealFailureRequest={index === firstFailureIndex ? revealFailureRequest : undefined}
             />
           ))}
         </div>

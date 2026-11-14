@@ -1,42 +1,38 @@
 'use client'
 
-import { useId, useMemo } from 'react'
-import { buildInterleavedCotNodes } from '@aichat/shared/cot-timeline'
+import { useId, useMemo, useState } from 'react'
+import { buildInterleavedCotNodes, buildToolStepTitle } from '@aichat/shared/cot-timeline'
 import { buildCotTimelineSummary } from '@aichat/shared/cot-timeline-view'
+import { resolveEventStatus } from '@aichat/shared/tool-events'
 import type { MessageMeta, ToolEvent } from '@/types'
-import { formatDurationSeconds } from './message-metrics'
 import { CotTimelineHeader, CotTimelineSummaryBar } from './cot-timeline-summary-bar'
 import { CotTimelineOutline } from './cot-timeline-outline'
 import { CotTimelineNodes } from './cot-timeline-nodes'
-import { useCotTimelineLevel } from './use-cot-timeline-level'
+import { useCotTimelineDisclosure, useCotTimelineLevel } from './use-cot-timeline-level'
+import { isFailedCotToolEvent } from './cot-timeline-failure'
 
 export interface CotTimelineProps {
   meta: MessageMeta
   reasoningRaw: string
   toolEvents: ToolEvent[]
-  /** 完成态下直接进入「全部展开」层（Battle 详情传 true） */
+  /** 调用方显式展开详情（Battle 详情保留原行为）。 */
   defaultExpanded?: boolean
-  /** 流式中：末段推理卡片展开后使用打字机播放 */
   isStreaming?: boolean
   reasoningPlayedLength?: number
 }
 
-const resolveBaseKey = (meta: Pick<MessageMeta, 'stableKey' | 'id' | 'clientMessageId'>) => {
-  if (meta.stableKey) return meta.stableKey
-  if (meta.id != null) return String(meta.id)
-  if (meta.clientMessageId) return meta.clientMessageId
-  return ''
+const INITIAL_STEP_COUNT = 7
+const resolveBaseKey = (meta: Pick<MessageMeta, 'stableKey' | 'id' | 'clientMessageId'>) =>
+  meta.stableKey || (meta.id != null ? String(meta.id) : meta.clientMessageId) || ''
+
+const formatProcessDuration = (seconds: number | null | undefined) => {
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) return null
+  const total = Math.floor(seconds)
+  const minutes = Math.floor(total / 60)
+  return minutes > 0 ? minutes + ' 分 ' + total % 60 + ' 秒' : total + ' 秒'
 }
 
-/**
- * 统一 CoT 时间轴：主聊天 / 分享 / Battle 共用。
- *
- * 三段折叠：
- * - collapsed：整条压成一行摘要（完成态默认），正文不再被 100+ 步顶走；
- * - outline：每步一行的提纲，限高滚动，单步仍可就地展开；
- * - expanded：每步细节全开，即原来的「全部展开」。
- * 级别偏好由 useCotTimelineLevel 持久化，用户手选优先于流式自动切换。
- */
+/** 已完成时一行摘要，查看后首屏七步；数据和交错顺序完全沿用 shared。 */
 export function CotTimeline({
   meta,
   reasoningRaw,
@@ -57,68 +53,106 @@ export function CotTimeline({
     isStreaming,
     defaultLevel: defaultExpanded ? 'expanded' : null,
   })
-
-  const durationText = formatDurationSeconds(meta.reasoningDurationSeconds)
-  const hasMeaningfulDuration =
-    durationText !== null && (meta.reasoningDurationSeconds ?? 0) > 0
-  const effectiveDurationText = hasMeaningfulDuration ? durationText : null
+  const { visibleCount, setVisibleCount } = useCotTimelineDisclosure(baseKey, INITIAL_STEP_COUNT)
+  const [navigation, setNavigation] = useState<{ key: string; version: number; index: number; failure: boolean } | null>(null)
+  const firstFailedIndex = nodes.findIndex(node => {
+    const events = node.type === 'tool' ? [node.event] : node.type === 'toolGroup' ? node.events : []
+    return events.some(isFailedCotToolEvent)
+  })
+  const showAll = defaultExpanded || level === 'expanded'
+  const visibleNodes = showAll ? nodes : nodes.slice(0, visibleCount)
+  const remainingCount = nodes.length - visibleNodes.length
+  const activeReasoningCharStart = useMemo(() => {
+    if (!isStreaming || meta.reasoningStatus !== 'streaming') return null
+    for (let i = nodes.length - 1; i >= 0; i -= 1) {
+      const node = nodes[i]
+      if (node.type === 'reasoning') return node.charStart
+    }
+    return null
+  }, [isStreaming, meta.reasoningStatus, nodes])
+  const durationText = formatProcessDuration(meta.reasoningDurationSeconds)
+  const activityText = useMemo(() => {
+    if (!isStreaming) return null
+    const events = nodes.flatMap(node =>
+      node.type === 'tool' ? [node.event] : node.type === 'toolGroup' ? node.events : [],
+    )
+    const active = events.slice().reverse().find(event =>
+      ['running', 'pending'].includes(resolveEventStatus(event)),
+    )
+    if (active) {
+      const prefix = resolveEventStatus(active) === 'pending' ? '等待确认 · ' : '正在执行 · '
+      return prefix + buildToolStepTitle(active)
+    }
+    return meta.reasoningStatus === 'streaming' ? '正在思考' : '正在整理回答'
+  }, [isStreaming, meta.reasoningStatus, nodes])
 
   if (nodes.length === 0) return null
 
-  const handleInteract = () => {
-    // 在「全部展开」层点单张卡 = 退出统一态，交回提纲层与该卡自己的记忆
-    if (level === 'expanded') setLevel('outline')
+  const openProcess = () => {
+    if (firstFailedIndex >= 0) {
+      setVisibleCount(Math.max(visibleCount, firstFailedIndex + 1))
+      setNavigation(previous => ({ key: baseKey, version: (previous?.version ?? 0) + 1, index: firstFailedIndex, failure: true }))
+    }
+    setLevel('outline')
   }
-
-  const nodesProps = {
-    nodes,
-    baseKey,
-    isStreaming,
-    isReasoningStreaming: meta.reasoningStatus === 'streaming',
-    reasoningPlayedLength,
-    defaultExpanded,
-    durationText: effectiveDurationText,
-    onInteract: handleInteract,
+  const revealRemaining = () => {
+    setNavigation(previous => ({ key: baseKey, version: (previous?.version ?? 0) + 1, index: visibleNodes.length, failure: false }))
+    setVisibleCount(nodes.length)
+    setLevel('outline')
   }
 
   return (
-    <div className="mb-3">
+    <div className="mb-3 min-w-0">
       {level === 'collapsed' ? (
         <CotTimelineSummaryBar
           summary={summary}
-          durationText={effectiveDurationText}
+          durationText={durationText}
           isStreaming={isStreaming}
+          activityText={activityText}
           bodyId={bodyId}
-          onExpand={() => setLevel('outline')}
+          onExpand={openProcess}
         />
       ) : (
-        <>
+        <div className="min-w-0 rounded-xl border border-border bg-background">
           <CotTimelineHeader
-            level={level}
             stepCount={nodes.length}
+            durationText={durationText}
+            activityText={activityText}
+            isStreaming={isStreaming}
+            failedCount={summary.failedCount}
             bodyId={bodyId}
-            onExpandAll={() => setLevel('expanded')}
-            onCollapseAll={() => setLevel('outline')}
             onCollapse={() => setLevel('collapsed')}
           />
           <div id={bodyId} data-testid="cot-timeline-body" data-level={level}>
-            {level === 'outline' ? (
-              <CotTimelineOutline stickToBottomKey={isStreaming ? nodes.length : null}>
-                <CotTimelineNodes {...nodesProps} overrideExpanded={null} compact />
-              </CotTimelineOutline>
-            ) : (
-              <div className="relative pl-6">
-                <div
-                  aria-hidden
-                  className="absolute bottom-2 left-[9px] top-2 w-px bg-border/70"
-                />
-                <div className="space-y-2">
-                  <CotTimelineNodes {...nodesProps} overrideExpanded />
+            <CotTimelineOutline>
+              <CotTimelineNodes
+                nodes={visibleNodes}
+                baseKey={baseKey}
+                isStreaming={isStreaming}
+                activeReasoningCharStart={activeReasoningCharStart}
+                reasoningPlayedLength={reasoningPlayedLength}
+                defaultExpanded={defaultExpanded}
+                overrideExpanded={level === 'expanded' ? true : null}
+                compact
+                failedNodeIndex={firstFailedIndex}
+                failureRequest={navigation?.key === baseKey && navigation.failure ? navigation.version : undefined}
+                focusRequest={navigation?.key === baseKey ? navigation : undefined}
+                onInteract={() => setLevel('outline')}
+              />
+              {remainingCount > 0 && (
+                <div className="mt-2 border-t border-border pt-3 pb-1">
+                  <button
+                    type="button"
+                    className="min-h-11 w-full cursor-pointer rounded-lg bg-surface px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={revealRemaining}
+                  >
+                    查看其余 {remainingCount} 步
+                  </button>
                 </div>
-              </div>
-            )}
+              )}
+            </CotTimelineOutline>
           </div>
-        </>
+        </div>
       )}
     </div>
   )

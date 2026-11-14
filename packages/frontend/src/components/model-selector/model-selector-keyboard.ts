@@ -1,24 +1,11 @@
 import type { KeyboardEvent } from 'react'
 
-// Enter/Space remain native button actions, so favorites never activate model selection.
+// Leave Enter/Space on rows to the native button, and text-editing keys to search.
 export function handleModelSelectorKeyDown(event: KeyboardEvent<HTMLDivElement>) {
   if (event.nativeEvent.isComposing) return
   const target = event.target as HTMLElement
   const isSearch = target instanceof HTMLInputElement
-  const isModel = target.matches('[data-model-select]')
-  const isGroup = target.matches('[data-model-group]')
-  if (!isSearch && !isModel && !isGroup) return
-
-  if (isGroup && ['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) {
-    const groups = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[data-model-group]'))
-    const current = groups.indexOf(target as HTMLButtonElement)
-    const next = event.key === 'Home' ? 0 : event.key === 'End' ? groups.length - 1
-      : (current + (event.key === 'ArrowDown' ? 1 : -1) + groups.length) % groups.length
-    event.preventDefault()
-    groups[next]?.focus()
-    groups[next]?.click()
-    return
-  }
+  if (!isSearch && !target.matches('[data-model-select]')) return
 
   const choices = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[data-model-select]'))
   if (!choices.length) return

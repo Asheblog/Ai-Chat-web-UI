@@ -65,7 +65,7 @@ describe('Composer model and send action isolation', () => {
     expect(trigger.contains(send) || send.contains(trigger)).toBe(false)
     await user.click(trigger)
     expect(props.onSend).not.toHaveBeenCalled()
-    expect(await screen.findByPlaceholderText('搜索模型 / 厂商 / 能力')).toBeVisible()
+    expect(await screen.findByRole('textbox', { name: '搜索模型或供应商' })).toBeVisible()
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     await user.click(send)

@@ -1,141 +1,108 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useRef } from 'react'
 import {
   cotTimelineNodeKey,
   resolveSegmentPlayedLength,
   type CotTimelineNode,
 } from '@aichat/shared/cot-timeline'
-import { resolveEventStatus } from '@aichat/shared/tool-events'
 import { ResearchPlanCard } from './research-plan-card'
 import { CotReasoningCard, CotToolCard, CotToolGroupCard } from './cot-timeline-cards'
-
-const resolveDotClass = (node: CotTimelineNode) => {
-  if (node.type === 'reasoning') return 'bg-amber-400'
-  const status = node.type === 'toolGroup' ? node.status : resolveEventStatus(node.event)
-  if (status === 'running' || status === 'pending') return 'bg-blue-400 animate-pulse'
-  if (status === 'error' || status === 'rejected' || status === 'aborted') return 'bg-rose-400'
-  return 'bg-emerald-400'
-}
 
 export interface CotTimelineNodesProps {
   nodes: CotTimelineNode[]
   baseKey: string
-  /** 消息仍在流式输出（工具/推理可能继续追加） */
   isStreaming: boolean
-  /** reasoningStatus === 'streaming'：只有此时末段推理才算「未结束」 */
-  isReasoningStreaming: boolean
+  activeReasoningCharStart: number | null
   reasoningPlayedLength?: number
-  /** 完成态下推理卡是否默认展开（Battle 详情传 true） */
   defaultExpanded?: boolean
-  /** 只给第一段推理卡展示的时长文案 */
-  durationText?: string | null
-  /** 统一覆盖：true=全部展开，false=全部折叠，null=各卡自管 */
   overrideExpanded?: boolean | null
-  /** 提纲层紧凑行 */
   compact?: boolean
+  failedNodeIndex?: number
+  failureRequest?: number
+  focusRequest?: { index: number; version: number }
   onInteract?: () => void
 }
 
-/**
- * 时间轴的节点列表：推理 / 工具 / 工具组 / 研究计划卡平铺成兄弟节点。
- * 折叠级别由外层决定 —— 传 overrideExpanded 即「全部展开 / 全部折叠」，
- * 传 null 则每张卡各自维护展开态（提纲层的单步下钻就靠这个）。
- */
+/** 只渲染当前已展示的节点，交错顺序、分组和稳定 key 由 shared 维护。 */
 export function CotTimelineNodes({
   nodes,
   baseKey,
   isStreaming,
-  isReasoningStreaming,
+  activeReasoningCharStart,
   reasoningPlayedLength,
   defaultExpanded = false,
-  durationText = null,
   overrideExpanded = null,
   compact = false,
+  failedNodeIndex = -1,
+  failureRequest,
+  focusRequest,
   onInteract,
 }: CotTimelineNodesProps) {
-  const lastReasoningIndex = useMemo(() => {
-    for (let i = nodes.length - 1; i >= 0; i -= 1) {
-      if (nodes[i].type === 'reasoning') return i
+  const listRef = useRef<HTMLOListElement>(null)
+  useEffect(() => {
+    if (focusRequest) {
+      const target = listRef.current?.children[focusRequest.index] as HTMLElement | undefined
+      target?.focus()
     }
-    return -1
-  }, [nodes])
-
-  const firstReasoningIndex = useMemo(() => {
-    for (let i = 0; i < nodes.length; i += 1) {
-      if (nodes[i].type === 'reasoning') return i
-    }
-    return -1
-  }, [nodes])
-
-  // 只有 reasoningStatus 仍为 streaming 时，末段推理才算「未结束」，
-  // 才会启用单行滚动 / 打字机；已经 done 的推理段即使消息仍在跑工具也保持静态。
-  const activeReasoningIndex = isReasoningStreaming ? lastReasoningIndex : -1
-
+  }, [focusRequest])
   return (
-    <>
+    <ol ref={listRef} aria-label="过程步骤" className="m-0 list-none p-0">
       {nodes.map((node, index) => {
         const reactKey = cotTimelineNodeKey(node, index)
-        const dotClass = resolveDotClass(node)
+        let content
         if (node.type === 'reasoning') {
-          return (
+          content = (
             <CotReasoningCard
-              key={reactKey}
               baseKey={baseKey}
               text={node.text}
               charStart={node.charStart}
               defaultExpanded={defaultExpanded}
-              isStreamingTail={Boolean(isStreaming) && index === activeReasoningIndex}
+              isStreamingTail={node.charStart === activeReasoningCharStart}
               playedLength={resolveSegmentPlayedLength(
                 reasoningPlayedLength,
                 node.charStart,
                 node.text.length,
               )}
-              durationText={index === firstReasoningIndex ? durationText : null}
-              dotClass={dotClass}
               overrideExpanded={overrideExpanded}
-              compact={compact}
               onInteract={onInteract}
             />
           )
-        }
-        if (node.type === 'toolGroup') {
-          return (
+        } else if (node.type === 'toolGroup') {
+          content = (
             <CotToolGroupCard
-              key={reactKey}
               baseKey={baseKey}
               node={node}
-              dotClass={dotClass}
+              revealFailureRequest={index === failedNodeIndex ? failureRequest : undefined}
               overrideExpanded={overrideExpanded}
               compact={compact}
               onInteract={onInteract}
             />
           )
-        }
-        const toolId = node.event.identifier || node.event.apiName || node.event.tool
-        if (toolId === 'research_plan') {
-          return (
-            <div key={reactKey} className="relative">
-              <span
-                aria-hidden
-                className={`absolute -left-[19px] top-4 h-2 w-2 rounded-full border-2 border-background ${dotClass}`}
-              />
-              <ResearchPlanCard event={node.event} isStreaming={isStreaming} />
-            </div>
+        } else {
+          const toolId = node.event.identifier || node.event.apiName || node.event.tool
+          content = toolId === 'research_plan' ? (
+            <ResearchPlanCard event={node.event} isStreaming={isStreaming} />
+          ) : (
+            <CotToolCard
+              baseKey={baseKey}
+              event={node.event}
+              revealFailureRequest={index === failedNodeIndex ? failureRequest : undefined}
+              overrideExpanded={overrideExpanded}
+              compact={compact}
+              onInteract={onInteract}
+            />
           )
         }
         return (
-          <CotToolCard
-            key={reactKey}
-            baseKey={baseKey}
-            event={node.event}
-            dotClass={dotClass}
-            overrideExpanded={overrideExpanded}
-            compact={compact}
-            onInteract={onInteract}
-          />
+          <li key={reactKey} tabIndex={-1} data-failure-target={index === failedNodeIndex ? true : undefined} className="grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)] gap-1 rounded-md focus:outline-none focus:ring-2 focus:ring-ring sm:gap-2">
+            <span aria-hidden className="pt-3.5 text-xs tabular-nums text-muted-foreground">
+              {String(index + 1).padStart(2, '0')}
+            </span>
+            <div className="min-w-0">{content}</div>
+          </li>
         )
       })}
-    </>
+    </ol>
   )
 }

@@ -1,35 +1,29 @@
 # Model Selector 组件说明
 
-## 目标
-- 将模型选择器拆分为「状态编排层 + 纯逻辑层 + 视图子组件」，降低单文件复杂度。
-- 统一搜索、筛选、常用模型、分组列表的职责边界，方便后续迭代 UI。
+## 交互契约
+- 搜索加单列模型列表。每个模型只出现一次，模型名在上、连接显示名与供应商在下，当前选择用右侧勾选标记。
+- 供应商来自真实连接元数据，不按模型名称猜测；连接显示名优先，保留同名模型的消歧信息。连接显示名与供应商相同（忽略大小写）时仅显示一次。
+- 不提供系列侧栏、收藏、最近、能力筛选、常用区或能力/上下文徽章，也不再读写旧选择器偏好缓存。
+- 搜索覆盖模型名、模型 ID、连接显示名和供应商，忽略首尾空白与大小写；空搜索保留 store 提供的目录顺序。
+- 选择回传原始 ModelItem，身份仍是 connectionId:rawId；不改变调用方、store 或后端的可用性约束。
 
 ## 目录结构
-- `model-selector-panel.tsx`：主组件，负责状态管理、事件编排、子组件组合。
-- `model-selector-types.ts`：公共类型、常量、筛选配置。
-- `model-selector-utils.ts`：纯函数工具（分组、排序、筛选、格式化）。
-- `model-selector-trigger.tsx`：触发按钮（闭合态 UI）。
-- `model-selector-search-controls.tsx`：搜索框与单行筛选项区域。
-- `model-selector-quick-grid.tsx`：常用模型快捷文本项区域。
-- `model-selector-group-list.tsx`：桌面端文字系列导航 + 模型列表，移动端系列标签 + 触控模型列表。
-- `model-selector-capability-badges.tsx`：能力徽章展示。
+- model-selector-panel.tsx：公开组件编排；桌面 Popover，767px 及以下使用底部 Sheet。
+- use-model-selector.ts：目录、搜索与覆盖层状态；Radix 生命周期内的搜索聚焦与触发器焦点回退。
+- model-selector-utils.ts：精确连接身份匹配与搜索纯函数。
+- model-selector-trigger.tsx：原有大小、inline 及禁用契约的触发按钮。
+- model-selector-header.tsx：标题、关闭动作及真实错误状态中的重试。
+- model-selector-search-controls.tsx：搜索输入与清空动作。
+- model-selector-list.tsx / model-selector-row.tsx：加载、空目录、无结果及扁平列表；长名称最多两行，完整文本保留在 title 与可访问名称中。
+- model-selector-keyboard.ts：上下键、Home / End 与 Enter；输入法组合期间不触发选择。
 
-## 数据流（简版）
-1. `model-selector-panel.tsx` 从 store 拉取模型列表与 loading 状态。
-2. 面板状态（搜索词/视图/能力筛选/收藏/最近使用）汇总后传入 `buildModelCollections`。
-3. `buildModelCollections` 返回：
-   - `groupedModels`（用于系列导航和模型列表）
-   - `quickModels`（用于常用区）
-   - `favoriteModelKeys`（用于星标状态）
-   - `visibleCount`（用于计数展示）
-4. 主组件将数据分发给各子组件渲染。
+## 状态与可访问性
+- 默认聚焦搜索；上下键移动到模型，Enter / Space 使用原生按钮选择，Esc 或关闭动作返回触发器。
+- 加载、成功空目录、搜索无结果和请求失败分开呈现；成功空目录提供刷新，加载时防止重复请求。失败时保留已加载模型，重试仅出现在错误状态。
+- 桌面列表只有一个滚动区；手机保留底部安全区域，模型行和动作至少 44px 触控高度。
+- 沿用 globals.css 语义 tokens 与公共覆盖层组件，不引入品牌色值。
 
-## 扩展建议
-- 新增筛选维度时：优先在 `model-selector-types.ts` 增加枚举与配置，再在 `model-selector-utils.ts` 落地过滤逻辑。
-- 调整排序策略时：只改 `buildModelCollections` 内的 `scoreModel` / `sortModels`。
-- 调整显示样式时：优先改对应视图子组件，避免把样式回灌到 `panel`。
-- 模型识别以文字为主，不引入供应商 Logo / 模型家族图标；图标仅用于搜索、展开、选中、收藏和能力提示。
-
-## 兼容与迁移
-- 本次为**无迁移、直接替换**。
-- 对外 API 保持不变：`packages/frontend/src/components/model-selector.tsx` 仍导出 `ModelSelector`。
+## 验证与迁移
+- 目标测试：pnpm --filter @aichat/frontend test --run src/components/model-selector
+- 交互测试使用真实 Zustand store、Radix 覆盖层和模型行；供应商 API 不参与测试。
+- 无迁移、直接替换。公开包装器及 ModelSelectorProps 保持不变。
