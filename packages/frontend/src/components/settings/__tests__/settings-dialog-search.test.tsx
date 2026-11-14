@@ -100,7 +100,7 @@ describe("SettingsDialog 搜索接入", () => {
   })
 })
 
-describe("SettingsDialog 陈旧深链", () => {
+describe("SettingsDialog 深链：权限提示与陈旧回退", () => {
   beforeEach(() => {
     searchParamsMock.delete("main")
     searchParamsMock.delete("sub")
@@ -134,5 +134,23 @@ describe("SettingsDialog 陈旧深链", () => {
         variant: "destructive",
       }),
     )
+  })
+
+  test("匿名 + 只带 ?sub=（叶子所属 adminOnly 分组被整体过滤）仍提示无权访问", async () => {
+    authStateMock.actorState = "anonymous"
+    authStateMock.user = null
+    // 只带 sub、不带 main：models 属于 adminOnly 的 system 分组，匿名的可见树里根本没有 system，
+    // 但该叶子仍在全量注册表中，属于「存在但当前角色看不到」，必须提示而不是静默回落。
+    searchParamsMock.set("sub", "models")
+
+    render(<SettingsDialog open onOpenChange={vi.fn()} defaultTab="personal" />)
+
+    await waitFor(() =>
+      expect(toastMock).toHaveBeenCalledWith({
+        title: "当前账户无法访问该设置",
+        variant: "destructive",
+      }),
+    )
+    expect(toastMock).toHaveBeenCalledTimes(1)
   })
 })

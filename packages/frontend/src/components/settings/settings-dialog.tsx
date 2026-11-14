@@ -202,10 +202,17 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
         : (isAuthenticated ? 'personal.preferences' : 'personal.about')
     let nextSub = (urlSub || memSub || roleDefaultSub || subLeaves[0] || '') as string
     if (nextSub && !subLeaves.includes(nextSub)) {
-      // 陈旧深链（如已删除的 sub=image-transcription）静默回落到默认叶子：该叶子已不存在，
-      // 提示「无法访问」会误导用户以为是权限问题。
-      const ownerMain = LEAF_OWNER_MAIN.get(nextSub)
-      if (!denialNotifiedRef.current && ownerMain === nextMain && (urlSub || urlMain)) {
+      // 「存在但看不到」才提示无权：按叶子在当前角色可见树里是否存在判定，而不是比对所属 main。
+      // 叶子所属 main 被整体过滤时（例：匿名打开 ?sub=<system 叶子>）该叶子同样不在可见树中，
+      // 必须提示；注册表里已不存在的陈旧深链（如已删除的 sub=image-transcription）静默回落，
+      // 否则「无法访问」会让用户误以为是权限问题。
+      const visibleLeafKeys = new Set(getAllLeafKeys(filteredTree))
+      if (
+        !denialNotifiedRef.current &&
+        LEAF_OWNER_MAIN.has(nextSub) &&
+        !visibleLeafKeys.has(nextSub) &&
+        (urlSub || urlMain)
+      ) {
         toast({
           title: '当前账户无法访问该设置',
           variant: 'destructive',
