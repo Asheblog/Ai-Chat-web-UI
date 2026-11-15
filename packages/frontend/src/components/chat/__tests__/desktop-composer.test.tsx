@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, screen, within } from '@testing-library/react'
 import { DesktopComposer } from '@/components/chat/desktop-composer'
 import type { WorkspaceFile } from '@/features/chat/composer'
 import { modelKeyFor } from '@/store/model-preference-store'
@@ -248,11 +248,18 @@ describe('DesktopComposer actions', () => {
     screen.getByRole('button', { name: '工具' }).click()
     // 桌面面板没有页签，上下文动作与能力行同屏
     const action = await screen.findByRole('button', { name: /会话系统提示词/ })
-    action.click()
-
-    await waitFor(() => expect(screen.queryByRole('switch', { name: '深度思考' })).not.toBeInTheDocument())
-    expect(onOpenSessionPrompt).not.toHaveBeenCalled()
-    await waitFor(() => expect(onOpenSessionPrompt).toHaveBeenCalledTimes(1), { timeout: 1500 })
+    vi.useFakeTimers()
+    try {
+      act(() => action.click())
+      expect(screen.queryByRole('switch', { name: '深度思考' })).not.toBeInTheDocument()
+      expect(onOpenSessionPrompt).not.toHaveBeenCalled()
+      act(() => vi.advanceTimersByTime(219))
+      expect(onOpenSessionPrompt).not.toHaveBeenCalled()
+      act(() => vi.advanceTimersByTime(1))
+      expect(onOpenSessionPrompt).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('opens the tools surface from the tools trigger', async () => {
