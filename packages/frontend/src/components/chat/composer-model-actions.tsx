@@ -3,6 +3,7 @@
 import { Loader2, Send, Square } from 'lucide-react'
 import type { ModelItem } from '@/store/models-store'
 import { ModelSelector } from '@/components/model-selector'
+import type { ModelReasoningControl } from '@/components/model-selector/model-selector-types'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { composerToolbarSendSlotClass } from './composer-toolbar-primitives'
@@ -10,6 +11,8 @@ import { composerToolbarSendSlotClass } from './composer-toolbar-primitives'
 export interface ComposerModelControlProps {
   selectedModelId?: string | null
   onModelChange?: (model: ModelItem) => void
+  /** 上层提供的思考强度；不传时入口保持纯模型选择。 */
+  reasoningControl?: ModelReasoningControl
 }
 
 interface ComposerModelActionsProps extends ComposerModelControlProps {
@@ -25,7 +28,7 @@ interface ComposerModelActionsProps extends ComposerModelControlProps {
 
 /** The model may truncate; send/stop always owns its full touch target. */
 export function ComposerModelActions({
-  selectedModelId = null, onModelChange, modelDisabled, disabled, isStreaming, isCreating,
+  selectedModelId = null, onModelChange, reasoningControl, modelDisabled, disabled, isStreaming, isCreating,
   onSend, onStop, stopLabel = '停止', sendTitle,
 }: ComposerModelActionsProps) {
   const label = isStreaming ? stopLabel : isCreating ? '正在创建会话' : '发送'
@@ -56,6 +59,7 @@ export function ComposerModelActions({
           <ModelSelector
             selectedModelId={selectedModelId}
             onModelChange={onModelChange}
+            reasoningControl={reasoningControl}
             disabled={modelDisabled}
             variant="inline"
             className="h-11 min-h-11 w-full min-w-0 max-w-full md:h-9 md:min-h-9"

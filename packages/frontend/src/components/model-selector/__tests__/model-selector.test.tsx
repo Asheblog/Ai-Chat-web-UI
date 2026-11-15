@@ -1,32 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { vi } from 'vitest'
 import { ModelSelector } from '@/components/model-selector'
 import { modelKeyFor } from '@/store/model-preference-store'
-import { useModelsStore, type ModelItem } from '@/store/models-store'
-
-// Exercise the real store, Radix overlays, search and rows without a provider request.
-const longName = 'GPT-4.1 超长中文模型名称用于验证当前模型可读与操作区域独立布局'
-const primary: ModelItem = {
-  id: 'gpt-ui', rawId: 'gpt-ui', name: longName, provider: 'openai',
-  displayName: '工作连接甲', channelName: '工作连接甲', connectionBaseUrl: 'https://fixture.invalid',
-  connectionId: 11, capabilities: { vision: true }, contextWindow: 128000,
-}
-const duplicate: ModelItem = { ...primary, connectionId: 12, displayName: '工作连接乙', channelName: '工作连接乙' }
-const image: ModelItem = {
-  ...primary, id: 'gpt-image', rawId: 'gpt-image', name: 'GPT Image', provider: 'anthropic', connectionId: 13,
-  displayName: '绘图连接', channelName: '绘图连接', capabilities: { image_generation: true },
-}
-const models = [primary, duplicate, image]
-const initialFetchAll = useModelsStore.getState().fetchAll
-
-function viewport(mobile: boolean) {
-  vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
-    matches: mobile && query === '(max-width: 767px)', media: query, onchange: null,
-    addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(),
-    removeListener: vi.fn(), dispatchEvent: vi.fn(),
-  })))
-}
+import { useModelsStore } from '@/store/models-store'
+import {
+  duplicate, image, longName, models, prepareSelectorTest, primary, viewport,
+} from './model-selector-fixtures'
 
 async function openSelector(props: Partial<React.ComponentProps<typeof ModelSelector>> = {}) {
   const onModelChange = vi.fn()
@@ -38,13 +19,7 @@ async function openSelector(props: Partial<React.ComponentProps<typeof ModelSele
   return { user, onModelChange, search }
 }
 
-beforeEach(() => {
-  localStorage.clear()
-  viewport(false)
-  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
-  Element.prototype.scrollIntoView = vi.fn()
-  useModelsStore.setState({ models, isLoading: false, error: null, fetchAll: initialFetchAll })
-})
+beforeEach(prepareSelectorTest)
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 describe('ModelSelector simple picker contracts', () => {
@@ -63,6 +38,7 @@ describe('ModelSelector simple picker contracts', () => {
     expect(screen.queryByRole('button', { name: /^(收藏|最近|视觉|绘图|刷新模型目录)$/ })).not.toBeInTheDocument()
     expect(screen.queryByText('常用')).not.toBeInTheDocument()
     expect(screen.queryByText(/128k 上下文|视觉/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^思考强度/ })).not.toBeInTheDocument()
   })
 
   it('searches supplier names without inferring a supplier from the model family', async () => {

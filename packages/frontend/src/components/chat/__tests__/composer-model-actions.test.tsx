@@ -3,6 +3,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DesktopComposer } from '@/components/chat/desktop-composer'
 import { MobileComposer } from '@/components/chat/mobile-composer'
+import { ComposerModelActions } from '@/components/chat/composer-model-actions'
 import { modelKeyFor } from '@/store/model-preference-store'
 import { useModelsStore, type ModelItem } from '@/store/models-store'
 
@@ -89,5 +90,41 @@ describe('Composer model and send action isolation', () => {
     await user.click(trigger)
     expect(await screen.findByRole('dialog', { name: '选择模型' })).toBeVisible()
     expect(props.onSend).not.toHaveBeenCalled()
+  })
+})
+
+describe('Composer model actions reasoning control', () => {
+  it('echoes and applies the optional effort control through the shared selector', async () => {
+    const onEffortChange = vi.fn()
+    const onModelChange = vi.fn()
+    const user = userEvent.setup()
+    render(
+      <ComposerModelActions
+        selectedModelId={modelKeyFor(model)} onModelChange={onModelChange}
+        reasoningControl={{ value: 'high', onChange: onEffortChange }}
+        disabled={false} onSend={vi.fn()}
+      />,
+    )
+    const trigger = screen.getByRole('combobox', { name: '选择模型' })
+    expect(trigger).toHaveTextContent(model.name)
+    expect(trigger).toHaveTextContent('High')
+    await user.click(trigger)
+    await user.click(await screen.findByRole('button', { name: /^思考强度/ }))
+    await user.click(screen.getByRole('button', { name: 'Max' }))
+    expect(onEffortChange).toHaveBeenCalledExactlyOnceWith('max')
+    expect(onModelChange).not.toHaveBeenCalled()
+  })
+
+  it('keeps the legacy trigger free of effort wording without a reasoning control', () => {
+    render(
+      <ComposerModelActions
+        selectedModelId={modelKeyFor(model)} onModelChange={vi.fn()}
+        disabled={false} onSend={vi.fn()}
+      />,
+    )
+    const trigger = screen.getByRole('combobox', { name: '选择模型' })
+    expect(trigger).toHaveTextContent(model.name)
+    expect(trigger).not.toHaveTextContent('默认')
+    expect(trigger).not.toHaveTextContent('Max')
   })
 })

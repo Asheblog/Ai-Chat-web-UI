@@ -5,9 +5,10 @@ export function handleModelSelectorKeyDown(event: KeyboardEvent<HTMLDivElement>)
   if (event.nativeEvent.isComposing) return
   const target = event.target as HTMLElement
   const isSearch = target instanceof HTMLInputElement
-  if (!isSearch && !target.matches('[data-model-select]')) return
+  const isEffort = target.matches('[data-effort-select]')
+  if (!isSearch && !isEffort && !target.matches('[data-model-select]')) return
 
-  const choices = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[data-model-select]'))
+  const choices = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>(isEffort ? '[data-effort-select]' : '[data-model-select]'))
   if (!choices.length) return
   if (isSearch && event.key === 'Enter') {
     event.preventDefault()
