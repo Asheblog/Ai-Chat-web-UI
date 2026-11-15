@@ -61,6 +61,17 @@ const createService = (overrides?: {
 const baseDate = new Date('2024-01-01T00:00:00.000Z')
 
 describe('SessionService', () => {
+  it('clears a saved effort explicitly while omitted effort leaves it unchanged', async () => {
+    const { service, prisma } = createService()
+    const actor = { type: 'user', id: 1 } as Actor
+    prisma.chatSession.findFirst.mockResolvedValue({ id: 1, reasoningEffort: 'high' })
+    prisma.chatSession.update.mockResolvedValue({ id: 1, reasoningEffort: null })
+    await service.updateSession(actor, 1, { reasoningEffort: null })
+    expect(prisma.chatSession.update.mock.calls[0][0].data).toHaveProperty('reasoningEffort', null)
+    await service.updateSession(actor, 1, { title: '保留强度' })
+    expect(prisma.chatSession.update.mock.calls[1][0].data).not.toHaveProperty('reasoningEffort')
+  })
+
   it('creates session using explicit connection and updates preferences', async () => {
     const { service, prisma, modelResolverService } = createService()
     const actor: Actor = {

@@ -266,7 +266,7 @@ export class SessionService {
       title?: string
       pinned?: boolean
       reasoningEnabled?: boolean
-      reasoningEffort?: string
+      reasoningEffort?: string | null
       systemPrompt?: string | null
       knowledgeBaseIds?: number[]
     },
@@ -289,7 +289,7 @@ export class SessionService {
         ...(typeof updates.reasoningEnabled === 'boolean'
           ? { reasoningEnabled: updates.reasoningEnabled }
           : {}),
-        ...(typeof updates.reasoningEffort === 'string'
+        ...(typeof updates.reasoningEffort === 'string' || updates.reasoningEffort === null
           ? { reasoningEffort: updates.reasoningEffort }
           : {}),
         ...(Object.prototype.hasOwnProperty.call(updates, 'systemPrompt')

@@ -139,7 +139,10 @@ vi.mock('@/store/deep-research-preference-store', () => ({
 }))
 
 // --- Mock advanced request ---
-vi.mock('@/features/chat/composer', () => ({
+vi.mock('@/features/chat/composer', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/chat/composer')>()
+  return {
+    ...actual,
   useAdvancedRequest: () => ({
     customBodyInput: '',
     setCustomBodyInput: vi.fn(),
@@ -160,7 +163,8 @@ vi.mock('@/features/chat/composer', () => ({
     handlePaste: vi.fn(),
   }),
   useComposerFeatureFlags: () => ({}),
-}))
+  }
+})
 
 // --- Mock knowledge base ---
 vi.mock('@/hooks/use-knowledge-base', () => ({

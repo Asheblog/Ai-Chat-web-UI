@@ -4,6 +4,23 @@ import { ComposerToolsPanel } from '@/components/chat/composer-tools-panel'
 import { toolsPanelProps } from './composer-tools-fixtures'
 
 describe('ComposerToolsPanel — 能力开关回传现有回调', () => {
+  it('非 Metaso 引擎直入范围页回落到能力页，不显示无效范围', () => {
+    render(<ComposerToolsPanel {...toolsPanelProps({ view: 'search-scope', webSearchEnabled: true, showWebSearchScope: false })} />)
+    expect(screen.getByRole('switch', { name: '联网搜索' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '返回能力' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+  })
+
+  it('复用公共开关的状态钩子，标题与说明分开关联，点说明只切换一次', () => {
+    const onToggleThinking = vi.fn()
+    render(<ComposerToolsPanel {...toolsPanelProps({ onToggleThinking })} />)
+    const toggle = screen.getByRole('switch', { name: '深度思考' })
+    expect(toggle).toHaveAttribute('data-state', 'unchecked')
+    expect(toggle).toHaveAccessibleDescription()
+    fireEvent.click(document.getElementById(toggle.getAttribute('aria-describedby')!)!)
+    expect(onToggleThinking).toHaveBeenCalledTimes(1)
+  })
+
   it('逐个能力开关只调用对应的既有回调', () => {
     const onToggleThinking = vi.fn()
     const onToggleWebSearch = vi.fn()
@@ -347,5 +364,43 @@ describe('ComposerToolsPanel — 受控展开与强度入口唯一', () => {
     expect(screen.queryByText(/思考强度/)).not.toBeInTheDocument()
     expect(screen.queryByText(/思考深度/)).not.toBeInTheDocument()
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  })
+})
+describe('工具面板权限状态（S4）', () => {
+  it('联网与 Python 权限缺失时不显示已启用，且点击不写回偏好', () => {
+    const onToggleWebSearch = vi.fn()
+    const onTogglePythonTool = vi.fn()
+    render(
+      <ComposerToolsPanel
+        {...toolsPanelProps({
+          open: true,
+          onOpenChange: vi.fn(),
+          mobile: false,
+          webSearchEnabled: true,
+          canUseWebSearch: false,
+          webSearchDisabledNote: '管理员未开放联网',
+          pythonToolEnabled: true,
+          canUsePythonTool: false,
+          pythonToolDisabledNote: '管理员未开放 Python',
+          onToggleWebSearch,
+          onTogglePythonTool,
+        })}
+      />,
+    )
+
+    const web = screen.getByRole('switch', { name: '联网搜索' })
+    expect(web).toHaveAttribute('aria-checked', 'false')
+    expect(web).toBeDisabled()
+    fireEvent.click(web)
+    expect(onToggleWebSearch).not.toHaveBeenCalled()
+
+    const python = screen.getByRole('switch', { name: 'Python' })
+    expect(python).toHaveAttribute('aria-checked', 'false')
+    expect(python).toBeDisabled()
+    fireEvent.click(python)
+    expect(onTogglePythonTool).not.toHaveBeenCalled()
+
+    expect(screen.getByText('管理员未开放联网')).toBeInTheDocument()
+    expect(screen.getByText('管理员未开放 Python')).toBeInTheDocument()
   })
 })

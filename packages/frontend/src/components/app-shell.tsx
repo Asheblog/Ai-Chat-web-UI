@@ -1,4 +1,7 @@
+'use client'
+
 import type { ReactNode } from 'react'
+import { useVisualViewport } from '@/hooks/use-visual-viewport'
 
 interface AppShellProps {
   ready: boolean
@@ -16,6 +19,7 @@ const SkeletonBlock = ({ className }: { className: string }) => (
  * 骨架只含非敏感占位，真实导航与内容仅在 ready 后挂载。
  */
 export function AppShell({ ready, sidebar, toolbar, children }: AppShellProps) {
+  useVisualViewport()
   if (!ready) {
     return (
       <div

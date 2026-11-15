@@ -1,12 +1,11 @@
 'use client'
 
 import type { ClipboardEventHandler, KeyboardEventHandler, MutableRefObject } from 'react'
-import { useState } from 'react'
+import { useComposerOverlayControls } from './use-composer-overlay-controls'
 import { Maximize2 } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import type { WorkspaceFile } from '@/features/chat/composer'
 import { Textarea } from '@/components/ui/textarea'
-import type { ModelSelectorView } from '@/components/model-selector/model-selector-types'
 import { ComposerAttachmentList } from './composer-attachment-list'
 import { AttachmentUploadButton } from './attachment-upload-button'
 import type { ComposerSkillOption } from './composer-types'
@@ -18,7 +17,7 @@ import { COMPOSER_TEXTAREA_BASE_CLASS } from './composer-shell-styles'
 import { ComposerShell } from './composer-shell'
 import { ComposerActiveCapabilities } from './composer-active-capabilities'
 import { buildComposerCapabilityItems, countEnabledSkills } from './composer-capability-items'
-import { COMPOSER_TOOLS_HANDOFF_MS, ComposerToolsPanel, type ComposerToolsPanelView } from './composer-tools-panel'
+import { ComposerToolsPanel } from './composer-tools-panel'
 import {
   ComposerIconButton,
   composerToolbarScrollClass,
@@ -151,29 +150,8 @@ export function DesktopComposer({
   knowledgeBaseCount,
 }: DesktopComposerProps) {
   const sendTooltip = isStreaming ? '停止生成' : sendLockedReason ?? '发送'
-  const [toolsOpen, setToolsOpen] = useState(false)
-  const [toolsView, setToolsView] = useState<ComposerToolsPanelView>('capabilities')
-  const [skillPanelOpen, setSkillPanelOpen] = useState(false)
-  const [selectorOpen, setSelectorOpen] = useState(false)
-  const [selectorView, setSelectorView] = useState<ModelSelectorView>('models')
-
-  const openTools = (view: ComposerToolsPanelView) => {
-    setToolsView(view)
-    setToolsOpen(true)
-  }
-  const openSkillPanelFromTools = () => {
-    runFromTools(() => setSkillPanelOpen(true))
-  }
-  // 组合强度入口：思考标签直达强度视图；关闭后回到模型列表，再次点击仍是模型列表。
-  // 面板里的上下文动作会打开另一层覆盖层：先收起面板，等浮层退场后再执行。
-  const runFromTools = (action: () => void) => {
-    setToolsOpen(false)
-    window.setTimeout(action, COMPOSER_TOOLS_HANDOFF_MS)
-  }
-  const openEffortView = () => {
-    setSelectorView('effort')
-    setSelectorOpen(true)
-  }
+  const { toolsOpen, setToolsOpen, toolsView, setToolsView, skillPanelOpen, setSkillPanelOpen,
+    selectorOpen, setSelectorOpen, selectorView, openTools, runFromTools, openSkillPanelFromTools, openEffortView } = useComposerOverlayControls()
   const capabilities = buildComposerCapabilityItems(
     {
       thinkingEnabled,
@@ -237,7 +215,7 @@ export function DesktopComposer({
           </div>
 
           {capabilities.length > 0 ? (
-            <div data-composer-layer="capabilities" className="mt-2.5">
+            <div data-composer-layer="capabilities" className="mt-2">
               <ComposerActiveCapabilities
                 items={capabilities}
                 mobile={false}
@@ -247,7 +225,7 @@ export function DesktopComposer({
             </div>
           ) : null}
 
-          <div data-composer-layer="actions" className="mt-2.5 flex min-w-0 items-center gap-2">
+          <div data-composer-layer="actions" className="mt-2 flex min-w-0 items-center gap-2">
             <div className={cn(composerToolbarScrollClass, 'min-w-0 shrink md:flex-1')}>
               <AttachmentUploadButton
                 onPick={onPickAttachments}
@@ -288,7 +266,7 @@ export function DesktopComposer({
                 onOpenKnowledgeBase={onOpenKnowledgeBase ? () => runFromTools(onOpenKnowledgeBase) : undefined}
                 onOpenSkillPanel={onActivateSkillPanel ? openSkillPanelFromTools : undefined}
                 skillCount={countEnabledSkills(skillOptions)}
-                onOpenSessionPrompt={() => runFromTools(onOpenSessionPrompt)}
+                onOpenSessionPrompt={onOpenSessionPrompt ? () => runFromTools(onOpenSessionPrompt) : undefined}
                 onOpenAdvanced={() => runFromTools(onOpenAdvanced)}
                 traceEnabled={traceEnabled}
                 canUseTrace={canUseTrace}
@@ -301,10 +279,7 @@ export function DesktopComposer({
               reasoningControl={reasoningControl}
               selectorOpen={selectorOpen}
               selectorView={selectorView}
-              onSelectorOpenChange={(open) => {
-                setSelectorOpen(open)
-                if (!open) setSelectorView('models')
-              }}
+              onSelectorOpenChange={setSelectorOpen}
               modelDisabled={isStreaming} isStreaming={isStreaming}
               disabled={desktopSendDisabled} onSend={onSend} onStop={onStop}
               stopLabel="停止生成" sendTitle={sendTooltip}

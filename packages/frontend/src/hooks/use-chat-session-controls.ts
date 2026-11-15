@@ -84,7 +84,7 @@ export function useChatSessionControls({
       if (!currentSession) return
       setEffort(value)
       useChatStore.getState().updateSessionPrefs(currentSession.id, {
-        reasoningEffort: value === 'unset' ? undefined : value,
+        reasoningEffort: value === 'unset' ? null : value,
       })
     },
     [currentSession, setEffort],

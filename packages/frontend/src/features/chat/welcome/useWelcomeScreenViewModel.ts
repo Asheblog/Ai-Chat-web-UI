@@ -16,7 +16,12 @@ import {
 import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
 import { usePythonToolPreferenceStore } from '@/store/python-tool-preference-store'
 import { useDeepResearchPreferenceStore } from '@/store/deep-research-preference-store'
-import { useAdvancedRequest, useImageAttachments } from '@/features/chat/composer'
+import {
+  buildAttachmentFallbackPrompt,
+  hasSendableContent,
+  useAdvancedRequest,
+  useImageAttachments,
+} from '@/features/chat/composer'
 import { buildWorkspaceFileManifest } from '@/features/chat/composer/workspace-file-manifest'
 import { useKnowledgeBase } from '@/hooks/use-knowledge-base'
 import { useSkillsSelection } from '@/hooks/use-skills-selection'
@@ -498,6 +503,10 @@ export const useWelcomeScreenViewModel = () => {
       })
       return
     }
+    // 空草稿不建会话：键盘 Enter 与程序化提交都经这里，守卫必须落在共享提交入口。
+    if (!hasSendableContent({ text: query, readyFiles: draftFiles.length, images: selectedImages.length })) {
+      return
+    }
 
     setIsCreating(true)
     const text = query.trim()
@@ -593,7 +602,7 @@ export const useWelcomeScreenViewModel = () => {
         // ignore preference sync errors
       }
 
-      if (text || uploadSuccesses > 0) {
+      if (text || uploadSuccesses > 0 || selectedImages.length > 0) {
         if (uploadSuccesses > 0 && !canUsePythonTool) {
           toast({
             title: '无法分析文件',
@@ -641,7 +650,11 @@ export const useWelcomeScreenViewModel = () => {
 
           // 构造文件 manifest
           const fileManifest = buildWorkspaceFileManifest(uploadedFilesMeta)
-          const message = (text || (uploadedFilesMeta.length > 0 ? '请分析工作区中的文件' : '')) + fileManifest
+          const fallback = buildAttachmentFallbackPrompt({
+            readyFiles: uploadedFilesMeta.length,
+            images: selectedImages.length,
+          })
+          const message = (text || fallback) + fileManifest
           const imagesPayload =
             selectedImages.length > 0
               ? selectedImages.map((img) => ({ data: img.dataUrl.split(',')[1], mime: img.mime }))

@@ -23,7 +23,7 @@ export function ModelSelectorRow({ model, selected, onSelect }: ModelSelectorRow
         aria-label={label}
         title={source ? model.name + ' · ' + source : model.name}
         aria-pressed={selected}
-        className="flex min-h-12 w-full min-w-0 items-center gap-2 rounded-lg px-3 py-1.5 text-left transition-colors duration-[160ms] hover:bg-surface-hover active:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-signal motion-reduce:transition-none"
+        className="flex min-h-12 w-full min-w-0 items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors duration-[160ms] hover:bg-surface-hover active:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-signal motion-reduce:transition-none"
       >
         <span className="min-w-0 flex-1">
           <span className={cn('block break-words text-sm font-medium leading-5 text-foreground [overflow-wrap:anywhere]')}>{model.name}</span>

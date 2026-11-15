@@ -79,7 +79,7 @@ export function ComposerAttachmentList({
         <div
           key={file.localId}
           className={cn(
-            'inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm',
+            'inline-flex max-w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm',
             file.status === 'error' && 'border-destructive/40 bg-destructive/5',
             file.status === 'uploading' && 'border-signal/30 bg-signal-soft/40',
             file.status === 'ready' && 'border-border bg-[hsl(var(--surface))/0.72]',
@@ -102,7 +102,10 @@ export function ComposerAttachmentList({
           </span>
 
           {file.status === 'error' && file.errorMessage && (
-            <span className="shrink-0 text-[11px] text-destructive/80" title={file.errorMessage}>
+            <span
+              className="min-w-0 max-w-[9rem] truncate text-[11px] text-destructive/80"
+              title={file.errorMessage}
+            >
               {file.errorMessage}
             </span>
           )}

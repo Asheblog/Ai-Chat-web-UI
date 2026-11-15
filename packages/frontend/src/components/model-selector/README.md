@@ -28,7 +28,7 @@
 - model-selector-header.tsx：标题、关闭动作、强度视图返回及真实错误状态中的重试。
 - model-selector-search-controls.tsx：搜索输入与清空动作。
 - model-selector-effort.tsx：六值选项、文案表、列表底部入口与强度列表。
-- model-selector-list.tsx / model-selector-row.tsx：加载、空目录、无结果及扁平列表；长名称最多两行，完整文本保留在 title 与可访问名称中。
+- model-selector-list.tsx / model-selector-row.tsx：加载、空目录、无结果及扁平列表；长名称完整换行并增加行高，完整文本同时保留在 title 与可访问名称中。
 - model-selector-keyboard.ts：上下键、Home / End 与 Enter；输入法组合期间不触发选择。
 - model-selector-types.ts：公开类型；`@/components/model-selector` 统一再导出组件、类型与 `formatModelShortName`。
 

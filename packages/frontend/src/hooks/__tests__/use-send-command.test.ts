@@ -333,3 +333,35 @@ describe('useSendCommand images', () => {
     expect(images).toBeUndefined()
   })
 })
+describe('useSendCommand 图片与空内容守卫', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const images = [{ dataUrl: 'data:image/png;base64,AAAA', mime: 'image/png', size: 1024 }]
+
+  it('sends an images-only message with fallback text and the existing image payload', async () => {
+    const params = { ...makeBaseParams(), input: '', selectedImages: images, isVisionEnabled: true }
+    const { result } = renderHook(() => useSendCommand(params))
+
+    await act(async () => {
+      await result.current()
+    })
+
+    expect(mockStreamMessage).toHaveBeenCalledOnce()
+    const [, message, imagePayload] = mockStreamMessage.mock.calls[0]
+    expect(message).toContain('请查看这些图片')
+    expect(imagePayload).toEqual([{ data: 'AAAA', mime: 'image/png' }])
+  })
+
+  it('does not send when text, ready files and images are all absent', async () => {
+    const params = { ...makeBaseParams(), input: '   ', selectedImages: [] }
+    const { result } = renderHook(() => useSendCommand(params))
+
+    await act(async () => {
+      await result.current()
+    })
+
+    expect(mockStreamMessage).not.toHaveBeenCalled()
+  })
+})

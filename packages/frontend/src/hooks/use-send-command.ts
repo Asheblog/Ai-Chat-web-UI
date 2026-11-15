@@ -3,6 +3,7 @@
 import { useCallback } from 'react'
 import type { ComposerImage, WorkspaceFile } from '@/features/chat/composer'
 import type { SkillRuntimeReference } from '@/types'
+import { buildAttachmentFallbackPrompt, hasSendableContent } from '@/features/chat/composer/send-guard'
 import { buildWorkspaceFileManifest } from '@/features/chat/composer/workspace-file-manifest'
 
 interface UseSendCommandParams {
@@ -88,7 +89,15 @@ export const useSendCommand = (params: UseSendCommandParams) => {
     const readyFiles = workspaceFiles.filter((f) => f.status === 'ready')
     const hasReadyFiles = readyFiles.length > 0
 
-    if (!input.trim() && !hasReadyFiles) return
+    if (
+      !hasSendableContent({
+        text: input,
+        readyFiles: readyFiles.length,
+        images: isVisionEnabled ? selectedImages.length : 0,
+      })
+    ) {
+      return
+    }
     if (!currentSession) return
     if (hasReadyFiles && !canUsePythonTool) {
       toast({
@@ -106,7 +115,12 @@ export const useSendCommand = (params: UseSendCommandParams) => {
       })
       return
     }
-    const userMessage = input.trim() || (hasReadyFiles ? '请分析工作区中的文件' : '')
+    const userMessage =
+      input.trim() ||
+      buildAttachmentFallbackPrompt({
+        readyFiles: readyFiles.length,
+        images: isVisionEnabled ? selectedImages.length : 0,
+      })
     const fileManifest = buildWorkspaceFileManifest(
       readyFiles.map((f) => ({ originalName: f.originalName, workspacePath: f.workspacePath })),
     )

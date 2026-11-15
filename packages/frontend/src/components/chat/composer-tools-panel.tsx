@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { BookOpen, ChevronLeft, Clock3, FileText, Globe2, Settings2, Wrench, X } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
@@ -34,10 +34,6 @@ export interface ComposerToolsPanelProps {
   onOpenChange: (open: boolean) => void
   /** 手机底部面板；不传时按 768px 断点判断。 */
   mobile?: boolean
-  /** 自定义触发器；不传时使用默认“工具”按钮。 */
-  trigger?: ReactNode
-  /** 未受控时每次打开进入的分组。 */
-  initialView?: ComposerToolsPanelView
   /** 受控视图：标签可直达能力页或搜索范围。 */
   view?: ComposerToolsPanelView
   onViewChange?: (view: ComposerToolsPanelView) => void
@@ -81,7 +77,7 @@ const headerIconButtonClass =
 
 export function ComposerToolsPanel(props: ComposerToolsPanelProps) {
   const {
-    open, onOpenChange, mobile, trigger, initialView, view, onViewChange, onActivate, disabled,
+    open, onOpenChange, mobile, view, onViewChange, onActivate, disabled,
     thinkingEnabled, onToggleThinking,
     webSearchEnabled, onToggleWebSearch, canUseWebSearch, webSearchDisabledNote,
     webSearchScope, showWebSearchScope, onWebSearchScopeChange,
@@ -97,9 +93,9 @@ export function ComposerToolsPanel(props: ComposerToolsPanelProps) {
   const isMobile = mobile ?? !isDesktopViewport
   const idBase = `composer-tools-${useId().replace(/:/g, '')}`
 
-  const [internalView, setInternalView] = useState<ComposerToolsPanelView>(initialView ?? 'capabilities')
+  const [internalView, setInternalView] = useState<ComposerToolsPanelView>('capabilities')
   const requestedView = view ?? internalView
-  const scopeAvailable = Boolean(webSearchEnabled && canUseWebSearch)
+  const scopeAvailable = Boolean(webSearchEnabled && canUseWebSearch && showWebSearchScope && onWebSearchScopeChange)
   // 可用条件对直入的范围页同样生效：不可用时回落到能力页。
   const currentView: ComposerToolsPanelView =
     requestedView === 'search-scope' && !scopeAvailable ? 'capabilities' : requestedView
@@ -115,8 +111,8 @@ export function ComposerToolsPanel(props: ComposerToolsPanelProps) {
     if (open) onActivateRef.current?.()
   }, [open])
   useEffect(() => {
-    if (open && view === undefined) setInternalView(initialView ?? 'capabilities')
-  }, [open, view, initialView])
+    if (open && view === undefined) setInternalView('capabilities')
+  }, [open, view])
 
   // 视图切换后的焦点：进入范围页落到“返回能力”，返回后回到页签或范围入口。
   const previousView = useRef<ComposerToolsPanelView>(currentView)
@@ -147,7 +143,8 @@ export function ComposerToolsPanel(props: ComposerToolsPanelProps) {
       <ComposerCapabilityRow id="thinking" checked={thinkingEnabled} disabled={disabled} onToggle={onToggleThinking} />
       <ComposerCapabilityRow
         id="web-search"
-        checked={webSearchEnabled}
+        // 勾选表示“本次会生效”：权限缺失时即使 store 偏好为开也显示未勾选，避免显示勾选却不生效。
+        checked={webSearchEnabled && canUseWebSearch}
         disabled={disabled || !canUseWebSearch}
         note={canUseWebSearch ? undefined : webSearchDisabledNote}
         onToggle={onToggleWebSearch}
@@ -171,7 +168,7 @@ export function ComposerToolsPanel(props: ComposerToolsPanelProps) {
       />
       <ComposerCapabilityRow
         id="python"
-        checked={pythonToolEnabled}
+        checked={pythonToolEnabled && canUsePythonTool}
         disabled={disabled || !canUsePythonTool}
         note={canUsePythonTool ? undefined : pythonToolDisabledNote}
         onToggle={onTogglePythonTool}
@@ -294,13 +291,14 @@ export function ComposerToolsPanel(props: ComposerToolsPanelProps) {
   if (isMobile) {
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetTrigger asChild>{trigger ?? defaultTrigger}</SheetTrigger>
+        <SheetTrigger asChild>{defaultTrigger}</SheetTrigger>
         <SheetContent
           side="bottom"
           showCloseButton={false}
           dialogTitle="工具"
           dialogDescription="当前会话的能力开关与上下文设置。"
-          className="flex h-[70vh] flex-col rounded-t-3xl border-x-0 border-b-0 border-border bg-surface p-0"
+          className="flex h-[min(70vh,calc(var(--app-visible-height,100dvh)*0.9))] flex-col rounded-t-3xl border-x-0 border-b-0 border-border bg-surface p-0"
+          style={{ bottom: 'var(--app-keyboard-inset, 0px)' }}
         >
           <div className="shrink-0 border-b border-border px-4 pb-2 pt-3">
             {currentView === 'search-scope' ? (
@@ -355,7 +353,7 @@ export function ComposerToolsPanel(props: ComposerToolsPanelProps) {
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild>{trigger ?? defaultTrigger}</PopoverTrigger>
+      <PopoverTrigger asChild>{defaultTrigger}</PopoverTrigger>
       <PopoverContent
         side="top"
         align="start"

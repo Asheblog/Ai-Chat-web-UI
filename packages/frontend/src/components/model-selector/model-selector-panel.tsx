@@ -63,7 +63,7 @@ export function ModelSelector({
     return (
       <Sheet open={state.open} onOpenChange={state.setOpen}>
         <SheetTrigger asChild>{trigger}</SheetTrigger>
-        <SheetContent side="bottom" showCloseButton={false} dialogTitle={combined ? '模型与思考' : '选择模型'} dialogDescription={combined ? '搜索模型或供应商；底部可调整思考强度' : '搜索模型或供应商，点选立即使用'} onOpenAutoFocus={state.focusInitial} onCloseAutoFocus={state.restoreTriggerFocus} className="flex h-[min(78dvh,640px)] max-h-[86dvh] flex-col overflow-hidden rounded-t-[16px] border-border bg-surface p-0 pb-[env(safe-area-inset-bottom)]">
+        <SheetContent side="bottom" showCloseButton={false} dialogTitle={combined ? '模型与思考' : '选择模型'} dialogDescription={combined ? '搜索模型或供应商；底部可调整思考强度' : '搜索模型或供应商，点选立即使用'} onOpenAutoFocus={state.focusInitial} onCloseAutoFocus={state.restoreTriggerFocus} style={{ bottom: 'var(--app-keyboard-inset, 0px)' }} className="flex h-[min(calc(var(--app-visible-height,100dvh)*0.78),640px)] max-h-[calc(var(--app-visible-height,100dvh)*0.86)] flex-col overflow-hidden rounded-t-[16px] border-border bg-surface p-0 pb-[env(safe-area-inset-bottom)]">
           <div className="mx-auto mb-1 mt-2 h-1 w-10 shrink-0 rounded-full bg-border" aria-hidden="true" />
           {content}
         </SheetContent>
@@ -78,6 +78,7 @@ export function ModelSelector({
         onOpenAutoFocus={state.focusInitial} onCloseAutoFocus={state.restoreTriggerFocus}
         className="flex w-[min(288px,calc(100vw-24px))] max-h-[min(60dvh,var(--radix-popover-content-available-height,60dvh))] flex-col overflow-hidden rounded-xl border border-border bg-surface p-0">
         {content}
+        {!combined && <div className="shrink-0 border-t border-border px-3 py-2 text-xs text-muted-foreground">↑ ↓ 移动 · Enter 选择 · Esc 关闭</div>}
       </PopoverContent>
     </Popover>
   )

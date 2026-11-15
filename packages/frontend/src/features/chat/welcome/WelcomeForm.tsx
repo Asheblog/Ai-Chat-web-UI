@@ -7,12 +7,16 @@ import { KnowledgeBaseSelector } from '@/components/chat/knowledge-base-selector
 import { SkillPanelSheet } from '@/components/chat/skill-panel-sheet'
 import { ComposerActiveCapabilities } from '@/components/chat/composer-active-capabilities'
 import { buildComposerCapabilityItems } from '@/components/chat/composer-capability-items'
-import { COMPOSER_TOOLS_HANDOFF_MS, ComposerToolsPanel, type ComposerToolsPanelView } from '@/components/chat/composer-tools-panel'
+import { countEnabledSkills } from '@/components/chat/composer-capability-items'
+import { formatModelShortName } from '@/components/model-selector'
+import { ComposerToolsPanel } from '@/components/chat/composer-tools-panel'
+import { useComposerOverlayControls } from '@/components/chat/use-composer-overlay-controls'
 import { ComposerIconButton, composerToolbarScrollClass } from '@/components/chat/composer-toolbar-primitives'
 import { cn } from '@/lib/utils'
 import { COMPOSER_TEXTAREA_BASE_CLASS } from '@/components/chat/composer-shell-styles'
 import { ComposerShell } from '@/components/chat/composer-shell'
 import { ComposerModelActions } from '@/components/chat/composer-model-actions'
+import { hasSendableContent } from '@/features/chat/composer'
 import type { WelcomeFormProps } from './welcome-form-types'
 import { WelcomeDialogs } from './WelcomeDialogs'
 
@@ -42,11 +46,8 @@ export function WelcomeForm({ form, selectedModelId, onModelChange, modelDisable
     sessionPromptDialog,
   } = form
   const [isMobile, setIsMobile] = useState(false)
-  const [toolsOpen, setToolsOpen] = useState(false)
-  const [toolsView, setToolsView] = useState<ComposerToolsPanelView>('capabilities')
-  const [skillPanelOpen, setSkillPanelOpen] = useState(false)
-  const [selectorOpen, setSelectorOpen] = useState(false)
-  const [selectorView, setSelectorView] = useState<'models' | 'effort'>('models')
+  const { toolsOpen, setToolsOpen, toolsView, setToolsView, skillPanelOpen, setSkillPanelOpen,
+    selectorOpen, setSelectorOpen, selectorView, openTools, runFromTools, openSkillPanelFromTools, openEffortView } = useComposerOverlayControls()
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -66,27 +67,16 @@ export function WelcomeForm({ form, selectedModelId, onModelChange, modelDisable
   const activePlaceholder = isMobile ? mobilePlaceholder : basePlaceholder
   const hasAttachments = attachments.selectedImages.length > 0 || attachments.workspaceFiles.length > 0
   const attachmentsCount = attachments.selectedImages.length + attachments.workspaceFiles.length
-  const enabledSkillCount = advancedOptions.skillOptions.filter((skill) => skill.enabled).length
+  const enabledSkillCount = countEnabledSkills(advancedOptions.skillOptions)
   // 空输入且无附件时只禁用发送；编辑区、附件、工具与模型在额度/权限允许时仍可用。
-  const hasSendableContent = query.trim().length > 0 || hasAttachments
-  const sendDisabled = creationDisabled || !hasSendableContent
+  // 判定与 handleCreate / use-send-command 共用 hasSendableContent：图片-only 与文件-only 都可发送。
+  const canSubmit = hasSendableContent({
+    text: query,
+    readyFiles: attachments.workspaceFiles.filter((file) => file.status === 'ready').length,
+    images: attachments.selectedImages.length,
+  })
+  const sendDisabled = creationDisabled || !canSubmit
 
-  const openTools = (view: ComposerToolsPanelView) => {
-    setToolsView(view)
-    setToolsOpen(true)
-  }
-  const openSkillPanelFromTools = () => {
-    runFromTools(() => setSkillPanelOpen(true))
-  }
-  // 面板里的上下文动作会打开另一层覆盖层：先收起面板，等 Sheet 退场后再执行。
-  const runFromTools = (action?: () => void) => {
-    setToolsOpen(false)
-    if (action) window.setTimeout(action, COMPOSER_TOOLS_HANDOFF_MS)
-  }
-  const openEffortView = () => {
-    setSelectorView('effort')
-    setSelectorOpen(true)
-  }
   const capabilities = buildComposerCapabilityItems(
     {
       thinkingEnabled: advancedOptions.thinkingEnabled,
@@ -222,12 +212,10 @@ export function WelcomeForm({ form, selectedModelId, onModelChange, modelDisable
           <ComposerModelActions
             selectedModelId={selectedModelId} onModelChange={onModelChange}
             reasoningControl={{ value: advancedOptions.effort, onChange: advancedOptions.onEffortChange }}
+            formatModelName={isMobile ? formatModelShortName : undefined}
             selectorOpen={selectorOpen}
             selectorView={selectorView}
-            onSelectorOpenChange={(open) => {
-              setSelectorOpen(open)
-              if (!open) setSelectorView('models')
-            }}
+            onSelectorOpenChange={setSelectorOpen}
             modelDisabled={modelDisabled} disabled={sendDisabled}
             isCreating={isCreating} onSend={onSubmit}
           />

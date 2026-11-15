@@ -4,6 +4,16 @@ import { ComposerToolsPanel } from '@/components/chat/composer-tools-panel'
 import { toolsPanelProps } from './composer-tools-fixtures'
 
 describe('ComposerToolsPanel — 能力行的真实触控目标', () => {
+  it('Enter 切换一次，禁用时不触发', () => {
+    const onToggleThinking = vi.fn()
+    const { rerender } = render(<ComposerToolsPanel {...toolsPanelProps({ onToggleThinking })} />)
+    fireEvent.keyDown(screen.getByRole('switch', { name: '深度思考' }), { key: 'Enter' })
+    expect(onToggleThinking).toHaveBeenCalledTimes(1)
+    rerender(<ComposerToolsPanel {...toolsPanelProps({ onToggleThinking, disabled: true })} />)
+    fireEvent.keyDown(screen.getByRole('switch', { name: '深度思考' }), { key: 'Enter' })
+    expect(onToggleThinking).toHaveBeenCalledTimes(1)
+  })
+
   it('能力开关本身就是整行按钮，点标题即可切换', () => {
     const onToggleWebSearch = vi.fn()
     render(<ComposerToolsPanel {...toolsPanelProps({ onToggleWebSearch, mobile: true })} />)
@@ -22,7 +32,7 @@ describe('ComposerToolsPanel — 能力行的真实触控目标', () => {
     expect(row.className).toContain('min-h-11')
     expect(row.className).toContain('w-full')
     // 视觉轨道不进入无障碍树，也不承担点击。
-    const track = row.querySelector('[data-composer-tools-track="true"]')
+    const track = row.querySelector('[data-slot="switch-track"]')
     expect(track).not.toBeNull()
     expect(track).toHaveAttribute('aria-hidden', 'true')
     expect(track!.tagName).toBe('SPAN')

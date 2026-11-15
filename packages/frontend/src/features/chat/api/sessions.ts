@@ -50,7 +50,7 @@ export const updateSession = async (
     title: string
     pinned: boolean
     reasoningEnabled: boolean
-    reasoningEffort: 'low' | 'medium' | 'high' | 'max' | 'xhigh'
+    reasoningEffort: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | null
     systemPrompt: string | null
     knowledgeBaseIds: number[]
   }>,

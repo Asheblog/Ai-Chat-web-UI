@@ -239,3 +239,33 @@ describe('ComposerAttachmentList upload retry', () => {
     expect(screen.getByRole('button', { name: /移除图片/ })).toHaveClass('h-11', 'w-11')
   })
 })
+describe('ComposerAttachmentList 失败卡片宽度约束（Q3）', () => {
+  it('长服务端错误被截断在受控宽度内，重试与移除仍保留 44px 触控区', () => {
+    const longError = 'HTTP 413 文件过大：单文件上限 20MB，请压缩或拆分后重试（服务端：workspace upload rejected）'
+    render(
+      <ComposerAttachmentList
+        images={[]}
+        onRemoveImage={vi.fn()}
+        workspaceFiles={[{
+          localId: 'f9', filename: '', originalName: '很长的调研报告文件名-最终版-2026-修订.pdf',
+          mimeType: 'application/pdf', fileSize: 20971520, workspacePath: '',
+          status: 'error', errorMessage: longError,
+        }]}
+        onRemoveWorkspaceFile={vi.fn()}
+        onRetryWorkspaceFile={vi.fn()}
+      />,
+    )
+
+    const chip = screen.getByText('很长的调研报告文件名-最终版-2026-修订.pdf').closest('div') as HTMLElement
+    expect(chip.className).toContain('max-w-full')
+
+    const errorText = screen.getByTitle(longError)
+    expect(errorText.className).toContain('truncate')
+    expect(errorText.className).toContain('min-w-0')
+    expect(errorText.className).toMatch(/max-w-\[/)
+    expect(errorText.className).not.toContain('shrink-0')
+
+    expect(screen.getByRole('button', { name: /^重试/ })).toHaveClass('min-h-11')
+    expect(screen.getByRole('button', { name: /^移除/ })).toHaveClass('h-11', 'w-11')
+  })
+})

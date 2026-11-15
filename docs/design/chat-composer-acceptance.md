@@ -29,9 +29,22 @@ Windows 本机项目 Next.js 开发服务，http://localhost:3000；Playwright �
 
 手机连续上下文场景另发现工具抽屉与提示词对话框同时打开，抽屉拦截保存按钮。原实现者在 `44939616` 统一四个上下文入口的浮层切换顺序；最后375px场景定向复验通过。
 
+## 独立审查后的补验
+
+Task 3 独立审查发现的空 Enter、纯图片发送、知识库裁剪循环与交错写回均已修复。最终补验：
+
+- `review-regressions.json`：7/7。欢迎页 / 会话页 × 1440 / 375 实测纯图片请求含图片字节、MIME 与回退文案；空 Enter 不建会话；375px长错误下重试 / 移除均44px且在编辑框内、重试恢复；陈旧知识库ID无渲染循环；受限能力显示禁用且未勾选、原偏好保留。
+- `context-final.json`：4/4。共享浮层交接后知识库、Skill / MCP、提示词、请求头及草稿保留通过。
+- `spacing-final.json`：4/4。恢复4px步进后，两路由 × 1440 / 375复验模型搜索、完整长名、同名连接、六档强度、工具页签、七范围与标签溢出；首次冷编译等待超时，路由编译完成后复验通过。
+- `final-contracts.json`：5/5。1440 / 375系统Medium下选择High再默认、保存null、刷新保持默认、聊天请求省略reasoningEffort；非Metaso联网标签返回能力页；欢迎页与会话页模拟480px可视高度/32px顶部时，输入区、发送、模型和工具面板均在可视范围内，Enter / Space各切换一次。
+
+最后一项首次实测发现Tailwind高度规则覆盖可视高度，已提高壳选择器优先级并复验。附件首次补验用了不存在的容器类，欢迎页fixture首次复用了会话ID；修正fixture后重跑，未将这些初始失败计作产品通过。503仅为上传恢复场景主动注入。
+
+整支路Standards / Spec独立报告已逐项裁决。增量复审代理连续失败且无交付，最终闭环由root对照原报告、代码与上述证据完成。范围入口、默认强度、键盘视口、无调用props、长名文档均已修复；原4px间距要求恢复到代码，撤销2px例外。
+
 ## 工程检查
 
-实现候选 `44939616`：前端全量169文件 / 1092测试通过；类型检查、全量Lint、架构检查和生产构建退出码均为0，静态页13/13生成完成。Lint有124条仓库既存警告；本次路径为5条既有文件/函数规模警告。文件行数检查仍受仓库既有超限影响，阈值未调整。
+最终修复候选：前端全量172文件 / 1111测试通过；后端172套 / 1081测试通过；前后端类型检查、全量Lint、架构检查和生产构建退出码均为0，静态页13/13生成完成。后端首次全量因宿主UNDICI实验警告导致stderr断言失败，设NODE_NO_WARNINGS=1后完整通过。Lint有124条仓库既存警告；文件行数检查仍因既有超限退出1，阈值未调整。4px间距恢复后，定向组件测试与四路由浏览器复验通过。
 
 ## 代表性截图
 
@@ -41,6 +54,9 @@ Windows 本机项目 Next.js 开发服务，http://localhost:3000；Playwright �
 - [手机工具能力面板](./assets/chat-composer/acceptance/375-light-default-tools-capabilities.png)
 - [手机全屏编辑](./assets/chat-composer/acceptance/375-light-default-fullscreen-editor.png)
 - [手机生成中与停止入口](./assets/chat-composer/acceptance/375-light-default-streaming-stop.png)
+- [键盘可视区域内的输入区](./assets/chat-composer/acceptance/375-light-default-final-keyboard-composer.png)
+- [键盘可视区域内的工具面板](./assets/chat-composer/acceptance/375-light-default-final-keyboard-tools-sheet.png)
+- [长上传错误与完整重试区域](./assets/chat-composer/acceptance/375-light-default-review-long-upload-error.png)
 
 原始矩阵、更多状态截图与请求记录保存在前述本地输出目录。独立审查结论另随最终提交记录。
 
@@ -53,4 +69,4 @@ Windows 本机项目 Next.js 开发服务，http://localhost:3000；Playwright �
 - 附件与编辑：图片选择 / 粘贴 / 拖入、全屏应用 / 取消、上传中 / 失败 / 重试 / 移除、输入法组词、换行、发送 / 停止。
 - 实测手机命中区至少44×44px；缩小可用视口后编辑区与发送可见；无页面横向溢出、意外控制台异常或资源失败。
 
-桌面浏览器的缩小视口验证覆盖布局响应；真实手机软键盘与系统屏幕阅读器需在对应设备验证。
+浏览器使用真实前端与合成API，覆盖请求组装和页面交互；真实模型供应商调用未在本轮执行。可视视口注入覆盖键盘布局逻辑，真实手机软键盘与系统屏幕阅读器仍待对应设备验证。

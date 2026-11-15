@@ -22,7 +22,7 @@ const updateSessionSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   pinned: z.boolean().optional(),
   reasoningEnabled: z.boolean().optional(),
-  reasoningEffort: z.enum(['low', 'medium', 'high', 'max', 'xhigh']).optional(),
+  reasoningEffort: z.enum(['low', 'medium', 'high', 'max', 'xhigh']).nullable().optional(),
   systemPrompt: z.string().max(MAX_SYSTEM_PROMPT_LENGTH).nullable().optional(),
   knowledgeBaseIds: z.array(z.number().int().positive()).max(10).optional(),
 })

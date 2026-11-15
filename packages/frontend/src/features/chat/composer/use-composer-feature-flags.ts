@@ -32,7 +32,14 @@ export const useComposerFeatureFlags = ({
   scopePreferenceKey = DEFAULT_SCOPE_KEY,
 }: UseComposerFeatureFlagsOptions) => {
   const [thinkingEnabled, setThinkingEnabled] = useState(false)
-  const [effort, setEffort] = useState<'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset'>('unset')
+  type Effort = 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset'
+  const [effort, setEffortState] = useState<Effort>('unset')
+  const effortSessionRef = useRef<number | null>(null)
+  const effortTouchedRef = useRef(false)
+  const setEffort = useCallback((value: Effort) => {
+    effortTouchedRef.current = true
+    setEffortState(value)
+  }, [])
   const [webSearchEnabled, setWebSearchEnabledState] = useState(false)
   const [webSearchScope, setWebSearchScope] = useState('webpage')
   const [pythonToolEnabled, setPythonToolEnabled] = useState(false)
@@ -79,7 +86,13 @@ export const useComposerFeatureFlags = ({
         ? Boolean(currentSession.reasoningEnabled)
         : sysEnabled,
     )
-    setEffort((currentSession.reasoningEffort as any) || sysEffort)
+    if (effortSessionRef.current !== currentSession.id) {
+      effortSessionRef.current = currentSession.id
+      effortTouchedRef.current = false
+    }
+    if (!effortTouchedRef.current) {
+      setEffortState(currentSession.reasoningEffort === null ? 'unset' : (currentSession.reasoningEffort as Effort) || sysEffort)
+    }
   }, [
     currentSession,
     currentSession?.id,

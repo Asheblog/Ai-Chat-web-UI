@@ -171,16 +171,12 @@ export function useChatComposer(options?: UseChatComposerOptions) {
     if (!currentSession) return
 
     const sysEnabled = Boolean(systemSettings?.reasoningEnabled ?? true)
-    const sysEffortRaw = (systemSettings?.openaiReasoningEffort ?? '') as any
-    const sysEffort: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset' =
-      sysEffortRaw && sysEffortRaw !== '' ? sysEffortRaw : 'unset'
 
     setThinkingEnabled(
       typeof currentSession.reasoningEnabled === 'boolean'
         ? Boolean(currentSession.reasoningEnabled)
         : sysEnabled,
     )
-    setEffort((currentSession.reasoningEffort as any) || sysEffort)
     const nextPrompt = (currentSession.systemPrompt ?? '') || ''
     setSessionPromptDraft(nextPrompt)
   }, [

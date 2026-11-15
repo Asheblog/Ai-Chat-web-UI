@@ -1,4 +1,5 @@
 export * from './types'
+export * from './send-guard'
 export * from './use-image-attachments'
 export * from './use-workspace-files'
 export * from './use-advanced-request'

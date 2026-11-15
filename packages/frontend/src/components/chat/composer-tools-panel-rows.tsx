@@ -1,6 +1,7 @@
 'use client'
 
-import type { ReactNode, Ref } from 'react'
+import { useId, type ReactNode, type Ref } from 'react'
+import { Switch } from '@/components/ui/switch'
 import { Check, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -32,50 +33,33 @@ interface ComposerToggleRowProps {
   onToggle: (value: boolean) => void
 }
 
-/**
- * 开关行本身就是 role="switch" 的按钮：命中区是整行（手机 ≥44×44），
- * 内部的 38×22 轨道只是 aria-hidden 装饰，点标题或说明也能切换。
- */
+/** 公共 Switch 承载整行，标题与说明独立关联，命中区至少44px。 */
 export function ComposerToggleRow({ icon, label, description, checked, disabled, onToggle }: ComposerToggleRowProps) {
+  const id = useId()
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
+    <Switch
+      checked={checked}
       disabled={disabled}
-      onClick={() => onToggle(!checked)}
+      onCheckedChange={onToggle}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' && !disabled) {
+          event.preventDefault()
+          onToggle(!checked)
+        }
+      }}
+      aria-labelledby={id + '-label'}
+      aria-describedby={description ? id + '-description' : undefined}
       data-composer-tools-row
-      className={cn(
-        composerToolsRowClass,
-        'justify-between transition-colors duration-[160ms] hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-60',
-      )}
+      className={cn(composerToolsRowClass, 'h-auto justify-between transition-colors duration-[160ms] hover:bg-surface-hover disabled:opacity-60')}
     >
       <span className="flex min-w-0 items-center gap-3">
         <span className="shrink-0 text-ink-tertiary" aria-hidden="true">{icon}</span>
         <span className="min-w-0">
-          <span className="block text-[13px] font-medium leading-5 text-foreground">{label}</span>
-          {description ? (
-            <span className="block text-[12px] leading-4 text-muted-foreground">{description}</span>
-          ) : null}
+          <span id={id + '-label'} className="block text-[13px] font-medium leading-5 text-foreground">{label}</span>
+          {description ? <span id={id + '-description'} className="block text-[12px] leading-4 text-muted-foreground">{description}</span> : null}
         </span>
       </span>
-      <span
-        aria-hidden="true"
-        data-composer-tools-track="true"
-        className={cn(
-          'relative inline-flex h-[22px] w-[38px] shrink-0 items-center rounded-full border transition-colors duration-[160ms]',
-          checked ? 'border-transparent bg-signal' : 'border-border bg-surface-hover',
-        )}
-      >
-        <span
-          className={cn(
-            'block h-[18px] w-[18px] rounded-full transition-transform duration-[160ms]',
-            checked ? 'translate-x-[18px] bg-background' : 'translate-x-[2px] bg-surface',
-          )}
-        />
-      </span>
-    </button>
+    </Switch>
   )
 }
 

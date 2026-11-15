@@ -1,12 +1,11 @@
 'use client'
 
 import type { ClipboardEventHandler, KeyboardEventHandler, MutableRefObject } from 'react'
-import { useState } from 'react'
+import { useComposerOverlayControls } from './use-composer-overlay-controls'
 import { Maximize2 } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import type { WorkspaceFile } from '@/features/chat/composer'
 import { Textarea } from '@/components/ui/textarea'
-import type { ModelSelectorView } from '@/components/model-selector/model-selector-types'
 import { formatModelShortName } from '@/components/model-selector'
 import { ComposerAttachmentList } from './composer-attachment-list'
 import { AttachmentUploadButton } from './attachment-upload-button'
@@ -18,7 +17,7 @@ import { ComposerModelActions, type ComposerModelControlProps } from './composer
 import { COMPOSER_TEXTAREA_BASE_CLASS } from './composer-shell-styles'
 import { ComposerActiveCapabilities } from './composer-active-capabilities'
 import { buildComposerCapabilityItems, countEnabledSkills } from './composer-capability-items'
-import { COMPOSER_TOOLS_HANDOFF_MS, ComposerToolsPanel, type ComposerToolsPanelView } from './composer-tools-panel'
+import { ComposerToolsPanel } from './composer-tools-panel'
 import {
   ComposerIconButton,
   composerInnerEditorClass,
@@ -151,28 +150,8 @@ export function MobileComposer({
 }: MobileComposerProps) {
   const hasReadyFiles = workspaceFiles.some((f) => f.status === 'ready')
   const disabled = sendLocked || (!input.trim() && selectedImages.length === 0 && !hasReadyFiles)
-  const [toolsOpen, setToolsOpen] = useState(false)
-  const [toolsView, setToolsView] = useState<ComposerToolsPanelView>('capabilities')
-  const [skillPanelOpen, setSkillPanelOpen] = useState(false)
-  const [selectorOpen, setSelectorOpen] = useState(false)
-  const [selectorView, setSelectorView] = useState<ModelSelectorView>('models')
-
-  const openTools = (view: ComposerToolsPanelView) => {
-    setToolsView(view)
-    setToolsOpen(true)
-  }
-  const openSkillPanelFromTools = () => {
-    runFromTools(() => setSkillPanelOpen(true))
-  }
-  // 面板里的上下文动作会打开另一层覆盖层：先收起面板，等 Sheet 退场后再执行。
-  const runFromTools = (action: () => void) => {
-    setToolsOpen(false)
-    window.setTimeout(action, COMPOSER_TOOLS_HANDOFF_MS)
-  }
-  const openEffortView = () => {
-    setSelectorView('effort')
-    setSelectorOpen(true)
-  }
+  const { toolsOpen, setToolsOpen, toolsView, setToolsView, skillPanelOpen, setSkillPanelOpen,
+    selectorOpen, setSelectorOpen, selectorView, openTools, runFromTools, openSkillPanelFromTools, openEffortView } = useComposerOverlayControls()
   const capabilities = buildComposerCapabilityItems(
     {
       thinkingEnabled,
@@ -301,10 +280,7 @@ export function MobileComposer({
             formatModelName={formatModelShortName}
             selectorOpen={selectorOpen}
             selectorView={selectorView}
-            onSelectorOpenChange={(open) => {
-              setSelectorOpen(open)
-              if (!open) setSelectorView('models')
-            }}
+            onSelectorOpenChange={setSelectorOpen}
             modelDisabled={isStreaming} isStreaming={isStreaming}
             disabled={disabled} onSend={onSend} onStop={onStop}
             sendTitle={!isStreaming && sendLocked ? sendLockedReason ?? undefined : undefined}

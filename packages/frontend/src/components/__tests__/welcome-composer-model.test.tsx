@@ -84,4 +84,49 @@ describe('Welcome composer model action', () => {
     expect(onModelChange).not.toHaveBeenCalled()
     expect(modelKeyFor(selectedModel)).toBe('31:gpt-4.1')
   })
+  it('手机端欢迎页触发器显示短名，完整身份仍可读（S3）', () => {
+    const shortNameModel: ModelItem = {
+      ...selectedModel,
+      name: 'DeepSeek V4.1 Flash',
+      displayName: '产品研发连接',
+      channelName: '产品研发连接',
+    }
+    useModelsStore.setState({ models: [shortNameModel], isLoading: false, error: null })
+    // 375：欢迎页走手机断点
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      matches: query === '(max-width: 767px)', media: query, onchange: null,
+      addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(),
+      removeListener: vi.fn(), dispatchEvent: vi.fn(),
+    })))
+
+    render(<WelcomeScreen />)
+    const textbox = screen.getByRole('textbox', { name: '输入消息' })
+    const trigger = within(textbox.closest('.composer-shell') as HTMLElement)
+      .getByRole('combobox', { name: '选择模型' })
+
+    expect(trigger.querySelector('.font-medium')?.textContent).toBe('V4.1 Flash')
+    expect(trigger.getAttribute('title')).toContain('DeepSeek V4.1 Flash')
+    expect(trigger.textContent).toContain('DeepSeek V4.1 Flash')
+  })
+
+  it('桌面欢迎页触发器仍显示完整模型名（S3 反向断言）', () => {
+    const shortNameModel: ModelItem = {
+      ...selectedModel,
+      name: 'DeepSeek V4.1 Flash',
+      displayName: '产品研发连接',
+      channelName: '产品研发连接',
+    }
+    useModelsStore.setState({ models: [shortNameModel], isLoading: false, error: null })
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      matches: false, media: query, onchange: null, addEventListener: vi.fn(),
+      removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
+    })))
+
+    render(<WelcomeScreen />)
+    const textbox = screen.getByRole('textbox', { name: '输入消息' })
+    const trigger = within(textbox.closest('.composer-shell') as HTMLElement)
+      .getByRole('combobox', { name: '选择模型' })
+
+    expect(trigger.querySelector('.font-medium')?.textContent).toBe('DeepSeek V4.1 Flash')
+  })
 })

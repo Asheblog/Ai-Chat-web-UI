@@ -131,7 +131,7 @@ export interface SessionSlice {
     sessionId: number,
     prefs: Partial<{
       reasoningEnabled: boolean
-      reasoningEffort: 'low' | 'medium' | 'high' | 'max' | 'xhigh'
+      reasoningEffort: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | null
       systemPrompt: string | null
       knowledgeBaseIds: number[]
     }>,

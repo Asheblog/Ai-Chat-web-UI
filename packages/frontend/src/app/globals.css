@@ -158,6 +158,16 @@
   }
 }
 
+@media (max-width: 767px) {
+  /* iOS keyboards resize visualViewport without resizing the layout viewport. */
+  html [data-app-shell] {
+    position: fixed;
+    inset-inline: 0;
+    top: var(--app-viewport-offset-top, 0px);
+    height: var(--app-visible-height, 100dvh);
+  }
+}
+
 @layer components {
   /* 结构只用 1px 发丝线与色阶：无阴影、无渐变，圆角固定在 8 / 10 / 12 / 16 */
   .v2-app-surface {

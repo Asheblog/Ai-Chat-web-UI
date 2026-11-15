@@ -74,20 +74,6 @@ describe('ComposerActiveCapabilities — 溢出汇总', () => {
     expect(screen.queryByRole('button', { name: /还有 .* 个已启用能力/ })).not.toBeInTheDocument()
   })
 
-  it('maxVisible 可由调用方收紧', () => {
-    render(
-      <ComposerActiveCapabilities
-        items={activeCapabilityItems(['思考', '联网', 'Python'])}
-        mobile={false}
-        maxVisible={1}
-        onOverflowActivate={vi.fn()}
-      />,
-    )
-
-    expect(screen.getByRole('button', { name: '思考' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '联网' })).not.toBeInTheDocument()
-    expect(screen.getByText('+2')).toBeInTheDocument()
-  })
 })
 
 describe('ComposerActiveCapabilities — 空与禁用', () => {

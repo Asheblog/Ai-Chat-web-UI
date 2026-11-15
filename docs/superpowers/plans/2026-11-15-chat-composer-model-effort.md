@@ -61,10 +61,10 @@
 
 ## Task 4：真实页面验收、审查、合并与推送
 
-- [ ] 加载 ui-ux-pro-max、playwright 和 verification-before-completion；用项目既有命令启动本地 dev server，复用有效的本地环境。Playwright 在该 dev server 验收实际页面；测试数据可经可复现网络 fixture 注入，截图说明数据来源。
-- [ ] 覆盖 /main 与 /main/[sessionId]，宽屏、390px、375px；默认 / focus / hover / disabled、模型及强度页、搜索 / 同名连接 / 长名称、loading / empty / error、工具页签 / 能力 / Skill-MCP、附件 / 上传失败、全屏、生成中 / 停止。同步检查控制台、资源请求、可见焦点、滚动 / 遮挡 / 安全区；修复实际发现的偏差并复核。
-- [ ] 保存截图和简明验收记录，说明真实服务与 fixture 的覆盖。复用同一候选的有效检查结果。
-- [ ] 用 code-review 对 git merge-base origin/main HEAD 得到的固定 BASE 和候选 HEAD 做 Standards / Spec 双轴审查；逐项裁决和修复影响本次契约的问题，必要时重跑对应检查。
+- [x] 加载 ui-ux-pro-max、playwright 和 verification-before-completion；用项目既有命令启动本地 dev server，复用有效的本地环境。Playwright 在该 dev server 验收实际页面；测试数据可经可复现网络 fixture 注入，截图说明数据来源。
+- [x] 覆盖 /main 与 /main/[sessionId]，宽屏、390px、375px；默认 / focus / hover / disabled、模型及强度页、搜索 / 同名连接 / 长名称、loading / empty / error、工具页签 / 能力 / Skill-MCP、附件 / 上传失败、全屏、生成中 / 停止。同步检查控制台、资源请求、可见焦点、滚动 / 遮挡 / 安全区；修复实际发现的偏差并复核。
+- [x] 保存截图和简明验收记录，说明真实服务与 fixture 的覆盖。复用同一候选的有效检查结果。
+- [x] 用 code-review 对 git merge-base origin/main HEAD 得到的固定 BASE 和候选 HEAD 做 Standards / Spec 双轴审查；逐项裁决和修复影响本次契约的问题，必要时重跑对应检查。
 - [ ] 只暂存本次文件，完成提交。fetch 后核对主分支最新状态，处理冲突并验证合并结果，合并 main，推送实现分支和 main（不强推）。
 - [ ] 检查此次推送触发的 GitHub Actions，镜像构建或必需检查失败则定位、修复、再次推送并跟踪到结论。交付分支、提交、主分支合并结果、检查和截图位置。
 
