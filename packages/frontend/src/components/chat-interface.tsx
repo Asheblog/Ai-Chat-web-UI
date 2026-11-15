@@ -13,6 +13,7 @@ const MAX_AUTO_HEIGHT = 200
 export function ChatInterface() {
   const viewModel = useChatInterfaceViewModel(MAX_AUTO_HEIGHT)
   const sessionKey = useChatStore(state => state.currentSession?.id ?? 'none')
+  const sessionTitle = useChatStore(state => state.currentSession?.title ?? '聊天')
 
   if (!viewModel) {
     return null
@@ -23,7 +24,7 @@ export function ChatInterface() {
   return (
     <ProcessWorkspaceHost key={sessionKey} className="flex-1 min-h-0 h-full">
     <div className="flex-1 flex flex-col h-full min-h-0 min-w-0 relative">
-      <ChatToolbar {...toolbar} />
+      <ChatToolbar {...toolbar} title={sessionTitle} />
 
       <ConnectedMessageViewport />
 

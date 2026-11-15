@@ -9,7 +9,6 @@ import { useMarkdownRender } from '@/hooks/use-markdown-render'
 import { useChatStore } from '@/store/chat-store'
 import type { MessageBody, MessageMeta, MessageRenderCacheEntry, MessageStreamMetrics } from '@/types'
 import { useSettingsStore } from '@/store/settings-store'
-import { TypingIndicator } from '@/components/typing-indicator'
 import { ExpandEditorDialog } from '@/components/chat/expand-editor-dialog'
 import { buildAssistantRichPayload, MessageBodyContent } from './message-body-content'
 import { MessageHeader } from './message-header'
@@ -76,9 +75,7 @@ function MessageBubbleComponent({
   const outsideText = content.replace(/```[\s\S]*?```/g, '').trim()
   const isCodeOnly = !isUser && content.includes('```') && outsideText === ''
   const hasContent = content.length > 0
-  const shouldShowStreamingPlaceholder = Boolean(
-    isStreaming && !hasContent && meta.role === 'assistant' && !buildAssistantRichPayload(meta, content),
-  )
+  const hasAnswerContent = hasContent || Boolean(!isUser && buildAssistantRichPayload(meta, content))
   const { timeline: toolTimeline } = useToolTimeline({
     sessionId: meta.sessionId,
     messageId: meta.id,
@@ -122,7 +119,7 @@ function MessageBubbleComponent({
 
   const bubbleClass = `box-border ${
     isUser
-      ? 'ml-auto w-fit max-w-[min(100%,520px)] rounded-[14px] bg-userBubble px-3.5 py-2.5 text-left text-[14px] leading-[1.7] text-foreground'
+      ? 'ml-auto w-fit max-w-[min(100%,520px)] rounded-[14px] bg-userBubble px-4 py-3 text-left text-[14px] leading-[1.7] text-foreground'
       : isCodeOnly
         ? 'max-w-full w-full p-0 bg-transparent border-0 text-foreground'
         : 'max-w-full w-full px-0 py-0.5 bg-transparent text-foreground'
@@ -212,9 +209,7 @@ function MessageBubbleComponent({
             commands={processCommands}
           />}
 
-          {shouldShowStreamingPlaceholder && <TypingIndicator announce={false} />}
-
-          {!shouldShowStreamingPlaceholder && <MessageBodyContent
+          {(isUser || hasAnswerContent) && <MessageBodyContent
             isUser={isUser}
             meta={meta}
             bubbleClass={bubbleClass}

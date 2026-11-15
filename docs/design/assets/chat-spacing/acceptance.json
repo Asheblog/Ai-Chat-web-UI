@@ -1,0 +1,72 @@
+{
+  "reference": "https://www.figma.com/design/HT9fauORjVnoES9mndVdsw/Untitled?node-id=2-2",
+  "route": "/dev/spacing-preview",
+  "components": [
+    "ChatMessageViewport",
+    "MessageList",
+    "MessageBubble"
+  ],
+  "backendFixtures": [
+    "/api/auth/actor",
+    "/api/settings/branding"
+  ],
+  "measurements": [
+    {
+      "name": "desktop",
+      "viewport": 1440,
+      "topGap": 32,
+      "messageGap": 31.599998474121094,
+      "scrollWidth": 1440,
+      "viewportScrollWidth": 1392,
+      "viewportWidth": 1392
+    },
+    {
+      "name": "mobile390",
+      "viewport": 390,
+      "topGap": 24,
+      "messageGap": 32,
+      "scrollWidth": 390,
+      "viewportScrollWidth": 366,
+      "viewportWidth": 366
+    },
+    {
+      "name": "mobile320",
+      "viewport": 320,
+      "topGap": 24,
+      "messageGap": 32,
+      "scrollWidth": 320,
+      "viewportScrollWidth": 296,
+      "viewportWidth": 296
+    },
+    {
+      "name": "mobile-long",
+      "viewport": 320,
+      "topGap": 24,
+      "messageGap": 32,
+      "scrollWidth": 320,
+      "viewportScrollWidth": 296,
+      "viewportWidth": 296
+    }
+  ],
+  "bubblePadding": {
+    "horizontal": 16,
+    "vertical": 12
+  },
+  "virtualizerGap": 32,
+  "scroll": {
+    "top": 4399.2001953125,
+    "height": 4950,
+    "width": 296,
+    "clientWidth": 296
+  },
+  "headerStable": true,
+  "streamingSpinners": 1,
+  "processActionsGap": 8,
+  "errors": [],
+  "failedRequests": [],
+  "tests": {
+    "files": 161,
+    "passed": 973
+  },
+  "typeCheck": "passed"
+}

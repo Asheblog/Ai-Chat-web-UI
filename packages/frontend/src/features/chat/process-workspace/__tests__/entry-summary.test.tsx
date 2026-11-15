@@ -61,6 +61,26 @@ afterEach(() => {
 })
 
 describe('摘要入口', () => {
+  it.each([
+    ['error', '本轮出错'],
+    ['cancelled', '已取消'],
+  ] as const)('keeps a truthful terminal entry with no process records (%s)', (streamStatus, label) => {
+    render(<ProcessWorkspaceEntry meta={meta({ streamStatus })} reasoningRaw="" toolEvents={[]} content="" />)
+    const trigger = screen.getByRole('button', { name: new RegExp('查看过程：' + label) })
+    expect(trigger.querySelector('[class*="var(--success)"]')).toBeNull()
+    expect(trigger.querySelector('.animate-spin')).toBeNull()
+    expect(trigger.querySelector(streamStatus === 'error' ? '[class*="var(--warning)"]' : '.text-muted-foreground')).toBeInTheDocument()
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('announces activity outside the process button without another visual indicator', () => {
+    render(<ProcessWorkspaceEntry {...baseProps} toolEvents={[event('active', { stage: 'start', status: 'running' })]} isStreaming />)
+    const status = screen.getByRole('status')
+    expect(status.closest('button')).toBeNull()
+    expect(status).toHaveAttribute('aria-live', 'polite')
+    expect(status.textContent?.trim()).not.toBe('')
+  })
+
   it('完成态只显示状态、真实耗时与打开入口，不展示详情', () => {
     render(<ProcessWorkspaceEntry {...baseProps} />)
     expect(screen.getByText('已完成')).toBeInTheDocument()

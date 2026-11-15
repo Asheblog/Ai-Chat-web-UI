@@ -18,13 +18,13 @@ const meta: MessageMeta = { id: 'layout', stableKey: 'layout', sessionId: -1, ro
 const body: MessageBody = { id: 'layout', stableKey: 'layout', content: '', reasoning: '正在分析资料', version: 1, reasoningVersion: 1 }
 
 describe('message layout', () => {
-  it('places an accessible waiting indicator below the process entry', () => {
-    render(<MessageBubble meta={meta} body={body} isStreaming />)
-    const entry = screen.getByRole('button', { name: /查看过程/ })
-    const label = screen.getByText('AI 正在思考…')
-    expect(entry.compareDocumentPosition(label)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
-    expect(label.parentElement?.querySelector('svg')).toBeInTheDocument()
-    expect(label.closest('[aria-live]')).toBeNull()
+  it('uses the process entry as the only running indicator', () => {
+    const { container } = render(<MessageBubble meta={meta} body={body} isStreaming />)
+    const entry = screen.getByRole('button', { name: /查看过程：进行中/ })
+    expect(screen.getAllByText('进行中')).toHaveLength(1)
+    expect(container.querySelectorAll('.animate-spin')).toHaveLength(1)
+    expect(entry.querySelector('.animate-spin')).toBeInTheDocument()
+    expect(screen.queryByText('AI 正在思考…')).toBeNull()
   })
 
   it('keeps the process entry above both streaming and completed answers', () => {
@@ -38,18 +38,21 @@ describe('message layout', () => {
     expectProcessBeforeAnswer()
   })
 
-  it('removes the waiting indicator once answer text arrives', () => {
+  it('renders arriving answer text alongside the single progress entry', () => {
     const { rerender } = render(<MessageBubble meta={meta} body={body} isStreaming />)
     rerender(<MessageBubble meta={meta} body={{ ...body, content: '开始回答', version: 2 }} isStreaming />)
     expect(screen.queryByText(/AI ?正在思考/)).toBeNull()
     expect(screen.getByText('开始回答')).toBeInTheDocument()
   })
 
-  it('shows waiting without process records, then removes it when streaming ends', () => {
-    const { rerender } = render(<MessageBubble meta={meta} body={{ ...body, reasoning: '' }} isStreaming />)
-    expect(screen.getByText('AI 正在思考…')).toBeInTheDocument()
-    rerender(<MessageBubble meta={meta} body={{ ...body, reasoning: '' }} />)
+  it('keeps one progress entry before any records arrive and removes it when an empty run ends', () => {
+    const { container, rerender } = render(<MessageBubble meta={meta} body={{ ...body, reasoning: '' }} isStreaming />)
+    expect(screen.getByRole('button', { name: /查看过程：进行中/ })).toBeInTheDocument()
+    expect(container.querySelectorAll('.animate-spin')).toHaveLength(1)
     expect(screen.queryByText('AI 正在思考…')).toBeNull()
+    rerender(<MessageBubble meta={meta} body={{ ...body, reasoning: '' }} />)
+    expect(screen.queryByRole('button', { name: /查看过程/ })).toBeNull()
+    expect(container.querySelector('.animate-spin')).toBeNull()
   })
 
   it('keeps image-only and rich responses visible while streaming', () => {
@@ -63,9 +66,11 @@ describe('message layout', () => {
     expect(screen.queryByText('AI 正在思考…')).toBeNull()
   })
 
-  it('keeps waiting feedback when generated image metadata has no usable image', () => {
-    render(<MessageBubble meta={{ ...meta, generatedImages: [{}] }} body={body} isStreaming />)
-    expect(screen.getByText('AI 正在思考…')).toBeInTheDocument()
+  it('keeps one progress entry when generated image metadata has no usable image', () => {
+    const { container } = render(<MessageBubble meta={{ ...meta, generatedImages: [{}] }} body={body} isStreaming />)
+    expect(screen.getByRole('button', { name: /查看过程：进行中/ })).toBeInTheDocument()
+    expect(container.querySelectorAll('.animate-spin')).toHaveLength(1)
+    expect(screen.queryByText('AI 正在思考…')).toBeNull()
   })
 
   it('keeps the assistant avatar and omits the redundant user avatar', () => {

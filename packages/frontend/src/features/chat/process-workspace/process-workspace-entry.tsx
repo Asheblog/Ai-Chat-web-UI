@@ -147,6 +147,8 @@ export function ProcessWorkspaceEntry({
     Boolean(reasoningRaw?.trim()) ||
     (artifacts?.length ?? 0) > 0 ||
     isStreaming ||
+    meta.streamStatus === 'error' ||
+    meta.streamStatus === 'cancelled' ||
     model.terminal.finalAnswerMissing ||
     Boolean(model.terminal.stopReason)
   if (!hasProcess) return null
@@ -160,7 +162,9 @@ export function ProcessWorkspaceEntry({
         anomalyCount={anomalyCount}
         activity={isStreaming ? model.activity : null}
         isStreaming={isStreaming}
+        streamStatus={meta.streamStatus}
         expanded={open}
+        contentFollows={Boolean(content?.length || meta.images?.length || meta.generatedImages?.length || artifacts?.length || (presentation === 'inline' && open))}
         bodyId={bodyId}
         presentation={presentation}
         onOpen={() => setOpen(true)}

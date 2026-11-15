@@ -1,7 +1,8 @@
 'use client'
 
 import type { Ref } from 'react'
-import { AlertTriangle, CheckCircle2, ChevronRight, Loader2 } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronRight, CircleSlash2, Loader2 } from 'lucide-react'
+import type { MessageMeta } from '@/types'
 import { cn } from '@/lib/utils'
 import type { ProcessRunTerminalView } from '../model/scope'
 
@@ -12,7 +13,9 @@ interface ProcessSummaryBarProps {
   anomalyCount: number
   activity: string | null
   isStreaming: boolean
+  streamStatus?: MessageMeta['streamStatus']
   expanded: boolean
+  contentFollows?: boolean
   bodyId: string
   /** 就地展开时 aria-controls 指向面板；抽屉用 aria-haspopup，不指向不存在的元素 */
   presentation?: 'drawer' | 'inline'
@@ -32,7 +35,9 @@ export function ProcessSummaryBar({
   anomalyCount,
   activity,
   isStreaming,
+  streamStatus,
   expanded,
+  contentFollows = true,
   bodyId,
   presentation = 'drawer',
   onOpen,
@@ -43,7 +48,7 @@ export function ProcessSummaryBar({
     .join('，')
 
   return (
-    <div className="mb-3 min-w-0">
+    <div className={cn("min-w-0", contentFollows && "mb-3")}>
       <button
         ref={triggerRef}
         type="button"
@@ -58,6 +63,10 @@ export function ProcessSummaryBar({
           <AlertTriangle aria-hidden className="h-4 w-4 shrink-0 text-[hsl(var(--warning))]" />
         ) : isStreaming ? (
           <Loader2 aria-hidden className="h-4 w-4 shrink-0 animate-spin text-primary motion-reduce:animate-none" />
+        ) : streamStatus === 'error' || terminal.tone === 'warning' ? (
+          <AlertTriangle aria-hidden className="h-4 w-4 shrink-0 text-[hsl(var(--warning))]" />
+        ) : streamStatus === 'cancelled' ? (
+          <CircleSlash2 aria-hidden className="h-4 w-4 shrink-0 text-muted-foreground" />
         ) : (
           <CheckCircle2 aria-hidden className="h-4 w-4 shrink-0 text-[hsl(var(--success))]" />
         )}
@@ -70,7 +79,7 @@ export function ProcessSummaryBar({
             )}
           </span>
           {activity ? (
-            <span role="status" className="mt-0.5 block truncate text-micro text-muted-foreground">
+            <span className="mt-0.5 block truncate text-micro text-muted-foreground">
               {activity}
             </span>
           ) : terminal.note && !terminal.finalAnswerMissing ? (
@@ -82,6 +91,7 @@ export function ProcessSummaryBar({
           <ChevronRight aria-hidden className="h-3.5 w-3.5" />
         </span>
       </button>
+      {isStreaming && <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">{activity}</span>}
     </div>
   )
 }

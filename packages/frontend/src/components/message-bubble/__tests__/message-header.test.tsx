@@ -19,6 +19,14 @@ const baseProps = {
 }
 
 describe('MessageHeader metrics', () => {
+  it.each([true, false])('keeps metadata without repeating process status (streaming=%s)', (isStreaming) => {
+    const { container } = render(<MessageHeader {...baseProps} mode="status" isStreaming={isStreaming} />)
+    expect(screen.getByText('20:47')).toBeInTheDocument()
+    expect(screen.queryByText('进行中')).toBeNull()
+    expect(screen.queryByText('已完成')).toBeNull()
+    expect(container.querySelector('.animate-spin')).toBeNull()
+  })
+
   it('显示响应总耗时而不是首 token 延迟', () => {
     render(
       <MessageHeader

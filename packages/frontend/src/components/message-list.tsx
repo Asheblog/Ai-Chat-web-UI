@@ -220,6 +220,7 @@ const MessageListComponent = forwardRef<MessageListHandle, MessageListProps>(fun
     getScrollElement: () => scrollElement,
     estimateSize: estimateRowHeight,
     overscan: 8,
+    gap: 32,
     paddingStart: 0,
     paddingEnd: 16,
     // 当前 react-virtual 类型定义缺少该字段，运行时由 virtual-core 实际支持。
@@ -258,7 +259,7 @@ const MessageListComponent = forwardRef<MessageListHandle, MessageListProps>(fun
 
   if (isLoading && displayMetas.length === 0) {
     return (
-      <div className="space-y-[26px]">
+      <div className="space-y-8">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="flex gap-3">
             <div className="h-8 w-8 rounded-full bg-surface-subtle animate-pulse" />
@@ -335,7 +336,6 @@ const MessageListComponent = forwardRef<MessageListHandle, MessageListProps>(fun
               left: 0,
               width: '100%',
               transform: `translateY(${virtualRow.start}px)`,
-              paddingBottom: 16,
             }}
           >
             <MessageRow

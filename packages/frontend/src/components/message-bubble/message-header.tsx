@@ -1,6 +1,6 @@
 'use client'
 
-import { CheckCircle2, ChevronLeft, ChevronRight, Clock3, Copy, Loader2, Pencil, RefreshCw, Share2, ThumbsDown, ThumbsUp } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Clock3, Copy, Pencil, RefreshCw, Share2, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { formatDurationMs } from './message-metrics'
 
@@ -152,18 +152,6 @@ export function MessageHeader({
 
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-border pb-2 text-xs text-muted-foreground">
-      {isStreaming ? (
-        <span className="inline-flex items-center gap-1.5 text-signal">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          进行中
-        </span>
-      ) : (
-        <span className="inline-flex items-center gap-1.5 text-emerald-600">
-          <CheckCircle2 className="h-3.5 w-3.5" />
-          已完成
-        </span>
-      )}
-      <span className="h-3 w-px bg-border" />
       <span className="inline-flex items-center gap-1.5">
         <Clock3 className="h-3.5 w-3.5" />
         {formatDurationMs(metrics?.durationMs) ?? timestamp}

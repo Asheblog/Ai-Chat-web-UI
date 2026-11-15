@@ -1,0 +1,89 @@
+{
+  "route": "/main/1511",
+  "source": "actual ChatInterface with fixed API response fixtures",
+  "measurements": [
+    {
+      "name": "desktop-main-1440",
+      "width": 1440,
+      "height": 900,
+      "headerHeight": 56,
+      "topGap": 32,
+      "messageGap": 31.599998474121094,
+      "viewportWidth": 1124,
+      "scrollWidth": 1124,
+      "pageScrollWidth": 1440,
+      "composerBottom": 815.2000122070312,
+      "mainX": 268,
+      "mainWidth": 1172
+    },
+    {
+      "name": "desktop-main-collapsed",
+      "width": 1440,
+      "height": 900,
+      "headerHeight": 56,
+      "topGap": 32,
+      "messageGap": 31.599998474121094,
+      "viewportWidth": 1332,
+      "scrollWidth": 1332,
+      "pageScrollWidth": 1440,
+      "composerBottom": 815.2000122070312,
+      "mainX": 60,
+      "mainWidth": 1380
+    },
+    {
+      "name": "desktop-main-1920",
+      "width": 1920,
+      "height": 1080,
+      "headerHeight": 56,
+      "topGap": 32,
+      "messageGap": 31.599998474121094,
+      "viewportWidth": 1604,
+      "scrollWidth": 1604,
+      "pageScrollWidth": 1920,
+      "composerBottom": 995.2000122070312,
+      "mainX": 268,
+      "mainWidth": 1652
+    },
+    {
+      "name": "desktop-main-long",
+      "width": 1920,
+      "height": 1080,
+      "headerHeight": 56,
+      "topGap": 32,
+      "messageGap": 31.599998474121094,
+      "viewportWidth": 1604,
+      "scrollWidth": 1604,
+      "pageScrollWidth": 1920,
+      "composerBottom": 995.2000122070312,
+      "mainX": 268,
+      "mainWidth": 1652
+    }
+  ],
+  "inputFocused": true,
+  "sendEnabled": true,
+  "scrolling": {
+    "top": 4216,
+    "height": 5058,
+    "width": 1604,
+    "clientWidth": 1604
+  },
+  "headerStable": true,
+  "processPanel": {
+    "width": 440,
+    "noOverlap": true
+  },
+  "spinners": 1,
+  "errors": [],
+  "badResponses": [],
+  "renderReady": "Markdown paragraphs rendered; sidebar transitions settled",
+  "verification": {
+    "fullSuite": {
+      "files": 162,
+      "tests": 975
+    },
+    "finalTitleSuite": {
+      "tests": 3
+    },
+    "typescript": "passed"
+  }
+}
