@@ -1,5 +1,5 @@
-import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
-import { BookOpen, Brain, Code2, Globe2, Microscope } from 'lucide-react'
+import { forwardRef, type ButtonHTMLAttributes, type ComponentType, type ReactNode } from 'react'
+import { BookOpen, Brain, Code2, Globe2, Microscope, SlidersHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export const composerInnerEditorClass =
@@ -16,6 +16,46 @@ export const composerToolbarIconClass = 'composer-toolbar-icon'
 
 /** Isolates send/stop from toolbar overflow / paint */
 export const composerToolbarSendSlotClass = 'relative z-10 shrink-0'
+
+/** 工具入口：图标 + 文字，手机 44px、桌面 36px 触控区（Figma 01 / 03）。 */
+export const composerToolsTriggerClass =
+  'composer-tools-trigger inline-flex h-11 shrink-0 touch-manipulation cursor-pointer items-center gap-1.5 rounded-[8px] border border-transparent bg-transparent px-2 text-[13px] text-ink-tertiary transition-colors duration-[160ms] hover:bg-surface-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-45 md:h-9'
+
+export type ComposerCapabilityId = 'thinking' | 'web-search' | 'deep-research' | 'python'
+
+export interface ComposerCapabilityMeta {
+  id: ComposerCapabilityId
+  /** 输入区回显标签用的短名。 */
+  label: string
+  /** 工具面板行标题（与短名不同的两项在这里写全称）。 */
+  panelLabel: string
+  description: string
+  Icon: ComponentType<{ className?: string }>
+}
+
+/** 能力名、图标与说明的唯一来源：输入区标签、工具面板行、旧 flat 控件共用。 */
+export const COMPOSER_CAPABILITIES: readonly ComposerCapabilityMeta[] = [
+  { id: 'thinking', label: '思考', panelLabel: '深度思考', description: '先推理，再回答', Icon: Brain },
+  { id: 'web-search', label: '联网', panelLabel: '联网搜索', description: '检索最新网页内容', Icon: Globe2 },
+  { id: 'deep-research', label: '深度研究', panelLabel: '深度研究', description: '规划、检索并整理成报告', Icon: Microscope },
+  { id: 'python', label: 'Python', panelLabel: 'Python', description: '计算与数据分析', Icon: Code2 },
+]
+
+export const getComposerCapability = (id: ComposerCapabilityId): ComposerCapabilityMeta =>
+  COMPOSER_CAPABILITIES.find((capability) => capability.id === id) ?? COMPOSER_CAPABILITIES[0]
+
+/** 联网搜索范围：沿用既有六个取值，工具面板与技能面板共用同一份。 */
+export const WEB_SEARCH_SCOPE_OPTIONS = [
+  { value: 'webpage', label: '网页' },
+  { value: 'document', label: '文档' },
+  { value: 'paper', label: '论文' },
+  { value: 'image', label: '图片' },
+  { value: 'video', label: '视频' },
+  { value: 'podcast', label: '播客' },
+] as const
+
+export const formatWebSearchScopeLabel = (value: string | undefined): string =>
+  WEB_SEARCH_SCOPE_OPTIONS.find((option) => option.value === value)?.label ?? value ?? '网页'
 
 interface ComposerIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean
@@ -40,6 +80,28 @@ export const ComposerIconButton = forwardRef<HTMLButtonElement, ComposerIconButt
   },
 )
 ComposerIconButton.displayName = 'ComposerIconButton'
+
+interface ComposerToolsTriggerProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  expanded?: boolean
+}
+
+/** 工具面板的默认触发器；上层也可用 trigger 传入自己的按钮。 */
+export const ComposerToolsTrigger = forwardRef<HTMLButtonElement, ComposerToolsTriggerProps>(
+  ({ expanded, className, type = 'button', children, ...props }, ref) => (
+    <button
+      ref={ref}
+      type={type}
+      aria-label="工具"
+      aria-expanded={expanded ?? false}
+      className={cn(composerToolsTriggerClass, className)}
+      {...props}
+    >
+      <SlidersHorizontal className={composerToolbarIconClass} aria-hidden="true" />
+      {children ?? <span>工具</span>}
+    </button>
+  ),
+)
+ComposerToolsTrigger.displayName = 'ComposerToolsTrigger'
 
 interface ComposerFeatureChipProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean
@@ -106,6 +168,10 @@ interface ComposerFeatureControlsProps {
   onOpenKnowledgeBase?: () => void
 }
 
+/**
+ * 旧的 flat 控件行。Task 3 把双端输入区改为工具面板 + 已启用标签后，这里仅剩
+ * 欢迎页等尚未迁移的调用方；能力名与图标统一取自 COMPOSER_CAPABILITIES。
+ */
 export function ComposerFeatureControls({
   disabled,
   thinkingEnabled,
@@ -124,6 +190,30 @@ export function ComposerFeatureControls({
   knowledgeBaseCount,
   onOpenKnowledgeBase,
 }: ComposerFeatureControlsProps) {
+  const capabilityState: Record<
+    ComposerCapabilityId,
+    { active: boolean; disabled?: boolean; note?: string; onToggle: () => void }
+  > = {
+    thinking: { active: thinkingEnabled, disabled, onToggle: () => onToggleThinking(!thinkingEnabled) },
+    'web-search': {
+      active: webSearchEnabled,
+      disabled: disabled || !canUseWebSearch,
+      note: canUseWebSearch ? undefined : webSearchDisabledNote,
+      onToggle: () => onToggleWebSearch(!webSearchEnabled),
+    },
+    'deep-research': {
+      active: deepResearchEnabled,
+      disabled,
+      onToggle: () => onToggleDeepResearch(!deepResearchEnabled),
+    },
+    python: {
+      active: pythonToolEnabled,
+      disabled: disabled || !canUsePythonTool,
+      note: canUsePythonTool ? undefined : pythonToolDisabledNote,
+      onToggle: () => onTogglePythonTool(!pythonToolEnabled),
+    },
+  }
+
   return (
     <>
       <ComposerToolbarDivider />
@@ -145,36 +235,20 @@ export function ComposerFeatureControls({
         </ComposerIconButton>
       ) : null}
 
-      <ComposerFeatureChip
-        active={thinkingEnabled}
-        disabled={disabled}
-        icon={<Brain className={composerToolbarIconClass} />}
-        label="思考"
-        onClick={() => onToggleThinking(!thinkingEnabled)}
-      />
-      <ComposerFeatureChip
-        active={webSearchEnabled}
-        disabled={disabled || !canUseWebSearch}
-        icon={<Globe2 className={composerToolbarIconClass} />}
-        label="联网"
-        title={!canUseWebSearch ? webSearchDisabledNote : undefined}
-        onClick={() => onToggleWebSearch(!webSearchEnabled)}
-      />
-      <ComposerFeatureChip
-        active={deepResearchEnabled}
-        disabled={disabled}
-        icon={<Microscope className={composerToolbarIconClass} />}
-        label="深度研究"
-        onClick={() => onToggleDeepResearch(!deepResearchEnabled)}
-      />
-      <ComposerFeatureChip
-        active={pythonToolEnabled}
-        disabled={disabled || !canUsePythonTool}
-        icon={<Code2 className={composerToolbarIconClass} />}
-        label="Python"
-        title={!canUsePythonTool ? pythonToolDisabledNote : undefined}
-        onClick={() => onTogglePythonTool(!pythonToolEnabled)}
-      />
+      {COMPOSER_CAPABILITIES.map(({ id, label, Icon }) => {
+        const state = capabilityState[id]
+        return (
+          <ComposerFeatureChip
+            key={id}
+            active={state.active}
+            disabled={state.disabled}
+            icon={<Icon className={composerToolbarIconClass} />}
+            label={label}
+            title={state.note}
+            onClick={state.onToggle}
+          />
+        )
+      })}
     </>
   )
 }

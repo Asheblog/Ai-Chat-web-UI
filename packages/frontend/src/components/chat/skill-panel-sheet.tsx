@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { WEB_SEARCH_SCOPE_OPTIONS } from './composer-toolbar-primitives'
 import type { McpToolView, McpConnectionOption } from '@/hooks/use-mcp-session-bindings'
 
 interface SkillOption {
@@ -158,12 +159,11 @@ export function SkillPanelSheet({
                         <SelectValue placeholder="选择范围" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="webpage">网页</SelectItem>
-                        <SelectItem value="document">文档</SelectItem>
-                        <SelectItem value="paper">论文</SelectItem>
-                        <SelectItem value="image">图片</SelectItem>
-                        <SelectItem value="video">视频</SelectItem>
-                        <SelectItem value="podcast">播客</SelectItem>
+                        {WEB_SEARCH_SCOPE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>

@@ -1,12 +1,13 @@
 'use client'
 
 import { DropdownMenuContent } from '@/components/ui/dropdown-menu'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 
 interface PlusMenuContentProps {
+  /** @deprecated 强度入口已迁到模型选择器；仅为旧调用方保留签名，面板不再渲染。 */
   effort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset'
+  /** @deprecated 见 effort。 */
   onEffortChange?: (value: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset') => void
   traceEnabled?: boolean
   canUseTrace?: boolean
@@ -56,8 +57,6 @@ function ActionCardButton({
 }
 
 export function PlusMenuContent({
-  effort = 'unset',
-  onEffortChange,
   traceEnabled,
   canUseTrace = false,
   onToggleTrace,
@@ -79,38 +78,19 @@ export function PlusMenuContent({
     action?.()
     onActionComplete?.()
   }
-  const hasSecondaryControls = Boolean(onEffortChange || (canUseTrace && onToggleTrace))
+  const hasSecondaryControls = Boolean(canUseTrace && onToggleTrace)
 
   const body = (
     <div className={cn('space-y-3', bodyClassName)}>
       {showControlCard && hasSecondaryControls ? (
         <div className="rounded-lg border border-border bg-[hsl(var(--surface))/0.72] p-3">
-          <div className="space-y-3">
-            {onEffortChange ? (
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-xs font-medium text-muted-foreground">思考深度</span>
-                <Select value={effort} onValueChange={(value) => onEffortChange(value as typeof effort)}>
-                  <SelectTrigger className="h-8 w-32 rounded-lg border-border bg-background/60 text-xs">
-                    <SelectValue placeholder="不设置" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="unset">不设置</SelectItem>
-                    <SelectItem value="low">low</SelectItem>
-                    <SelectItem value="medium">medium</SelectItem>
-                    <SelectItem value="high">high</SelectItem>
-                    <SelectItem value="max">max</SelectItem>
-                    <SelectItem value="xhigh">xhigh</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : null}
-
-            {canUseTrace && onToggleTrace ? (
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground">任务追踪</span>
-                <Switch checked={Boolean(traceEnabled)} onCheckedChange={(checked) => onToggleTrace(Boolean(checked))} />
-              </div>
-            ) : null}
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">任务追踪</span>
+            <Switch
+              aria-label="任务追踪"
+              checked={Boolean(traceEnabled)}
+              onCheckedChange={(checked) => onToggleTrace?.(Boolean(checked))}
+            />
           </div>
         </div>
       ) : null}
