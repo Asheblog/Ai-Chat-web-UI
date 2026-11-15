@@ -65,6 +65,10 @@ export interface ChatComposerPanelProps extends ComposerModelControlProps {
   isUploadingWorkspaceFiles: boolean
   hasWorkspaceFiles: boolean
   onRemoveWorkspaceFile: (fileId: string) => void
+  /** 失败工作区文件的重试动作，接到既有上传链路。 */
+  onRetryWorkspaceFile?: (localId: string) => void
+  /** 框外额度提示与键盘提示行；不传则不渲染。 */
+  quotaMessage?: string | null
   // 自定义请求
   customHeaders: Array<{ name: string; value: string }>
   onAddCustomHeader: () => void

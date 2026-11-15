@@ -172,12 +172,9 @@ export const useWelcomeScreenViewModel = () => {
       ? '额度已用尽，请登录或等待次日重置'
       : `本日消息发送额度剩余 ${quotaLabel}`
     : null
-  const basePlaceholder = quota
-    ? quotaExhausted
-      ? '额度已用尽，请登录或等待次日重置'
-      : `本日消息发送额度剩余 ${quotaLabel}`
-    : '输入消息（Shift+Enter 换行）'
-  const mobilePlaceholder = '输入消息...'
+  // 输入提示只提示写作与上传；额度在框外单独呈现。
+  const basePlaceholder = '给 AI 发消息，或直接拖入文件…'
+  const mobilePlaceholder = '发消息，或上传文件…'
 
   const MAX_AUTO_HEIGHT = 200
   const scopePreferenceKey = 'web_search_scope_preference'

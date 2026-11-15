@@ -19,7 +19,8 @@ function commonProps() {
   return {
     input: '请整理当前发布计划', textareaRef: { current: null }, onInputChange: vi.fn(),
     onKeyDown: vi.fn(), onPaste: vi.fn(), onCompositionStart: vi.fn(), onCompositionEnd: vi.fn(),
-    placeholder: '输入消息', isStreaming: false, selectedImages: [], onRemoveImage: vi.fn(),
+    placeholder: '输入消息', isStreaming: false, showExpand: false, onExpandOpen: vi.fn(),
+    selectedImages: [], onRemoveImage: vi.fn(),
     workspaceFiles: [], onRemoveWorkspaceFile: vi.fn(), onPickAttachments: vi.fn(),
     hasAttachments: false, attachmentsCount: 0, thinkingEnabled: false, onToggleThinking: vi.fn(),
     webSearchEnabled: true, onToggleWebSearch: vi.fn(), webSearchScope: 'webpage',
@@ -126,5 +127,72 @@ describe('Composer model actions reasoning control', () => {
     expect(trigger).toHaveTextContent(model.name)
     expect(trigger).not.toHaveTextContent('默认')
     expect(trigger).not.toHaveTextContent('Max')
+  })
+})
+
+describe('Composer model actions controlled selector hooks', () => {
+  it('opens the combined selector directly on the effort view for a thought chip', async () => {
+    const onEffortChange = vi.fn()
+    render(
+      <ComposerModelActions
+        selectedModelId={modelKeyFor(model)} onModelChange={vi.fn()}
+        reasoningControl={{ value: 'low', onChange: onEffortChange }}
+        selectorOpen onSelectorOpenChange={vi.fn()} selectorView="effort"
+        disabled={false} onSend={vi.fn()}
+      />,
+    )
+
+    const list = await screen.findByRole('list', { name: '思考强度选项' })
+    expect(list).toBeInTheDocument()
+  })
+
+  it('applies an optional display-only name formatter to the trigger', () => {
+    const shortModel: ModelItem = { ...model, name: 'DeepSeek V4.1 Flash' }
+    useModelsStore.setState({ models: [shortModel], isLoading: false, error: null })
+    render(
+      <ComposerModelActions
+        selectedModelId={modelKeyFor(shortModel)} onModelChange={vi.fn()}
+        reasoningControl={{ value: 'max', onChange: vi.fn() }}
+        formatModelName={(name) => name.replace('DeepSeek ', '')}
+        disabled={false} onSend={vi.fn()}
+      />,
+    )
+
+    const trigger = screen.getByRole('combobox', { name: '选择模型' })
+    expect(trigger).toHaveTextContent('V4.1 Flash')
+    expect(trigger.getAttribute('title')).toContain('DeepSeek V4.1 Flash')
+  })
+})
+
+describe('Composer model actions controlled selector hooks', () => {
+  it('opens the combined selector directly on the effort view for a thought chip', async () => {
+    const onEffortChange = vi.fn()
+    render(
+      <ComposerModelActions
+        selectedModelId={modelKeyFor(model)} onModelChange={vi.fn()}
+        reasoningControl={{ value: 'low', onChange: onEffortChange }}
+        selectorOpen onSelectorOpenChange={vi.fn()} selectorView="effort"
+        disabled={false} onSend={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByRole('list', { name: '思考强度选项' })).toBeInTheDocument()
+  })
+
+  it('applies an optional display-only name formatter to the trigger', () => {
+    const shortModel: ModelItem = { ...model, name: 'DeepSeek V4.1 Flash' }
+    useModelsStore.setState({ models: [shortModel], isLoading: false, error: null })
+    render(
+      <ComposerModelActions
+        selectedModelId={modelKeyFor(shortModel)} onModelChange={vi.fn()}
+        reasoningControl={{ value: 'max', onChange: vi.fn() }}
+        formatModelName={(name) => name.replace('DeepSeek ', '')}
+        disabled={false} onSend={vi.fn()}
+      />,
+    )
+
+    const trigger = screen.getByRole('combobox', { name: '选择模型' })
+    expect(trigger).toHaveTextContent('V4.1 Flash')
+    expect(trigger.getAttribute('title')).toContain('DeepSeek V4.1 Flash')
   })
 })

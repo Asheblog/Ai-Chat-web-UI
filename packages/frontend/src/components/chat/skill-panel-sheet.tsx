@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Boxes, Plug } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { WEB_SEARCH_SCOPE_OPTIONS } from './composer-toolbar-primitives'
+import { ComposerToggleRow } from './composer-tools-panel-rows'
 import type { McpToolView, McpConnectionOption } from '@/hooks/use-mcp-session-bindings'
 
 interface SkillOption {
@@ -210,19 +211,15 @@ export function SkillPanelSheet({
                   )}
                 </div>
                 {mcpConnectionOptions.map((conn) => (
-                  <div key={conn.connectionId} className="flex items-center justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{conn.connectionName}</p>
-                      <p className="text-[11px] text-muted-foreground/80 truncate">
-                        {conn.installationLabel}
-                      </p>
-                    </div>
-                    <Switch
-                      checked={conn.enabled}
-                      disabled={conn.updating}
-                      onCheckedChange={(checked) => onToggleMcpBinding?.(conn.connectionId, checked)}
-                    />
-                  </div>
+                  <ComposerToggleRow
+                    key={conn.connectionId}
+                    icon={<Plug className="h-[18px] w-[18px]" />}
+                    label={conn.connectionName}
+                    description={conn.installationLabel}
+                    checked={Boolean(conn.enabled)}
+                    disabled={conn.updating}
+                    onToggle={(checked) => onToggleMcpBinding?.(conn.connectionId, checked)}
+                  />
                 ))}
               </section>
             ) : (
@@ -239,22 +236,16 @@ export function SkillPanelSheet({
                 <p className="text-[11px] tracking-wide text-muted-foreground">第三方安装</p>
                 {skillOptions.map((skill) => (
                   <div key={skill.skillId} className="space-y-1 border-b border-border/50 pb-2 last:border-b-0 last:pb-0">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium">{skill.label}</p>
-                        <p className="text-[11px] text-muted-foreground/80">
-                          {skill.sourceLabel || 'github'} / {skill.slug}
-                          {skill.licenseName ? ` · ${skill.licenseName}` : ''}
-                        </p>
-                      </div>
-                      <Switch
-                        checked={Boolean(skill.enabled)}
-                        disabled={!skill.versionId || skill.updating}
-                        onCheckedChange={(checked) => onToggleSkillOption?.(skill.skillId, Boolean(checked))}
-                      />
-                    </div>
+                    <ComposerToggleRow
+                      icon={<Boxes className="h-[18px] w-[18px]" />}
+                      label={skill.label}
+                      description={[skill.sourceLabel || 'github', skill.slug, skill.licenseName].filter(Boolean).join(' / ')}
+                      checked={Boolean(skill.enabled)}
+                      disabled={!skill.versionId || skill.updating}
+                      onToggle={(checked) => onToggleSkillOption?.(skill.skillId, checked)}
+                    />
                     {skill.description ? (
-                      <p className="text-[11px] text-muted-foreground line-clamp-3">
+                      <p className="pl-[30px] text-[11px] text-muted-foreground line-clamp-3">
                         {skill.description}
                       </p>
                     ) : null}

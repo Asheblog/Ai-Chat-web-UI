@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useRef } from 'react'
 import { ChatComposerPanel } from '@/components/chat/chat-composer-panel'
 import { useTextareaAutoResize } from '@/hooks/use-textarea-auto-resize'
@@ -239,5 +239,102 @@ describe('ChatComposerPanel — dual composer textarea measurement', () => {
 
     rerender(<DualComposerHarness isDesktopComposer={false} />)
     await waitFor(() => expect(mobileTextarea.style.height).toBe('180px'))
+  })
+})
+
+describe('ChatComposerPanel — attachment retry and quota placement', () => {
+  const failedFile = {
+    localId: 'e1',
+    filename: '',
+    originalName: 'failed.xlsx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    fileSize: 20480,
+    workspacePath: '',
+    status: 'error' as const,
+    errorMessage: '413 文件过大',
+  }
+
+  it('wires the retry action through both composers to the upload hook', () => {
+    const onRetryWorkspaceFile = vi.fn()
+    render(
+      <ChatComposerPanel
+        {...createProps({
+          workspaceFiles: [failedFile],
+          hasWorkspaceFiles: true,
+          onRetryWorkspaceFile,
+        })}
+      />,
+    )
+
+    const retries = screen.getAllByRole('button', { name: '重试 failed.xlsx' })
+    expect(retries.length).toBe(2)
+    retries[0].click()
+    expect(onRetryWorkspaceFile).toHaveBeenCalledExactlyOnceWith('e1')
+  })
+
+  it('keeps the quota line outside the composer frame', () => {
+    const { container } = render(
+      <ChatComposerPanel {...createProps({ quotaMessage: '今日剩余 198 条' })} />,
+    )
+
+    const quota = screen.getByText('今日剩余 198 条')
+    expect(quota.closest('.composer-shell')).toBeNull()
+    expect(container.querySelector('.composer-shell')).not.toBeNull()
+    expect(quota.closest('[data-composer-footer]')).not.toBeNull()
+  })
+
+  it('offers the desktop keyboard hint beside the quota line only', () => {
+    render(<ChatComposerPanel {...createProps({ quotaMessage: '今日剩余 198 条' })} />)
+
+    const hint = screen.getByText('Enter 发送 · Shift + Enter 换行')
+    expect(hint.className).toContain('hidden')
+    expect(hint.className).toContain('md:block')
+  })
+})
+describe('ChatComposerPanel — mobile attachment entry and bottom bar geometry', () => {
+  it('routes the visible mobile upload action to the shared picker and file input', () => {
+    const pickAttachments = vi.fn()
+    const attachmentInputRef = { current: null as HTMLInputElement | null }
+    const { container } = render(
+      <ChatComposerPanel
+        {...createProps({ isDesktopComposer: false, pickAttachments, attachmentInputRef })}
+      />,
+    )
+    const mobileRoot = container.querySelector('.md\\:hidden') as HTMLElement
+    fireEvent.click(within(mobileRoot).getByRole('button', { name: '上传附件' }))
+
+    expect(pickAttachments).toHaveBeenCalledTimes(1)
+    // 可见按钮与唯一的隐藏 file input 共用同一回调与 ref（点击后由 pickAttachments 触发选择器）
+    expect(attachmentInputRef.current?.getAttribute('type')).toBe('file')
+    expect(attachmentInputRef.current?.hasAttribute('multiple')).toBe(true)
+  })
+
+  it('opens the shared full-screen editor from the visible mobile entry', async () => {
+    const { container } = render(
+      <ChatComposerPanel {...createProps({ isDesktopComposer: false, showExpand: true })} />,
+    )
+    const mobileRoot = container.querySelector('.md\\:hidden') as HTMLElement
+    fireEvent.click(within(mobileRoot).getByRole('button', { name: '全屏编辑' }))
+
+    expect(await screen.findByRole('dialog', { name: '编辑消息' })).toBeInTheDocument()
+  })
+
+  it('lets the model column grow into spare space without covering the tools row', () => {
+    const { container } = render(
+      <ChatComposerPanel {...createProps({ isDesktopComposer: false })} />,
+    )
+    const mobileRoot = container.querySelector('.md\\:hidden') as HTMLElement
+    const modelColumn = mobileRoot.querySelector('[data-composer-model-actions]') as HTMLElement
+
+    expect(modelColumn).not.toBeNull()
+    // 回归：w-full 会让模型列占满整行，把附件与工具按钮压到 0 宽或被覆盖。
+    expect(modelColumn.className).not.toMatch(/\bw-full\b/)
+    expect(modelColumn.className).toContain('flex-1')
+    expect(modelColumn.className).toContain('min-w-0')
+
+    const toolsRow = within(mobileRoot).getByRole('button', { name: '工具' }).closest('.composer-toolbar') as HTMLElement
+    expect(toolsRow).not.toBeNull()
+    expect(toolsRow.className).toContain('shrink')
+    expect(toolsRow.className).not.toMatch(/(^|\s)flex-1(\s|$)/)
   })
 })

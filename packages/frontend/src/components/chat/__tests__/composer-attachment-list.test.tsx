@@ -167,3 +167,75 @@ describe('ComposerAttachmentList', () => {
     expect(container.textContent).not.toContain('转写')
   })
 })
+
+describe('ComposerAttachmentList upload retry', () => {
+  const failedFile: WorkspaceFile = {
+    localId: 'f3',
+    filename: '',
+    originalName: 'failed.xlsx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    fileSize: 102400,
+    workspacePath: '',
+    status: 'error',
+    errorMessage: '413 文件过大',
+  }
+
+  it('retries a failed file through the existing upload chain', () => {
+    const onRetryWorkspaceFile = vi.fn()
+    render(
+      <ComposerAttachmentList
+        images={[]}
+        onRemoveImage={vi.fn()}
+        workspaceFiles={[failedFile]}
+        onRemoveWorkspaceFile={vi.fn()}
+        onRetryWorkspaceFile={onRetryWorkspaceFile}
+      />,
+    )
+
+    const retry = screen.getByRole('button', { name: '重试 failed.xlsx' })
+    expect(retry).toHaveClass('min-h-11')
+    fireEvent.click(retry)
+    expect(onRetryWorkspaceFile).toHaveBeenCalledExactlyOnceWith('f3')
+  })
+
+  it('offers 44px remove targets on the failed card', () => {
+    render(
+      <ComposerAttachmentList
+        images={[]}
+        onRemoveImage={vi.fn()}
+        workspaceFiles={[failedFile]}
+        onRemoveWorkspaceFile={vi.fn()}
+        onRetryWorkspaceFile={vi.fn()}
+      />,
+    )
+
+    const remove = screen.getByRole('button', { name: '移除 failed.xlsx' })
+    expect(remove).toHaveClass('h-11', 'w-11')
+  })
+
+  it('hides the retry action when no retry handler is wired', () => {
+    render(
+      <ComposerAttachmentList
+        images={[]}
+        onRemoveImage={vi.fn()}
+        workspaceFiles={[failedFile]}
+        onRemoveWorkspaceFile={vi.fn()}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: /^重试/ })).not.toBeInTheDocument()
+  })
+
+  it('keeps image remove targets at 44px on touch layout', () => {
+    render(
+      <ComposerAttachmentList
+        images={[{ dataUrl: 'data:image/png;base64,abc', mime: 'image/png', size: 1024 }]}
+        onRemoveImage={vi.fn()}
+        workspaceFiles={[]}
+        onRemoveWorkspaceFile={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: /移除图片/ })).toHaveClass('h-11', 'w-11')
+  })
+})

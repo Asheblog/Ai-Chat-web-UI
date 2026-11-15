@@ -146,3 +146,66 @@ describe('SkillPanelSheet MCP 区域', () => {
     expect(renderCount).toBeLessThan(5)
   })
 })
+
+describe('SkillPanelSheet 可切换行', () => {
+  it('每个 MCP 连接都是带名称的整行开关，命中区不小于 44px', () => {
+    const onToggle = vi.fn()
+    render(
+      <SkillPanelSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        mcpConnectionOptions={[
+          { connectionId: 1, connectionName: '研发 MCP', installationLabel: 'dev-mcp', enabled: false },
+          { connectionId: 2, connectionName: '检索 MCP', installationLabel: 'search-mcp', enabled: true },
+        ]}
+        onToggleMcpBinding={onToggle}
+        skillOptions={[]}
+      />,
+    )
+
+    const row = screen.getByRole('switch', { name: '研发 MCP' })
+    expect(row).toHaveClass('min-h-11')
+    fireEvent.click(row)
+    expect(onToggle).toHaveBeenCalledExactlyOnceWith(1, true)
+
+    expect(screen.getByRole('switch', { name: '检索 MCP' })).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('每个第三方 Skill 都以名称命名的整行开关切换绑定', () => {
+    const onToggleSkillOption = vi.fn()
+    render(
+      <SkillPanelSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        mcpConnectionOptions={[]}
+        skillOptions={[
+          { skillId: 11, versionId: 3, slug: 'weekly-report', label: '周报助手', enabled: false, sourceLabel: 'github' },
+        ]}
+        onToggleSkillOption={onToggleSkillOption}
+      />,
+    )
+
+    const row = screen.getByRole('switch', { name: '周报助手' })
+    expect(row).toHaveClass('min-h-11')
+    fireEvent.click(row)
+    expect(onToggleSkillOption).toHaveBeenCalledExactlyOnceWith(11, true)
+  })
+
+  it('未固定版本或正在更新的 Skill 行禁用，且保留可读名称', () => {
+    render(
+      <SkillPanelSheet
+        open={true}
+        onOpenChange={vi.fn()}
+        mcpConnectionOptions={[]}
+        skillOptions={[
+          { skillId: 12, versionId: null, slug: 'no-version', label: '待批准助手', enabled: false },
+          { skillId: 13, versionId: 4, slug: 'updating', label: '更新中助手', enabled: true, updating: true },
+        ]}
+        onToggleSkillOption={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('switch', { name: '待批准助手' })).toBeDisabled()
+    expect(screen.getByRole('switch', { name: '更新中助手' })).toBeDisabled()
+  })
+})

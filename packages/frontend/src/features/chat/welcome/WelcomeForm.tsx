@@ -1,30 +1,25 @@
 import React, { useEffect, useState } from 'react'
 import { Textarea } from '@/components/ui/textarea'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Maximize2 } from 'lucide-react'
-import { CustomRequestEditor } from '@/components/chat/custom-request-editor'
-import { AdvancedOptions } from './AdvancedOptions'
 import { ComposerAttachmentList } from '@/components/chat/composer-attachment-list'
 import { AttachmentUploadButton } from '@/components/chat/attachment-upload-button'
 import { KnowledgeBaseSelector } from '@/components/chat/knowledge-base-selector'
+import { SkillPanelSheet } from '@/components/chat/skill-panel-sheet'
+import { ComposerActiveCapabilities } from '@/components/chat/composer-active-capabilities'
+import { buildComposerCapabilityItems } from '@/components/chat/composer-capability-items'
+import { COMPOSER_TOOLS_HANDOFF_MS, ComposerToolsPanel, type ComposerToolsPanelView } from '@/components/chat/composer-tools-panel'
+import { ComposerIconButton, composerToolbarScrollClass } from '@/components/chat/composer-toolbar-primitives'
 import { cn } from '@/lib/utils'
 import { COMPOSER_TEXTAREA_BASE_CLASS } from '@/components/chat/composer-shell-styles'
 import { ComposerShell } from '@/components/chat/composer-shell'
 import { ComposerModelActions } from '@/components/chat/composer-model-actions'
 import type { WelcomeFormProps } from './welcome-form-types'
-import {
-  ComposerFeatureControls,
-  ComposerIconButton,
-  composerToolbarButtonClass,
-  composerToolbarScrollClass,
-} from '@/components/chat/composer-toolbar-primitives'
+import { WelcomeDialogs } from './WelcomeDialogs'
 
 
 export function WelcomeForm({ form, selectedModelId, onModelChange, modelDisabled }: WelcomeFormProps) {
   const {
     query,
-    isComposing,
     setIsComposing,
     textareaRef,
     basePlaceholder,
@@ -47,6 +42,11 @@ export function WelcomeForm({ form, selectedModelId, onModelChange, modelDisable
     sessionPromptDialog,
   } = form
   const [isMobile, setIsMobile] = useState(false)
+  const [toolsOpen, setToolsOpen] = useState(false)
+  const [toolsView, setToolsView] = useState<ComposerToolsPanelView>('capabilities')
+  const [skillPanelOpen, setSkillPanelOpen] = useState(false)
+  const [selectorOpen, setSelectorOpen] = useState(false)
+  const [selectorView, setSelectorView] = useState<'models' | 'effort'>('models')
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -66,6 +66,44 @@ export function WelcomeForm({ form, selectedModelId, onModelChange, modelDisable
   const activePlaceholder = isMobile ? mobilePlaceholder : basePlaceholder
   const hasAttachments = attachments.selectedImages.length > 0 || attachments.workspaceFiles.length > 0
   const attachmentsCount = attachments.selectedImages.length + attachments.workspaceFiles.length
+  const enabledSkillCount = advancedOptions.skillOptions.filter((skill) => skill.enabled).length
+  // 空输入且无附件时只禁用发送；编辑区、附件、工具与模型在额度/权限允许时仍可用。
+  const hasSendableContent = query.trim().length > 0 || hasAttachments
+  const sendDisabled = creationDisabled || !hasSendableContent
+
+  const openTools = (view: ComposerToolsPanelView) => {
+    setToolsView(view)
+    setToolsOpen(true)
+  }
+  const openSkillPanelFromTools = () => {
+    runFromTools(() => setSkillPanelOpen(true))
+  }
+  // 面板里的上下文动作会打开另一层覆盖层：先收起面板，等 Sheet 退场后再执行。
+  const runFromTools = (action?: () => void) => {
+    setToolsOpen(false)
+    if (action) window.setTimeout(action, COMPOSER_TOOLS_HANDOFF_MS)
+  }
+  const openEffortView = () => {
+    setSelectorView('effort')
+    setSelectorOpen(true)
+  }
+  const capabilities = buildComposerCapabilityItems(
+    {
+      thinkingEnabled: advancedOptions.thinkingEnabled,
+      webSearchEnabled: advancedOptions.webSearchEnabled,
+      canUseWebSearch: advancedOptions.canUseWebSearch,
+      deepResearchEnabled: advancedOptions.deepResearchEnabled,
+      pythonToolEnabled: advancedOptions.pythonToolEnabled,
+      canUsePythonTool: advancedOptions.canUsePythonTool,
+    },
+    {
+      // 欢迎页与聊天页共用同一组合选择器：思考标签直达强度视图。
+      thinking: openEffortView,
+      webSearch: () => openTools('search-scope'),
+      deepResearch: () => openTools('capabilities'),
+      python: () => openTools('capabilities'),
+    },
+  )
 
   return (
     <div
@@ -81,58 +119,80 @@ export function WelcomeForm({ form, selectedModelId, onModelChange, modelDisable
           </div>
         </div>
       )}
-      <ComposerAttachmentList
-        images={attachments.selectedImages}
-        onRemoveImage={attachments.onRemoveImage}
-        workspaceFiles={attachments.workspaceFiles}
-        onRemoveWorkspaceFile={attachments.onRemoveWorkspaceFile}
-      />
 
       <ComposerShell>
-        <Textarea
-          ref={textareaRef}
-          value={query}
-          placeholder={activePlaceholder}
-          aria-label="输入消息"
-          disabled={creationDisabled}
-          onChange={(event) => onTextareaChange(event.target.value)}
-          onKeyDown={onKeyDown}
-          onCompositionStart={() => setIsComposing(true)}
-          onCompositionEnd={() => setIsComposing(false)}
-          onPaste={attachments.onPaste}
-          className={cn(
-            COMPOSER_TEXTAREA_BASE_CLASS,
-            'min-h-[64px] max-h-[200px] w-full text-sm lg:min-h-[68px]',
-            showExpand && 'pr-12',
-          )}
-          rows={1}
+        <ComposerAttachmentList
+          images={attachments.selectedImages}
+          onRemoveImage={attachments.onRemoveImage}
+          workspaceFiles={attachments.workspaceFiles}
+          onRemoveWorkspaceFile={attachments.onRemoveWorkspaceFile}
+          className={hasAttachments ? 'mb-2.5' : undefined}
         />
 
-        {showExpand && (
-          <ComposerIconButton
-            className="absolute right-4 top-4 h-8 w-8 md:h-8 md:w-8 rounded-md"
-            onClick={onOpenExpand}
+        <div data-composer-layer="text" className="relative min-w-0">
+          <Textarea
+            ref={textareaRef}
+            value={query}
+            placeholder={activePlaceholder}
+            aria-label="输入消息"
             disabled={creationDisabled}
-            aria-label="全屏编辑"
-            title="全屏编辑"
-          >
-            <Maximize2 className="h-4 w-4" />
-          </ComposerIconButton>
-        )}
+            onChange={(event) => onTextareaChange(event.target.value)}
+            onKeyDown={onKeyDown}
+            onCompositionStart={() => setIsComposing(true)}
+            onCompositionEnd={() => setIsComposing(false)}
+            onPaste={attachments.onPaste}
+            className={cn(
+              COMPOSER_TEXTAREA_BASE_CLASS,
+              'min-h-[64px] max-h-[200px] w-full lg:min-h-[68px]',
+              showExpand && 'pr-12',
+            )}
+            rows={1}
+          />
 
-        <div className="mt-3 grid min-w-0 grid-cols-1 items-center gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:gap-2">
-          <div className={cn(composerToolbarScrollClass, 'flex-1')}>
-            <AdvancedOptions {...advancedOptions} triggerClassName={composerToolbarButtonClass} />
+          {showExpand && (
+            <ComposerIconButton
+              className="absolute right-0 top-0 h-8 w-8 rounded-md"
+              onClick={onOpenExpand}
+              disabled={creationDisabled}
+              aria-label="全屏编辑"
+              title="全屏编辑"
+            >
+              <Maximize2 className="h-4 w-4" />
+            </ComposerIconButton>
+          )}
+        </div>
+
+        {capabilities.length > 0 ? (
+          <div data-composer-layer="capabilities" className="mt-2.5">
+            <ComposerActiveCapabilities
+              items={capabilities}
+              mobile={isMobile}
+              onOverflowActivate={() => openTools('capabilities')}
+              disabled={creationDisabled}
+            />
+          </div>
+        ) : null}
+
+        <div data-composer-layer="actions" className="mt-2.5 flex min-w-0 items-center gap-2">
+          <div className={cn(composerToolbarScrollClass, 'min-w-0 flex-1')}>
             <AttachmentUploadButton
               onPick={attachments.pickAttachments}
               disabled={creationDisabled}
               hasAttachments={hasAttachments}
               count={attachmentsCount}
               ariaLabel="上传附件"
-              className={composerToolbarButtonClass}
             />
 
-            <ComposerFeatureControls
+            <ComposerToolsPanel
+              open={toolsOpen}
+              onOpenChange={(open) => {
+                setToolsOpen(open)
+                if (!open) setToolsView('capabilities')
+              }}
+              mobile={isMobile}
+              view={toolsView}
+              onViewChange={setToolsView}
+              onActivate={advancedOptions.onActivateSkillPanel}
               disabled={creationDisabled}
               thinkingEnabled={advancedOptions.thinkingEnabled}
               onToggleThinking={advancedOptions.onToggleThinking}
@@ -140,6 +200,9 @@ export function WelcomeForm({ form, selectedModelId, onModelChange, modelDisable
               onToggleWebSearch={advancedOptions.onToggleWebSearch}
               canUseWebSearch={advancedOptions.canUseWebSearch}
               webSearchDisabledNote={advancedOptions.webSearchDisabledNote}
+              webSearchScope={advancedOptions.webSearchScope}
+              showWebSearchScope={advancedOptions.showWebSearchScope}
+              onWebSearchScopeChange={advancedOptions.onWebSearchScopeChange}
               deepResearchEnabled={advancedOptions.deepResearchEnabled}
               onToggleDeepResearch={advancedOptions.onToggleDeepResearch}
               pythonToolEnabled={advancedOptions.pythonToolEnabled}
@@ -148,23 +211,51 @@ export function WelcomeForm({ form, selectedModelId, onModelChange, modelDisable
               pythonToolDisabledNote={advancedOptions.pythonToolDisabledNote}
               knowledgeBaseEnabled={knowledgeBase.enabled}
               knowledgeBaseCount={knowledgeBase.selectedKbIds.length}
-              onOpenKnowledgeBase={knowledgeBase.onOpenSelector}
+              onOpenKnowledgeBase={() => runFromTools(knowledgeBase.onOpenSelector)}
+              onOpenSkillPanel={openSkillPanelFromTools}
+              skillCount={enabledSkillCount}
+              onOpenSessionPrompt={() => runFromTools(advancedOptions.onOpenSessionPrompt)}
+              onOpenAdvanced={() => runFromTools(advancedOptions.onOpenAdvanced)}
             />
           </div>
 
           <ComposerModelActions
             selectedModelId={selectedModelId} onModelChange={onModelChange}
-            modelDisabled={modelDisabled} disabled={creationDisabled}
+            reasoningControl={{ value: advancedOptions.effort, onChange: advancedOptions.onEffortChange }}
+            selectorOpen={selectorOpen}
+            selectorView={selectorView}
+            onSelectorOpenChange={(open) => {
+              setSelectorOpen(open)
+              if (!open) setSelectorView('models')
+            }}
+            modelDisabled={modelDisabled} disabled={sendDisabled}
             isCreating={isCreating} onSend={onSubmit}
           />
         </div>
       </ComposerShell>
 
       {mobileQuotaNotice ? (
-        <p className="mx-auto mt-3 max-w-3xl rounded-full border border-border bg-[hsl(var(--surface))/0.65] px-3 py-1.5 text-center text-xs text-muted-foreground  md:hidden">
+        <p className="mx-auto mt-2 max-w-3xl px-1 text-center text-[12px] leading-4 text-ink-tertiary">
           {mobileQuotaNotice}
         </p>
       ) : null}
+
+      <SkillPanelSheet
+        open={skillPanelOpen}
+        onOpenChange={setSkillPanelOpen}
+        webSearchEnabled={advancedOptions.webSearchEnabled}
+        canUseWebSearch={advancedOptions.canUseWebSearch}
+        showWebSearchScope={advancedOptions.showWebSearchScope}
+        webSearchScope={advancedOptions.webSearchScope}
+        onWebSearchScopeChange={advancedOptions.onWebSearchScopeChange}
+        webSearchDisabledNote={advancedOptions.webSearchDisabledNote}
+        pythonToolEnabled={advancedOptions.pythonToolEnabled}
+        canUsePythonTool={advancedOptions.canUsePythonTool}
+        pythonToolDisabledNote={advancedOptions.pythonToolDisabledNote}
+        skillOptions={advancedOptions.skillOptions}
+        onToggleSkillOption={advancedOptions.onToggleSkillOption}
+        onActivate={advancedOptions.onActivateSkillPanel}
+      />
 
       {/* 统一附件上传输入框 */}
       <input
@@ -189,93 +280,12 @@ export function WelcomeForm({ form, selectedModelId, onModelChange, modelDisable
         onClearAll={knowledgeBase.onClearAll}
         onRefresh={knowledgeBase.onRefresh}
       />
-
-      <Dialog open={expand.open} onOpenChange={(open) => (open ? onOpenExpand() : expand.onClose())}>
-        <DialogContent className="max-w-[1000px] w-[92vw] h-[80vh] max-h-[85vh] p-0 sm:rounded-2xl overflow-hidden flex flex-col">
-          <DialogHeader className="sr-only">
-            <DialogTitle>编辑消息</DialogTitle>
-            <DialogDescription>在全屏编辑器中修改当前草稿内容</DialogDescription>
-          </DialogHeader>
-          <div className="p-4 border-b text-sm text-muted-foreground">编辑消息</div>
-          <div className="flex-1 min-h-0 p-4">
-            <Textarea
-              value={expand.draft}
-              onChange={(event) => expand.onChange(event.target.value)}
-              className="h-full w-full resize-none border rounded-md p-3"
-            />
-          </div>
-          <div className="p-4 border-t flex justify-end gap-2">
-            <Button variant="outline" onClick={expand.onClose}>
-              取消
-            </Button>
-            <Button onClick={expand.onApply}>应用</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={advancedDialog.open} onOpenChange={(open) => (!open ? advancedDialog.onClose() : null)}>
-        <DialogContent className="max-w-3xl w-full max-h-[85vh] overflow-hidden p-0 sm:rounded-2xl">
-          <DialogHeader className="px-5 py-4 border-b">
-            <DialogTitle>高级请求定制</DialogTitle>
-            <DialogDescription>
-              为本次消息添加自定义请求体和请求头。核心字段已锁定，敏感头会被忽略。
-            </DialogDescription>
-          </DialogHeader>
-          <div className="px-5 py-4">
-            <CustomRequestEditor
-              customHeaders={advancedDialog.customHeaders}
-              onAddHeader={advancedDialog.onAddHeader}
-              onHeaderChange={advancedDialog.onHeaderChange}
-              onRemoveHeader={advancedDialog.onRemoveHeader}
-              canAddHeader={advancedDialog.canAddHeader}
-              customBody={advancedDialog.customBodyInput}
-              onCustomBodyChange={advancedDialog.onCustomBodyChange}
-              customBodyError={advancedDialog.customBodyError}
-            />
-          </div>
-          <div className="flex justify-end border-t px-5 py-3">
-            <Button variant="secondary" onClick={advancedDialog.onClose}>
-              完成
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={sessionPromptDialog.open} onOpenChange={(open) => (!open ? sessionPromptDialog.onClose() : null)}>
-        <DialogContent className="max-w-2xl w-full max-h-[80vh] overflow-hidden p-0 sm:rounded-2xl">
-          <DialogHeader className="px-5 py-4 border-b">
-            <DialogTitle>会话系统提示词</DialogTitle>
-            <DialogDescription>
-              {sessionPromptDialog.value.trim()
-                ? '当前会话将使用该提示词'
-                : sessionPromptDialog.placeholder || '留空继承上级或使用默认提示词'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="px-5 py-4 space-y-3">
-            <textarea
-              value={sessionPromptDialog.value}
-              onChange={(event) => sessionPromptDialog.onChange(event.target.value)}
-              rows={6}
-              placeholder={sessionPromptDialog.placeholder}
-              className="w-full rounded-xl border border-border bg-surface-subtle px-3 py-2 text-sm leading-relaxed  "
-            />
-            <p className="text-xs text-muted-foreground">
-              {'生效顺序：会话 > 个人 > 全局；支持 {day time}（自动替换为服务器当前时间）。留空继承上级，三层均为空时默认使用"今天日期是{day time}"。'}
-            </p>
-          </div>
-          <div className="flex items-center justify-between border-t px-5 py-3">
-            <Button variant="ghost" onClick={sessionPromptDialog.onClear}>
-              清空
-            </Button>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={sessionPromptDialog.onClose}>
-                取消
-              </Button>
-              <Button onClick={sessionPromptDialog.onConfirm}>确认</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <WelcomeDialogs
+        expand={expand}
+        advancedDialog={advancedDialog}
+        sessionPromptDialog={sessionPromptDialog}
+        onOpenExpand={onOpenExpand}
+      />
     </div>
   )
 }

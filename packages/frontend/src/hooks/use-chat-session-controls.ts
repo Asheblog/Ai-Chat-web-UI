@@ -46,15 +46,13 @@ export function useChatSessionControls({
     return Math.max(0, quotaRemaining ?? 0)
   }, [quota, quotaRemaining])
 
+  // 输入提示只提示写消息；额度与 Enter/Shift+Enter 提示都在框外呈现。
   const basePlaceholder = useMemo(() => {
-    if (quotaExhausted) {
-      return '额度已用尽，请登录或等待次日重置'
-    }
-    return currentSession ? '继续输入（Shift+Enter 换行）' : '输入消息（Shift+Enter 换行）'
-  }, [currentSession, quotaExhausted])
+    return currentSession ? '继续输入' : '输入消息'
+  }, [currentSession])
 
   const mobilePlaceholder = useMemo(() => {
-    return currentSession ? '继续输入...' : '输入你要翻译的文字'
+    return currentSession ? '继续输入…' : '发消息，或上传文件…'
   }, [currentSession])
 
   const toolbarModelId = useMemo(() => {

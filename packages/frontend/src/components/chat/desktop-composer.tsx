@@ -2,14 +2,13 @@
 
 import type { ClipboardEventHandler, KeyboardEventHandler, MutableRefObject } from 'react'
 import { useState } from 'react'
-import { Maximize2, Plus } from 'lucide-react'
+import { Maximize2 } from 'lucide-react'
 import type { ChatComposerImage } from '@/hooks/use-chat-composer'
 import type { WorkspaceFile } from '@/features/chat/composer'
 import { Textarea } from '@/components/ui/textarea'
-import { DropdownMenu, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import type { ModelSelectorView } from '@/components/model-selector/model-selector-types'
 import { ComposerAttachmentList } from './composer-attachment-list'
 import { AttachmentUploadButton } from './attachment-upload-button'
-import { PlusMenuContent } from '@/components/plus-menu-content'
 import type { ComposerSkillOption } from './composer-types'
 import type { McpConnectionOption, McpToolView } from '@/hooks/use-mcp-session-bindings'
 import { SkillPanelSheet } from './skill-panel-sheet'
@@ -17,15 +16,17 @@ import { cn } from '@/lib/utils'
 import { ComposerModelActions, type ComposerModelControlProps } from './composer-model-actions'
 import { COMPOSER_TEXTAREA_BASE_CLASS } from './composer-shell-styles'
 import { ComposerShell } from './composer-shell'
+import { ComposerActiveCapabilities } from './composer-active-capabilities'
+import { buildComposerCapabilityItems, countEnabledSkills } from './composer-capability-items'
+import { COMPOSER_TOOLS_HANDOFF_MS, ComposerToolsPanel, type ComposerToolsPanelView } from './composer-tools-panel'
 import {
-  ComposerFeatureControls,
   ComposerIconButton,
-  composerToolbarButtonClass,
-  composerToolbarIconClass,
   composerToolbarScrollClass,
 } from './composer-toolbar-primitives'
 
-interface DesktopComposerProps extends ComposerModelControlProps {
+type ComposerModelBridge = Pick<ComposerModelControlProps, 'selectedModelId' | 'onModelChange' | 'reasoningControl'>
+
+interface DesktopComposerProps extends ComposerModelBridge {
   input: string
   textareaRef: MutableRefObject<HTMLTextAreaElement | null>
   onInputChange: (value: string) => void
@@ -41,6 +42,7 @@ interface DesktopComposerProps extends ComposerModelControlProps {
   onRemoveImage: (index: number) => void
   workspaceFiles: WorkspaceFile[]
   onRemoveWorkspaceFile: (localId: string) => void
+  onRetryWorkspaceFile?: (localId: string) => void
   onPickAttachments: () => void
   hasAttachments: boolean
   attachmentsCount: number
@@ -73,8 +75,6 @@ interface DesktopComposerProps extends ComposerModelControlProps {
   traceEnabled: boolean
   canUseTrace: boolean
   onToggleTrace: (value: boolean) => void
-  effort: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset'
-  onEffortChange: (value: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset') => void
   showExpand: boolean
   onExpandOpen: () => void
   onOpenAdvanced: () => void
@@ -83,7 +83,7 @@ interface DesktopComposerProps extends ComposerModelControlProps {
   onStop: () => void
   desktopSendDisabled: boolean
   sendLockedReason: string | null
-  // 知识库（只在 ComposerFeatureControls 展示）
+  // 知识库（工具面板的上下文入口）
   onOpenKnowledgeBase?: () => void
   knowledgeBaseEnabled?: boolean
   knowledgeBaseCount?: number
@@ -93,6 +93,7 @@ export function DesktopComposer({
   input,
   selectedModelId,
   onModelChange,
+  reasoningControl,
   textareaRef,
   onInputChange,
   onKeyDown,
@@ -106,6 +107,7 @@ export function DesktopComposer({
   onRemoveImage,
   workspaceFiles,
   onRemoveWorkspaceFile,
+  onRetryWorkspaceFile,
   onPickAttachments,
   hasAttachments,
   attachmentsCount,
@@ -136,8 +138,6 @@ export function DesktopComposer({
   traceEnabled,
   canUseTrace,
   onToggleTrace,
-  effort,
-  onEffortChange,
   showExpand,
   onExpandOpen,
   onOpenAdvanced,
@@ -151,101 +151,122 @@ export function DesktopComposer({
   knowledgeBaseCount,
 }: DesktopComposerProps) {
   const sendTooltip = isStreaming ? '停止生成' : sendLockedReason ?? '发送'
-  const [plusOpen, setPlusOpen] = useState(false)
+  const [toolsOpen, setToolsOpen] = useState(false)
+  const [toolsView, setToolsView] = useState<ComposerToolsPanelView>('capabilities')
   const [skillPanelOpen, setSkillPanelOpen] = useState(false)
-  const openSkillPanelFromMenu = () => {
-    setPlusOpen(false)
-    window.setTimeout(() => {
-      setSkillPanelOpen(true)
-    }, 0)
+  const [selectorOpen, setSelectorOpen] = useState(false)
+  const [selectorView, setSelectorView] = useState<ModelSelectorView>('models')
+
+  const openTools = (view: ComposerToolsPanelView) => {
+    setToolsView(view)
+    setToolsOpen(true)
   }
+  const openSkillPanelFromTools = () => {
+    runFromTools(() => setSkillPanelOpen(true))
+  }
+  // 组合强度入口：思考标签直达强度视图；关闭后回到模型列表，再次点击仍是模型列表。
+  // 面板里的上下文动作会打开另一层覆盖层：先收起面板，等浮层退场后再执行。
+  const runFromTools = (action: () => void) => {
+    setToolsOpen(false)
+    window.setTimeout(action, COMPOSER_TOOLS_HANDOFF_MS)
+  }
+  const openEffortView = () => {
+    setSelectorView('effort')
+    setSelectorOpen(true)
+  }
+  const capabilities = buildComposerCapabilityItems(
+    {
+      thinkingEnabled,
+      webSearchEnabled,
+      canUseWebSearch,
+      deepResearchEnabled,
+      pythonToolEnabled,
+      canUsePythonTool,
+    },
+    {
+      thinking: openEffortView,
+      webSearch: () => openTools('search-scope'),
+      deepResearch: () => openTools('capabilities'),
+      python: () => openTools('capabilities'),
+    },
+  )
 
   return (
     <div className="hidden px-4 pb-5 pt-3 md:block md:px-6">
       <div className="w-full">
-        <ComposerAttachmentList
-          images={selectedImages}
-          onRemoveImage={onRemoveImage}
-          workspaceFiles={workspaceFiles}
-          onRemoveWorkspaceFile={onRemoveWorkspaceFile}
-          className="mb-3"
-        />
         <ComposerShell>
-          <Textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => onInputChange(e.target.value)}
-            onKeyDown={onKeyDown}
-            onPaste={onPaste}
-            onCompositionStart={onCompositionStart}
-            onCompositionEnd={onCompositionEnd}
-            placeholder={isStreaming ? 'AI正在思考中...' : placeholder}
-            aria-label="输入消息"
-            disabled={textareaDisabled}
-            className={cn(
-              COMPOSER_TEXTAREA_BASE_CLASS,
-              'min-h-[64px] max-h-[200px] w-full text-sm lg:min-h-[68px]',
-              showExpand && 'pr-12',
-            )}
-            rows={1}
+          <ComposerAttachmentList
+            images={selectedImages}
+            onRemoveImage={onRemoveImage}
+            workspaceFiles={workspaceFiles}
+            onRemoveWorkspaceFile={onRemoveWorkspaceFile}
+            onRetryWorkspaceFile={onRetryWorkspaceFile}
+            className={hasAttachments ? 'mb-2.5' : undefined}
           />
 
-          {showExpand && (
-            <ComposerIconButton
-              className="absolute right-4 top-4 h-8 w-8 md:h-8 md:w-8 rounded-md"
-              onClick={onExpandOpen}
-              aria-label="全屏编辑"
-              title="全屏编辑"
-            >
-              <Maximize2 className="h-4 w-4" />
-            </ComposerIconButton>
-          )}
+          <div data-composer-layer="text" className="relative min-w-0">
+            <Textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => onInputChange(e.target.value)}
+              onKeyDown={onKeyDown}
+              onPaste={onPaste}
+              onCompositionStart={onCompositionStart}
+              onCompositionEnd={onCompositionEnd}
+              placeholder={isStreaming ? 'AI正在思考中...' : placeholder}
+              aria-label="输入消息"
+              disabled={textareaDisabled}
+              className={cn(
+                COMPOSER_TEXTAREA_BASE_CLASS,
+                'min-h-[64px] max-h-[200px] w-full lg:min-h-[68px]',
+                showExpand && 'pr-12',
+              )}
+              rows={1}
+            />
 
-          <div className="mt-3 grid min-w-0 grid-cols-1 items-center gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:gap-2">
-            <div className={cn(composerToolbarScrollClass, 'min-w-0 flex-1')}>
-              <DropdownMenu open={plusOpen} onOpenChange={setPlusOpen}>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    className={composerToolbarButtonClass}
-                    aria-label="更多操作"
-                  >
-                    <Plus className={composerToolbarIconClass} />
-                  </button>
-                </DropdownMenuTrigger>
-                <PlusMenuContent
-                  canUseTrace={canUseTrace}
-                  traceEnabled={traceEnabled}
-                  onToggleTrace={(checked) => onToggleTrace(Boolean(checked))}
-                  effort={effort}
-                  onEffortChange={(value) => onEffortChange(value as typeof effort)}
-                  contentClassName="rounded-lg"
-                  bodyClassName="text-sm"
-                  onOpenSkillPanel={openSkillPanelFromMenu}
-                  onOpenAdvanced={() => {
-                    setPlusOpen(false)
-                    onOpenAdvanced()
-                  }}
-                  onOpenSessionPrompt={
-                    onOpenSessionPrompt
-                      ? () => {
-                          setPlusOpen(false)
-                          onOpenSessionPrompt()
-                        }
-                      : undefined
-                  }
-                />
-              </DropdownMenu>
+            {showExpand && (
+              <ComposerIconButton
+                className="absolute right-0 top-0 h-8 w-8 rounded-md"
+                onClick={onExpandOpen}
+                aria-label="全屏编辑"
+                title="全屏编辑"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </ComposerIconButton>
+            )}
+          </div>
 
+          {capabilities.length > 0 ? (
+            <div data-composer-layer="capabilities" className="mt-2.5">
+              <ComposerActiveCapabilities
+                items={capabilities}
+                mobile={false}
+                onOverflowActivate={() => openTools('capabilities')}
+                disabled={textareaDisabled}
+              />
+            </div>
+          ) : null}
+
+          <div data-composer-layer="actions" className="mt-2.5 flex min-w-0 items-center gap-2">
+            <div className={cn(composerToolbarScrollClass, 'min-w-0 shrink md:flex-1')}>
               <AttachmentUploadButton
                 onPick={onPickAttachments}
                 disabled={isStreaming}
                 hasAttachments={hasAttachments}
                 count={attachmentsCount}
                 ariaLabel="上传附件"
-                className={composerToolbarButtonClass}
               />
 
-              <ComposerFeatureControls
+              <ComposerToolsPanel
+                open={toolsOpen}
+                onOpenChange={(open) => {
+                  setToolsOpen(open)
+                  if (!open) setToolsView('capabilities')
+                }}
+                mobile={false}
+                view={toolsView}
+                onViewChange={setToolsView}
+                onActivate={onActivateSkillPanel}
                 disabled={textareaDisabled}
                 thinkingEnabled={thinkingEnabled}
                 onToggleThinking={onToggleThinking}
@@ -253,6 +274,9 @@ export function DesktopComposer({
                 onToggleWebSearch={onToggleWebSearch}
                 canUseWebSearch={canUseWebSearch}
                 webSearchDisabledNote={webSearchDisabledNote}
+                webSearchScope={webSearchScope}
+                showWebSearchScope={showWebSearchScope}
+                onWebSearchScopeChange={onWebSearchScopeChange}
                 deepResearchEnabled={deepResearchEnabled}
                 onToggleDeepResearch={onToggleDeepResearch}
                 pythonToolEnabled={pythonToolEnabled}
@@ -261,12 +285,26 @@ export function DesktopComposer({
                 pythonToolDisabledNote={pythonToolDisabledNote}
                 knowledgeBaseEnabled={knowledgeBaseEnabled}
                 knowledgeBaseCount={knowledgeBaseCount}
-                onOpenKnowledgeBase={onOpenKnowledgeBase}
+                onOpenKnowledgeBase={onOpenKnowledgeBase ? () => runFromTools(onOpenKnowledgeBase) : undefined}
+                onOpenSkillPanel={onActivateSkillPanel ? openSkillPanelFromTools : undefined}
+                skillCount={countEnabledSkills(skillOptions)}
+                onOpenSessionPrompt={() => runFromTools(onOpenSessionPrompt)}
+                onOpenAdvanced={() => runFromTools(onOpenAdvanced)}
+                traceEnabled={traceEnabled}
+                canUseTrace={canUseTrace}
+                onToggleTrace={onToggleTrace}
               />
             </div>
 
             <ComposerModelActions
               selectedModelId={selectedModelId} onModelChange={onModelChange}
+              reasoningControl={reasoningControl}
+              selectorOpen={selectorOpen}
+              selectorView={selectorView}
+              onSelectorOpenChange={(open) => {
+                setSelectorOpen(open)
+                if (!open) setSelectorView('models')
+              }}
               modelDisabled={isStreaming} isStreaming={isStreaming}
               disabled={desktopSendDisabled} onSend={onSend} onStop={onStop}
               stopLabel="停止生成" sendTitle={sendTooltip}

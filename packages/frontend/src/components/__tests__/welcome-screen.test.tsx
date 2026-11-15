@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { WelcomeScreen } from '@/components/welcome-screen'
+import type { WorkspaceFile } from '@/features/chat/composer'
 
 const mockSubmit = vi.fn()
 const mockTextareaChange = vi.fn()
@@ -70,7 +71,7 @@ const createMockViewModel = () => ({
       onAttachmentsSelected: vi.fn(),
       pickAttachments: mockPickImages,
       onPaste: vi.fn(),
-      workspaceFiles: [],
+      workspaceFiles: [] as WorkspaceFile[],
       onRemoveWorkspaceFile: vi.fn(),
       attachmentInputRef: { current: null },
     },
@@ -140,11 +141,25 @@ const createMockViewModel = () => ({
 let mockViewModel = createMockViewModel()
 
 vi.mock('@/components/model-selector', () => ({
-  ModelSelector: ({ selectedModelId, onModelChange }: any) => (
-    <button type="button" data-testid="model-selector" onClick={() => onModelChange({ id: 'model-b' })}>
-      {selectedModelId || '选择模型'}
-    </button>
+  // 本文件只验证欢迎页组合关系，模型选择器本体由其自身测试覆盖；桩保留真实可访问名。
+  ModelSelector: ({ selectedModelId, onModelChange, disabled }: any) => (
+    <>
+      <button
+        type="button"
+        role="combobox"
+        aria-label="选择模型"
+        aria-expanded={false}
+        aria-controls="welcome-model-stub-list"
+        disabled={disabled}
+        data-testid="model-selector"
+        onClick={() => onModelChange({ id: 'model-b' })}
+      >
+        {selectedModelId || '选择模型'}
+      </button>
+      <span id="welcome-model-stub-list" hidden />
+    </>
   ),
+  formatModelShortName: (name: string) => name,
 }))
 
 vi.mock('@/components/user-menu', () => ({
@@ -176,30 +191,59 @@ describe('WelcomeScreen', () => {
     expect(mockTextareaChange).toHaveBeenCalledWith('hello')
   })
 
-  it('textarea is direct child of composer shell (no composerInnerEditorClass wrapper)', () => {
+  it('keeps the textarea inside the composer shell with a positioned text layer', () => {
     render(<WelcomeScreen />)
     const textarea = screen.getByRole('textbox', { name: '输入消息' })
-    const parent = textarea.parentElement!
-    expect(parent.className).toContain('rounded-[var(--radius-composer)]')
-    expect(parent.className).toContain('relative')
-    expect(parent.className).toContain('p-4')
-    expect(parent.className).toContain('composer-shell')
-    // shell uses COMPOSER_SHELL_BASE_CLASS; inner editor class is not a parent wrapper
-    expect(parent.className).toContain('overflow-hidden')
+    const shell = textarea.closest('.composer-shell')!
+    expect(shell).not.toBeNull()
+    expect(shell.className).toContain('rounded-[var(--radius-composer)]')
+    expect(shell.className).toContain('p-4')
+    expect(shell.className).toContain('overflow-hidden')
+    const layer = textarea.parentElement!
+    expect(layer.getAttribute('data-composer-layer')).toBe('text')
+    expect(layer.className).toContain('relative')
   })
 
-  it('keeps send isolated from adaptive toolbar so Python cannot cover it', () => {
+  it('keeps send isolated from the adaptive tools row', () => {
     render(<WelcomeScreen />)
 
-    const python = screen.getByRole('button', { name: 'Python' })
+    const tools = screen.getByRole('button', { name: '工具' })
     const send = screen.getByRole('button', { name: '发送' })
-    const toolbar = python.closest('.composer-toolbar')
+    const toolbar = tools.closest('.composer-toolbar')
 
     expect(toolbar).not.toBeNull()
     expect(toolbar!.className).toContain('overflow-x-auto')
+    expect(toolbar).not.toContainElement(send)
     expect(send.parentElement?.className ?? '').toMatch(/shrink-0/)
     expect(send.parentElement?.className ?? '').toMatch(/relative/)
     expect(send.parentElement?.className ?? '').toMatch(/z-10/)
+  })
+
+  it('disables only the send action when the welcome draft is empty', () => {
+    mockViewModel.form.query = ''
+    mockViewModel.form.attachments.workspaceFiles = []
+    render(<WelcomeScreen />)
+
+    expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
+    // 其他编辑与选择入口不受影响
+    expect(screen.getByRole('textbox', { name: '输入消息' })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: '上传附件' })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: '工具' })).not.toBeDisabled()
+    expect(screen.getByRole('combobox', { name: '选择模型' })).not.toBeDisabled()
+  })
+
+  it('keeps attachment-only and typed drafts sendable', () => {
+    mockViewModel.form.query = ''
+    mockViewModel.form.attachments.workspaceFiles = [{
+      localId: 'f1', filename: 'r.pdf', originalName: '调研.pdf', mimeType: 'application/pdf',
+      fileSize: 1024, workspacePath: 'input/r.pdf', status: 'ready' as const,
+    }]
+    const { rerender } = render(<WelcomeScreen />)
+    expect(screen.getByRole('button', { name: '发送' })).not.toBeDisabled()
+
+    mockViewModel.form.query = '帮我分析这份调研'
+    rerender(<WelcomeScreen />)
+    expect(screen.getByRole('button', { name: '发送' })).not.toBeDisabled()
   })
 
   it('shows quota below input on mobile instead of placeholder text', async () => {

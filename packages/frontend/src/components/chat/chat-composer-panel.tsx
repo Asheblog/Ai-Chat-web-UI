@@ -140,6 +140,8 @@ function ChatComposerPanelComponent({
   isUploadingWorkspaceFiles,
   hasWorkspaceFiles,
   onRemoveWorkspaceFile,
+  onRetryWorkspaceFile,
+  quotaMessage,
   // 自定义请求
   customHeaders,
   onAddCustomHeader,
@@ -213,6 +215,11 @@ function ChatComposerPanelComponent({
   const [kbSelectorOpen, setKbSelectorOpen] = useState(false)
   const attachmentsCount = selectedImages.length + workspaceFiles.length
   const hasReadyFiles = workspaceFiles.some((f) => f.status === 'ready')
+  // 模型与强度共用同一入口；强度值仍由上层设置持有，面板不新增偏好状态。
+  const reasoningControl = useMemo(
+    () => ({ value: effort, onChange: onEffortChange }),
+    [effort, onEffortChange],
+  )
 
   const openKnowledgeBaseSelector = useCallback(() => {
     setKbSelectorOpen(true)
@@ -636,6 +643,7 @@ function ChatComposerPanelComponent({
       <MobileComposer
         selectedModelId={selectedModelId}
         onModelChange={onModelChange}
+        reasoningControl={reasoningControl}
         input={input}
         textareaRef={mobileTextareaRef}
         onInputChange={onInputChange}
@@ -644,6 +652,8 @@ function ChatComposerPanelComponent({
         onCompositionStart={onCompositionStart}
         onCompositionEnd={onCompositionEnd}
         isStreaming={isStreaming}
+        showExpand={showExpand}
+        onExpandOpen={openExpand}
         sendLocked={sendLocked}
         sendLockedReason={sendLockedReason}
         onSend={onSend}
@@ -652,13 +662,12 @@ function ChatComposerPanelComponent({
         onRemoveImage={onRemoveImage}
         workspaceFiles={workspaceFiles}
         onRemoveWorkspaceFile={onRemoveWorkspaceFile}
+        onRetryWorkspaceFile={onRetryWorkspaceFile}
         onPickAttachments={pickAttachments}
         hasAttachments={attachmentsCount > 0}
         attachmentsCount={attachmentsCount}
         thinkingEnabled={thinkingEnabled}
         onToggleThinking={onToggleThinking}
-        effort={effort}
-        onEffortChange={onEffortChange}
         webSearchEnabled={webSearchEnabled}
         onToggleWebSearch={onToggleWebSearch}
         webSearchScope={webSearchScope}
@@ -696,6 +705,7 @@ function ChatComposerPanelComponent({
       <DesktopComposer
         selectedModelId={selectedModelId}
         onModelChange={onModelChange}
+        reasoningControl={reasoningControl}
         input={input}
         textareaRef={desktopTextareaRef}
         onInputChange={onInputChange}
@@ -710,6 +720,7 @@ function ChatComposerPanelComponent({
         onRemoveImage={onRemoveImage}
         workspaceFiles={workspaceFiles}
         onRemoveWorkspaceFile={onRemoveWorkspaceFile}
+        onRetryWorkspaceFile={onRetryWorkspaceFile}
         onPickAttachments={pickAttachments}
         hasAttachments={attachmentsCount > 0}
         attachmentsCount={attachmentsCount}
@@ -740,8 +751,6 @@ function ChatComposerPanelComponent({
         traceEnabled={traceEnabled}
         canUseTrace={canUseTrace}
         onToggleTrace={onToggleTrace}
-        effort={effort}
-        onEffortChange={onEffortChange}
         showExpand={showExpand}
         onExpandOpen={openExpand}
         onOpenAdvanced={() => setAdvancedOpen(true)}
@@ -791,6 +800,14 @@ function ChatComposerPanelComponent({
           {sendLockedReason}
         </p>
       ) : null}
+
+      <div
+        data-composer-footer="true"
+        className="mt-1 flex items-center justify-between gap-3 px-1 text-[12px] leading-4 text-ink-tertiary"
+      >
+        <span className="min-w-0 truncate">{quotaMessage ?? ''}</span>
+        <span className="hidden shrink-0 md:block">Enter 发送 · Shift + Enter 换行</span>
+      </div>
     </div>
   )
 }

@@ -5,6 +5,7 @@ import { useChatComposer } from '@/hooks/use-chat-composer'
 import { useTextareaAutoResize } from '@/hooks/use-textarea-auto-resize'
 import { useChatSessionControls } from '@/hooks/use-chat-session-controls'
 import { useKnowledgeBase } from '@/hooks/use-knowledge-base'
+import { useSessionKnowledgeBaseSync } from '@/hooks/use-session-knowledge-base-sync'
 import { useDesktopComposer } from '@/hooks/use-desktop-composer'
 import type { ChatToolbarProps } from '@/components/chat/chat-toolbar'
 import type { ChatComposerPanelProps } from '@/components/chat/chat-composer-panel'
@@ -12,7 +13,6 @@ import { useChatStore } from '@/store/chat-store'
 
 export interface ChatInterfaceViewModel {
   toolbar: ChatToolbarProps
-  quotaMessage: string | null
   composer: ChatComposerPanelProps
 }
 
@@ -106,57 +106,32 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     setWebSearchEnabled,
     setEffort,
   })
-  const kbSyncInFlightRef = useRef(false)
-  const kbHydratingFromSessionRef = useRef(false)
-  const pendingPushKbKeyRef = useRef<string | null>(null)
-  const selectedKnowledgeBaseIds = knowledgeBase.selectedKbIds
-  const setSelectedKnowledgeBaseIds = knowledgeBase.setSelectedKbIds
-  const normalizedSessionKbIds = Array.isArray(currentSession?.knowledgeBaseIds)
-    ? currentSession.knowledgeBaseIds
-    : []
-  const normalizedSelectedKbIds = selectedKnowledgeBaseIds
-  const sessionKbKey = normalizedSessionKbIds.slice().sort((a, b) => a - b).join(',')
-  const selectedKbKey = normalizedSelectedKbIds.slice().sort((a, b) => a - b).join(',')
-
-  useEffect(() => {
-    if (!currentSession) return
-    if (kbSyncInFlightRef.current) return
-    if (sessionKbKey === selectedKbKey) {
-      if (kbHydratingFromSessionRef.current) {
-        kbHydratingFromSessionRef.current = false
-      }
-      return
-    }
-    kbHydratingFromSessionRef.current = true
-    const nextSessionKbIds = Array.isArray(currentSession.knowledgeBaseIds)
-      ? currentSession.knowledgeBaseIds
-      : []
-    setSelectedKnowledgeBaseIds(nextSessionKbIds)
-  }, [currentSession, sessionKbKey, selectedKbKey, setSelectedKnowledgeBaseIds])
-
-  useEffect(() => {
-    if (!currentSession) return
-    if (sessionKbKey === selectedKbKey) {
-      if (kbHydratingFromSessionRef.current) {
-        kbHydratingFromSessionRef.current = false
-      }
-      if (pendingPushKbKeyRef.current === selectedKbKey) {
-        pendingPushKbKeyRef.current = null
-      }
-      return
-    }
-    if (kbSyncInFlightRef.current) return
-    if (kbHydratingFromSessionRef.current) return
-    if (pendingPushKbKeyRef.current === selectedKbKey) return
-    kbSyncInFlightRef.current = true
-    pendingPushKbKeyRef.current = selectedKbKey
-    void useChatStore
-      .getState()
-      .updateSessionPrefs(currentSession.id, { knowledgeBaseIds: normalizedSelectedKbIds })
-      .finally(() => {
-        kbSyncInFlightRef.current = false
-      })
-  }, [currentSession, normalizedSelectedKbIds, selectedKbKey, sessionKbKey])
+  // 会话知识库选择：用户改选先本地生效，再写回会话记录；水合不得覆盖用户刚做出的选择。
+  const { markUserEdit: markKbUserEdit } = useSessionKnowledgeBaseSync({
+    sessionId: currentSession?.id ?? null,
+    sessionKbIds: Array.isArray(currentSession?.knowledgeBaseIds) ? currentSession.knowledgeBaseIds : [],
+    selectedKbIds: knowledgeBase.selectedKbIds,
+    setSelectedKbIds: knowledgeBase.setSelectedKbIds,
+    persist: (ids) =>
+      currentSession
+        ? useChatStore.getState().updateSessionPrefs(currentSession.id, { knowledgeBaseIds: ids })
+        : undefined,
+  })
+  const toggleKnowledgeBase = useCallback(
+    (id: number) => {
+      markKbUserEdit()
+      knowledgeBase.toggleKb(id)
+    },
+    [knowledgeBase, markKbUserEdit],
+  )
+  const selectAllKnowledgeBases = useCallback(() => {
+    markKbUserEdit()
+    knowledgeBase.selectAll()
+  }, [knowledgeBase, markKbUserEdit])
+  const clearKnowledgeBases = useCallback(() => {
+    markKbUserEdit()
+    knowledgeBase.clearAll()
+  }, [knowledgeBase, markKbUserEdit])
 
   const onActivateSkillPanel = useCallback(() => {
     void ensureSkillsLoaded()
@@ -234,6 +209,8 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     isUploadingWorkspaceFiles,
     hasWorkspaceFiles,
     onRemoveWorkspaceFile: removeWorkspaceFile,
+    onRetryWorkspaceFile: retryWorkspaceFile,
+    quotaMessage: sessionControls.quotaNotice?.message ?? null,
     customHeaders,
     onAddCustomHeader: addCustomHeader,
     onCustomHeaderChange: updateCustomHeader,
@@ -258,16 +235,12 @@ export function useChatInterfaceViewModel(autoHeight = 200): ChatInterfaceViewMo
     knowledgeBaseEnabled: knowledgeBase.isEnabled,
     knowledgeBases: knowledgeBase.availableKbs,
     selectedKnowledgeBaseIds: knowledgeBase.selectedKbIds,
-    onToggleKnowledgeBase: knowledgeBase.toggleKb,
-    onSelectAllKnowledgeBases: knowledgeBase.selectAll,
-    onClearKnowledgeBases: knowledgeBase.clearAll,
+    onToggleKnowledgeBase: toggleKnowledgeBase,
+    onSelectAllKnowledgeBases: selectAllKnowledgeBases,
+    onClearKnowledgeBases: clearKnowledgeBases,
     onRefreshKnowledgeBases: knowledgeBase.refresh,
     isLoadingKnowledgeBases: knowledgeBase.isLoading,
   }
 
-  return {
-    toolbar,
-    quotaMessage: sessionControls.quotaNotice?.message ?? null,
-    composer,
-  }
+  return { toolbar, composer }
 }

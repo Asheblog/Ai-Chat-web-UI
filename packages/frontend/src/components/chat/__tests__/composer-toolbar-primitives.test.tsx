@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
 import {
-  ComposerFeatureControls,
+  WEB_SEARCH_SCOPE_OPTIONS,
   composerToolbarButtonClass,
   composerToolbarIconClass,
   composerToolbarScrollClass,
   composerToolbarSendSlotClass,
+  formatWebSearchScopeLabel,
 } from '@/components/chat/composer-toolbar-primitives'
+import { WEB_SEARCH_SCOPE_IDS } from '@aichat/shared'
 
 describe('composer toolbar adaptive layout', () => {
   it('uses a named container with horizontal scroll fallback instead of overflow-visible', () => {
@@ -23,49 +24,33 @@ describe('composer toolbar adaptive layout', () => {
     expect(composerToolbarSendSlotClass).toContain('shrink-0')
     expect(composerToolbarSendSlotClass).toContain('z-10')
   })
+})
 
-  it('renders Python and other feature controls with adaptive icon class', () => {
-    render(
-      <div className={composerToolbarScrollClass}>
-        <ComposerFeatureControls
-          thinkingEnabled={false}
-          onToggleThinking={() => undefined}
-          webSearchEnabled={false}
-          onToggleWebSearch={() => undefined}
-          canUseWebSearch
-          deepResearchEnabled={false}
-          onToggleDeepResearch={() => undefined}
-          pythonToolEnabled={false}
-          onTogglePythonTool={() => undefined}
-          canUsePythonTool
-          onOpenKnowledgeBase={() => undefined}
-          knowledgeBaseEnabled
-          knowledgeBaseCount={0}
-        />
-      </div>,
-    )
-
-    const python = screen.getByRole('button', { name: 'Python' })
-    expect(python.className).toContain('composer-toolbar-btn')
-    expect(python.querySelector('svg')?.getAttribute('class') ?? '').toContain('composer-toolbar-icon')
+describe('web search scope vocabulary', () => {
+  it('derives the options from the shared seven-value enum', () => {
+    expect(WEB_SEARCH_SCOPE_OPTIONS.map((option) => option.value)).toEqual([...WEB_SEARCH_SCOPE_IDS])
+    expect(WEB_SEARCH_SCOPE_OPTIONS).toHaveLength(7)
   })
 
-  it('renders a deep research toggle between web search and Python', () => {
-    render(
-      <ComposerFeatureControls
-        thinkingEnabled={false}
-        onToggleThinking={() => undefined}
-        webSearchEnabled={false}
-        onToggleWebSearch={() => undefined}
-        canUseWebSearch
-        deepResearchEnabled={false}
-        onToggleDeepResearch={() => undefined}
-        pythonToolEnabled={false}
-        onTogglePythonTool={() => undefined}
-        canUsePythonTool
-      />,
-    )
+  it('labels every scope in Chinese, including scholar', () => {
+    const labels = WEB_SEARCH_SCOPE_OPTIONS.map((option) => option.label)
+    expect(labels).toEqual(['网页', '文档', '论文', '学术', '图片', '视频', '播客'])
+    expect(formatWebSearchScopeLabel('scholar')).toBe('学术')
+  })
 
-    expect(screen.getByRole('button', { name: '深度研究' })).toBeInTheDocument()
+  it('falls back to the raw value for unknown scopes', () => {
+    expect(formatWebSearchScopeLabel('unknown-scope')).toBe('unknown-scope')
+    expect(formatWebSearchScopeLabel(undefined)).toBe('网页')
+    expect(formatWebSearchScopeLabel('')).toBe('网页')
+  })
+
+  it('never resolves prototype keys from a polluted preference value', () => {
+    // 回归：改用 Object.hasOwn 后，localStorage 被手工写入 constructor / __proto__ 时仍返回字符串
+    for (const polluted of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+      const label = formatWebSearchScopeLabel(polluted)
+      expect(typeof label).toBe('string')
+      expect(label).toBe(polluted)
+    }
+    expect(() => formatWebSearchScopeLabel('__proto__')).not.toThrow()
   })
 })

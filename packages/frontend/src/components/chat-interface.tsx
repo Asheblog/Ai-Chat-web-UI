@@ -4,7 +4,6 @@ import { ProcessWorkspaceHost } from '@/features/chat/process-workspace'
 import { useChatStore } from '@/store/chat-store'
 import { ChatToolbar } from '@/components/chat/chat-toolbar'
 import { ChatComposerPanel } from '@/components/chat/chat-composer-panel'
-import { ChatQuotaNotice } from '@/components/chat/chat-quota-notice'
 import { ConnectedMessageViewport } from '@/components/chat/connected-message-viewport'
 import { useChatInterfaceViewModel } from '@/hooks/use-chat-interface-viewmodel'
 
@@ -19,7 +18,7 @@ export function ChatInterface() {
     return null
   }
 
-  const { toolbar, quotaMessage, composer } = viewModel
+  const { toolbar, composer } = viewModel
 
   return (
     <ProcessWorkspaceHost key={sessionKey} className="flex-1 min-h-0 h-full">
@@ -27,8 +26,6 @@ export function ChatInterface() {
       <ChatToolbar {...toolbar} title={sessionTitle} />
 
       <ConnectedMessageViewport />
-
-      <ChatQuotaNotice message={quotaMessage} />
 
       <ChatComposerPanel
         {...composer}

@@ -13,7 +13,7 @@ import { useModelSelector } from './use-model-selector'
 
 export function ModelSelector({
   selectedModelId, onModelChange, disabled, className, variant = 'default', size = 'md',
-  dropdownDirection = 'auto', reasoningControl, open, onOpenChange, defaultView,
+  dropdownDirection = 'auto', reasoningControl, open, onOpenChange, defaultView, formatTriggerName,
 }: ModelSelectorProps) {
   const state = useModelSelector({ selectedModelId, onModelChange, reasoningControl, open, onOpenChange, defaultView })
   const forceBottomDropdown = dropdownDirection === 'bottom'
@@ -55,6 +55,7 @@ export function ModelSelector({
     <ModelSelectorTrigger
       ref={state.triggerRef} open={state.open} selected={state.selected} disabled={disabled}
       className={className} displayVariant={variant} selectorSize={size} effort={reasoningControl?.value}
+      formatTriggerName={formatTriggerName}
     />
   )
 

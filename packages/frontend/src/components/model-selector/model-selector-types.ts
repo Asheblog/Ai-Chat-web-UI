@@ -30,4 +30,6 @@ export interface ModelSelectorProps {
   onOpenChange?: (open: boolean) => void
   /** 每次展开时进入的视图；不传则停留在模型列表。 */
   defaultView?: ModelSelectorView
+  /** 只影响触发器可见文本的短名规则；完整名称仍保留在 title、列表与可访问描述中。 */
+  formatTriggerName?: (name: string) => string
 }

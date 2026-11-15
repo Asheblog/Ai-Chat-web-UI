@@ -1,12 +1,12 @@
-import { forwardRef, type ButtonHTMLAttributes, type ComponentType, type ReactNode } from 'react'
-import { BookOpen, Brain, Code2, Globe2, Microscope, SlidersHorizontal } from 'lucide-react'
+import { forwardRef, type ButtonHTMLAttributes, type ComponentType } from 'react'
+import { Brain, Code2, Globe2, Microscope, SlidersHorizontal } from 'lucide-react'
 import { WEB_SEARCH_SCOPE_IDS, type WebSearchScope } from '@aichat/shared'
 import { cn } from '@/lib/utils'
 
 export const composerInnerEditorClass =
   'composer-inner-editor relative overflow-hidden rounded-[var(--radius-composer)] border border-borderStrong bg-surface transition-colors duration-[160ms] focus-within:border-signal'
 
-/** Scroll tools independently; target sizes come from `.composer-toolbar*` in globals.css. */
+/** Scroll tools independently; target sizes come from .composer-toolbar* in globals.css. */
 export const composerToolbarScrollClass =
   'composer-toolbar flex min-w-0 max-w-full flex-nowrap items-center overflow-x-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
 
@@ -34,7 +34,7 @@ export interface ComposerCapabilityMeta {
   Icon: ComponentType<{ className?: string }>
 }
 
-/** 能力名、图标与说明的唯一来源：输入区标签、工具面板行、旧 flat 控件共用。 */
+/** 能力名、图标与说明的唯一来源：输入区标签与工具面板行共用。 */
 export const COMPOSER_CAPABILITIES: readonly ComposerCapabilityMeta[] = [
   { id: 'thinking', label: '思考', panelLabel: '深度思考', description: '先推理，再回答', Icon: Brain },
   { id: 'web-search', label: '联网', panelLabel: '联网搜索', description: '检索最新网页内容', Icon: Globe2 },
@@ -44,7 +44,7 @@ export const COMPOSER_CAPABILITIES: readonly ComposerCapabilityMeta[] = [
 
 export const getComposerCapability = (id: ComposerCapabilityId): ComposerCapabilityMeta => {
   const found = COMPOSER_CAPABILITIES.find((capability) => capability.id === id)
-  if (!found) throw new Error(`未知能力 id：${id}`)
+  if (!found) throw new Error('未知能力 id：' + id)
   return found
 }
 
@@ -65,8 +65,14 @@ export const WEB_SEARCH_SCOPE_LABELS: Record<WebSearchScope, string> = {
 export const WEB_SEARCH_SCOPE_OPTIONS: ReadonlyArray<{ value: WebSearchScope; label: string }> =
   WEB_SEARCH_SCOPE_IDS.map((value) => ({ value, label: WEB_SEARCH_SCOPE_LABELS[value] }))
 
+/**
+ * 偏好值可能来自 localStorage 的手工写入，因此只认自有属性；
+ * 用 in 会命中 constructor / __proto__ 等原型键并渲染非字符串。
+ */
 export const formatWebSearchScopeLabel = (value: string | undefined): string => {
-  if (value && value in WEB_SEARCH_SCOPE_LABELS) return WEB_SEARCH_SCOPE_LABELS[value as WebSearchScope]
+  if (value && Object.prototype.hasOwnProperty.call(WEB_SEARCH_SCOPE_LABELS, value)) {
+    return WEB_SEARCH_SCOPE_LABELS[value as WebSearchScope]
+  }
   return value || WEB_SEARCH_SCOPE_LABELS.webpage
 }
 
@@ -115,153 +121,3 @@ export const ComposerToolsTrigger = forwardRef<HTMLButtonElement, ComposerToolsT
   ),
 )
 ComposerToolsTrigger.displayName = 'ComposerToolsTrigger'
-
-interface ComposerFeatureChipProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  active?: boolean
-  icon: ReactNode
-  label: string
-  showDot?: boolean
-}
-
-export function ComposerFeatureChip({
-  active,
-  icon,
-  label,
-  showDot = true,
-  className,
-  type = 'button',
-  title,
-  'aria-label': ariaLabel,
-  ...props
-}: ComposerFeatureChipProps) {
-  return (
-    <button
-      type={type}
-      aria-pressed={active}
-      aria-label={ariaLabel ?? label}
-      title={title ?? label}
-      className={cn(
-        composerToolbarButtonClass,
-        active && 'border-signal/40 bg-signal-soft text-signal-text',
-        className,
-      )}
-      {...props}
-    >
-      {icon}
-      {showDot && active && (
-        <span
-          className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-signal"
-          aria-hidden="true"
-        />
-      )}
-    </button>
-  )
-}
-
-export function ComposerToolbarDivider() {
-  return <span className="mx-0.5 h-5 w-px shrink-0 bg-border sm:mx-1" aria-hidden="true" />
-}
-
-interface ComposerFeatureControlsProps {
-  disabled?: boolean
-  thinkingEnabled: boolean
-  onToggleThinking: (value: boolean) => void
-  webSearchEnabled: boolean
-  onToggleWebSearch: (value: boolean) => void
-  canUseWebSearch: boolean
-  webSearchDisabledNote?: string
-  deepResearchEnabled: boolean
-  onToggleDeepResearch: (value: boolean) => void
-  pythonToolEnabled: boolean
-  onTogglePythonTool: (value: boolean) => void
-  canUsePythonTool: boolean
-  pythonToolDisabledNote?: string
-  knowledgeBaseEnabled?: boolean
-  knowledgeBaseCount?: number
-  onOpenKnowledgeBase?: () => void
-}
-
-/**
- * 旧的 flat 控件行。Task 3 把双端输入区改为工具面板 + 已启用标签后，这里仅剩
- * 欢迎页等尚未迁移的调用方；能力名与图标统一取自 COMPOSER_CAPABILITIES。
- */
-export function ComposerFeatureControls({
-  disabled,
-  thinkingEnabled,
-  onToggleThinking,
-  webSearchEnabled,
-  onToggleWebSearch,
-  canUseWebSearch,
-  webSearchDisabledNote,
-  deepResearchEnabled,
-  onToggleDeepResearch,
-  pythonToolEnabled,
-  onTogglePythonTool,
-  canUsePythonTool,
-  pythonToolDisabledNote,
-  knowledgeBaseEnabled,
-  knowledgeBaseCount,
-  onOpenKnowledgeBase,
-}: ComposerFeatureControlsProps) {
-  const capabilityState: Record<
-    ComposerCapabilityId,
-    { active: boolean; disabled?: boolean; note?: string; onToggle: () => void }
-  > = {
-    thinking: { active: thinkingEnabled, disabled, onToggle: () => onToggleThinking(!thinkingEnabled) },
-    'web-search': {
-      active: webSearchEnabled,
-      disabled: disabled || !canUseWebSearch,
-      note: canUseWebSearch ? undefined : webSearchDisabledNote,
-      onToggle: () => onToggleWebSearch(!webSearchEnabled),
-    },
-    'deep-research': {
-      active: deepResearchEnabled,
-      disabled,
-      onToggle: () => onToggleDeepResearch(!deepResearchEnabled),
-    },
-    python: {
-      active: pythonToolEnabled,
-      disabled: disabled || !canUsePythonTool,
-      note: canUsePythonTool ? undefined : pythonToolDisabledNote,
-      onToggle: () => onTogglePythonTool(!pythonToolEnabled),
-    },
-  }
-
-  return (
-    <>
-      <ComposerToolbarDivider />
-
-      {onOpenKnowledgeBase ? (
-        <ComposerIconButton
-          active={Boolean(knowledgeBaseCount && knowledgeBaseCount > 0)}
-          onClick={onOpenKnowledgeBase}
-          aria-label="知识库"
-          title={knowledgeBaseEnabled ? '知识库' : '知识库未启用'}
-          disabled={disabled || !knowledgeBaseEnabled}
-        >
-          <BookOpen className={composerToolbarIconClass} />
-          {Boolean(knowledgeBaseCount && knowledgeBaseCount > 0) && (
-            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-foreground px-1 text-[10px] font-medium text-background">
-              {knowledgeBaseCount! > 9 ? '9+' : knowledgeBaseCount}
-            </span>
-          )}
-        </ComposerIconButton>
-      ) : null}
-
-      {COMPOSER_CAPABILITIES.map(({ id, label, Icon }) => {
-        const state = capabilityState[id]
-        return (
-          <ComposerFeatureChip
-            key={id}
-            active={state.active}
-            disabled={state.disabled}
-            icon={<Icon className={composerToolbarIconClass} />}
-            label={label}
-            title={state.note}
-            onClick={state.onToggle}
-          />
-        )
-      })}
-    </>
-  )
-}

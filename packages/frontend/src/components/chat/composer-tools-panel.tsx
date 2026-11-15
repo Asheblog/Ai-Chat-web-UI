@@ -4,7 +4,6 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { BookOpen, ChevronLeft, Clock3, FileText, Globe2, Settings2, Wrench, X } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
-import { cn } from '@/lib/utils'
 import { useDesktopComposer } from '@/hooks/use-desktop-composer'
 import { ComposerToolsTrigger, formatWebSearchScopeLabel } from './composer-toolbar-primitives'
 import {
@@ -19,6 +18,12 @@ import {
   composerToolsTabId,
   type ComposerToolsTabId,
 } from './composer-tools-panel-rows'
+
+/**
+ * 工具面板收起后，等 Sheet 退出动画结束再打开下一个覆盖层：
+ * 仍在退场的 z-50 模态层会拦截新弹层里的点击（375 会话系统提示词的保存按钮曾被它挡住）。
+ */
+export const COMPOSER_TOOLS_HANDOFF_MS = 220
 
 export type ComposerToolsPanelTab = ComposerToolsTabId
 /** search-scope 是能力页内的子视图；联网标签可直接打开它。 */
