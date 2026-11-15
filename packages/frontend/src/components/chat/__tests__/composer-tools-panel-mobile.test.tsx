@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ComposerToolsPanel } from '@/components/chat/composer-tools-panel'
 import { toolsPanelProps } from './composer-tools-fixtures'
 
@@ -70,12 +70,73 @@ describe('ComposerToolsPanel — 手机底部面板', () => {
     expect(dialog.innerHTML).toContain('env(safe-area-inset-bottom)')
   })
 
-  it('能力行在手机端保留可点击高度', () => {
+  it('能力开关的真实命中区是整行 44px 按钮', () => {
     render(<ComposerToolsPanel {...toolsPanelProps({ mobile: true })} />)
 
-    const row = screen.getByRole('switch', { name: '深度思考' }).closest('[data-composer-tools-row]')
-    expect(row).not.toBeNull()
-    expect(row!.className).toContain('min-h-11')
+    const row = screen.getByRole('switch', { name: '深度思考' })
+    expect(row.tagName).toBe('BUTTON')
+    expect(row.className).toContain('min-h-11')
+    expect(row.className).toContain('w-full')
+  })
+
+  it('页签的 aria-controls 指向真实存在的 tabpanel', () => {
+    render(<ComposerToolsPanel {...toolsPanelProps({ mobile: true, onOpenKnowledgeBase: vi.fn() })} />)
+
+    for (const name of ['能力', '上下文与设置']) {
+      const tab = screen.getByRole('tab', { name })
+      const controls = tab.getAttribute('aria-controls')
+      expect(controls).toBeTruthy()
+      const panel = document.getElementById(controls!)
+      expect(panel).not.toBeNull()
+      expect(panel).toHaveAttribute('aria-labelledby', tab.getAttribute('id'))
+    }
+
+    fireEvent.click(screen.getByRole('tab', { name: '上下文与设置' }))
+    const activeTab = screen.getByRole('tab', { name: '上下文与设置' })
+    expect(activeTab).toHaveAttribute('aria-selected', 'true')
+    expect(document.getElementById(activeTab.getAttribute('aria-controls')!)).not.toBeNull()
+  })
+
+  it('进入范围页时收起页签，返回与关闭固定在标题区', () => {
+    render(
+      <ComposerToolsPanel
+        {...toolsPanelProps({
+          mobile: true,
+          webSearchEnabled: true,
+          showWebSearchScope: true,
+          onWebSearchScopeChange: vi.fn(),
+        })}
+      />,
+    )
+
+    const scroller = screen.getByRole('dialog').querySelector('[data-composer-tools-scroll="true"]')
+    fireEvent.click(screen.getByRole('button', { name: /搜索范围/ }))
+
+    expect(screen.queryByRole('tab', { name: '能力' })).not.toBeInTheDocument()
+    expect(scroller!.contains(screen.getByRole('button', { name: '返回能力' }))).toBe(false)
+    expect(scroller!.contains(screen.getByRole('button', { name: '关闭工具面板' }))).toBe(false)
+  })
+
+  it('手机进入范围页与返回后焦点明确', async () => {
+    render(
+      <ComposerToolsPanel
+        {...toolsPanelProps({
+          mobile: true,
+          webSearchEnabled: true,
+          showWebSearchScope: true,
+          onWebSearchScopeChange: vi.fn(),
+        })}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /搜索范围/ }))
+    const back = screen.getByRole('button', { name: '返回能力' })
+    await waitFor(() => expect(document.activeElement).toBe(back))
+
+    fireEvent.click(back)
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole('tab', { name: '能力' })),
+    )
   })
 
   it('手机端范围页可返回能力页', () => {
@@ -95,6 +156,23 @@ describe('ComposerToolsPanel — 手机底部面板', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '返回能力' }))
     expect(screen.getByRole('switch', { name: '深度思考' })).toBeInTheDocument()
+  })
+})
+
+describe('ComposerToolsPanel — 双端同时挂载', () => {
+  it('桌面与手机实例的页签/面板 id 不冲突', () => {
+    render(
+      <>
+        <ComposerToolsPanel {...toolsPanelProps({ open: true, mobile: true })} />
+        <ComposerToolsPanel {...toolsPanelProps({ open: true, mobile: false })} />
+      </>,
+    )
+
+    const ids = Array.from(document.querySelectorAll('[id]'))
+      .map((node) => node.id)
+      .filter((id) => id.startsWith('composer-tools'))
+    expect(ids.length).toBeGreaterThan(0)
+    expect(new Set(ids).size).toBe(ids.length)
   })
 })
 

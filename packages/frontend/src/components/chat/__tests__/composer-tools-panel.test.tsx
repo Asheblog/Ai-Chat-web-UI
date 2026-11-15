@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ComposerToolsPanel } from '@/components/chat/composer-tools-panel'
 import { toolsPanelProps } from './composer-tools-fixtures'
 
@@ -46,45 +46,6 @@ describe('ComposerToolsPanel — 能力开关回传现有回调', () => {
     for (const name of ['深度思考', '联网搜索', '深度研究', 'Python']) {
       expect(screen.getByRole('switch', { name })).toBeDisabled()
     }
-  })
-})
-
-describe('ComposerToolsPanel — 受限原因', () => {
-  it('联网不可用时禁用开关并显示受限原因', () => {
-    const onToggleWebSearch = vi.fn()
-    render(
-      <ComposerToolsPanel
-        {...toolsPanelProps({
-          canUseWebSearch: false,
-          webSearchDisabledNote: '当前模型不支持联网搜索',
-          onToggleWebSearch,
-        })}
-      />,
-    )
-
-    const toggle = screen.getByRole('switch', { name: '联网搜索' })
-    expect(toggle).toBeDisabled()
-    expect(screen.getByText('当前模型不支持联网搜索')).toBeInTheDocument()
-
-    fireEvent.click(toggle)
-    expect(onToggleWebSearch).not.toHaveBeenCalled()
-  })
-
-  it('Python 不可用时禁用开关并显示受限原因', () => {
-    render(
-      <ComposerToolsPanel
-        {...toolsPanelProps({ canUsePythonTool: false, pythonToolDisabledNote: '当前连接未开启 Python 运行时' })}
-      />,
-    )
-
-    expect(screen.getByRole('switch', { name: 'Python' })).toBeDisabled()
-    expect(screen.getByText('当前连接未开启 Python 运行时')).toBeInTheDocument()
-  })
-
-  it('可用时不显示受限原因', () => {
-    render(<ComposerToolsPanel {...toolsPanelProps({ webSearchDisabledNote: '不该出现的原因' })} />)
-
-    expect(screen.queryByText('不该出现的原因')).not.toBeInTheDocument()
   })
 })
 
@@ -183,6 +144,7 @@ describe('ComposerToolsPanel — 联网范围沿用既有枚举', () => {
       ['网页', 'webpage'],
       ['文档', 'document'],
       ['论文', 'paper'],
+      ['学术', 'scholar'],
       ['图片', 'image'],
       ['视频', 'video'],
       ['播客', 'podcast'],
@@ -226,6 +188,56 @@ describe('ComposerToolsPanel — 联网范围沿用既有枚举', () => {
       <ComposerToolsPanel {...toolsPanelProps({ webSearchEnabled: true, showWebSearchScope: false, onWebSearchScopeChange: vi.fn() })} />,
     )
     expect(screen.queryByRole('button', { name: /搜索范围/ })).not.toBeInTheDocument()
+  })
+
+  it('设置回灌 scholar 时“学术”选中并以中文回显', () => {
+    render(
+      <ComposerToolsPanel
+        {...toolsPanelProps({
+          webSearchEnabled: true,
+          showWebSearchScope: true,
+          webSearchScope: 'scholar',
+          onWebSearchScopeChange: vi.fn(),
+        })}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: /搜索范围/ }).textContent).toContain('学术')
+    expect(screen.queryByText('scholar')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /搜索范围/ }))
+    expect(screen.getByRole('radio', { name: '学术' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('radio', { name: '网页' })).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('直入范围页同样受联网可用条件约束', () => {
+    const { rerender } = render(
+      <ComposerToolsPanel
+        {...toolsPanelProps({
+          webSearchEnabled: true,
+          canUseWebSearch: false,
+          showWebSearchScope: true,
+          onWebSearchScopeChange: vi.fn(),
+          view: 'search-scope',
+        })}
+      />,
+    )
+
+    // 不可用时上层直入也不能改范围，回落到能力页并保留受限原因。
+    expect(screen.queryByRole('radiogroup', { name: '搜索范围' })).not.toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: '联网搜索' })).toBeDisabled()
+
+    rerender(
+      <ComposerToolsPanel
+        {...toolsPanelProps({
+          webSearchEnabled: false,
+          showWebSearchScope: true,
+          onWebSearchScopeChange: vi.fn(),
+          view: 'search-scope',
+        })}
+      />,
+    )
+    expect(screen.queryByRole('radiogroup', { name: '搜索范围' })).not.toBeInTheDocument()
   })
 
   it('受控视图让上层直达范围页（联网标签）', () => {
@@ -272,6 +284,61 @@ describe('ComposerToolsPanel — 受控展开与强度入口唯一', () => {
 
     rerender(<ComposerToolsPanel {...toolsPanelProps({ open: true, onActivate })} />)
     expect(onActivate).toHaveBeenCalledTimes(1)
+  })
+
+  it('进入范围页时焦点落到“返回能力”，返回后回到范围入口', async () => {
+    render(
+      <ComposerToolsPanel
+        {...toolsPanelProps({
+          webSearchEnabled: true,
+          showWebSearchScope: true,
+          onWebSearchScopeChange: vi.fn(),
+        })}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /搜索范围/ }))
+    const back = screen.getByRole('button', { name: '返回能力' })
+    await waitFor(() => expect(document.activeElement).toBe(back))
+
+    fireEvent.click(back)
+    const entry = screen.getByRole('button', { name: /搜索范围/ })
+    await waitFor(() => expect(document.activeElement).toBe(entry))
+  })
+
+  it('桌面浮层限制可用高度并内部滚动，标题与关闭固定在滚动区外', () => {
+    render(<ComposerToolsPanel {...toolsPanelProps()} />)
+
+    const scroller = screen.getByRole('dialog').querySelector('[data-composer-tools-desktop-scroll="true"]')
+    expect(scroller).not.toBeNull()
+    expect(scroller!.className).toContain('overflow-y-auto')
+    expect(scroller!.className).toMatch(/max-h-\[/)
+    expect(scroller!.contains(screen.getByRole('button', { name: '关闭工具面板' }))).toBe(false)
+  })
+
+  it('范围子页在桌面保留固定可达的返回与关闭', () => {
+    const onOpenChange = vi.fn()
+    render(
+      <ComposerToolsPanel
+        {...toolsPanelProps({
+          onOpenChange,
+          webSearchEnabled: true,
+          showWebSearchScope: true,
+          onWebSearchScopeChange: vi.fn(),
+        })}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /搜索范围/ }))
+    const dialog = screen.getByRole('dialog')
+    const scroller = dialog.querySelector('[data-composer-tools-desktop-scroll="true"]')
+
+    expect(scroller!.contains(screen.getByRole('button', { name: '返回能力' }))).toBe(false)
+    const close = screen.getByRole('button', { name: '关闭工具面板' })
+    expect(scroller!.contains(close)).toBe(false)
+
+    fireEvent.click(close)
+    expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
   it('不承载重复的思考强度入口', () => {

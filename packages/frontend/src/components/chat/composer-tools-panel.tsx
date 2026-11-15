@@ -1,26 +1,26 @@
 'use client'
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { BookOpen, Check, ChevronLeft, Clock3, FileText, Globe2, Settings2, Wrench, X } from 'lucide-react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { BookOpen, ChevronLeft, Clock3, FileText, Globe2, Settings2, Wrench, X } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
-import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
-import {
-  ComposerToolsTrigger,
-  WEB_SEARCH_SCOPE_OPTIONS,
-  formatWebSearchScopeLabel,
-} from './composer-toolbar-primitives'
+import { useDesktopComposer } from '@/hooks/use-desktop-composer'
+import { ComposerToolsTrigger, formatWebSearchScopeLabel } from './composer-toolbar-primitives'
 import {
   ComposerActionRow,
   ComposerCapabilityRow,
+  ComposerScopeOptions,
+  ComposerToggleRow,
   ComposerToolsDivider,
   ComposerToolsSectionLabel,
   ComposerToolsTabs,
-  composerToolsRowClass,
+  composerToolsPanelId,
+  composerToolsTabId,
+  type ComposerToolsTabId,
 } from './composer-tools-panel-rows'
 
-export type ComposerToolsPanelTab = 'capabilities' | 'context'
+export type ComposerToolsPanelTab = ComposerToolsTabId
 /** search-scope 是能力页内的子视图；联网标签可直接打开它。 */
 export type ComposerToolsPanelView = ComposerToolsPanelTab | 'search-scope'
 
@@ -71,30 +71,7 @@ export interface ComposerToolsPanelProps {
   onToggleTrace?: (value: boolean) => void
 }
 
-function useIsDesktopViewport(enableQuery: boolean) {
-  const [isDesktop, setIsDesktop] = useState(() => {
-    if (!enableQuery) return true
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
-    return window.matchMedia('(min-width: 768px)').matches
-  })
-  useEffect(() => {
-    if (!enableQuery) return
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
-    const query = window.matchMedia('(min-width: 768px)')
-    const update = () => setIsDesktop(query.matches)
-    update()
-    const handle = (event: MediaQueryListEvent) => setIsDesktop(event.matches)
-    if (typeof query.addEventListener === 'function') {
-      query.addEventListener('change', handle)
-      return () => query.removeEventListener('change', handle)
-    }
-    query.addListener(handle)
-    return () => query.removeListener(handle)
-  }, [enableQuery])
-  return isDesktop
-}
-
-const closeButtonClass =
+const headerIconButtonClass =
   'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] text-ink-tertiary transition-colors duration-[160ms] hover:bg-surface-hover hover:text-foreground md:h-8 md:w-8'
 
 export function ComposerToolsPanel(props: ComposerToolsPanelProps) {
@@ -110,10 +87,22 @@ export function ComposerToolsPanel(props: ComposerToolsPanelProps) {
     traceEnabled, canUseTrace, onToggleTrace,
   } = props
 
-  const isDesktopViewport = useIsDesktopViewport(mobile === undefined)
+  // 复用既有断点 hook（SSR 固定移动端、水合后切换），并让双端同时挂载时 id 不冲突。
+  const isDesktopViewport = useDesktopComposer()
   const isMobile = mobile ?? !isDesktopViewport
+  const idBase = `composer-tools-${useId().replace(/:/g, '')}`
+
   const [internalView, setInternalView] = useState<ComposerToolsPanelView>(initialView ?? 'capabilities')
-  const currentView = view ?? internalView
+  const requestedView = view ?? internalView
+  const scopeAvailable = Boolean(webSearchEnabled && canUseWebSearch)
+  // 可用条件对直入的范围页同样生效：不可用时回落到能力页。
+  const currentView: ComposerToolsPanelView =
+    requestedView === 'search-scope' && !scopeAvailable ? 'capabilities' : requestedView
+  const activeTab: ComposerToolsPanelTab = currentView === 'context' ? 'context' : 'capabilities'
+
+  const backRef = useRef<HTMLButtonElement | null>(null)
+  const scopeEntryRef = useRef<HTMLButtonElement | null>(null)
+  const tabListRef = useRef<HTMLDivElement | null>(null)
 
   const onActivateRef = useRef(onActivate)
   onActivateRef.current = onActivate
@@ -124,15 +113,32 @@ export function ComposerToolsPanel(props: ComposerToolsPanelProps) {
     if (open && view === undefined) setInternalView(initialView ?? 'capabilities')
   }, [open, view, initialView])
 
+  // 视图切换后的焦点：进入范围页落到“返回能力”，返回后回到页签或范围入口。
+  const previousView = useRef<ComposerToolsPanelView>(currentView)
+  useEffect(() => {
+    const previous = previousView.current
+    previousView.current = currentView
+    if (previous === currentView) return
+    if (currentView === 'search-scope') {
+      backRef.current?.focus()
+      return
+    }
+    if (previous === 'search-scope') {
+      const activeTabNode = tabListRef.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]')
+      ;(activeTabNode ?? scopeEntryRef.current)?.focus()
+    }
+  }, [currentView])
+
   const setView = (next: ComposerToolsPanelView) => {
+    if (next === 'search-scope' && !scopeAvailable) return
     if (view === undefined) setInternalView(next)
     onViewChange?.(next)
   }
 
-  const showScopeEntry = Boolean(webSearchEnabled && canUseWebSearch && showWebSearchScope && onWebSearchScopeChange)
+  const showScopeEntry = Boolean(scopeAvailable && showWebSearchScope && onWebSearchScopeChange)
 
   const capabilitiesSection = (
-    <div className="space-y-0.5" aria-label="能力">
+    <div role="group" aria-label="能力" className="space-y-0.5">
       <ComposerCapabilityRow id="thinking" checked={thinkingEnabled} disabled={disabled} onToggle={onToggleThinking} />
       <ComposerCapabilityRow
         id="web-search"
@@ -143,6 +149,7 @@ export function ComposerToolsPanel(props: ComposerToolsPanelProps) {
       />
       {showScopeEntry ? (
         <ComposerActionRow
+          buttonRef={scopeEntryRef}
           icon={<Globe2 className="h-[18px] w-[18px]" />}
           label="搜索范围"
           description="联网搜索的检索范围"
@@ -168,7 +175,7 @@ export function ComposerToolsPanel(props: ComposerToolsPanelProps) {
   )
 
   const contextSection = (
-    <div className="space-y-0.5" aria-label="上下文与设置">
+    <div role="group" aria-label="上下文与设置" className="space-y-0.5">
       <ComposerActionRow
         icon={<BookOpen className="h-[18px] w-[18px]" />}
         label="知识库"
@@ -208,94 +215,75 @@ export function ComposerToolsPanel(props: ComposerToolsPanelProps) {
       {canUseTrace && onToggleTrace ? (
         <>
           <ComposerToolsDivider />
-          <div className={cn(composerToolsRowClass, 'justify-between')} data-composer-tools-row>
-            <span className="flex min-w-0 items-center gap-3">
-              <Clock3 className="h-[18px] w-[18px] shrink-0 text-ink-tertiary" aria-hidden="true" />
-              <span className="text-[13px] font-medium leading-5 text-foreground">任务追踪</span>
-            </span>
-            <Switch
-              checked={Boolean(traceEnabled)}
-              disabled={disabled}
-              onCheckedChange={(value) => onToggleTrace(Boolean(value))}
-              aria-label="任务追踪"
-            />
-          </div>
+          <ComposerToggleRow
+            icon={<Clock3 className="h-[18px] w-[18px]" />}
+            label="任务追踪"
+            checked={Boolean(traceEnabled)}
+            disabled={disabled}
+            onToggle={onToggleTrace}
+          />
         </>
       ) : null}
     </div>
   )
 
   const scopeSection = (
-    <div role="radiogroup" aria-label="搜索范围" className="space-y-0.5">
-      {WEB_SEARCH_SCOPE_OPTIONS.map((option) => {
-        const selected = option.value === (webSearchScope ?? 'webpage')
-        return (
-          <button
-            key={option.value}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            disabled={disabled}
-            onClick={() => {
-              onWebSearchScopeChange?.(option.value)
-              setView('capabilities')
-            }}
-            className={cn(
-              composerToolsRowClass,
-              'justify-between transition-colors duration-[160ms] hover:bg-surface-hover disabled:pointer-events-none disabled:opacity-45',
-              selected ? 'text-signal-text' : 'text-foreground',
-            )}
-          >
-            <span className="text-[13px] leading-5">{option.label}</span>
-            {selected ? <Check className="h-4 w-4" aria-hidden="true" /> : null}
-          </button>
-        )
-      })}
+    <ComposerScopeOptions
+      value={webSearchScope}
+      disabled={disabled}
+      onSelect={(value) => {
+        onWebSearchScopeChange?.(value)
+        setView('capabilities')
+      }}
+    />
+  )
+
+  const closeButton = (
+    <button type="button" onClick={() => onOpenChange(false)} aria-label="关闭工具面板" className={headerIconButtonClass}>
+      <X className="h-4 w-4" aria-hidden="true" />
+    </button>
+  )
+
+  const panelHeader = (
+    <div className="flex shrink-0 items-center justify-between gap-2 px-0.5">
+      <p className="text-[13px] font-semibold text-foreground">工具</p>
+      {closeButton}
     </div>
   )
 
   const scopeHeader = (
-    <div className="flex items-center gap-1.5 px-0.5 pb-1">
-      <button type="button" onClick={() => setView('capabilities')} aria-label="返回能力" className={closeButtonClass}>
+    <div className="flex shrink-0 items-center gap-1.5 px-0.5">
+      <button
+        ref={backRef}
+        type="button"
+        onClick={() => setView('capabilities')}
+        aria-label="返回能力"
+        className={headerIconButtonClass}
+      >
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
       </button>
-      <p className="text-[13px] font-medium text-foreground">搜索范围</p>
+      <p className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">搜索范围</p>
+      {closeButton}
     </div>
   )
 
-  const panelHeader = (
-    <div className="flex items-center justify-between gap-2 px-0.5">
-      <p className="text-[13px] font-semibold text-foreground">工具</p>
-      <button type="button" onClick={() => onOpenChange(false)} aria-label="关闭工具面板" className={closeButtonClass}>
-        <X className="h-4 w-4" aria-hidden="true" />
-      </button>
+  const scopeBody = (
+    <div role="region" aria-label="搜索范围设置" className="space-y-0.5">
+      {scopeSection}
     </div>
   )
 
-  const renderBody = () => {
-    if (currentView === 'search-scope') {
-      return (
-        <div id="composer-tools-panel-search-scope" role="region" aria-label="搜索范围设置">
-          {scopeHeader}
-          {scopeSection}
-        </div>
-      )
-    }
-    if (currentView === 'context') {
-      return (
-        <div id="composer-tools-panel-context" role="tabpanel" aria-label="上下文与设置">
-          {contextSection}
-        </div>
-      )
-    }
-    return (
-      <div id="composer-tools-panel-capabilities" role="tabpanel" aria-label="能力">
-        {capabilitiesSection}
-      </div>
-    )
-  }
+  const desktopSections = (
+    <>
+      <ComposerToolsDivider />
+      <ComposerToolsSectionLabel>能力</ComposerToolsSectionLabel>
+      {capabilitiesSection}
+      <ComposerToolsDivider />
+      <ComposerToolsSectionLabel>上下文与设置</ComposerToolsSectionLabel>
+      {contextSection}
+    </>
+  )
 
-  const activeTab: ComposerToolsPanelTab = currentView === 'context' ? 'context' : 'capabilities'
   const defaultTrigger = <ComposerToolsTrigger expanded={open} />
 
   if (isMobile) {
@@ -310,14 +298,41 @@ export function ComposerToolsPanel(props: ComposerToolsPanelProps) {
           className="flex h-[70vh] flex-col rounded-t-3xl border-x-0 border-b-0 border-border bg-surface p-0"
         >
           <div className="shrink-0 border-b border-border px-4 pb-2 pt-3">
-            {panelHeader}
-            <ComposerToolsTabs value={activeTab} onChange={setView} />
+            {currentView === 'search-scope' ? (
+              scopeHeader
+            ) : (
+              <>
+                {panelHeader}
+                <ComposerToolsTabs idBase={idBase} value={activeTab} onChange={setView} listRef={tabListRef} />
+              </>
+            )}
           </div>
           <div
             data-composer-tools-scroll="true"
             className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2"
           >
-            {renderBody()}
+            {currentView === 'search-scope' ? (
+              scopeBody
+            ) : (
+              <>
+                <div
+                  role="tabpanel"
+                  id={composerToolsPanelId(idBase, 'capabilities')}
+                  aria-labelledby={composerToolsTabId(idBase, 'capabilities')}
+                  hidden={activeTab !== 'capabilities'}
+                >
+                  {capabilitiesSection}
+                </div>
+                <div
+                  role="tabpanel"
+                  id={composerToolsPanelId(idBase, 'context')}
+                  aria-labelledby={composerToolsTabId(idBase, 'context')}
+                  hidden={activeTab !== 'context'}
+                >
+                  {contextSection}
+                </div>
+              </>
+            )}
           </div>
           <div className="shrink-0 border-t border-border px-4 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3">
             <button
@@ -342,22 +357,13 @@ export function ComposerToolsPanel(props: ComposerToolsPanelProps) {
         sideOffset={8}
         className="w-[27rem] max-w-[calc(100vw-2rem)] rounded-xl border-border bg-surface p-2"
       >
-        {currentView === 'search-scope' ? (
-          <>
-            {scopeHeader}
-            {scopeSection}
-          </>
-        ) : (
-          <>
-            {panelHeader}
-            <ComposerToolsDivider />
-            <ComposerToolsSectionLabel>能力</ComposerToolsSectionLabel>
-            {capabilitiesSection}
-            <ComposerToolsDivider />
-            <ComposerToolsSectionLabel>上下文与设置</ComposerToolsSectionLabel>
-            {contextSection}
-          </>
-        )}
+        {currentView === 'search-scope' ? scopeHeader : panelHeader}
+        <div
+          data-composer-tools-desktop-scroll="true"
+          className="max-h-[min(60vh,30rem)] overflow-y-auto overscroll-contain"
+        >
+          {currentView === 'search-scope' ? scopeSection : desktopSections}
+        </div>
       </PopoverContent>
     </Popover>
   )

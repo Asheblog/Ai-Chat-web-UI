@@ -43,7 +43,10 @@ describe('ComposerActiveCapabilities — 溢出汇总', () => {
     expect(screen.getByRole('button', { name: '联网' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Python' })).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: '还有 1 个已启用能力，打开工具面板' }))
+    const overflow = screen.getByRole('button', { name: '还有 1 个已启用能力，打开工具面板' })
+    expect(overflow.className).toContain('min-w-11')
+
+    fireEvent.click(overflow)
     expect(onOverflowActivate).toHaveBeenCalledTimes(1)
     expect(screen.getByText('+1')).toBeInTheDocument()
   })

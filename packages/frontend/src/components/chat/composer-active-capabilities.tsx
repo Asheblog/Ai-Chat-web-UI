@@ -28,7 +28,7 @@ const chipHitClass =
   'inline-flex h-11 shrink-0 touch-manipulation cursor-pointer items-center rounded-full disabled:pointer-events-none disabled:opacity-45 md:h-7'
 
 const chipSurfaceClass =
-  'inline-flex h-7 items-center gap-1 rounded-full border border-signal/40 bg-signal-soft px-2.5 text-[12px] leading-none text-signal-text'
+  'inline-flex h-7 min-w-7 items-center justify-center gap-1 rounded-full border border-signal/40 bg-signal-soft px-2.5 text-[12px] leading-none text-signal-text'
 
 /** 输入区已启用能力回显：点标签直达对应控制，多出的条目汇总为 +N。 */
 export function ComposerActiveCapabilities({
@@ -73,7 +73,7 @@ export function ComposerActiveCapabilities({
           disabled={disabled}
           aria-label={`还有 ${hiddenCount} 个已启用能力，打开工具面板`}
           title="查看全部已启用能力"
-          className={chipHitClass}
+          className={cn(chipHitClass, 'min-w-11 justify-center')}
         >
           <span className={chipSurfaceClass}>+{hiddenCount}</span>
         </button>

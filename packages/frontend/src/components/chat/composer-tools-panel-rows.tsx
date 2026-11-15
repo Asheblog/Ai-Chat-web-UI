@@ -1,23 +1,83 @@
 'use client'
 
-import type { ReactNode } from 'react'
-import { ChevronRight } from 'lucide-react'
-import { Switch } from '@/components/ui/switch'
+import type { ReactNode, Ref } from 'react'
+import { Check, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getComposerCapability, type ComposerCapabilityId } from './composer-toolbar-primitives'
+import {
+  WEB_SEARCH_SCOPE_OPTIONS,
+  getComposerCapability,
+  type ComposerCapabilityId,
+} from './composer-toolbar-primitives'
 
 /** 工具面板行的统一触控与排版：手机 44px 起、桌面同一密度。 */
 export const composerToolsRowClass = 'flex min-h-11 w-full items-center gap-3 rounded-lg px-1.5 text-left'
 
-export interface ComposerToolsPanelTabOption {
-  id: 'capabilities' | 'context'
-  label: string
-}
+export type ComposerToolsTabId = 'capabilities' | 'context'
+export type ComposerToolsPanelSlot = ComposerToolsTabId | 'search-scope'
 
-export const composerToolsPanelTabs: readonly ComposerToolsPanelTabOption[] = [
+export const composerToolsTabId = (base: string, tab: ComposerToolsTabId): string => `${base}-tab-${tab}`
+export const composerToolsPanelId = (base: string, slot: ComposerToolsPanelSlot): string => `${base}-panel-${slot}`
+
+export const composerToolsPanelTabs: ReadonlyArray<{ id: ComposerToolsTabId; label: string }> = [
   { id: 'capabilities', label: '能力' },
   { id: 'context', label: '上下文与设置' },
 ]
+
+interface ComposerToggleRowProps {
+  icon: ReactNode
+  label: string
+  description?: string
+  checked: boolean
+  disabled?: boolean
+  onToggle: (value: boolean) => void
+}
+
+/**
+ * 开关行本身就是 role="switch" 的按钮：命中区是整行（手机 ≥44×44），
+ * 内部的 38×22 轨道只是 aria-hidden 装饰，点标题或说明也能切换。
+ */
+export function ComposerToggleRow({ icon, label, description, checked, disabled, onToggle }: ComposerToggleRowProps) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onToggle(!checked)}
+      data-composer-tools-row
+      className={cn(
+        composerToolsRowClass,
+        'justify-between transition-colors duration-[160ms] hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-60',
+      )}
+    >
+      <span className="flex min-w-0 items-center gap-3">
+        <span className="shrink-0 text-ink-tertiary" aria-hidden="true">{icon}</span>
+        <span className="min-w-0">
+          <span className="block text-[13px] font-medium leading-5 text-foreground">{label}</span>
+          {description ? (
+            <span className="block text-[12px] leading-4 text-muted-foreground">{description}</span>
+          ) : null}
+        </span>
+      </span>
+      <span
+        aria-hidden="true"
+        data-composer-tools-track="true"
+        className={cn(
+          'relative inline-flex h-[22px] w-[38px] shrink-0 items-center rounded-full border transition-colors duration-[160ms]',
+          checked ? 'border-transparent bg-signal' : 'border-border bg-surface-hover',
+        )}
+      >
+        <span
+          className={cn(
+            'block h-[18px] w-[18px] rounded-full transition-transform duration-[160ms]',
+            checked ? 'translate-x-[18px] bg-background' : 'translate-x-[2px] bg-surface',
+          )}
+        />
+      </span>
+    </button>
+  )
+}
 
 interface CapabilityRowProps {
   id: ComposerCapabilityId
@@ -31,20 +91,15 @@ export function ComposerCapabilityRow({ id, checked, disabled, note, onToggle }:
   const { panelLabel, description, Icon } = getComposerCapability(id)
   return (
     <div className="space-y-0.5">
-      <div className={cn(composerToolsRowClass, disabled && 'opacity-60')} data-composer-tools-row>
-        <Icon className="h-[18px] w-[18px] shrink-0 text-ink-tertiary" aria-hidden="true" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-medium leading-5 text-foreground">{panelLabel}</p>
-          <p className="text-[11px] leading-4 text-muted-foreground">{description}</p>
-        </div>
-        <Switch
-          checked={checked}
-          disabled={disabled}
-          onCheckedChange={(value) => onToggle(Boolean(value))}
-          aria-label={panelLabel}
-        />
-      </div>
-      {note ? <p className="pl-[30px] text-[11px] leading-4 text-muted-foreground">{note}</p> : null}
+      <ComposerToggleRow
+        icon={<Icon className="h-[18px] w-[18px]" />}
+        label={panelLabel}
+        description={description}
+        checked={checked}
+        disabled={disabled}
+        onToggle={onToggle}
+      />
+      {note ? <p className="pl-[30px] text-[12px] leading-4 text-muted-foreground">{note}</p> : null}
     </div>
   )
 }
@@ -56,11 +111,21 @@ interface ActionRowProps {
   trailing?: string
   disabled?: boolean
   onClick?: () => void
+  buttonRef?: Ref<HTMLButtonElement>
 }
 
-export function ComposerActionRow({ icon, label, description, trailing, disabled, onClick }: ActionRowProps) {
+export function ComposerActionRow({
+  icon,
+  label,
+  description,
+  trailing,
+  disabled,
+  onClick,
+  buttonRef,
+}: ActionRowProps) {
   return (
     <button
+      ref={buttonRef}
       type="button"
       onClick={onClick}
       disabled={disabled}
@@ -72,39 +137,81 @@ export function ComposerActionRow({ icon, label, description, trailing, disabled
       <span className="shrink-0 text-ink-tertiary" aria-hidden="true">{icon}</span>
       <span className="min-w-0 flex-1">
         <span className="block text-[13px] font-medium leading-5 text-foreground">{label}</span>
-        <span className="block text-[11px] leading-4 text-muted-foreground">{description}</span>
+        <span className="block text-[12px] leading-4 text-muted-foreground">{description}</span>
       </span>
-      {trailing ? <span className="shrink-0 text-[11px] text-muted-foreground">{trailing}</span> : null}
+      {trailing ? <span className="shrink-0 text-[12px] text-muted-foreground">{trailing}</span> : null}
       <ChevronRight className="h-4 w-4 shrink-0 text-ink-tertiary" aria-hidden="true" />
     </button>
   )
 }
 
 export function ComposerToolsSectionLabel({ children }: { children: ReactNode }) {
-  return <p className="px-1.5 pb-1 pt-2 text-[11px] font-medium tracking-wide text-muted-foreground">{children}</p>
+  return <p className="px-1.5 pb-1 pt-2 text-[12px] font-medium tracking-wide text-muted-foreground">{children}</p>
 }
 
 export function ComposerToolsDivider() {
   return <div className="my-1.5 h-px bg-border" aria-hidden="true" />
 }
 
-export function ComposerToolsTabs({
-  value,
-  onChange,
-}: {
-  value: 'capabilities' | 'context'
-  onChange: (tab: 'capabilities' | 'context') => void
-}) {
+interface ComposerScopeOptionsProps {
+  value?: string
+  disabled?: boolean
+  onSelect: (value: string) => void
+}
+
+/** 联网搜索范围列表：取值来自 shared 的七项枚举，沿用面板行尺寸。 */
+export function ComposerScopeOptions({ value, disabled, onSelect }: ComposerScopeOptionsProps) {
   return (
-    <div role="tablist" aria-label="工具面板分组" className="mt-3 inline-flex rounded-[10px] bg-surface-subtle p-0.5">
+    <div role="radiogroup" aria-label="搜索范围" className="space-y-0.5">
+      {WEB_SEARCH_SCOPE_OPTIONS.map((option) => {
+        const selected = option.value === (value ?? 'webpage')
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            disabled={disabled}
+            onClick={() => onSelect(option.value)}
+            className={cn(
+              composerToolsRowClass,
+              'justify-between transition-colors duration-[160ms] hover:bg-surface-hover disabled:pointer-events-none disabled:opacity-45',
+              selected ? 'text-signal-text' : 'text-foreground',
+            )}
+          >
+            <span className="text-[13px] leading-5">{option.label}</span>
+            {selected ? <Check className="h-4 w-4" aria-hidden="true" /> : null}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+
+interface ComposerToolsTabsProps {
+  idBase: string
+  value: ComposerToolsTabId
+  onChange: (tab: ComposerToolsTabId) => void
+  listRef?: Ref<HTMLDivElement>
+}
+
+export function ComposerToolsTabs({ idBase, value, onChange, listRef }: ComposerToolsTabsProps) {
+  return (
+    <div
+      ref={listRef}
+      role="tablist"
+      aria-label="工具面板分组"
+      className="mt-3 inline-flex rounded-[10px] bg-surface-subtle p-0.5"
+    >
       {composerToolsPanelTabs.map(({ id, label }) => (
         <button
           key={id}
           type="button"
           role="tab"
-          id={`composer-tools-tab-${id}`}
+          id={composerToolsTabId(idBase, id)}
           aria-selected={value === id}
-          aria-controls={`composer-tools-panel-${id}`}
+          aria-controls={composerToolsPanelId(idBase, id)}
           onClick={() => onChange(id)}
           className={cn(
             'h-11 min-w-[4.5rem] rounded-[8px] px-3 text-[13px] transition-colors duration-[160ms]',

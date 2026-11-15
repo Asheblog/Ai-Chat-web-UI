@@ -1,5 +1,6 @@
 import { forwardRef, type ButtonHTMLAttributes, type ComponentType, type ReactNode } from 'react'
 import { BookOpen, Brain, Code2, Globe2, Microscope, SlidersHorizontal } from 'lucide-react'
+import { WEB_SEARCH_SCOPE_IDS, type WebSearchScope } from '@aichat/shared'
 import { cn } from '@/lib/utils'
 
 export const composerInnerEditorClass =
@@ -41,21 +42,33 @@ export const COMPOSER_CAPABILITIES: readonly ComposerCapabilityMeta[] = [
   { id: 'python', label: 'Python', panelLabel: 'Python', description: '计算与数据分析', Icon: Code2 },
 ]
 
-export const getComposerCapability = (id: ComposerCapabilityId): ComposerCapabilityMeta =>
-  COMPOSER_CAPABILITIES.find((capability) => capability.id === id) ?? COMPOSER_CAPABILITIES[0]
+export const getComposerCapability = (id: ComposerCapabilityId): ComposerCapabilityMeta => {
+  const found = COMPOSER_CAPABILITIES.find((capability) => capability.id === id)
+  if (!found) throw new Error(`未知能力 id：${id}`)
+  return found
+}
 
-/** 联网搜索范围：沿用既有六个取值，工具面板与技能面板共用同一份。 */
-export const WEB_SEARCH_SCOPE_OPTIONS = [
-  { value: 'webpage', label: '网页' },
-  { value: 'document', label: '文档' },
-  { value: 'paper', label: '论文' },
-  { value: 'image', label: '图片' },
-  { value: 'video', label: '视频' },
-  { value: 'podcast', label: '播客' },
-] as const
+/**
+ * 联网搜索范围标签：取值来自 shared 的 WEB_SEARCH_SCOPE_IDS（七项，含 scholar/学术），
+ * Record 让漏标签在编译期报错，避免输入区再存一份少一项的枚举。
+ */
+export const WEB_SEARCH_SCOPE_LABELS: Record<WebSearchScope, string> = {
+  webpage: '网页',
+  document: '文档',
+  paper: '论文',
+  scholar: '学术',
+  image: '图片',
+  video: '视频',
+  podcast: '播客',
+}
 
-export const formatWebSearchScopeLabel = (value: string | undefined): string =>
-  WEB_SEARCH_SCOPE_OPTIONS.find((option) => option.value === value)?.label ?? value ?? '网页'
+export const WEB_SEARCH_SCOPE_OPTIONS: ReadonlyArray<{ value: WebSearchScope; label: string }> =
+  WEB_SEARCH_SCOPE_IDS.map((value) => ({ value, label: WEB_SEARCH_SCOPE_LABELS[value] }))
+
+export const formatWebSearchScopeLabel = (value: string | undefined): string => {
+  if (value && value in WEB_SEARCH_SCOPE_LABELS) return WEB_SEARCH_SCOPE_LABELS[value as WebSearchScope]
+  return value || WEB_SEARCH_SCOPE_LABELS.webpage
+}
 
 interface ComposerIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean
