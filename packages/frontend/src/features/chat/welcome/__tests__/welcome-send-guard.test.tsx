@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
+import { useChatSessionControls } from '@/hooks/use-chat-session-controls'
+import { useWelcomeScreenViewModel } from '../useWelcomeScreenViewModel'
 import { WelcomeScreen } from '@/components/welcome-screen'
 import { useAuthStore } from '@/store/auth-store'
 import { useChatStore } from '@/store/chat-store'
 import { useModelsStore, type ModelItem } from '@/store/models-store'
-import { useModelPreferenceStore } from '@/store/model-preference-store'
+import { modelKeyFor, useModelPreferenceStore } from '@/store/model-preference-store'
 import { useSettingsStore } from '@/store/settings-store'
+import { useReasoningEffortPreferenceStore } from '@/store/reasoning-effort-preference-store'
 
 const imageFixture = { dataUrl: 'data:image/png;base64,AAAA', mime: 'image/png', size: 1024 }
 let mockImages: Array<typeof imageFixture> = []
@@ -48,6 +51,7 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
   Element.prototype.scrollIntoView = vi.fn()
   useModelPreferenceStore.getState().clear()
+  useReasoningEffortPreferenceStore.getState().clear()
   useModelsStore.setState({ models: [model], isLoading: false, error: null })
   useAuthStore.setState({ actor: null, user: null, actorState: 'anonymous', quota: null })
   useSettingsStore.setState({ systemSettings: null, publicBrandText: 'AIChat' })
@@ -64,6 +68,50 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 const textarea = () => screen.getByRole('textbox', { name: '输入消息' })
 
 describe('欢迎页发送守卫（真实 handleCreate 路径）', () => {
+  it('聊天选择的模型与 Max 在欢迎页、刷新后和首条消息中继承', async () => {
+    const recentModel = { ...model, id: 'deepseek-v4.1-flash', rawId: 'deepseek-v4.1-flash' }
+    useModelsStore.setState({ models: [model, recentModel] })
+    const updateSessionPrefs = vi.fn().mockResolvedValue(true)
+    const switchSessionModel = vi.fn()
+    useChatStore.setState({ currentSession: { id: 42 } as never, updateSessionPrefs, switchSessionModel })
+    const controls = renderHook(() => useChatSessionControls({
+      currentSession: useChatStore.getState().currentSession, canUseWebSearch: false,
+      setThinkingEnabled: vi.fn(), setWebSearchEnabled: vi.fn(), setEffort: vi.fn(),
+    }))
+    act(() => {
+      controls.result.current.handleModelChange(recentModel)
+      controls.result.current.updateEffort('max')
+    })
+    controls.unmount()
+    const welcome = renderHook(() => useWelcomeScreenViewModel())
+    await waitFor(() => expect(welcome.result.current.header.selectedModelId).toBe(modelKeyFor(recentModel)))
+    expect(welcome.result.current.form.advancedOptions.effort).toBe('max')
+    welcome.unmount()
+    const restored = renderHook(() => useWelcomeScreenViewModel())
+    await waitFor(() => expect(restored.result.current.form.advancedOptions.effort).toBe('max'))
+    act(() => restored.result.current.form.onTextareaChange('帮我分析这段代码'))
+    await act(async () => restored.result.current.form.onSubmit())
+    expect(createSession.mock.calls[0][0]).toBe(recentModel.id)
+    expect(createSession.mock.calls[0][5]).toEqual({ reasoningEffort: 'max' })
+    expect(streamMessage.mock.calls[0][3]).toMatchObject({ reasoningEffort: 'max' })
+    expect(JSON.parse(localStorage.getItem('reasoning-effort-preference')!).state.lastSelection).toBe('max')
+  })
+
+  it('欢迎页显式选择默认覆盖之前的 Max，重新打开仍为默认', async () => {
+    useReasoningEffortPreferenceStore.getState().setLastSelection('max')
+    useSettingsStore.setState({ systemSettings: { openaiReasoningEffort: 'medium' } as never })
+    const welcome = renderHook(() => useWelcomeScreenViewModel())
+    await waitFor(() => expect(welcome.result.current.form.advancedOptions.effort).toBe('max'))
+    act(() => welcome.result.current.form.advancedOptions.onEffortChange('unset'))
+    welcome.unmount()
+    const restored = renderHook(() => useWelcomeScreenViewModel())
+    await waitFor(() => expect(restored.result.current.form.advancedOptions.effort).toBe('unset'))
+    act(() => restored.result.current.form.onTextareaChange('使用默认强度'))
+    await act(async () => restored.result.current.form.onSubmit())
+    expect(createSession.mock.calls[0][5]).toEqual({ reasoningEffort: 'unset' })
+    expect(streamMessage.mock.calls[0][3]?.reasoningEffort).toBeUndefined()
+  })
+
   it('空草稿按 Enter 不创建会话', async () => {
     render(<WelcomeScreen />)
 

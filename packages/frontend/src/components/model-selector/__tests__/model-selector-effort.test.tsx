@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ModelSelector } from '@/components/model-selector'
+import { MODEL_REASONING_EFFORTS, ModelSelector } from '@/components/model-selector'
 import { modelKeyFor } from '@/store/model-preference-store'
 import { useModelsStore, type ModelItem } from '@/store/models-store'
 import {
@@ -80,6 +80,24 @@ describe('ModelSelector combined model and reasoning effort', () => {
     expect(onEffortChange).toHaveBeenCalledExactlyOnceWith(value)
     expect(screen.getByRole('textbox', { name: /搜索模型/ })).toBeVisible()
     expect(screen.queryByRole('list', { name: '思考强度选项' })).not.toBeInTheDocument()
+  })
+
+  it('orders the effort rows from default through the strongest setting', async () => {
+    const { user } = await openCombined({ initialEffort: 'unset' })
+    await user.click(screen.getByRole('button', { name: /^思考强度/ }))
+    const list = screen.getByRole('list', { name: '思考强度选项' })
+    const rows = Array.from(list.querySelectorAll('[data-effort-row]')).map(row => row.getAttribute('data-effort-row'))
+    expect(rows).toEqual(['unset', 'low', 'medium', 'high', 'xhigh', 'max'])
+    const expectedLabels = ['默认', 'Low', 'Medium', 'High', 'XHigh', 'Max']
+    const buttons = within(list).getAllByRole('button')
+    expect(buttons).toHaveLength(expectedLabels.length)
+    expectedLabels.forEach((label, index) => {
+      expect(buttons[index]).toHaveAccessibleName(new RegExp('^' + label))
+    })
+  })
+
+  it('keeps the exported effort list in the same ascending order', () => {
+    expect([...MODEL_REASONING_EFFORTS]).toEqual(['unset', 'low', 'medium', 'high', 'xhigh', 'max'])
   })
 
   it('synchronises the trigger with the chosen effort', async () => {

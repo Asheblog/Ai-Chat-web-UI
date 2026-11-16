@@ -13,6 +13,7 @@ import {
   findPreferredModel,
   modelKeyFor,
 } from '@/store/model-preference-store'
+import { useReasoningEffortPreferenceStore } from '@/store/reasoning-effort-preference-store'
 import { useWebSearchPreferenceStore } from '@/store/web-search-preference-store'
 import { usePythonToolPreferenceStore } from '@/store/python-tool-preference-store'
 import { useDeepResearchPreferenceStore } from '@/store/deep-research-preference-store'
@@ -86,6 +87,8 @@ export const useWelcomeScreenViewModel = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const actorType = actor?.type ?? 'anonymous'
   const preferred = useModelPreferenceStore((state) => state.preferred)
+  const storedEffortPreference = useReasoningEffortPreferenceStore((state) => state.lastSelection)
+  const persistEffortPreference = useReasoningEffortPreferenceStore((state) => state.setLastSelection)
   const modelsCount = models?.length ?? 0
   const storedWebSearchPreference = useWebSearchPreferenceStore((state) => state.lastSelection)
   const persistWebSearchPreference = useWebSearchPreferenceStore((state) => state.setLastSelection)
@@ -256,7 +259,7 @@ export const useWelcomeScreenViewModel = () => {
     const raw = (systemSettings?.openaiReasoningEffort ?? '') as any
     const sysEffort: 'unset' | 'low' | 'medium' | 'high' | 'max' | 'xhigh' = raw && raw !== '' ? raw : 'unset'
     if (!thinkingTouched) setThinkingEnabled(sysEnabled)
-    if (!effortTouched) setEffort(sysEffort)
+    if (!effortTouched) setEffort(storedEffortPreference ?? sysEffort)
     if (!sessionPromptTouched) {
       setSessionPromptDraft(systemSettings?.chatSystemPrompt || '')
     }
@@ -266,6 +269,7 @@ export const useWelcomeScreenViewModel = () => {
     systemSettings?.chatSystemPrompt,
     thinkingTouched,
     effortTouched,
+    storedEffortPreference,
     sessionPromptTouched,
   ])
 
@@ -526,6 +530,7 @@ export const useWelcomeScreenViewModel = () => {
         selectedModel.connectionId,
         selectedModel.rawId,
         normalizedPrompt || undefined,
+        { reasoningEffort: effort },
       )
       // 上传成功的文件元数据，用于构造 manifest
       const uploadedFilesMeta: Array<{ originalName: string; workspacePath: string }> = []
@@ -589,10 +594,9 @@ export const useWelcomeScreenViewModel = () => {
 
       try {
         const session = useChatStore.getState().currentSession
-        if (session && (thinkingTouched || effortTouched || sessionPromptTouched)) {
+        if (session && (thinkingTouched || sessionPromptTouched)) {
           const prefs: Record<string, any> = {}
           if (thinkingTouched) prefs.reasoningEnabled = !!thinkingEnabled
-          if (effortTouched && effort !== 'unset') prefs.reasoningEffort = effort
           if (sessionPromptTouched) prefs.systemPrompt = sessionPromptDraft.trim() || null
           if (Object.keys(prefs).length > 0) {
             await useChatStore.getState().updateSessionPrefs(session.id, prefs)
@@ -679,7 +683,7 @@ export const useWelcomeScreenViewModel = () => {
           }
           const options: Record<string, any> = {}
           if (thinkingTouched) options.reasoningEnabled = thinkingEnabled
-          if (effortTouched && effort !== 'unset') options.reasoningEffort = effort
+          if (effort !== 'unset') options.reasoningEffort = effort
           if (builtinSkills.length > 0 || resolvedExtraSkills.length > 0) {
             options.skills = {
               ...(builtinSkills.length > 0 ? { builtin: Array.from(new Set(builtinSkills)) } : {}),
@@ -845,6 +849,7 @@ export const useWelcomeScreenViewModel = () => {
         onEffortChange: (value: 'unset' | 'low' | 'medium' | 'high' | 'max' | 'xhigh') => {
           setEffortTouched(true)
           setEffort(value)
+          persistEffortPreference(value)
         },
         webSearchEnabled,
         onToggleWebSearch: (value: boolean) => {

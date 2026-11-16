@@ -1,7 +1,8 @@
+import type { ReasoningEffortSelection } from '@/types/chat'
 import type { ModelItem } from '@/store/models-store'
 
-/** 六种强度值与 unset；unset 表示不显式设置，沿用系统设置。 */
-export const MODEL_REASONING_EFFORTS = ['unset', 'low', 'medium', 'high', 'max', 'xhigh'] as const
+/** 六种强度值与 unset，按从默认到最强的顺序排列；unset 表示不显式设置，沿用系统设置。 */
+export const MODEL_REASONING_EFFORTS = ['unset', 'low', 'medium', 'high', 'xhigh', 'max'] as const satisfies readonly ReasoningEffortSelection[]
 export type ModelReasoningEffort = (typeof MODEL_REASONING_EFFORTS)[number]
 
 /** 强度状态由上层持有；选择器只回传变化，不保存默认值或示例值。 */

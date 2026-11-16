@@ -77,16 +77,19 @@ export const createSessionSlice: ChatSliceCreator<SessionSlice & {
     return fetchSessionsInFlight
   },
 
-  createSession: async (modelId, title, connectionId, rawId, systemPrompt) => {
+  createSession: async (modelId, title, connectionId, rawId, systemPrompt, options) => {
     runtime.stopAllMessagePollers()
     set({ isSessionsLoading: true, error: null })
     try {
+      const selectedEffort = options?.reasoningEffort
       const response = await createSessionByModelId(
         modelId,
         title,
         connectionId,
         rawId,
         systemPrompt ?? undefined,
+        undefined,
+        { reasoningEffort: selectedEffort === 'unset' ? undefined : selectedEffort },
       )
       const newSession = response.data as ChatSession
       set((state) => ({

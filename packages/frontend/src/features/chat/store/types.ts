@@ -12,6 +12,7 @@ import type {
   SkillRuntimeReference,
 } from '@/types'
 import type { ModelItem } from '@/store/models-store'
+import type { ReasoningEffortSelection } from '@/types/chat'
 import type { StateCreator, StoreApi } from 'zustand'
 
 export type MessageId = number | string
@@ -122,6 +123,7 @@ export interface SessionSlice {
     connectionId?: number,
     rawId?: string,
     systemPrompt?: string | null,
+    options?: { reasoningEffort?: ReasoningEffortSelection },
   ) => Promise<ChatSession | null>
   selectSession: (sessionId: number) => void
   deleteSession: (sessionId: number) => Promise<void>

@@ -9,10 +9,11 @@
 
 ## 组合模式：模型与思考强度
 - 传入 `reasoningControl` 后启用组合模式：触发器同时显示模型名与当前强度（如 `DeepSeek V4.1 Flash Max`），`unset` 显示“默认”。
-- 强度六值沿用设置语义：`unset | low | medium | high | max | xhigh`。组件不保存强度，也不写默认值或示例值；值全部来自 `reasoningControl.value`。
+- 强度六值沿用设置语义，按从默认到最强的顺序呈现：`unset | low | medium | high | xhigh | max`（默认、Low、Medium、High、XHigh、Max）。列表顺序与 `MODEL_REASONING_EFFORTS` 一致，上下键沿同一顺序移动。组件不保存强度，也不写默认值或示例值；值全部来自 `reasoningControl.value`。
 - 同一面板内两个视图。模型列表底部固定“思考强度（当前值）”入口，进入后标题变“思考强度”、左侧返回、当前模型名作为上下文行；选择后回传 `onChange` 并回到模型列表。
 - 组合模式选择模型后保留面板以便继续调整强度；未提供 `reasoningControl` 的旧调用仍然是选择即关闭。
 - 深度思考开关独立表达开关状态，不在选择器内重复。
+- 欢迎页与聊天页的调用方记录最近显式选择的模型和强度，供新会话继承；强度在当前浏览器持久化，选择“默认”也会记住。旧会话仍读取自己的强度，浏览旧会话不会覆盖最近选择。
 
 ## 可选受控接口
 - `open` / `onOpenChange`：受控展开。提供 `open` 时组件不再自持展开状态，仍会上报关闭意图，便于“思考”等入口直达强度页。

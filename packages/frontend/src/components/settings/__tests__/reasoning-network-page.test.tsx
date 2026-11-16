@@ -197,6 +197,19 @@ describe("ReasoningNetworkPage", () => {
     expect(screen.getByRole("button", { name: "保存设置" })).toBeDisabled()
   })
 
+  test("OpenAI reasoning_effort 选项按 不设置 → low → medium → high → xhigh → max 排列", async () => {
+    render(<ReasoningNetworkPage />)
+    const card = getCard("流式与性能")
+
+    await userEvent.click(within(card).getByRole("button", { name: "更多参数" }))
+    await userEvent.click(within(card).getByRole("combobox"))
+
+    const options = await screen.findAllByRole("option")
+    expect(options.map(option => option.textContent?.trim())).toEqual([
+      "不设置", "low", "medium", "high", "xhigh", "max",
+    ])
+  })
+
   test("dirty 跟踪：修改任一字段保存启用，改回原值后 disabled", () => {
     render(<ReasoningNetworkPage />)
     const saveButton = screen.getByRole("button", { name: "保存设置" })
