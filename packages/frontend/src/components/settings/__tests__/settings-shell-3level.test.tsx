@@ -266,7 +266,7 @@ describe("SettingsShell 3 级嵌套导航", () => {
     expect(docsIcon?.querySelector("svg")).not.toBeNull()
   })
 
-  test("active leaf 高亮显示（白底 + 发丝线 + data-active）", async () => {
+  test("active leaf 以青绿色高亮并标记当前页", async () => {
     render(
       <SettingsShell
         mode="nested"
@@ -283,8 +283,8 @@ describe("SettingsShell 3 级嵌套导航", () => {
     await waitFor(() => {
       const connBtn = screen.getByText("连接管理").closest("button")
       expect(connBtn).toHaveAttribute("data-active", "true")
-      expect(connBtn?.className).toContain("bg-surface")
-      expect(connBtn?.className).toContain("border-border")
+      expect(connBtn).toHaveAttribute("aria-current", "page")
+      expect(connBtn?.className).toContain("bg-signal-soft")
     })
   })
 })

@@ -21,10 +21,12 @@ scenarios.push(
  {id:'models-error',path:'/main',actor:'admin',flow:'welcome',variant:'models-error'},
  {id:'models-refresh-error',path:'/main',actor:'admin',flow:'welcome',variant:'models-refresh-error'},
  {id:'models-loading',path:'/main',actor:'admin',flow:'welcome',variant:'models-loading'},
+ {id:'settings-loading',path:'/main/settings/system',actor:'admin',flow:'system-states',variant:'settings-loading'},
+ {id:'settings-error',path:'/main/settings/system',actor:'admin',flow:'system-states',variant:'settings-error'},
  {id:'logs-first-error',path:'/main/logs/system',actor:'admin',flow:'logs-error',variant:'logs-first-error'},
  {id:'logs-refresh-error',path:'/main/logs/system',actor:'admin',flow:'logs-system',variant:'logs-refresh-error'},
  {id:'battle-result',path:'/main/battle/multi-model',actor:'admin',flow:'battle-multi',variant:'battle-result'},
 );
 const viewports = [{ width: 1440, height: 1000 }, { width: 390, height: 844 }, { width: 358, height: 800 }, { width: 320, height: 760 }];
-const dark = ['welcome', 'session', 'personal', 'system', 'share', 'battle', 'battle-result', 'models-empty', 'models-error', 'logs-refresh-error'];
+const dark = ['welcome', 'session', 'personal', 'system', 'share', 'battle', 'battle-result', 'models-empty', 'models-error', 'logs-refresh-error', 'settings-error'];
 module.exports = { scenarios, viewports, dark };

@@ -13,13 +13,14 @@ const csv=(key,fallback)=>arg(key,fallback).split(',');
 const isExpectedHttp=(id,status,pathname)=>(id==='share-error'&&status===404&&pathname==='/share/ui-v2-missing')||status===503&&(({
  'models-error':'/api/catalog/models','models-refresh-error':'/api/catalog/models',
  'logs-first-error':'/api/system-logs','logs-refresh-error':'/api/system-logs',
+ 'settings-error':'/api/settings/system',
 })[id]===pathname);
 function expectedConsole(scenario,msg){
  if(msg.type!=='console')return false;
  const status=msg.text.match(/^Failed to load resource: the server responded with a status of (503|404) /);
  if(status){try{return isExpectedHttp(scenario.id,Number(status[1]),new URL(msg.location.url).pathname);}catch{return false;}}
- const logged=msg.text.match(/\[ERROR\] HTTP Error Request failed with status code (503) in [0-9]+ms \{url: (https?:\/\/[^, ]+), status: 503,/);
- if(logged){try{return isExpectedHttp(scenario.id,503,new URL(logged[2]).pathname);}catch{return false;}}
+ const logged=msg.text.match(/\[ERROR\] HTTP Error Request failed with status code (503) in [0-9]+ms \{url: (https?:\/\/[^, ]+|\/[^, ]+), status: 503,/);
+ if(logged){try{return isExpectedHttp(scenario.id,503,new URL(logged[2],'http://localhost').pathname);}catch{return false;}}
  return false;
 }
 function runtime() {

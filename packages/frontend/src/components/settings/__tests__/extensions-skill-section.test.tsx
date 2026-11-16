@@ -140,8 +140,8 @@ describe("Skill 段：四标签与页头", () => {
       "版本",
       "绑定",
     ])
-    expect(screen.getByRole("heading", { name: "Skill" })).toBeInTheDocument()
-    expect(screen.getByText("Skill 安装、待审批调用、版本激活与绑定策略")).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: "Skill", level: 1 })).toBeInTheDocument()
+    expect(screen.getByText("管理第三方 Skill 的安装、调用审批、版本与绑定。")).toBeInTheDocument()
     // 安装段直接渲染既有 SkillInstallSection（无 FeatureCard 外壳）
     expect(screen.getByRole("button", { name: "安装" })).toBeInTheDocument()
     expect(container.querySelector('[data-card-key="extensions:skill-install"]')).not.toBeNull()

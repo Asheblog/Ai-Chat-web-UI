@@ -1,5 +1,5 @@
 import React from "react"
-import { cleanup, render, screen, waitFor } from "@testing-library/react"
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { SettingsDialog } from "../settings-dialog"
 
@@ -47,8 +47,8 @@ vi.mock("@/components/settings/system-settings-registry", async (importOriginal)
   }
 })
 
-const dispatchSelect = (detail: { key: string; cardKey?: string; origin?: string }) => {
-  window.dispatchEvent(new CustomEvent("aichat:system-settings-select", { detail }))
+const dispatchSelect = (detail: { key: string; cardKey?: string; origin?: string; hostId?: string }) => {
+  act(() => window.dispatchEvent(new CustomEvent("aichat:system-settings-select", { detail })))
 }
 
 beforeEach(() => {
@@ -72,6 +72,20 @@ describe("SettingsDialog 搜索接入", () => {
     render(<SettingsDialog open onOpenChange={vi.fn()} defaultTab="system" />)
     dispatchSelect({ key: "models", origin: "search" })
     await waitFor(() => expect(screen.getByTestId("leaf-models")).toBeInTheDocument())
+  })
+
+  test("旧扩展卡片链接定位到新子页及对应位置提示", async () => {
+    render(<SettingsDialog open onOpenChange={vi.fn()} defaultTab="system" />)
+    dispatchSelect({ key: "extensions", cardKey: "extensions:mcp-secrets", origin: "search" })
+    await waitFor(() => expect(screen.getByTestId("leaf-extensions-mcp")).toBeInTheDocument())
+    expect(screen.getByRole("status").textContent).toContain("工具与扩展 → MCP 服务")
+  })
+
+  test("layout 宿主事件不会切换打开的弹窗", async () => {
+    render(<SettingsDialog open onOpenChange={vi.fn()} defaultTab="system" />)
+    dispatchSelect({ key: "extensions-mcp", hostId: "layout" })
+    expect(screen.getByTestId("leaf-overview")).toBeInTheDocument()
+    expect(screen.queryByTestId("leaf-extensions-mcp")).not.toBeInTheDocument()
   })
 
   test("搜索来源（origin=search）的 select 事件显示位置提示条「已定位到」", async () => {

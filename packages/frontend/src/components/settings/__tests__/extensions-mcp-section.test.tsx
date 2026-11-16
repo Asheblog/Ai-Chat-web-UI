@@ -82,9 +82,12 @@ describe("MCP 段：五标签与全局开关", () => {
     ])
     expect(screen.queryByRole("tab", { name: "总览" })).toBeNull()
 
-    expect(screen.getByRole("heading", { name: "MCP 服务" })).toBeInTheDocument()
+    // 当前段用 h1：一页一个主标题；keep-alive 隐藏时降为 h2
+    expect(screen.getByRole("heading", { name: "MCP 服务", level: 1 })).toBeInTheDocument()
     // 段头说明的唯一来源是 EXTENSION_SECTIONS，不再由段组件各写一份
-    expect(screen.getByText("MCP 服务模板、连接、凭据、工具与绑定作用域")).toBeInTheDocument()
+    expect(
+      screen.getByText("连接外部工具与数据源，管理模型可以调用的服务。"),
+    ).toBeInTheDocument()
     expect(screen.getByText("安装模板面板")).toBeInTheDocument()
     expect(container.querySelector('[data-card-key="extensions:mcp-installations"]')).not.toBeNull()
   })

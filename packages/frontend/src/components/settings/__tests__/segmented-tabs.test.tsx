@@ -163,3 +163,83 @@ describe("SegmentedTabs", () => {
     expect(screen.getByRole("tab", { name: "绑定" }).className).toContain("border-transparent")
   })
 })
+
+describe("SegmentedTabs · underline（Figma 工具与扩展段页头）", () => {
+  const renderUnderline = (active: SegmentKey, onChange = vi.fn()) =>
+    render(
+      <SegmentedTabs
+        items={items}
+        active={active}
+        onChange={onChange}
+        ariaLabel={ARIA_LABEL}
+        variant="underline"
+      />,
+    )
+
+  test("一条下划线行，不套胶囊底：容器只留发丝线，标签不再有圆角底色", () => {
+    renderUnderline("install")
+
+    const tablist = screen.getByRole("tablist", { name: ARIA_LABEL })
+    expect(tablist.className).toContain("border-b")
+    expect(tablist.className).toContain("flex-wrap")
+    expect(tablist.className).not.toContain("bg-surface-subtle")
+    expect(tablist.className).not.toContain("rounded-lg")
+
+    const tab = screen.getByRole("tab", { name: "安装" })
+    // 手机 44px 触控高度，桌面收回到 36px 行高
+    expect(tab.className).toContain("min-h-11")
+    expect(tab.className).toContain("md:min-h-9")
+    // 2px 底线压住容器发丝线
+    expect(tab.className).toContain("border-b-2")
+    expect(tab.className).toContain("-mb-px")
+  })
+
+  test("选中项青瓷色文字 + 底线，未选中项透明底线，颜色靠文字色区分", () => {
+    renderUnderline("approvals")
+
+    const selected = screen.getByRole("tab", { name: /待审批/ })
+    expect(selected).toHaveAttribute("aria-selected", "true")
+    expect(selected.className).toContain("border-signal")
+    expect(selected.className).toContain("text-signal-text")
+    expect(selected.className).not.toContain("bg-surface-subtle")
+
+    const idle = screen.getByRole("tab", { name: "安装" })
+    expect(idle.className).toContain("border-transparent")
+    expect(idle.className).toContain("text-ink-secondary")
+  })
+
+  test("标签语义与 pill 变体一致：id/aria-controls 成对、点击回调收到 key、焦点环交给全局", () => {
+    const onChange = vi.fn()
+    render(
+      <SegmentedTabs
+        items={items}
+        active="install"
+        onChange={onChange}
+        ariaLabel={ARIA_LABEL}
+        idPrefix="skill-tab"
+        variant="underline"
+      />,
+    )
+
+    const tab = screen.getByRole("tab", { name: "安装" })
+    expect(tab).toHaveAttribute("id", "skill-tab-install")
+    expect(tab).toHaveAttribute("aria-controls", "skill-tab-panel-install")
+    expect(tab.getAttribute("type")).toBe("button")
+    expect(tab.className).not.toContain("outline-none")
+    for (const node of screen.getAllByRole("tab")) {
+      expect(node.className).not.toContain("ring-")
+      expect(node.className).not.toContain("shadow")
+    }
+
+    fireEvent.click(screen.getByRole("tab", { name: "绑定" }))
+    expect(onChange).toHaveBeenCalledWith("bindings")
+  })
+
+  test("badge 与 icon 在两种外观下渲染一致", () => {
+    renderUnderline("install")
+
+    const approvalsTab = screen.getByRole("tab", { name: /待审批/ })
+    expect(within(approvalsTab).getByText("3")).toBeInTheDocument()
+    expect(approvalsTab.querySelector("svg")).not.toBeNull()
+  })
+})

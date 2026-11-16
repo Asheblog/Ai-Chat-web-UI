@@ -3,6 +3,16 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { PersonalSettings } from "@/components/personal-settings"
 import { McpSection } from "@/components/settings/pages/extensions/sections/mcp-section"
+/**
+ * 预载 next/dynamic 的叶子模块：产品仍走 next/dynamic，测试只是先把 chunk 的
+ * Vite 转换成本付在 import 阶段。否则冷启动首次 render 会在 waitFor 的
+ * 轮询窗口里做整棵子树的转换（阻塞事件循环），并行跑全套时必然超时，
+ * 断言就会停在「正在加载个人设置…」。
+ */
+import "@/components/settings/pages/PersonalPreferences"
+import "@/components/settings/pages/PersonalSkills"
+import "@/components/settings/pages/ShareManagement"
+import "@/components/settings/pages/PersonalSecurity"
 
 // jsdom 未实现 Pointer Capture API（Radix Select / Dropdown 交互依赖）
 if (!Element.prototype.hasPointerCapture) {
@@ -145,7 +155,9 @@ describe("PersonalSettings 个人设置分区", () => {
     await flushAsync()
     await screen.findByRole("heading", { name: "MCP 服务" })
 
-    expect(screen.getByText(/MCP 服务模板、连接、凭据、工具与绑定作用域/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/连接外部工具与数据源，管理模型可以调用的服务。/),
+    ).toBeInTheDocument()
   })
 })
 

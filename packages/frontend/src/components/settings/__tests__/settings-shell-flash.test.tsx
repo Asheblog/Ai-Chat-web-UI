@@ -53,6 +53,7 @@ beforeAll(() => {
 afterEach(() => {
   cleanup()
   scrollIntoViewSpy.mockClear()
+  vi.restoreAllMocks()
 })
 
 describe("SettingsShell 导航闪烁（flashKey）", () => {
@@ -85,7 +86,11 @@ describe("SettingsShell 导航闪烁（flashKey）", () => {
   })
 
   test("prefers-reduced-motion 时跳过闪烁动画、直接触发 onFlashDone", async () => {
-    vi.stubGlobal("matchMedia", () => ({ matches: true }) as MediaQueryList)
+    vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+      matches: true, media: query, onchange: null,
+      addListener: vi.fn(), removeListener: vi.fn(),
+      addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn(),
+    }))
     const onFlashDone = vi.fn()
     renderShell({ flashKey: "models", onFlashDone })
 
@@ -93,7 +98,6 @@ describe("SettingsShell 导航闪烁（flashKey）", () => {
     await waitFor(() => expect(onFlashDone).toHaveBeenCalledTimes(1))
     expect(button.classList.contains("settings-flash")).toBe(false)
     expect(scrollIntoViewSpy).toHaveBeenCalled()
-    vi.unstubAllGlobals()
   })
 
   test("动画结束后触发 onFlashDone（animationend 一次性监听）", async () => {

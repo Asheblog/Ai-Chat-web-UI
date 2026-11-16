@@ -31,9 +31,10 @@ describe("InstallationsTab 表单标签", () => {
   it("新建表单使用中文标签，原样字段收进默认收起的 details", async () => {
     const { container } = render(<InstallationsTab />)
 
-    // 等列表请求落地（空列表渲染空状态），再打开表单
+    // 等列表请求落地（空列表渲染空状态），再打开表单：
+    // 0 项时表头不再出「新建」，空态中央的「新建模板」是唯一入口
     await screen.findByText("暂无安装模板")
-    fireEvent.click(screen.getByRole("button", { name: "新建" }))
+    fireEvent.click(screen.getByRole("button", { name: "新建模板" }))
 
     for (const label of FLAT_LABELS) {
       expect(screen.getByText(label)).toBeInTheDocument()

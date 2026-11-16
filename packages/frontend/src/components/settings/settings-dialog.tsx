@@ -12,6 +12,7 @@ import { useAuthStore } from "@/store/auth-store"
 import { useToast } from "@/components/ui/use-toast"
 // import { PersonalModelsPage } from "./pages/PersonalModels"
 import { DEFAULT_SYSTEM_LEAF, renderSystemLeaf } from "./system-settings-registry"
+import { resolveExtensionLeaf } from "./extensions-navigation"
 
 type FlashTarget = { leafKey: string; cardKey?: string }
 
@@ -245,9 +246,9 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
   useEffect(() => {
     const onSelect = (event: Event) => {
       if (!openRef.current) return
-      const detail = (event as CustomEvent<{ key?: string; cardKey?: string; origin?: string }>).detail
-      if (!detail?.key) return
-      const target = resolveSelectTarget(filteredTree, detail.key)
+      const detail = (event as CustomEvent<{ key?: string; cardKey?: string; origin?: string; hostId?: string }>).detail
+      if (!detail?.key || (detail.hostId && detail.hostId !== "dialog")) return
+      const target = resolveSelectTarget(filteredTree, resolveExtensionLeaf(detail.key, detail.cardKey))
       if (!target) return
       setActiveMain(target.main)
       setActiveSub(target.sub)

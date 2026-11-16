@@ -2,6 +2,15 @@ import React from 'react'
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PersonalSettings } from '@/components/personal-settings'
+/**
+ * 预载 next/dynamic 的叶子模块：产品仍走 next/dynamic（懒加载契约不变），
+ * 测试只是把 chunk 的转换成本提前到 import 阶段，避免冷启动首次 render
+ * 在 waitFor 窗口里阻塞事件循环、并行跑时超时停在「正在加载个人设置…」。
+ */
+import '@/components/settings/pages/PersonalPreferences'
+import '@/components/settings/pages/PersonalSkills'
+import '@/components/settings/pages/ShareManagement'
+import '@/components/settings/pages/PersonalSecurity'
 
 const toastSpy = vi.hoisted(() => vi.fn())
 vi.mock('@/components/ui/use-toast', () => ({

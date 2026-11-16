@@ -22,7 +22,9 @@ function makeResolver(options={}) {
    case 'POST /catalog/models/refresh':return ok({count:f.models.length});
    case 'GET /catalog/models/overrides':return ok([]);
    case 'GET /settings/branding':return ok({brand_text:'AIChat · Fixture'});
-   case 'GET /settings/system':return ok(settings);
+   case 'GET /settings/system':
+    if(options.variant==='settings-error'&&!options.settingsRecovered)return {status:503,body:{success:false,error:'Fixture 系统设置暂不可用'}};
+    return ok(settings);
    case 'PUT /settings/system':Object.assign(settings,body);return ok({saved:true});
    case 'GET /settings/app-info':return ok({name:'AIChat · Fixture',version:'fixture',mode:'development',features:{battle:true,share:true},limits:{system_prompt_max_length:12000}});
    case 'GET /settings/setup-status':return ok({setup_state:'completed',hasAdmin:true,hasConnections:true,hasModels:true,completed:true});
@@ -60,7 +62,17 @@ function makeResolver(options={}) {
    case 'GET /task-trace/9401':return ok({trace,latexTrace:null,events,truncated:false});
    case 'GET /battle/runs':return ok({runs:[battle],pagination:pagination(1)});
    case 'GET /battle/runs/9201':return ok(battle);
-   case 'GET /settings/python-runtime':return ok({enabled:false,available:false,status:'unavailable',packages:[],installedPackages:[],indexes:[],message:'Fixture 运行时未连接'});
+   case 'GET /settings/python-runtime':return ok({
+    dataRoot:'fixture/data/python-runtime',runtimeRoot:'fixture/data/python-runtime',
+    venvPath:'fixture/data/python-runtime/venv',pythonPath:'fixture/data/python-runtime/venv/bin/python',
+    ready:true,
+    indexes:{indexUrl:'https://pypi.fixture.invalid/simple',extraIndexUrls:[],trustedHosts:['pypi.fixture.invalid'],autoInstallOnActivate:true,autoInstallOnMissing:false},
+    manualPackages:[],
+    installedPackages:[{name:'fixture-pkg',version:'1.0.0',versionSource:'manual'}],
+    packageSources:[{name:'fixture-pkg',sources:['manual']}],
+    activeDependencies:[],
+    conflicts:[],
+   });
    default:return null;
   }
  };
@@ -68,6 +80,7 @@ function makeResolver(options={}) {
 async function installRoutes(context,options,report) {
  const resolve=makeResolver(options);
  let releaseModels;const modelGate=options.variant==='models-loading'?new Promise(resolve=>{releaseModels=resolve;}):null;
+ let releaseSettings;const settingsGate=options.variant==='settings-loading'?new Promise(resolve=>{releaseSettings=resolve;}):null;
  const allowedOrigins=new Set([options.baseOrigin,'http://localhost:3000','http://127.0.0.1:3000','http://127.0.0.1:18001']);
  await context.route(url=>/^https?:$/.test(url.protocol),async route=>{
   const req=route.request(),url=new URL(req.url());
@@ -79,6 +92,7 @@ async function installRoutes(context,options,report) {
    const path=url.pathname.slice(4),method=req.method();
    if(method==='OPTIONS')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':options.baseOrigin,'Access-Control-Allow-Credentials':'true','Access-Control-Allow-Headers':'Content-Type','Access-Control-Allow-Methods':'GET,POST,PUT,PATCH,DELETE,OPTIONS'}});
    if(path==='/catalog/models'&&method==='GET'&&modelGate)await modelGate;
+   if(path==='/settings/system'&&method==='GET'&&settingsGate)await settingsGate;
    let body;try{body=req.postDataJSON()||{};}catch{body={};}
    const response=resolve(method,path,url.searchParams,body);
    report.api.push({method,path,fixture:!!response});
@@ -95,6 +109,6 @@ async function installRoutes(context,options,report) {
   }
   return route.continue();
  });
- return {releaseModels:()=>releaseModels?.(),failLogs:()=>{options.failLogs=true;},failModels:()=>{options.failModels=true;},recoverModels:()=>{options.modelsRecovered=true;}};
+ return {releaseModels:()=>releaseModels?.(),failLogs:()=>{options.failLogs=true;},failModels:()=>{options.failModels=true;},recoverModels:()=>{options.modelsRecovered=true;},releaseSettings:()=>releaseSettings?.(),recoverSettings:()=>{options.settingsRecovered=true;}};
 }
 module.exports={makeResolver,installRoutes};

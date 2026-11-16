@@ -84,7 +84,10 @@ export function BindingsTab() {
 
   return (
     <div className="space-y-3">
-      <McpListHeader count={items.length} actionLabel="新建" onAction={() => setShowForm(!showForm)} />
+      {/* 列表头只在有数据时出现：0 项时它与空态中央的 CTA 重复，空态只留一个主操作 */}
+      {items.length > 0 && (
+        <McpListHeader count={items.length} actionLabel="新建" onAction={() => setShowForm(!showForm)} />
+      )}
 
       {showForm && (
         <McpFormPanel

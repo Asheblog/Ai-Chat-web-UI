@@ -40,10 +40,13 @@ const TAB_PREFIX = "skill-tab"
 export function SkillSection({
   segment,
   onSegmentChange,
+  active = true,
 }: {
   /** 次级标签由页面持有：卡定位/搜索需要先切段再交给 SystemLeafWrapper 滚动。 */
   segment: SkillSegment
   onSegmentChange: (segment: SkillSegment) => void
+  /** 本段是否为当前段：决定主标题层级 */
+  active?: boolean
 }): JSX.Element {
   const {
     loading,
@@ -74,6 +77,7 @@ export function SkillSection({
     <div className="space-y-3">
       <SectionHeader
         sectionKey="skills"
+        active={active}
         aside={
           <SectionSwitch
             settingsKey="chatDynamicSkillRuntimeEnabled"
@@ -92,6 +96,7 @@ export function SkillSection({
         onChange={onSegmentChange}
         ariaLabel="Skill 次级标签"
         idPrefix={TAB_PREFIX}
+        variant="underline"
       />
 
       <div

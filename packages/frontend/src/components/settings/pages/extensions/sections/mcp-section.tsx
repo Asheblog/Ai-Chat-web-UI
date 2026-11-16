@@ -56,10 +56,13 @@ const TAB_PREFIX = "mcp-tab"
 export function McpSection({
   segment,
   onSegmentChange,
+  active = true,
 }: {
   /** 次级标签由页面持有：卡定位/搜索需要先切段再交给 SystemLeafWrapper 滚动。 */
   segment: McpSegment
   onSegmentChange: (segment: McpSegment) => void
+  /** 本段是否为当前段：决定主标题层级 */
+  active?: boolean
 }): JSX.Element {
   // 开关本身的读写归 SectionSwitch；本段只读同一份 store 判断要不要提示「全局已关闭」。
   const { settings } = useSystemSettings()
@@ -71,6 +74,7 @@ export function McpSection({
     <div className="space-y-3">
       <SectionHeader
         sectionKey="mcp"
+        active={active}
         aside={
           <SectionSwitch
             settingsKey="mcpGlobalEnabled"
@@ -88,6 +92,7 @@ export function McpSection({
         onChange={onSegmentChange}
         ariaLabel="MCP 服务次级标签"
         idPrefix={TAB_PREFIX}
+        variant="underline"
       />
 
       {globalEnabled === false && segment !== "installations" && (

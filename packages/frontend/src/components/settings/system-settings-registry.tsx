@@ -4,6 +4,8 @@ import dynamic from "next/dynamic"
 import type { ComponentType, ReactNode } from "react"
 import { peekFlash } from "./settings-flash-bus"
 import { SystemLeafWrapper } from "./system-leaf-wrapper"
+import { getExtensionSection, extensionLeafForSection } from "./extensions-navigation"
+import type { ExtensionSection } from "./pages/extensions/extensions-sections"
 
 // 导航树、卡索引与位置描述都在纯数据层 system-settings-tree.tsx：
 // 概览页也要读导航树，若与组件一起放在本文件会形成 registry → overview → registry 循环 import。
@@ -73,7 +75,6 @@ const leafComponentMap: Record<string, ComponentType> = {
   models: ModelsPage,
   "session-defaults": SessionDefaultsPage,
   "search-knowledge": SearchKnowledgePage,
-  extensions: ExtensionsPage,
   "users-registration": UsersRegistrationPage,
   branding: BrandingPage,
   "logs-audit": SystemSkillAuditsPage,
@@ -91,7 +92,8 @@ export const DEFAULT_SYSTEM_LEAF = "overview"
  * Returns null if not found.
  */
 export function renderSystemLeaf(key: string, hostId?: string): ReactNode | null {
-  const Component = leafComponentMap[key]
+  const extensionSection = getExtensionSection(key)
+  const Component = extensionSection ? ExtensionsPage : leafComponentMap[key]
   if (!Component) return null
   // 渲染期读取（不消费）待处理定位请求：dynamic 页面挂载晚于 wrapper 的挂载副作用，
   // 等页面自己的 effect 再读就已经被 consumeFlash 取走，冷启动会落回默认段。
@@ -99,8 +101,16 @@ export function renderSystemLeaf(key: string, hostId?: string): ReactNode | null
   return (
     <SystemLeafWrapper leafKey={key} hostId={hostId}>
       {/* 能力扩展页需要宿主标识与冷启动目标卡；其余叶子保持无 props 渲染 */}
-      {key === "extensions" ? (
-        <ExtensionsPage hostId={hostId} initialCardKey={initialCardKey} />
+      {extensionSection ? (
+        <ExtensionsPage
+          hostId={hostId}
+          leafKey={key}
+          section={extensionSection}
+          onSectionChange={(section: ExtensionSection) => window.dispatchEvent(new CustomEvent("aichat:system-settings-select", {
+            detail: { key: extensionLeafForSection(section), hostId },
+          }))}
+          initialCardKey={initialCardKey}
+        />
       ) : (
         <Component />
       )}

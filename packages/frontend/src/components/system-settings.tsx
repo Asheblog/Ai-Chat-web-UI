@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react"
 import { DEFAULT_SYSTEM_LEAF, renderSystemLeaf } from "./settings/system-settings-registry"
+import { resolveExtensionLeaf } from "./settings/extensions-navigation"
+import { isDialogOpen } from "./settings/settings-flash-bus"
 
 // 路由页宿主的叶子渲染 hostId（与 Dialog 的 "dialog" 区分，用于卡定位请求匹配）
 const LAYOUT_HOST_ID = "layout"
@@ -43,10 +45,13 @@ function SystemSettingsUncontrolled() {
     }
 
     const handler = (event: Event) => {
-      const detail = (event as CustomEvent<{ key?: string }>).detail
-      if (detail?.key && renderSystemLeaf(detail.key, LAYOUT_HOST_ID) !== null) {
-        setActiveKey(detail.key)
-        window.localStorage.setItem(MODULE_STORAGE_KEY, detail.key)
+      if (isDialogOpen()) return
+      const detail = (event as CustomEvent<{ key?: string; cardKey?: string; hostId?: string }>).detail
+      if (detail?.hostId && detail.hostId !== LAYOUT_HOST_ID) return
+      const key = detail?.key ? resolveExtensionLeaf(detail.key, detail.cardKey) : undefined
+      if (key && renderSystemLeaf(key, LAYOUT_HOST_ID) !== null) {
+        setActiveKey(key)
+        window.localStorage.setItem(MODULE_STORAGE_KEY, key)
       }
     }
 

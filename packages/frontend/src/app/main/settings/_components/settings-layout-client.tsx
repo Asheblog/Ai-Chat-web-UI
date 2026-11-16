@@ -12,6 +12,7 @@ import { SettingsShell, type SettingsSection } from "@/components/settings/shell
 import { SettingsSearch } from "@/components/settings/components/settings-search"
 import { SettingsLocationBanner } from "@/components/settings/components/settings-location-banner"
 import { isDialogOpen, requestFlash } from "@/components/settings/settings-flash-bus"
+import { resolveExtensionLeaf } from "@/components/settings/extensions-navigation"
 import { DEFAULT_SYSTEM_LEAF, getAllSystemLeafKeys, getWorkspaceForLeaf } from "@/components/settings/system-settings-registry"
 import { useAuthStore } from "@/store/auth-store"
 import { setPersonalSection, usePersonalSectionFromHash } from "@/components/settings/personal-section"
@@ -101,10 +102,11 @@ export function SettingsLayoutClient({ children }: { children: ReactNode }) {
     if (activeSection !== "system") return
     const onSelect = (event: Event) => {
       if (isDialogOpen()) return
-      const detail = (event as CustomEvent<{ key?: string; cardKey?: string; origin?: string }>).detail
+      const detail = (event as CustomEvent<{ key?: string; cardKey?: string; origin?: string; hostId?: string }>).detail
+      if (detail?.hostId && detail.hostId !== "layout") return
       if (detail?.origin !== "search" || !detail?.key) return
-      if (!getAllSystemLeafKeys().includes(detail.key)) return
-      const leafKey = detail.key
+      const leafKey = resolveExtensionLeaf(detail.key, detail.cardKey)
+      if (!getAllSystemLeafKeys().includes(leafKey)) return
       setFlashTarget({ leafKey, cardKey: detail.cardKey })
       setFlashKey(leafKey)
       setFlashSeq((seq) => seq + 1)
