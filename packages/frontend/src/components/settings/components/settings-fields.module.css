@@ -1,0 +1,41 @@
+.container {
+  container-type: inline-size;
+  min-width: 0;
+  padding-block: 20px;
+}
+
+.container:first-child { padding-top: 0; }
+.container:last-child { padding-bottom: 0; }
+.container:not([hidden]) ~ .container:not([hidden]) {
+  margin-top: 0;
+  border-top: 1px solid hsl(var(--border));
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.control {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+@container (min-width: 42rem) {
+  .row {
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    column-gap: 32px;
+  }
+
+  .control { justify-content: flex-end; }
+  .stacked { grid-template-columns: minmax(0, 1fr); }
+  .stacked .control { justify-content: flex-start; }
+}
+
+@container (max-width: 41.999rem) {
+  .control > :is(input, textarea, button:not([role="switch"])) {
+    min-height: 44px;
+  }
+}

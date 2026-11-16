@@ -205,68 +205,81 @@ export function BrandingCard({ settings, update }: BrandingCardProps) {
         </div>
       }
     >
-      <div className="space-y-3">
+      <div>
         <SettingRow
           title="文字 LOGO"
+          htmlFor="brandText"
           description="显示在页面顶部的品牌名称，最多 40 个字符"
           align="start"
         >
-          <div className="flex w-full flex-wrap items-center justify-end gap-2">
-            <Input
-              id="brandText"
-              maxLength={40}
-              value={brandTextDraft}
-              placeholder="例如：AIChat 或公司名"
-              onChange={(e) => setBrandTextDraft(e.target.value)}
-              onCompositionStart={() => setIsIMEComposing(true)}
-              onCompositionEnd={() => setIsIMEComposing(false)}
-              className="w-full sm:w-[320px]"
-              disabled={!isAdmin}
-            />
-          </div>
+          {(descriptionId) => (
+            <div className="flex w-full flex-wrap items-center justify-end gap-2">
+              <Input aria-describedby={descriptionId}
+                id="brandText"
+                maxLength={40}
+                value={brandTextDraft}
+                placeholder="例如：AIChat 或公司名"
+                onChange={(e) => setBrandTextDraft(e.target.value)}
+                onCompositionStart={() => setIsIMEComposing(true)}
+                onCompositionEnd={() => setIsIMEComposing(false)}
+                className="w-full sm:w-[320px]"
+                disabled={!isAdmin}
+              />
+            </div>
+          )}
         </SettingRow>
 
         <SettingRow
           title="全局系统提示词"
+          htmlFor="chatSystemPrompt"
+          layout="stacked"
           description="留空则不注入；会话未设置时自动继承（默认上限 12000 字符，可通过后端环境变量调整）"
           align="start"
         >
-          <div className="w-full space-y-2">
-            <Textarea
-              value={chatSystemPromptDraft}
-              onChange={(e) => setChatSystemPromptDraft(e.target.value)}
-              placeholder="例如：你是一位专业助教，请使用简洁、结构化的回答。"
-              rows={4}
-              disabled={!isAdmin}
-            />
-            <p className="text-xs text-muted-foreground">
-              {'生效顺序：会话 > 个人 > 全局；支持使用 {day time}（将替换为服务器当前时间）。三层均为空时默认提示词为“今天日期是{day time}”。'}
-            </p>
-          </div>
+          {(descriptionId) => (
+            <div className="w-full space-y-2">
+              <Textarea
+                id="chatSystemPrompt"
+                aria-describedby={`${descriptionId} prompt-precedence`}
+                value={chatSystemPromptDraft}
+                onChange={(e) => setChatSystemPromptDraft(e.target.value)}
+                placeholder="例如：你是一位专业助教，请使用简洁、结构化的回答。"
+                rows={4}
+                disabled={!isAdmin}
+              />
+              <p id="prompt-precedence" className="text-[13px] leading-relaxed text-muted-foreground">
+                {'生效顺序：会话 > 个人 > 全局；支持使用 {day time}（将替换为服务器当前时间）。三层均为空时默认提示词为“今天日期是{day time}”。'}
+              </p>
+            </div>
+          )}
         </SettingRow>
 
         <SettingRow
           title="图片访问域名"
+          htmlFor="chatImageDomain"
+          layout="stacked"
           description="用户上传图片的公开访问地址前缀（需包含协议）"
           align="start"
         >
-          <div className="flex w-full flex-wrap items-center justify-end gap-2">
-            <Input
-              id="chatImageDomain"
-              type="text"
-              value={siteBaseDraft}
-              onChange={(e) => setSiteBaseDraft(e.target.value)}
-              placeholder="例如：https://chat.example.com"
-              className="w-full sm:w-[320px]"
-              disabled={!isAdmin}
-            />
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={handleRefreshImageAttachments}
-              disabled={!isAdmin}
-            >刷新</Button>
-          </div>
+          {(descriptionId) => (
+            <div className="flex w-full flex-wrap items-center justify-end gap-2">
+              <Input aria-describedby={descriptionId}
+                id="chatImageDomain"
+                type="text"
+                value={siteBaseDraft}
+                onChange={(e) => setSiteBaseDraft(e.target.value)}
+                placeholder="例如：https://chat.example.com"
+                className="min-w-0 flex-1"
+                disabled={!isAdmin}
+              />
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={handleRefreshImageAttachments}
+                disabled={!isAdmin}
+              >刷新</Button>
+            </div>
+          )}
         </SettingRow>
 
         {BRAND_COLOR_FIELDS.map(({ key, title, description, previewFallback }) => {
@@ -274,37 +287,40 @@ export function BrandingCard({ settings, update }: BrandingCardProps) {
           const normalized = normalizeHexDraft(draft)
           const pickerValue = isValidBrandHex(normalized) ? normalized : previewFallback
           return (
-            <SettingRow key={key} title={title} description={description} align="start">
-              <div className="flex w-full flex-wrap items-center justify-end gap-2">
-                <Input
-                  id={`${key}-picker`}
-                  type="color"
-                  aria-label={`${title}色板`}
-                  value={pickerValue}
-                  onChange={(e) => setColorDraft(key, e.target.value.toUpperCase())}
-                  className="h-10 w-14 cursor-pointer p-1"
-                  disabled={!isAdmin}
-                />
-                <Input
-                  id={key}
-                  type="text"
-                  value={draft}
-                  onChange={(e) => setColorDraft(key, e.target.value)}
-                  placeholder="#RRGGBB"
-                  spellCheck={false}
-                  className="w-full font-mono sm:w-[140px]"
-                  disabled={!isAdmin}
-                  aria-label={`${title}十六进制`}
-                />
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setColorDraft(key, "")}
-                  disabled={!isAdmin || !draft}
-                >
-                  恢复默认
-                </Button>
-              </div>
+            <SettingRow key={key} title={title} description={description} htmlFor={key}>
+              {(descriptionId) => (
+                <div className="flex w-full flex-wrap items-center justify-end gap-2">
+                  <Input aria-describedby={descriptionId}
+                    id={`${key}-picker`}
+                    type="color"
+                    aria-label={`${title}色板`}
+                    value={pickerValue}
+                    onChange={(e) => setColorDraft(key, e.target.value.toUpperCase())}
+                    className="h-10 w-14 cursor-pointer p-1"
+                    disabled={!isAdmin}
+                  />
+                  <Input
+                    id={key}
+                    type="text"
+                    value={draft}
+                    onChange={(e) => setColorDraft(key, e.target.value)}
+                    placeholder="#RRGGBB"
+                    spellCheck={false}
+                    className="min-w-0 flex-1 font-mono sm:w-[140px] sm:flex-none"
+                    disabled={!isAdmin}
+                    aria-label={`${title}十六进制`}
+                    aria-describedby={descriptionId}
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setColorDraft(key, "")}
+                    disabled={!isAdmin || !draft}
+                  >
+                    恢复默认
+                  </Button>
+                </div>
+              )}
             </SettingRow>
           )
         })}

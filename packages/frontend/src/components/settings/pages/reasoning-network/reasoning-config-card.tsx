@@ -51,87 +51,106 @@ export function ReasoningConfigCard({
     >
       <SettingRow
         title="启用推理链"
+        htmlFor="reasoningEnabled"
         description="识别 reasoning_content 与常见 CoT 标签，并在 UI 折叠显示"
       >
-        <Switch id="reasoningEnabled" checked={reasoningEnabled} onCheckedChange={(v) => onReasoningEnabledChange(!!v)} />
+        {(descriptionId) => (
+          <Switch aria-describedby={descriptionId} id="reasoningEnabled" checked={reasoningEnabled} onCheckedChange={(v) => onReasoningEnabledChange(!!v)} />
+        )}
       </SettingRow>
 
       <SettingRow
         title="保存到数据库"
+        htmlFor="reasoningSaveToDb"
         description="可能包含中间推断过程，请按需开启"
       >
-        <Switch id="reasoningSaveToDb" checked={reasoningSaveToDb} onCheckedChange={(v) => onReasoningSaveToDbChange(!!v)} />
+        {(descriptionId) => (
+          <Switch aria-describedby={descriptionId} id="reasoningSaveToDb" checked={reasoningSaveToDb} onCheckedChange={(v) => onReasoningSaveToDbChange(!!v)} />
+        )}
       </SettingRow>
 
       <SettingRow
         title="默认生成 Tokens"
+        htmlFor="reasoningMaxTokens"
         description="为空表示沿用供应商默认（通常 32K），可根据模型能力设置 1~256000"
       >
-        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
-          <Input
-            type="text"
-            placeholder="32000"
-            value={reasoningMaxTokens}
-            onChange={(e) => onReasoningMaxTokensChange(e.target.value)}
-            className="num-tabular w-full text-right sm:w-32"
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full sm:w-auto"
-            onClick={() => onReasoningMaxTokensChange('')}
-          >
-            恢复默认
-          </Button>
-        </div>
+        {(descriptionId) => (
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+            <Input
+              id="reasoningMaxTokens"
+              aria-describedby={descriptionId}
+              type="text"
+              placeholder="32000"
+              value={reasoningMaxTokens}
+              onChange={(e) => onReasoningMaxTokensChange(e.target.value)}
+              className="num-tabular w-full text-right sm:w-32"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full sm:w-auto"
+              onClick={() => onReasoningMaxTokensChange('')}
+            >
+              恢复默认
+            </Button>
+          </div>
+        )}
       </SettingRow>
 
       <SettingRow
         title="默认温度"
+        htmlFor="temperatureDefault"
         description="为空表示使用系统默认值（0.7），范围 0~2"
       >
-        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
-          <Input
-            type="text"
-            placeholder="0.7"
-            value={temperatureDefault}
-            onChange={(e) => onTemperatureDefaultChange(e.target.value)}
-            className="num-tabular w-full text-right sm:w-32"
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full sm:w-auto"
-            onClick={() => onTemperatureDefaultChange('')}
-          >
-            恢复默认
-          </Button>
-        </div>
+        {(descriptionId) => (
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+            <Input
+              id="temperatureDefault"
+              aria-describedby={descriptionId}
+              type="text"
+              placeholder="0.7"
+              value={temperatureDefault}
+              onChange={(e) => onTemperatureDefaultChange(e.target.value)}
+              className="num-tabular w-full text-right sm:w-32"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full sm:w-auto"
+              onClick={() => onTemperatureDefaultChange('')}
+            >
+              恢复默认
+            </Button>
+          </div>
+        )}
       </SettingRow>
 
       <SettingRow
         title="标签模式"
+        htmlFor="reasoningTagsMode"
         description="默认包含 <think> / <|begin_of_thought|> 等常见标签"
         align="start"
       >
-        <div className="flex w-full flex-wrap items-center justify-end gap-3">
-          <Select value={reasoningTagsMode} onValueChange={(v) => onReasoningTagsModeChange(v as ReasoningTagsMode)}>
-            <SelectTrigger className="w-full sm:w-[220px]"><SelectValue placeholder="选择模式" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="default">默认</SelectItem>
-              <SelectItem value="custom">自定义</SelectItem>
-              <SelectItem value="off">关闭</SelectItem>
-            </SelectContent>
-          </Select>
-          {reasoningTagsMode === 'custom' && (
-            <Input
-              placeholder='["<think>","</think>"]'
-              value={reasoningCustomTags}
-              onChange={(e) => onReasoningCustomTagsChange(e.target.value)}
-              className="w-full sm:w-[320px] font-mono text-xs"
-            />
-          )}
-        </div>
+        {(descriptionId) => (
+          <div className="flex w-full flex-wrap items-center justify-end gap-3">
+            <Select value={reasoningTagsMode} onValueChange={(v) => onReasoningTagsModeChange(v as ReasoningTagsMode)}>
+              <SelectTrigger id="reasoningTagsMode" aria-describedby={descriptionId} className="w-full sm:w-[220px]"><SelectValue placeholder="选择模式" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">默认</SelectItem>
+                <SelectItem value="custom">自定义</SelectItem>
+                <SelectItem value="off">关闭</SelectItem>
+              </SelectContent>
+            </Select>
+            {reasoningTagsMode === 'custom' && (
+              <Input aria-describedby={descriptionId}
+                placeholder='["<think>","</think>"]'
+                value={reasoningCustomTags}
+                onChange={(e) => onReasoningCustomTagsChange(e.target.value)}
+                className="w-full sm:w-[320px] font-mono text-xs"
+              />
+            )}
+          </div>
+        )}
       </SettingRow>
     </FeatureCard>
   )

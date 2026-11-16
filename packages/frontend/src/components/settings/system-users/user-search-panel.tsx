@@ -29,12 +29,13 @@ export function UserSearchPanel({
   onRefresh,
 }: UserSearchPanelProps) {
   return (
-    <div className="rounded-lg border border-border bg-surface-subtle px-4 py-4">
+    <div className="rounded-xl border border-border bg-surface px-4 py-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2 flex-1">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
+              aria-label="搜索用户名"
               placeholder="搜索用户名..."
               value={searchDraft}
               onChange={(e) => setSearchDraft(e.target.value)}
@@ -54,7 +55,7 @@ export function UserSearchPanel({
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
           <Select value={statusFilter} onValueChange={(value) => onStatusFilterChange(value as StatusFilter)}>
-            <SelectTrigger className="w-full sm:w-[140px]">
+            <SelectTrigger aria-label="用户状态" className="w-full sm:w-[140px]">
               <SelectValue placeholder="状态筛选" />
             </SelectTrigger>
             <SelectContent>
