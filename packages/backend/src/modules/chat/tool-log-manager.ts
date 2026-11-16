@@ -183,6 +183,14 @@ export class ToolLogManager {
   }
 
   /**
+   * 已记录的工具日志条数（含被 getSummary 切片的部分）。
+   * trace 用它声明裁剪前长度，避免摘要只有前 N 条却不留痕迹。
+   */
+  getCount(): number {
+    return this.logs.length
+  }
+
+  /**
    * 获取日志摘要（用于 trace）
    */
   getSummary(limit = 50): Array<{

@@ -14,6 +14,7 @@ import {
   readPlaywrightChromiumExecutablePath,
   resolveBrowserExecutablePath,
 } from '../../utils/browser-executable'
+import { withSharedBrowserPage } from '../../utils/web-retrieval/browser/pool'
 
 const md = new MarkdownIt({
   html: false,
@@ -248,7 +249,7 @@ export const buildReportHtml = (input: ReportHtmlInput): string => {
 const resolveExecutablePath = (
   explicit?: string,
   chromiumLike: PdfChromiumLike = chromium,
-): string | undefined => {
+): string => {
   const playwrightPath = readPlaywrightChromiumExecutablePath(chromiumLike)
   const resolved = resolveBrowserExecutablePath({
     explicitPath: explicit,
@@ -260,15 +261,30 @@ const resolveExecutablePath = (
   )
 }
 
-export const renderHtmlToPdfBuffer = async (
+const PDF_OPTIONS = {
+  format: 'A4',
+  printBackground: true,
+  margin: {
+    top: '18mm',
+    bottom: '18mm',
+    left: '16mm',
+    right: '16mm',
+  },
+  displayHeaderFooter: true,
+  headerTemplate: '<div></div>',
+  footerTemplate: `<div style="font-family:'Noto Sans CJK SC',sans-serif;font-size:8px;width:100%;text-align:center;color:#6b7280;">第 <span class="pageNumber"></span> 页 / 共 <span class="totalPages"></span> 页</div>`,
+}
+
+const toPdfBuffer = (pdf: Buffer | Uint8Array): Buffer =>
+  Buffer.isBuffer(pdf) ? pdf : Buffer.from(pdf)
+
+// 调用方注入 chromiumLike 时使用专用浏览器（测试/自定义适配器契约）；
+// 默认的真实路径与 URL 读取共用同一个浏览器池，避免每个报告再起一个 Chromium。
+const renderWithInjectedChromium = async (
   html: string,
-  options: {
-    executablePath?: string
-    chromiumLike?: PdfChromiumLike
-  } = {},
+  executablePath: string,
+  chromiumLike: PdfChromiumLike,
 ): Promise<Buffer> => {
-  const chromiumLike = options.chromiumLike ?? chromium
-  const executablePath = resolveExecutablePath(options.executablePath, chromiumLike)
   const browser = await chromiumLike.launch({
     headless: true,
     executablePath,
@@ -282,25 +298,43 @@ export const renderHtmlToPdfBuffer = async (
 
   try {
     const context = await browser.newContext({ locale: 'zh-CN' })
-    const page = await context.newPage()
-    await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
-    const pdf = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: {
-        top: '18mm',
-        bottom: '18mm',
-        left: '16mm',
-        right: '16mm',
-      },
-      displayHeaderFooter: true,
-      headerTemplate: '<div></div>',
-      footerTemplate: `<div style="font-family:'Noto Sans CJK SC',sans-serif;font-size:8px;width:100%;text-align:center;color:#6b7280;">第 <span class="pageNumber"></span> 页 / 共 <span class="totalPages"></span> 页</div>`,
-    })
-    return Buffer.isBuffer(pdf) ? pdf : Buffer.from(pdf)
+    try {
+      const page = await context.newPage()
+      await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
+      const pdf = await page.pdf(PDF_OPTIONS)
+      return toPdfBuffer(pdf)
+    } finally {
+      const closeContext = (context as { close?: () => Promise<void> }).close
+      if (closeContext) await Promise.resolve(closeContext.call(context)).catch(() => undefined)
+    }
   } finally {
     await browser.close()
   }
+}
+
+export const renderHtmlToPdfBuffer = async (
+  html: string,
+  options: {
+    executablePath?: string
+    chromiumLike?: PdfChromiumLike
+  } = {},
+): Promise<Buffer> => {
+  const chromiumLike = options.chromiumLike
+  const executablePath = resolveExecutablePath(
+    options.executablePath,
+    (chromiumLike ?? chromium) as PdfChromiumLike,
+  )
+  if (chromiumLike) {
+    return renderWithInjectedChromium(html, executablePath, chromiumLike)
+  }
+
+  return withSharedBrowserPage({ executablePath, purpose: 'pdf' }, async (page) => {
+    if (!page.setContent || !page.pdf) {
+      throw new Error('PDF 渲染不可用：浏览器页面缺少 setContent/pdf 能力')
+    }
+    await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
+    return toPdfBuffer(await page.pdf(PDF_OPTIONS))
+  })
 }
 
 export const renderMarkdownToPdfBuffer = async (

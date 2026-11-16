@@ -304,6 +304,62 @@ describe('provider conformance: Exa', () => {
   })
 })
 
+describe('provider conformance: auto-read body capability', () => {
+  const originalFetch = global.fetch
+  afterEach(() => {
+    global.fetch = originalFetch
+    jest.restoreAllMocks()
+  })
+
+  test('Tavily requests markdown raw content for auto-read even when includeRawContent is off', async () => {
+    const fetchMock = jest.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = parseBody(init)
+      expect(body.include_raw_content).toBe('markdown')
+      expect(body).not.toHaveProperty('chunks_per_source')
+      return jsonResponse({ results: [] })
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
+
+    await runWebSearch('q', { engine: 'tavily', apiKey: 'k', limit: 3, autoReadNeedContent: true })
+  })
+
+  test('Exa requests text for auto-read even when includeRawContent is off', async () => {
+    const fetchMock = jest.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = parseBody(init)
+      expect(body.contents.text).toEqual({ maxCharacters: 4000 })
+      return jsonResponse({ results: [] })
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
+
+    await runWebSearch('q', { engine: 'exa', apiKey: 'k', limit: 3, autoReadNeedContent: true })
+  })
+
+  test('Metaso requests raw content for auto-read only on the webpage scope', async () => {
+    const bodies: Record<string, any>[] = []
+    global.fetch = jest.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(parseBody(init))
+      return jsonResponse({ webpages: [], scholars: [] })
+    }) as unknown as typeof fetch
+
+    await runWebSearch('q', { engine: 'metaso', apiKey: 'k', limit: 2, scope: 'webpage', autoReadNeedContent: true })
+    await runWebSearch('q', { engine: 'metaso', apiKey: 'k', limit: 2, scope: 'paper', autoReadNeedContent: true })
+
+    expect(bodies[0].includeRawContent).toBe(true)
+    expect(bodies[1]).not.toHaveProperty('includeRawContent')
+  })
+
+  test('image scope keeps the existing behaviour without body requests', async () => {
+    const fetchMock = jest.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = parseBody(init)
+      expect(body).not.toHaveProperty('include_raw_content')
+      return jsonResponse({ images: [] })
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
+
+    await runWebSearch('img', { engine: 'tavily', apiKey: 'k', limit: 2, scope: 'image', autoReadNeedContent: true })
+  })
+})
+
 describe('provider conformance: DeepSeek', () => {
   const originalFetch = global.fetch
   afterEach(() => {

@@ -5,6 +5,24 @@ import { combineAbortSignals } from './abort-signal'
 
 export type WebSearchQueryLanguage = 'zh' | 'en' | 'unknown'
 
+/**
+ * 搜索命中里 content 字段的真实种类。
+ * 只有 article 可以当正文复用；summary / highlight / snippet 只能作为摘要证据。
+ */
+export type WebSearchContentKind = 'article' | 'summary' | 'highlight' | 'snippet'
+
+/**
+ * content 的提供方与长度信息。独立于 sourceEngines：命中来自多个引擎不代表多份正文。
+ */
+export interface WebSearchContentMetadata {
+  provider: string
+  kind: WebSearchContentKind
+  chars: number
+  /** 提供方对正文长度设了硬上限，内容可能被截断（例如 Exa contents.text.maxCharacters）。 */
+  truncated?: boolean
+  maxChars?: number
+}
+
 export interface WebSearchHit {
   title: string
   url: string
@@ -24,7 +42,41 @@ export interface WebSearchHit {
   siteName?: string
   /** DeepSeek 权威性评分（0-4，-1 未知）。 */
   authority?: number
+  /** content 的种类。缺省表示该提供方没有声明，按最弱的 snippet 处理，不会被当成正文。 */
+  contentKind?: WebSearchContentKind
+  /** 实际提供 content 的提供方，与 sourceEngines 没有必然关系。 */
+  contentSource?: string
+  contentMetadata?: WebSearchContentMetadata
 }
+
+/**
+ * 只有带正文来源标记且非空的内容才算全文。
+ * 不能仅凭 content 非空或 sourceEngines 含某个引擎推断正文。
+ */
+export const isArticleContent = (
+  hit: Pick<WebSearchHit, 'content' | 'contentKind'> | null | undefined,
+): boolean => Boolean(hit && hit.contentKind === 'article' && (hit.content || '').trim().length > 0)
+
+/** 正文种类强弱：合并时只能整体取某一提供方的 (content, kind, source) 三元组。 */
+const CONTENT_KIND_WEIGHT: Record<WebSearchContentKind, number> = {
+  article: 3,
+  summary: 2,
+  highlight: 1,
+  snippet: 0,
+}
+
+const buildContentMetadata = (
+  provider: string,
+  kind: WebSearchContentKind,
+  content: string,
+  extra: { truncated?: boolean; maxChars?: number } = {},
+): WebSearchContentMetadata => ({
+  provider,
+  kind,
+  chars: content.length,
+  ...(extra.truncated ? { truncated: true } : {}),
+  ...(typeof extra.maxChars === 'number' ? { maxChars: extra.maxChars } : {}),
+})
 
 export interface WebSearchOptions {
   engine: string
@@ -35,6 +87,8 @@ export interface WebSearchOptions {
   scope?: string
   includeSummary?: boolean
   includeRawContent?: boolean
+  /** 自动阅读需要正文：只开启引擎既有的正文能力，不改条数与长度上限，也不引入新服务。 */
+  autoReadNeedContent?: boolean
   deepseekNeedContent?: boolean
   /** 触发检索的用户原始问题，供支持 ori_question 的引擎理解意图（DeepSeek）。 */
   oriQuestion?: string
@@ -79,6 +133,8 @@ export interface WebSearchParallelOptions {
   scope?: string
   includeSummary?: boolean
   includeRawContent?: boolean
+  /** 自动阅读需要正文：透传给支持正文能力的引擎（Tavily / Exa / Metaso / DeepSeek）。 */
+  autoReadNeedContent?: boolean
   deepseekNeedContent?: boolean
   timeoutMs?: number
   parallelMaxEngines?: number
@@ -306,6 +362,9 @@ const normalizeUrlForDedupe = (rawUrl: string): string => {
   }
 }
 
+/** 公开的 URL 归一化入口：自动阅读去重与合并去重使用同一套规则，保留有语义的 query 参数。 */
+export const normalizeSearchUrl = normalizeUrlForDedupe
+
 const getEngineWeight = (engine: string, engineOrder: string[]): number => {
   const idx = engineOrder.indexOf(engine)
   if (idx < 0) return 0
@@ -363,7 +422,8 @@ const runTavilySearch = async (query: string, opts: WebSearchOptions): Promise<W
   }
   const endpoint = opts.endpoint || TAVILY_SEARCH_ENDPOINT
   const isImageScope = isImageScopeOption(opts.scope)
-  const wantRawContent = Boolean(opts.includeRawContent)
+  // 自动阅读需要正文时同样请求 raw_content；图片搜索保持既有行为
+  const wantRawContent = !isImageScope && Boolean(opts.includeRawContent || opts.autoReadNeedContent)
   const payload: Record<string, unknown> = {
     query,
     max_results: clampLimit(opts.limit),
@@ -429,6 +489,9 @@ const runTavilySearch = async (query: string, opts: WebSearchOptions): Promise<W
           url: imageUrl,
           snippet: description,
           content: description,
+          contentKind: description ? 'snippet' : undefined,
+          contentSource: description ? 'tavily' : undefined,
+          contentMetadata: description ? buildContentMetadata('tavily', 'snippet', description) : undefined,
           imageUrl,
           thumbnailUrl: pickThumbnailUrl(item) || imageUrl,
         }
@@ -440,12 +503,24 @@ const runTavilySearch = async (query: string, opts: WebSearchOptions): Promise<W
   const results = Array.isArray(data?.results) ? data.results : []
   return results.map((item: any) => {
     const snippet = pickFirstString(item?.content, item?.snippet) || ''
+    // 官方字段语义：raw_content 是清洗后的正文，content 是命中片段。两者不能混为一谈
     const rawContent = pickFirstString(item?.raw_content) || ''
+    const content = rawContent || snippet
+    const contentKind: WebSearchContentKind | undefined = content
+      ? rawContent
+        ? 'article'
+        : 'snippet'
+      : undefined
     return {
       title: item?.title || item?.url || 'Untitled',
       url: item?.url || '',
       snippet,
-      content: rawContent || item?.content || snippet,
+      content,
+      contentKind,
+      contentSource: contentKind ? 'tavily' : undefined,
+      contentMetadata: contentKind
+        ? buildContentMetadata('tavily', contentKind, content)
+        : undefined,
       imageUrl: pickImageUrl(item),
       thumbnailUrl: pickThumbnailUrl(item),
       publishedDate: pickFirstString(item?.published_date),
@@ -489,11 +564,16 @@ const runBraveSearch = async (query: string, opts: WebSearchOptions): Promise<We
     const description = pickFirstString(item?.description) || ''
     const snippet = pickFirstString(description, extraSnippets[0]) || ''
     const content = [description, ...extraSnippets].filter(Boolean).join('\n\n')
+    const mergedContent = content || snippet
     return {
       title: item?.title || item?.url || 'Untitled',
       url: item?.url || '',
       snippet,
-      content: content || snippet,
+      content: mergedContent,
+      // Brave 只返回描述与额外摘录，永远不是页正文
+      contentKind: mergedContent ? 'snippet' : undefined,
+      contentSource: mergedContent ? 'brave' : undefined,
+      contentMetadata: mergedContent ? buildContentMetadata('brave', 'snippet', mergedContent) : undefined,
       imageUrl: pickFirstString(item?.thumbnail?.original, item?.thumbnail?.src) || pickImageUrl(item),
       thumbnailUrl: pickThumbnailUrl(item),
       publishedDate: pickFirstString(item?.page_age),
@@ -541,6 +621,9 @@ const runBraveImageSearch = async (query: string, opts: WebSearchOptions): Promi
       url: item?.url || item?.pageUrl || item?.page_url || directImage || '',
       snippet: description,
       content: description,
+      contentKind: description ? 'snippet' : undefined,
+      contentSource: description ? 'brave' : undefined,
+      contentMetadata: description ? buildContentMetadata('brave', 'snippet', description) : undefined,
       imageUrl: directImage,
       thumbnailUrl: pickThumbnailUrl(item) || directImage,
     }
@@ -563,8 +646,8 @@ const runMetasoSearch = async (query: string, opts: WebSearchOptions): Promise<W
     conciseSnippet: false,
   }
   if (scope === 'webpage') {
-    // 官方说明：includeRawContent 只在网页范围内生效
-    payload.includeRawContent = Boolean(opts.includeRawContent)
+    // 官方说明：includeRawContent 只在网页范围内生效；自动阅读需要正文时一并开启
+    payload.includeRawContent = Boolean(opts.includeRawContent || opts.autoReadNeedContent)
   }
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -603,14 +686,28 @@ const runMetasoSearch = async (query: string, opts: WebSearchOptions): Promise<W
     data?.data?.webpages,
     data?.data?.items,
   ]
-  const results = (candidateArrays.find((item) => Array.isArray(item)) as any[]) || []
+  const results = (candidateArrays.find((item) => Array.isArray(item)) || []) as any[]
+  // 官方说明：includeRawContent 只在网页范围生效；其它范围拿到的 content 只能是摘要/片段
+  const wantsRawContent = Boolean(opts.includeRawContent) && scope === 'webpage'
   const hits = results.map((item: any): WebSearchHit => {
     const snippet = pickFirstString(item?.summary, item?.description, item?.snippet) || ''
+    const rawCandidate = pickFirstString(item?.content) || ''
+    const content = rawCandidate || snippet
+    const contentKind: WebSearchContentKind | undefined = content
+      ? wantsRawContent && rawCandidate
+        ? 'article'
+        : 'snippet'
+      : undefined
     return {
       title: item?.title || item?.name || item?.url || 'Untitled',
       url: item?.url || item?.link || item?.imageUrl || '',
       snippet,
-      content: pickFirstString(item?.content, snippet),
+      content,
+      contentKind,
+      contentSource: contentKind ? 'metaso' : undefined,
+      contentMetadata: contentKind
+        ? buildContentMetadata('metaso', contentKind, content)
+        : undefined,
       imageUrl: pickImageUrl(item),
       thumbnailUrl: pickThumbnailUrl(item),
     }
@@ -631,7 +728,7 @@ const runExaSearch = async (query: string, opts: WebSearchOptions): Promise<WebS
     // Exa：代表图 image/favicon 随 contents 返回；再抽若干页内图片链接
     extras: { imageLinks: imageLinksCount },
   }
-  if (opts.includeRawContent) {
+  if (!isImageScope && (opts.includeRawContent || opts.autoReadNeedContent)) {
     // 官方 contents.text 控制正文返回长度；不传则没有 text 字段
     contents.text = { maxCharacters: EXA_RAW_TEXT_MAX_CHARS }
   }
@@ -686,6 +783,9 @@ const runExaSearch = async (query: string, opts: WebSearchOptions): Promise<WebS
           url: pageUrl || normalized,
           snippet,
           content: snippet,
+          contentKind: snippet ? 'snippet' : undefined,
+          contentSource: snippet ? 'exa' : undefined,
+          contentMetadata: snippet ? buildContentMetadata('exa', 'snippet', snippet) : undefined,
           imageUrl: normalized,
           thumbnailUrl: normalized,
         })
@@ -695,14 +795,32 @@ const runExaSearch = async (query: string, opts: WebSearchOptions): Promise<WebS
   }
 
   return results.map((item: any): WebSearchHit => {
-    const highlights = Array.isArray(item?.highlights) ? item.highlights : []
+    const highlights = Array.isArray(item?.highlights)
+      ? item.highlights.filter((value: unknown): value is string => typeof value === 'string' && value.trim().length > 0)
+      : []
     const text = typeof item?.text === 'string' ? item.text : ''
-    const summary = pickFirstString(item?.summary) || ''
+    // contents.text 是页面正文；summary 是模型摘要；highlights 是查询相关片段。三者不能互相冒充
+    const candidates: Array<[WebSearchContentKind, string]> = [
+      ['article', text],
+      ['summary', pickFirstString(item?.summary) || ''],
+      ['highlight', highlights.join('\n\n')],
+    ]
+    const picked = candidates.find(([, value]) => value.trim().length > 0)
+    const contentKind: WebSearchContentKind | undefined = picked?.[0]
+    const content = picked?.[1] || ''
     return {
       title: item?.title || item?.url || 'Untitled',
       url: item?.url || '',
-      snippet: pickFirstString(highlights[0], summary) || text.slice(0, 300) || '',
-      content: pickFirstString(text, highlights.join('\n'), summary) || '',
+      snippet: pickFirstString(highlights[0], item?.summary) || text.slice(0, 300) || '',
+      content,
+      contentKind,
+      contentSource: contentKind ? 'exa' : undefined,
+      contentMetadata: contentKind
+        ? buildContentMetadata('exa', contentKind, content, {
+            maxChars: contentKind === 'article' ? EXA_RAW_TEXT_MAX_CHARS : undefined,
+            truncated: contentKind === 'article' && content.length >= EXA_RAW_TEXT_MAX_CHARS,
+          })
+        : undefined,
       imageUrl: pickImageUrl(item),
       thumbnailUrl: pickThumbnailUrl(item) || item?.favicon || '',
       publishedDate: pickFirstString(item?.publishedDate),
@@ -725,11 +843,11 @@ export const runWebSearch = async (query: string, opts: WebSearchOptions): Promi
       return runMetasoSearch(query, opts)
     case 'exa':
       return runExaSearch(query, opts)
-    case 'deepseek':
+    case 'deepseek': {
       if (isImageScopeOption(opts.scope)) {
         throw new Error('DeepSeek web search does not support image scope')
       }
-      return runDeepSeekSearch(query, {
+      const hits = await runDeepSeekSearch(query, {
         apiKey: opts.apiKey,
         limit: opts.limit,
         domains: opts.domains,
@@ -738,6 +856,18 @@ export const runWebSearch = async (query: string, opts: WebSearchOptions): Promi
         oriQuestion: opts.oriQuestion,
         signal: opts.signal,
       })
+      // need_content 打开时 content 是页面正文；来源固定为 DeepSeek，与其它引擎命中无关
+      return hits.map((hit): WebSearchHit => {
+        const content = typeof hit.content === 'string' ? hit.content : ''
+        if (!content.trim()) return hit
+        return {
+          ...hit,
+          contentKind: 'article',
+          contentSource: 'deepseek',
+          contentMetadata: buildContentMetadata('deepseek', 'article', content),
+        }
+      })
+    }
     default:
       throw new Error(`Unsupported web search engine: ${engine || 'unknown'}`)
   }
@@ -753,6 +883,38 @@ const scoreHit = (
   const engineWeight = getEngineWeight(engine, engineOrder) * 6
   const snippetWeight = Math.min(12, Math.floor((hit.snippet || hit.content || '').length / 80))
   return base + engineWeight + snippetWeight
+}
+
+const contentWeightOf = (hit: WebSearchHit): number => {
+  const content = (hit.content || '').trim()
+  if (!content) return -1
+  // 没有种类标记的命中按最弱的片段处理：既不会被当成正文，也不会因合并被升级
+  return hit.contentKind ? CONTENT_KIND_WEIGHT[hit.contentKind] : CONTENT_KIND_WEIGHT.snippet
+}
+
+/**
+ * 合并后保留哪一份正文：整体取同一个提供方的 (content, contentKind, contentSource, contentMetadata)，
+ * 不允许把 A 的正文和 B 的种类标签拼在一起。种类相同时取更长的内容。
+ */
+const pickContentProvenance = (
+  current: WebSearchHit,
+  incoming: WebSearchHit,
+): Pick<WebSearchHit, 'content' | 'contentKind' | 'contentSource' | 'contentMetadata'> => {
+  const pick = (hit: WebSearchHit) => ({
+    content: hit.content,
+    contentKind: hit.contentKind,
+    contentSource: hit.contentSource,
+    contentMetadata: hit.contentMetadata,
+  })
+  const currentContent = (current.content || '').trim()
+  const incomingContent = (incoming.content || '').trim()
+  if (!incomingContent) return pick(current)
+  if (!currentContent) return pick(incoming)
+  const currentWeight = contentWeightOf(current)
+  const incomingWeight = contentWeightOf(incoming)
+  if (incomingWeight > currentWeight) return pick(incoming)
+  if (incomingWeight < currentWeight) return pick(current)
+  return incomingContent.length > currentContent.length ? pick(incoming) : pick(current)
 }
 
 const mergeHits = (
@@ -785,6 +947,8 @@ const mergeHits = (
     }
 
     existing.engines.add(engine)
+    // 正文来源与命中排序无关：排序高的引擎未必提供了正文，任何顺序都要保留真正的那份正文
+    const contentProvenance = pickContentProvenance(existing.hit, hit)
     if (score > existing.score) {
       existing.score = score
       existing.hit = {
@@ -794,11 +958,11 @@ const mergeHits = (
           (hit.snippet || '').length >= (existing.hit.snippet || '').length
             ? hit.snippet
             : existing.hit.snippet,
-        content:
-          (hit.content || '').length >= (existing.hit.content || '').length
-            ? hit.content
-            : existing.hit.content,
+        // 正文三元组只能整体取一个提供方，避免把摘要的 kind 换成别的引擎标签而"升级"成全文
+        ...contentProvenance,
       }
+    } else {
+      existing.hit = { ...existing.hit, ...contentProvenance }
     }
   }
 
@@ -934,6 +1098,7 @@ export const runWebSearchParallel = async (
           scope: opts.scope,
           includeSummary: opts.includeSummary,
           includeRawContent: opts.includeRawContent,
+          autoReadNeedContent: opts.autoReadNeedContent,
           deepseekNeedContent: opts.deepseekNeedContent,
           oriQuestion: opts.originalQuery,
           signal: combinedSignal.signal,

@@ -23,6 +23,9 @@ services:
       - ENABLE_CORS=${ENABLE_CORS:-true}
       - CORS_ORIGIN=http://localhost:${DEV_FRONTEND_PORT:-3000}
       - LOG_LEVEL=debug
+      # 追踪事件文件必须落在 /app/logs 持久化卷里，容器重建才不丢
+      - LOG_DIR=/app/logs
+      - TASK_TRACE_LOG_DIR=${TASK_TRACE_LOG_DIR:-/app/logs/task-trace}
       - SKILL_STORAGE_ROOT=/app/data/skills
       - WEB_SEARCH_AGENT_ENABLE=${WEB_SEARCH_AGENT_ENABLE:-false}
       - WEB_SEARCH_ENABLED_ENGINES=${WEB_SEARCH_ENABLED_ENGINES:-tavily}

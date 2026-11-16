@@ -25,6 +25,7 @@ import {
   BRAND_THEME_STORAGE_KEYS,
   normalizeBrandHex,
   SYSTEM_SETTINGS_FIELD_MAP,
+  WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS,
   type BrandThemeStorageKey,
 } from '@aichat/shared'
 
@@ -410,6 +411,13 @@ export class SettingsService {
         4,
         2,
       ),
+      web_search_auto_read_batch_timeout_ms: this.parseIntInRange(
+        settingsObj.web_search_auto_read_batch_timeout_ms,
+        process.env.WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS,
+        WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS.min,
+        WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS.max,
+        WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS.fallback,
+      ),
       agent_max_tool_iterations: this.parseIntInRange(
         settingsObj.agent_max_tool_iterations,
         process.env.AGENT_MAX_TOOL_ITERATIONS,
@@ -542,6 +550,7 @@ export class SettingsService {
         web_search_auto_bilingual: formatted.web_search_auto_bilingual,
         web_search_auto_bilingual_mode: formatted.web_search_auto_bilingual_mode,
         web_search_auto_read_parallelism: formatted.web_search_auto_read_parallelism,
+        web_search_auto_read_batch_timeout_ms: formatted.web_search_auto_read_batch_timeout_ms,
         mcp_global_enabled: formatted.mcp_global_enabled,
         python_tool_enable: formatted.python_tool_enable,
         chat_dynamic_skill_runtime_enabled: formatted.chat_dynamic_skill_runtime_enabled,
@@ -631,6 +640,7 @@ export class SettingsService {
     assignIfNumber('web_search_parallel_max_queries_per_call', payload.web_search_parallel_max_queries_per_call)
     assignIfNumber('web_search_parallel_timeout_ms', payload.web_search_parallel_timeout_ms)
     assignIfNumber('web_search_auto_read_parallelism', payload.web_search_auto_read_parallelism)
+    assignIfNumber('web_search_auto_read_batch_timeout_ms', payload.web_search_auto_read_batch_timeout_ms)
     assignIfNumber('agent_max_tool_iterations', payload.agent_max_tool_iterations)
     assignIfNumber('python_tool_timeout_ms', payload.python_tool_timeout_ms)
     assignIfNumber('python_tool_max_output_chars', payload.python_tool_max_output_chars)

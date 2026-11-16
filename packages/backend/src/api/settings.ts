@@ -12,7 +12,7 @@ import {
   PythonRuntimeServiceError,
   type PythonRuntimeService,
 } from '../services/python-runtime'
-import { RAG_SYSTEM_SETTINGS_KEYS } from '@aichat/shared'
+import { RAG_SYSTEM_SETTINGS_KEYS, WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS } from '@aichat/shared'
 import { WEB_SEARCH_ENGINE_IDS } from '@aichat/shared/web-search-contract'
 
 export interface SettingsApiDeps {
@@ -185,6 +185,12 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
     web_search_auto_bilingual: z.boolean().optional(),
     web_search_auto_bilingual_mode: z.enum(['off', 'conditional', 'always']).optional(),
     web_search_auto_read_parallelism: z.number().int().min(1).max(4).optional(),
+    web_search_auto_read_batch_timeout_ms: z
+      .number()
+      .int()
+      .min(WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS.min)
+      .max(WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS.max)
+      .optional(),
     agent_max_tool_iterations: z.number().int().min(0).max(20).optional(),
     mcp_global_enabled: z.boolean().optional(),
     extension_install_tool_enable: z.boolean().optional(),

@@ -7,6 +7,7 @@
  */
 
 import { isWebSearchEngine, WEB_SEARCH_ENGINE_IDS, type WebSearchEngine } from './web-search-contract.js'
+import { WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS } from './settings-contract.js'
 export type { WebSearchEngine } from './web-search-contract.js'
 export type WebSearchBilingualMode = 'off' | 'conditional' | 'always'
 export type WebSearchMergeStrategy = 'hybrid_score_v1'
@@ -84,6 +85,8 @@ export interface SystemSettings {
   webSearchAutoBilingual?: boolean
   webSearchAutoBilingualMode?: WebSearchBilingualMode
   webSearchAutoReadParallelism?: number
+  /** 自动阅读整批总时限；与单 URL 的读取超时分别生效。 */
+  webSearchAutoReadBatchTimeoutMs?: number
   pythonToolEnable?: boolean
   chatDynamicSkillRuntimeEnabled?: boolean
   pythonToolTimeoutMs?: number
@@ -399,6 +402,11 @@ export const parseSystemSettingsPayload = (
     const parsed = parseOptionalInt(raw.web_search_auto_read_parallelism)
     return typeof parsed === 'number' ? Math.max(1, Math.min(4, parsed)) : 2
   })()
+  const webSearchAutoReadBatchTimeoutMs = (() => {
+    const parsed = parseOptionalInt(raw.web_search_auto_read_batch_timeout_ms)
+    const { min, max, fallback } = WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS
+    return typeof parsed === 'number' ? Math.max(min, Math.min(max, parsed)) : fallback
+  })()
   const pythonToolEnable = Boolean(raw.python_tool_enable ?? false)
   const chatDynamicSkillRuntimeEnabled = Boolean(raw.chat_dynamic_skill_runtime_enabled ?? false)
   const pythonToolTimeoutMs = (() => {
@@ -574,6 +582,7 @@ export const parseSystemSettingsPayload = (
     webSearchAutoBilingual,
     webSearchAutoBilingualMode,
     webSearchAutoReadParallelism,
+    webSearchAutoReadBatchTimeoutMs,
     pythonToolEnable,
     chatDynamicSkillRuntimeEnabled,
     pythonToolTimeoutMs,
@@ -670,6 +679,7 @@ export {
   RAG_SYSTEM_SETTINGS_FIELDS,
   RAG_SYSTEM_SETTINGS_KEYS,
   SYSTEM_SETTINGS_FIELD_MAP,
+  WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS,
   SYSTEM_SETTINGS_STORAGE_TO_FIELD_MAP,
   deserializeSystemSettingsPayload,
   serializeSystemSettingsPatch,

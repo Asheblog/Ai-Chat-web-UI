@@ -585,7 +585,10 @@ export class BattleExecutor {
       battleRunId: context.battleRunId ?? null,
       mcpService: this.mcpService,
       builtins: {
-        webSearch: toolFlags.webSearchActive ? toolFlags.webSearchConfig : null,
+        // 自动阅读复用完整 url reader 配置，避免自动路径落回读取器默认值
+        webSearch: toolFlags.webSearchActive
+          ? { ...toolFlags.webSearchConfig, urlReader: toolFlags.urlReaderConfig }
+          : null,
         python: toolFlags.pythonActive ? toolFlags.pythonConfig : null,
         urlReader: toolFlags.urlReaderActive
           ? {
