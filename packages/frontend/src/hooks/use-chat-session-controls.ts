@@ -6,6 +6,7 @@ import type { ModelItem } from '@/store/models-store'
 import { useAuthStore } from '@/store/auth-store'
 import { useChatStore } from '@/store/chat-store'
 import { persistPreferredModel } from '@/store/model-preference-store'
+import { useReasoningEffortPreferenceStore } from '@/store/reasoning-effort-preference-store'
 
 interface UseChatSessionControlsOptions {
   currentSession: ChatSession | null
@@ -83,6 +84,7 @@ export function useChatSessionControls({
     (value: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | 'unset') => {
       if (!currentSession) return
       setEffort(value)
+      useReasoningEffortPreferenceStore.getState().setLastSelection(value)
       useChatStore.getState().updateSessionPrefs(currentSession.id, {
         reasoningEffort: value === 'unset' ? null : value,
       })

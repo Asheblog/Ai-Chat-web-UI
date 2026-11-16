@@ -3,6 +3,9 @@ import type { ToolLogCoverage } from '@aichat/shared/tool-operations'
 import type { ToolEvent } from './tool-events'
 import type { MessageStreamMetrics, UsageTotals } from './usage'
 
+export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+export type ReasoningEffortSelection = 'unset' | ReasoningEffort
+
 export interface ChatSession {
   id: number;
   userId: number;
@@ -13,7 +16,7 @@ export interface ChatSession {
   createdAt: string;
   pinnedAt?: string | null;
   reasoningEnabled?: boolean | null;
-  reasoningEffort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh' | null;
+  reasoningEffort?: ReasoningEffort | null;
   systemPrompt?: string | null;
   knowledgeBaseIds?: number[];
   lastMessagePreview?: string | null;

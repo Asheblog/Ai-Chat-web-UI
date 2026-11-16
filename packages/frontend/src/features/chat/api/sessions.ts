@@ -1,5 +1,6 @@
 import { apiHttpClient } from '@/api/http'
 import type { ApiResponse } from '@/types'
+import type { ReasoningEffort } from '@/types/chat'
 
 const client = apiHttpClient
 
@@ -23,9 +24,11 @@ export const createSessionByModelId = async (
   rawId?: string,
   systemPrompt?: string | null,
   knowledgeBaseIds?: number[],
+  options?: { reasoningEffort?: ReasoningEffort },
 ) => {
   const payload: Record<string, unknown> = { modelId }
   if (title) payload.title = title
+  if (options?.reasoningEffort) payload.reasoningEffort = options.reasoningEffort
   if (connectionId && rawId) {
     payload.connectionId = connectionId
     payload.rawId = rawId

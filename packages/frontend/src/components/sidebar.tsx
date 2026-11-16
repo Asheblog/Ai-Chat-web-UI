@@ -23,6 +23,7 @@ import type { UsageTotals } from '@/types'
 import dynamic from 'next/dynamic'
 import { useAuthStore } from '@/store/auth-store'
 import { useModelsStore } from '@/store/models-store'
+import { useReasoningEffortPreferenceStore } from '@/store/reasoning-effort-preference-store'
 import { useModelPreferenceStore, findPreferredModel, persistPreferredModel } from '@/store/model-preference-store'
 import { PROJECT_HOST_PATH, PROJECT_NAME, PROJECT_URL } from '@/lib/app-meta'
 import { SidebarSessionSearch } from '@/components/sidebar-session-search'
@@ -201,7 +202,9 @@ export function Sidebar() {
         resolved.id,
         '新的对话',
         resolved.connectionId ?? undefined,
-        resolved.rawId ?? undefined
+        resolved.rawId ?? undefined,
+        undefined,
+        { reasoningEffort: useReasoningEffortPreferenceStore.getState().lastSelection ?? undefined },
       )
       if (created?.id) {
         router.push(`/main/${created.id}`)

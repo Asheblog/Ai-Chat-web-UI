@@ -32,10 +32,10 @@ export function prepareSelectorTest() {
   useModelsStore.setState({ models, isLoading: false, error: null, fetchAll: initialFetchAll })
 }
 
-// Specification copy: six values, with unset meaning "do not set explicitly".
-export const efforts = ['unset', 'low', 'medium', 'high', 'max', 'xhigh'] as const
+// Specification copy: six values in display order, with unset meaning "do not set explicitly".
+export const efforts = ['unset', 'low', 'medium', 'high', 'xhigh', 'max'] as const
 export type Effort = (typeof efforts)[number]
 export const effortLabels: Record<Effort, string> = {
-  unset: '默认', low: 'Low', medium: 'Medium', high: 'High', max: 'Max', xhigh: 'XHigh',
+  unset: '默认', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'XHigh', max: 'Max',
 }
 export const effortOption = (value: Effort) => new RegExp('^' + effortLabels[value])

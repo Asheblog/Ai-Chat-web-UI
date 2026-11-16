@@ -4,6 +4,7 @@ import type { ChatSession } from '@/types'
 import * as chatApi from '@/features/chat/api'
 
 vi.mock('@/features/chat/api', () => ({
+  createSessionByModelId: vi.fn(),
   getSessions: vi.fn(),
   getSessionsUsage: vi.fn(),
   getUsage: vi.fn(),
@@ -25,6 +26,16 @@ const mockSessions = (count = 2): ChatSession[] =>
 describe('session slice', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it.each(['max', 'unset'] as const)('新建聊天将指定强度 %s 传给创建接口', async (effort) => {
+    const store = createChatStoreInstance()
+    vi.mocked(chatApi.createSessionByModelId).mockResolvedValue({ success: true, data: mockSessions(1)[0] })
+    await store.getState().createSession('gpt-test', undefined, undefined, undefined, undefined, { reasoningEffort: effort })
+    expect(chatApi.createSessionByModelId).toHaveBeenCalledWith(
+      'gpt-test', undefined, undefined, undefined, undefined, undefined,
+      { reasoningEffort: effort === 'unset' ? undefined : effort },
+    )
   })
 
   it('fetchSessions should load sessions list and stop loading flag', async () => {

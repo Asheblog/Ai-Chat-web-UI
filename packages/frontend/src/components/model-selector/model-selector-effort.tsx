@@ -9,14 +9,14 @@ interface ModelReasoningEffortOption {
   hint?: string
 }
 
-/** 六值选项与文案；unset 以“默认”呈现，并说明不显式设置。 */
+/** 六值选项与文案，顺序即呈现顺序（默认 → Low → Medium → High → XHigh → Max）；unset 以“默认”呈现，并说明不显式设置。 */
 export const MODEL_REASONING_EFFORT_OPTIONS: readonly ModelReasoningEffortOption[] = [
   { value: 'unset', label: '默认', hint: '不设置' },
   { value: 'low', label: 'Low' },
   { value: 'medium', label: 'Medium' },
   { value: 'high', label: 'High' },
-  { value: 'max', label: 'Max' },
   { value: 'xhigh', label: 'XHigh' },
+  { value: 'max', label: 'Max' },
 ]
 
 export const formatModelReasoningEffortLabel = (value: ModelReasoningEffort): string =>

@@ -277,6 +277,16 @@ describe("ReasoningNetworkPage（数据与日志 → 生成与网络（高级）
     expect(screen.getByRole("button", { name: "保存设置" })).toBeEnabled()
   })
 
+  test("推理强度兜底按 不设置 → low → medium → high → xhigh → max 排列", async () => {
+    render(<ReasoningNetworkPage />)
+    const card = await expand("推理与生成")
+    await userEvent.click(within(card).getByRole("combobox", { name: "推理强度兜底" }))
+    const options = await screen.findAllByRole("option")
+    expect(options.map(option => option.textContent?.trim())).toEqual([
+      "不设置", "low", "medium", "high", "xhigh", "max",
+    ])
+  })
+
   test("dirty 跟踪：修改任一字段保存启用，改回原值后 disabled", async () => {
     render(<ReasoningNetworkPage />)
     const saveButton = screen.getByRole("button", { name: "保存设置" })
