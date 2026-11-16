@@ -1,150 +1,186 @@
-# AI Chat 聊天平台
+# AI Chat
 
-轻量级、多模型、可扩展的 AI Chat 平台。前端基于 Next.js 14，后端基于 Hono + Prisma + SQLite，采用 Monorepo 架构；一条 `docker compose up -d` 即可完成生产部署。
+![AI Chat：把对话，变成成果。多模型、深度研究与 MCP / Skill，自部署的 AI 工作台。](docs/assets/readme-cover.png)
 
-🌐 在线示例：https://aichat.asheblog.org
+**把多模型对话、联网研究、文件分析和工具执行，放进一个可自部署的工作台。**
 
----
+AI Chat 面向个人自用和团队共享：接入自己的模型服务，在对话中搜索资料、阅读网页、分析文件、运行 Python，交付带来源的回答和可下载的成果。Web 端提供完整工作台与管理设置，Android 客户端用于连接自己的服务进行日常聊天。
 
-## ✨ 功能亮点
+[在线体验](https://aichat.asheblog.org) · [快速部署](#快速部署) · [首次配置](#首次配置) · [完整部署指南](docs/DEPLOYMENT.md) · [Android 客户端](packages/mobile/README.md)
 
-- **多模型统一接入**：OpenAI 兼容、OpenAI Responses、Google Gemini 三种协议，DeepSeek / GLM / Qwen / GPT 等模型一次配置、随时切换，上下文窗口与能力自动识别
-- **原生工具链**：联网搜索（Tavily / Brave / Exa / Metaso / DeepSeek，并行多引擎）、网页读取（本地多引擎 + 浏览器渲染 + 可选 DeepSeek Fetch 回退）、Python 沙箱执行、深度研究（计划确认 → 举证 → `export_pdf`）、RAG 知识库与文档解析
-- **Skill 插件系统**：内置 Skill + GitHub 第三方 Skill 的安装、审批、激活、会话绑定与审计；可执行型第三方 Skill 强制沙箱隔离、能力按声明授权
-- **AI 自助安装扩展**：聊天里贴一条 GitHub 链接，模型调用 `install_extension` 自行判断这是远程 MCP、本地包 MCP 还是 Skill，完成安装、绑定与工具清单验证；本地包在容器网关内运行，密钥只回填名称、不经过模型
-- **Workspace Agent**：会话级 Docker 隔离沙箱，内置受管 Python 运行时（缺库自动安装）、文件读写、Git 克隆；并发槽位排队、超时自动杀容器回收
-- **深度思考 ↔ 工具交错步骤流**：推理过程与工具调用按时间线交错展示，Web / 分享 / Battle / Android 四端统一
-- **模型大乱斗（Battle）**：多模型同题对比 / 单模型多题批量评测，支持题目配图与按题稳定性统计
-- **企业级治理**：Secret Vault 密钥库、MCP 服务接入、注册审批、匿名访客与每日额度、调用审计、品牌主题定制
-- **多端支持**：Web 客户端 + 原生 Android 客户端（React Native / Expo）
+## 能做什么
 
----
+- **多模型，一个入口**：接入 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 和 Google Gemini。DeepSeek、GLM、Qwen 等可通过兼容协议接入，按模型能力调整推理强度。
+- **从问题到研究报告**：搜索、读网页、确认研究计划、收集证据、导出 PDF。支持 Tavily、Brave、Exa、Metaso、DeepSeek 五种搜索引擎及多引擎并行。
+- **分析自己的资料**：上传文件，在会话工作区处理；或建立 RAG 知识库，解析文档并在聊天时检索。
+- **让模型完成操作**：在会话级 Docker 沙箱中执行 Python、读写文件、克隆 Git 仓库，管理运行资源、并发队列与下载产物。
+- **按需扩展工具**：使用内置与第三方 Skill、远程 MCP、容器网关中的本地包 MCP；支持在聊天里通过 GitHub 链接安装扩展。
+- **看懂回答怎样完成**：打开“本轮工作区”，按过程、来源、产物查看执行记录，筛选工具调用、检查错误与原始明细。聊天、分享与 Battle 共用 Web 工作区。
+- **比较模型与回答**：Battle 支持多模型同题对比、单模型多题评测与题目配图；聊天重新生成后保留全部回答版本及历史用量。
+- **管理共享服务**：用户与注册审批、访客额度、模型连接、密钥库、日志与任务追踪，以及品牌主题定制和统一的工具与扩展管理。
 
-## 🚀 快速部署（Docker）
+### 最近更新的使用体验
 
-### 前置要求
+- **输入区以写作为主**：模型与推理强度使用同一入口；联网、研究、Python、知识库和扩展收进工具面板，已启用能力在输入区回显。
+- **答案与过程各有位置**：正文保持阅读主位，按需展开本轮工作区；宽屏侧栏、手机全屏，来源和产物集中查看。
+- **设置贴近实际运行**：连接、模型能力、生成参数和访问配置分别管理；搜索引擎的启用与排序合为一处，“工具与扩展”集中管理 MCP 服务、Skill、内置工具和对话增强。
+- **偏好跟随账号**：个人提示词作为偏好层追加，会话上下文开关保存在账号中；关闭上下文时，消息仍保存，但历史消息不加入本次模型请求。
 
-- Docker 20.0+ 与 Docker Compose 2.0+
-- 内存 ≥ 2GB，磁盘 ≥ 2GB（镜像含 Playwright Chromium，供深度研究 PDF / 网页渲染使用）
+具体变更与升级说明见 [CHANGELOG](CHANGELOG.md)。
 
-### 1) 准备环境变量
+## 快速部署
+
+推荐使用仓库自带的 **Docker Compose**。默认启动两个常驻容器：
+
+- `app`：同容器运行 Next.js 前端、Hono 后端和文档处理 worker。
+- `docker-socket-proxy`：供 Workspace 和本地包 MCP 创建隔离容器。
+
+浏览器统一访问前端的 `/api`，默认对外端口为 **3000**，无需另行安装数据库。数据使用 SQLite 并写入 Docker 命名卷。
+
+### 1. 准备主机与代码
+
+安装 Git、支持 Linux 容器的 Docker 和 Docker Compose v2。Windows 使用 Docker Desktop 的 Linux 容器模式。建议从 **2 核 CPU、4 GB 内存**起步；同时运行多个 Python / MCP 容器或处理较大知识库时，按负载增加资源。
 
 ```bash
+git clone https://github.com/Asheblog/Ai-Chat-web-UI.git
+cd Ai-Chat-web-UI
 cp .env.example .env
 ```
 
-Windows PowerShell 使用 `Copy-Item .env.example .env`。至少显式设置以下密钥（不要写进 compose 或提交到 Git）：
+Windows PowerShell 将最后一行替换为 `Copy-Item .env.example .env`。
 
-| 变量 | 说明 |
-| --- | --- |
-| `JWT_SECRET` | 登录态签名密钥（必改） |
-| `SECRET_VAULT_MASTER_KEY` | Secret Vault 主密钥（必填），用 `openssl rand -hex 32` 生成 |
-| `WORKSPACE_ARTIFACT_SIGNING_SECRET` | artifact 下载签名（建议设置） |
-| `CORS_ORIGIN` | 改为你的实际访问地址 |
+### 2. 修改环境配置
 
-### 2) 启动
+打开 `.env`，为下面三个变量分别填入独立生成的随机值：
+
+- `JWT_SECRET`：签名登录令牌。
+- `SECRET_VAULT_MASTER_KEY`：加密模型、MCP、Skill 等凭据；与数据一起备份，恢复时使用原值。
+- `WORKSPACE_ARTIFACT_SIGNING_SECRET`：签名工作区产物的下载链接。
+
+有 OpenSSL 时，可执行 `openssl rand -hex 32`，每次取一个新值。也可在已安装 Node.js 的机器上执行：
 
 ```bash
-docker compose up -d
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-生产默认拓扑为 2 个容器：`app`（同容器运行 frontend + backend + rag-worker，镜像 `ghcr.io/asheblog/aichat`）与 `docker-socket-proxy`（限制 Docker socket 访问，供 Workspace 沙箱使用）。首次启动会自动初始化数据库、同步内置 Skill 并 reconcile Python 运行时，可用以下命令跟踪日志：
+使用本机或局域网 **HTTP** 访问时，在 `.env` 中加入：
+
+```dotenv
+COOKIE_SECURE=false
+```
+
+通过域名提供 **HTTPS** 服务时，使用 `COOKIE_SECURE=true`，由 Nginx、Caddy 或 1Panel 反代前端端口。同源部署将 `ENABLE_CORS` 设置为 `false`；只有前后端跨源访问时才启用 CORS 并配置 `CORS_ORIGIN`。
+
+### 3. 拉取镜像并启动
 
 ```bash
+docker compose pull
+docker compose up -d
+docker compose ps
 docker compose logs -f app
 ```
 
-### 3) 验证与首次登录
+首次启动会初始化数据库、同步内置 Skill，并准备受管 Python 运行环境。等待应用健康后访问：
 
-- 健康检查：`http://<你的地址>:3000/api/health`
-- 页面入口：`http://<你的地址>:3000`
-- 第一个注册用户自动成为管理员（若关闭注册，用配置的管理员账号登录）
-- 浏览器经前端同源 `/api` 访问后端，Nginx / 1Panel 只需反代前端端口
+- 页面：<http://localhost:3000>（远程部署时将 `localhost` 换成服务器地址）。
+- 前端健康检查：<http://localhost:3000/api/health>。
+- 后端健康检查：<http://localhost:3000/api/settings/health>。
 
-### 4) 日常运维
+前端端口被占用时，在 `.env` 设置 `FRONTEND_PORT=8080` 后重新执行 `docker compose up -d`，改用 8080 访问。
+
+初始化账户、首次登录及模型接入见下节。资源配置、HTTPS、升级备份、分容器部署和故障排查见 [完整部署指南](docs/DEPLOYMENT.md)。
+
+## 首次配置
+
+### 1. 登录并完成初始化
+
+默认新库由初始化脚本创建管理员：用户名 `admin`，初始密码 `admin123456`。登录后修改密码并完成初始化向导。自定义初始化账户的方法见 [部署指南](docs/DEPLOYMENT.md)；已有实例继续使用原账号与数据。
+
+### 2. 接入第一个模型
+
+管理员进入“系统设置 → 连接与模型”，添加供应商连接，填写服务地址和 API Key，再获取或配置模型列表。
+
+| 你的服务 | 选择的协议 |
+| --- | --- |
+| OpenAI、DeepSeek、GLM、Qwen 等 Chat Completions 兼容服务 | OpenAI → Chat Completions |
+| 提供 Responses API 的服务 | OpenAI → Responses |
+| Anthropic 官方或兼容 Messages API 的服务 | Anthropic |
+| Google Gemini API | Google Gemini |
+
+回到聊天页，打开模型选择器，选择连接与模型，发送第一条消息。推理、图片和工具调用等能力取决于所选模型与供应商协议。
+
+### 3. 按需开启研究、文件和扩展
+
+| 想做的事 | 配置入口与前提 |
+| --- | --- |
+| 联网搜索 | “系统设置 → 搜索与知识库 → 联网搜索”配置引擎与对应 Key；然后在聊天工具面板开启联网。 |
+| 用 DeepSeek 搜索 | 单独配置 DeepSeek 搜索 Key，聊天连接的 Key 不会自动用于搜索；Search / Fetch 按供应商计费。Fetch 回退默认关闭。 |
+| 深度研究 | 先配置可用模型与搜索，聊天工具面板开启深度研究，按研究计划确认后继续执行。 |
+| 分析文件、生成产物 | 在输入区添加文件并开启所需工具；Python 执行需要可用的 Docker 沙箱。 |
+| 使用长期资料库 | “系统设置 → 搜索与知识库”配置知识库及检索能力，再从聊天工具面板选择知识库。 |
+| 安装 MCP / Skill | “系统设置 → 工具与扩展”，或在聊天中给出 GitHub 链接。安装权限、连接密钥和容器前提见 [扩展使用指南](docs/EXTENSIONS.md)。 |
+
+搜索、模型调用和远程扩展通过你配置的外部服务处理相应请求；服务端保存聊天与配置，Secret Vault 加密保存凭据。
+
+## 源码开发
+
+推荐 **Node.js 22 LTS（22.12+）**，使用 **pnpm 8.15.0**。需要执行 Workspace / 本地包 MCP 时，另备可用的 Docker。
+
+在新克隆的仓库根目录执行：
 
 ```bash
-docker compose ps                            # 查看状态
-docker compose logs -f app                   # 查看日志
-docker compose down                          # 停止
-docker compose pull && docker compose up -d  # 升级到最新镜像
-```
-
-> 💡 需要 frontend / backend / rag-worker 分开扩缩？使用仓库内 `docker-compose.split.yml`（四容器拓扑）。1Panel 编排示例见 `docs/deploy/1panel-compose.example.yml`。
-
----
-
-## 🛠 本地源码开发
-
-```bash
-pnpm install
+pnpm install --frozen-lockfile
 cp .env.example .env
-pnpm --filter backend db:push
-npm run start:dev
+# 按上文填写三项密钥；本地 HTTP 设置 COOKIE_SECURE=false
+pnpm start:dev
 ```
 
-Windows PowerShell 用 `Copy-Item .env.example .env` 代替 `cp`。
+Windows PowerShell 使用 `Copy-Item .env.example .env`。启动脚本负责检查依赖、同步 Prisma 数据库、执行种子初始化并启动开发服务。浏览器访问 <http://localhost:3000>；后端端口取决于本地环境配置。
 
----
+源码环境的网页渲染与 PDF 导出需要可用的 Chromium / Chrome / Edge；文档处理还需 Python 运行环境。官方 Docker 镜像已包含这些依赖，本地配置方法见 [部署指南](docs/DEPLOYMENT.md)。
 
-## 📖 更多文档
+### 常用检查
 
-### AI 自助安装扩展
-
-不需要先去设置页填那些技术字段。在聊天里把仓库链接发给模型：
-
+```bash
+pnpm --filter @aichat/backend test
+pnpm --filter @aichat/frontend exec vitest run
+pnpm --filter @aichat/backend type-check
+pnpm --filter @aichat/frontend type-check
+pnpm architecture:check
 ```
-帮我把 https://github.com/modelcontextprotocol/servers/tree/main/src/github 装上
+
+### 项目结构
+
+```text
+packages/
+  frontend/    Next.js 15 · React 18 · Tailwind CSS · shadcn/ui
+  backend/     Hono · Prisma · SQLite · 工具编排与文档 worker
+  shared/      Web / 后端 / 移动端共享契约与纯函数
+  mobile/      React Native · Expo Android 客户端
+scripts/       本地启动、数据库初始化与检查脚本
+docs/          部署、架构、设计与决策记录
 ```
 
-模型会调用 `install_extension`，服务端只读取仓库里少量白名单清单文件（`SKILL.md`、`server.json`、`mcp.json`、`package.json`、`README.md`）来判断类型与运行方式，然后：
+## Android 客户端
 
-1. 判定类型：有 `SKILL.md` 按 Skill 安装；声明了远程端点按远程 MCP 接入；声明了启动命令按本地包 MCP 交给容器网关。
-2. 落库与绑定：生成 MCP 安装模板 + 连接，或安装 Skill 版本；按你的范围绑定到会话/用户。
-3. 验证：对 MCP 真正握手一次 `tools/list`，把工具清单回填给模型；对 Skill 走既有许可证与审批。
-4. 回填结果：缺哪些密钥、下一步去哪点，模型会直接告诉你。密钥只回填名称，不会被发给模型。
+Android App 连接你部署的 AI Chat 服务，支持登录、会话列表、历史消息、流式回复、停止生成和基础 Markdown 阅读。首次使用填写**手机可访问的服务器根地址**；手机上的 `localhost` 指向手机本身，局域网部署应填写服务器的局域网 IP 或域名。
 
-缺少密钥时，去「能力扩展 → MCP 服务 → 连接」编辑该连接：表单会按安装声明的名称列出输入框，填完保存即写入 Secret Vault 并自动刷新工具清单，不需要手写 JSON。管理员也可以在安装模板的「必需环境变量」里预先声明名称（如 `GITHUB_TOKEN`），连接页会照这份名单生成输入框。
+系统管理和完整的工具配置使用 Web 端。APK 构建、签名、安装与移动开发见 [Android 指南](packages/mobile/README.md)，发布产物见 [GitHub Releases](https://github.com/Asheblog/Ai-Chat-web-UI/releases)。
 
-如果仓库同时包含 MCP 与 Skill，工具会返回两个候选让模型向你确认，而不是自己选一个。
+## 运维与进一步阅读
 
-**权限与边界**
+| 你要做什么 | 入口 |
+| --- | --- |
+| 部署、反代、备份、升级或排障 | [部署指南](docs/DEPLOYMENT.md) |
+| 配置 AI 自助安装、MCP 与 Skill | [扩展使用指南](docs/EXTENSIONS.md) |
+| 理解模块划分与请求链路 | [架构说明](docs/Architecture.md) |
+| 查领域概念与规则 | [领域词汇表](CONTEXT.md) |
+| 查近期变化与迁移影响 | [变更日志](CHANGELOG.md) |
+| 查架构决定与取舍 | [ADR](docs/adr/) |
+| 修改 README 封面 | [Figma 设计稿](https://www.figma.com/design/g8OE79vEs53TGlcJ6Q4Cva?node-id=14-707) · [封面设计与源码](docs/design/readme-cover.md) |
 
-- MCP 安装模板是系统级资产，只有管理员能创建（ADR-0017）：普通用户装同一个仓库时会得到「请管理员先安装该模板」，之后可基于模板建自己的连接。
-- 本地包型 MCP 一律在容器网关内运行（ADR-0015），不在宿主机直接执行；宿主 docker 不可用时如实返回「需要网关」，不会谎报可用。
-- 能力扩展页头的「AI 自助安装」开关可整体关闭该工具（系统设置键 `extension_install_tool_enable`，默认开启）。
+反馈问题或建议请到 [GitHub Issues](https://github.com/Asheblog/Ai-Chat-web-UI/issues)，附上部署方式、复现步骤和脱敏日志。
 
-**可选环境变量**
+## 许可证
 
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `MCP_GATEWAY_NODE_IMAGE` | `node:20-slim` | `npx` 型本地包的运行镜像 |
-| `MCP_GATEWAY_PYTHON_IMAGE` | `ghcr.io/astral-sh/uv:python3.12-bookworm-slim` | `uvx` 型本地包的运行镜像（需含 uv） |
-| `MCP_GATEWAY_CPUS` / `MCP_GATEWAY_MEMORY` / `MCP_GATEWAY_PIDS_LIMIT` | `0.5` / `512m` / `128` | 网关容器资源上限 |
-| `MCP_GATEWAY_NETWORK` | `bridge` | 网关容器网络；设为 `none` 可完全断网 |
-| `MCP_RUNTIME_TIMEOUT_MS` | `30000` | MCP 握手与工具调用超时 |
-| `EXTENSION_INSTALL_TOOL_ENABLE` | 跟随系统设置 | 环境变量兜底开关，系统设置优先 |
-
-设计说明见 [docs/plans/2026-11-12-extension-install-tool-design.md](docs/plans/2026-11-12-extension-install-tool-design.md)。
-
-### DeepSeek 联网搜索
-
-管理员进入「系统设置 → 搜索与知识库 → 联网搜索」，勾选 DeepSeek 并保存独立的搜索 API Key。密钥使用 Secret Vault 加密保存；留空保持原值，「清除已保存 Key」显式删除。聊天、深度研究与 Battle 复用同一搜索工具配置。
-
-DeepSeek 支持网页检索；图片检索会跳过该引擎。开启「返回原文」后，可直接复用搜索返回的有效正文，减少重复读页。Search 与 Fetch 调用均可能产生供应商费用。Fetch 回退默认关闭，仅显式开启且本地网页读取失败时调用，亦可用于独立网页读取。
-
-也可在服务端环境中设置 `WEB_SEARCH_AGENT_ENABLE=true`、`WEB_SEARCH_ENABLED_ENGINES=deepseek`、`WEB_SEARCH_API_KEY_DEEPSEEK`；可选 `WEB_SEARCH_DEEPSEEK_FETCH_ENABLE=true`、`WEB_SEARCH_INCLUDE_RAW=true`。管理页设置优先；清除已保存 Key 后仍可使用环境变量 Key。默认并行引擎数为 3，`WEB_SEARCH_PARALLEL_MAX_ENGINES` 最大为 5。无需数据库迁移，直接更新代码或镜像；新增能力默认关闭。
-
-协议依据：[DeepSeek 搜索指南](https://api-docs.deepseek.com/zh-cn/guides/search/)。
-
-- 完整部署指南（环境变量、资源配置、安全清单、升级与迁移）：[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
-- 架构说明：[docs/Architecture.md](docs/Architecture.md)
-- 领域词汇表（Skill / MCP / 搜索等术语定义）：[CONTEXT.md](CONTEXT.md)
-- 变更日志（含 BREAKING 变更与迁移说明）：[CHANGELOG.md](CHANGELOG.md)
-- 架构决策记录：[docs/adr](docs/adr)（扩展安装与 MCP 运行层见 ADR-0037 / ADR-0038）
-
----
-
-## License
-
-[MIT](LICENSE)
+本项目使用 [MIT License](LICENSE)。
