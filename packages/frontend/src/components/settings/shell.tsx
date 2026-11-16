@@ -5,7 +5,6 @@ import type { SettingsNavItem } from "./nav"
 import { ChevronDown, ChevronRight } from "lucide-react"
 import { useNavFlash } from "./use-nav-flash"
 import { SettingsShellLayout, SettingsContentColumn } from "./shell-layout"
-import { getExtensionSection } from "./extensions-navigation"
 
 export interface SettingsSection {
   key: string
@@ -31,6 +30,8 @@ type FlatModeProps = {
 type NestedModeProps = {
   mode: "nested"
   tree: SettingsNavItem[]
+  /** 弹窗从个人/系统分区开始；独立页默认直接显示目录。 */
+  rootLayout?: "sections" | "directories"
   activeMain: string
   activeSub: string
   onChangeMain: (key: string) => void
@@ -46,30 +47,30 @@ type NestedModeProps = {
 
 export type SettingsShellProps = BaseProps & (FlatModeProps | NestedModeProps)
 
-// 分组与普通叶子沿用同层字阶，扩展子页缩进；选中使用青绿色浅底与信号条。
-const NAV_GROUP = "flex h-11 md:h-10 w-full items-center gap-2 rounded-lg px-2 text-left text-sm font-medium text-ink-secondary transition-colors duration-[160ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring hover:bg-surface-hover hover:text-foreground aria-expanded:text-foreground"
-const NAV_SUB = "flex h-11 md:h-10 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-ink-secondary transition-colors duration-[160ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring hover:bg-surface-hover hover:text-foreground"
-const NAV_LEAF = "flex h-11 md:h-10 w-full items-center gap-2 rounded-lg border px-2 text-left text-sm transition-colors duration-[160ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+// 一级分区用紧凑标题与分隔留白；目录图标和文字共列，所有折叠箭头固定在行尾。
+const NAV_GROUP = "flex h-11 md:h-10 w-full items-center gap-2 rounded-lg border border-transparent px-2 text-left text-sm text-ink-secondary transition-colors duration-[160ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring hover:bg-surface-hover hover:text-foreground"
+const NAV_SECTION = "text-[13px] font-semibold tracking-wide text-foreground"
+const NAV_LEAF = "relative flex h-11 md:h-10 w-full items-center gap-2 rounded-lg border px-2 text-left text-sm transition-colors duration-[160ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 const NAV_LEAF_ACTIVE = "border-transparent bg-signal-soft font-semibold text-signal-text"
 const NAV_LEAF_IDLE = "border-transparent text-ink-secondary hover:bg-surface-hover hover:text-foreground"
 const NAV_ICON = "h-[1.125rem] w-[1.125rem] shrink-0"
 const NAV_LIST = "flex flex-col gap-0.5"
 
-/** 选中态左侧信号竖条；未选中时留同宽透明占位，切换不产生横向位移。 */
+/** 选中条叠在行的左侧边缘，不占图标列，普通叶子与折叠目录保持同一文字起点。 */
 function NavBar({ active }: { active: boolean }) {
   return (
     <span
       aria-hidden="true"
-      className={cn("h-3.5 w-0.5 shrink-0 rounded-full", active ? "bg-signal" : "bg-transparent")}
+      className={cn("absolute left-0 top-1/2 h-3.5 w-0.5 -translate-y-1/2 rounded-full", active ? "bg-signal" : "bg-transparent")}
     />
   )
 }
 
 function NavChevron({ open }: { open: boolean }) {
   return open ? (
-    <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+    <ChevronDown data-nav-chevron="" className="h-3.5 w-3.5 shrink-0 text-ink-tertiary" aria-hidden="true" />
   ) : (
-    <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+    <ChevronRight data-nav-chevron="" className="h-3.5 w-3.5 shrink-0 text-ink-tertiary" aria-hidden="true" />
   )
 }
 
@@ -159,6 +160,7 @@ function findAncestors(tree: SettingsNavItem[], targetKey: string): string[] {
 function SettingsShellNestedImpl({
   title = "设置",
   tree,
+  rootLayout = "directories",
   activeMain,
   activeSub,
   onChangeMain,
@@ -217,38 +219,35 @@ function SettingsShellNestedImpl({
       const isActiveMain = item.key === activeMain
       const isActiveLeaf = !hasChildren && activeSub === item.key
       const itemRootKey = depth === 0 ? item.key : rootKey
+      const isChildLeaf = depth > (rootLayout === "sections" ? 1 : 0)
 
       if (hasChildren) {
-        // 顶级分组（depth 0）渲染成分组标签行，仍是可点击的折叠开关
-        if (depth === 0) {
-          return (
-            <div key={item.key}>
-              <button
-                type="button"
-                aria-expanded={isExpanded}
-                onClick={() => {
-                  if (!isExpanded) onChangeMain(item.key)
-                  toggleExpand(item.key)
-                }}
-                className={cn(NAV_GROUP, isActiveMain && "text-foreground")}
-              >
-                <NavChevron open={isExpanded} />
-                {item.icon && <span className={NAV_ICON}>{item.icon}</span>}
-                <span className="min-w-0 flex-1 truncate">{item.label}</span>
-              </button>
-              {isExpanded && <div className={cn(NAV_LIST, "mt-0.5")}>{renderItems(item.children || [], depth + 1, item.key)}</div>}
-            </div>
-          )
-        }
-        // 二级工作域（depth >= 1）：只负责展开/收起，不切页
+        const isSection = depth === 0 && rootLayout === "sections"
+        const toggle = (
+          <button
+            type="button"
+            data-nav-section={isSection ? "" : undefined}
+            aria-expanded={isExpanded}
+            onClick={() => {
+              if (depth === 0 && !isExpanded) onChangeMain(item.key)
+              toggleExpand(item.key)
+            }}
+            className={cn(NAV_GROUP, isSection && NAV_SECTION, isActiveMain && "text-foreground")}
+          >
+            {item.icon && <span aria-hidden="true" className={cn(NAV_ICON, "text-ink-tertiary")}>{item.icon}</span>}
+            <span className="min-w-0 flex-1 truncate">{item.label}</span>
+            <NavChevron open={isExpanded} />
+          </button>
+        )
         return (
-          <div key={item.key}>
-            <button type="button" aria-expanded={isExpanded} onClick={() => toggleExpand(item.key)} className={NAV_SUB}>
-              <NavChevron open={isExpanded} />
-              {item.icon && <span className={cn(NAV_ICON, "text-ink-tertiary")}>{item.icon}</span>}
-              <span className="min-w-0 flex-1 truncate">{item.label}</span>
-            </button>
-            {isExpanded && <div className={cn(NAV_LIST, "mt-0.5")}>{renderItems(item.children || [], depth + 1, itemRootKey)}</div>}
+          <div key={item.key} className={isSection ? "mt-4 border-t border-border pt-3 first:mt-0 first:border-t-0 first:pt-0" : undefined}>
+            {isSection ? <h3>{toggle}</h3> : toggle}
+            {isExpanded && (
+              // 17px = 行边框1 + 左内边距8 + 图标中心9 - 引导线1；子项文字与父目录标签共列。
+              <div className={cn(NAV_LIST, "mt-1", !isSection && "ml-[17px] border-l border-border pl-2")}>
+                {renderItems(item.children || [], depth + 1, itemRootKey)}
+              </div>
+            )}
           </div>
         )
       }
@@ -267,10 +266,10 @@ function SettingsShellNestedImpl({
             if (itemRootKey && itemRootKey !== activeMain) onChangeMain(itemRootKey)
             onChangeSub(item.key)
           }}
-          className={cn(NAV_LEAF, getExtensionSection(item.key) && "pl-9", isActiveLeaf ? NAV_LEAF_ACTIVE : NAV_LEAF_IDLE)}
+          className={cn(NAV_LEAF, isActiveLeaf ? NAV_LEAF_ACTIVE : NAV_LEAF_IDLE)}
         >
           <NavBar active={isActiveLeaf} />
-          {Icon && !getExtensionSection(item.key) && <span className={cn(NAV_ICON, isActiveLeaf ? "text-foreground" : "text-ink-tertiary")}>{Icon}</span>}
+          {!isChildLeaf && <span aria-hidden="true" className={cn(NAV_ICON, isActiveLeaf ? "text-foreground" : "text-ink-tertiary")}>{Icon}</span>}
           <span className="min-w-0 flex-1 truncate">{item.label}</span>
         </button>
       )
