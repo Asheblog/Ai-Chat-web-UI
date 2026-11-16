@@ -13,7 +13,7 @@ export type SectionSwitchKey =
 
 export interface SectionSwitchProps {
   settingsKey: SectionSwitchKey
-  /** 开关名（「全局」/「运行时」），与状态词拼成「{label} 已开启」 */
+  /** 开关名（「全局」/「运行时」），与状态词拼成「{label} 已开启」；空串表示只显示状态词 */
   label: string
   onLabel: string
   offLabel: string
@@ -59,7 +59,7 @@ export function SectionSwitch({
         // 开关值直接来自 store：写入失败时 store 不变，UI 自动回到原状态；
         // 失败原因必须说出来，否则用户会以为「点了没反应」。
         toast({
-          title: `${label}未保存`,
+          title: label ? `${label}未保存` : "设置未保存",
           description: cause?.response?.data?.error || cause?.message || '写入失败，开关已回到原状态',
           variant: "destructive",
         })
@@ -73,10 +73,18 @@ export function SectionSwitch({
   // 未取到设置时不猜开关状态：宁可显示「状态未知」并禁用，也不给一个假的确定值。
   const enabled = settings ? Boolean(settings[settingsKey]) : null
   const stateText = settings === null ? "状态未知" : enabled ? onLabel : offLabel
+  const stateLabel = label ? `${label} ${stateText}` : stateText
 
   return (
     <div className="flex shrink-0 flex-col items-end gap-1">
-      <div className="flex items-center gap-2">
+      {/* 状态词在开关左侧（Figma）：整行最小 44px，移动端点到的不是 24px 的开关本体 */}
+      <div className="flex min-h-11 items-center gap-2 md:min-h-9">
+        <label
+          htmlFor={switchId}
+          className="cursor-pointer select-none text-xs text-muted-foreground"
+        >
+          {stateLabel}
+        </label>
         <Switch
           id={switchId}
           checked={enabled === true}
@@ -84,12 +92,6 @@ export function SectionSwitch({
           disabled={saving || settings === null || isLoading}
           aria-label={ariaLabel}
         />
-        <label
-          htmlFor={switchId}
-          className="cursor-pointer select-none text-xs text-muted-foreground"
-        >
-          {label} {stateText}
-        </label>
         {saving && <span className="text-xs text-ink-tertiary">保存中...</span>}
         {settings === null && error ? (
           <button

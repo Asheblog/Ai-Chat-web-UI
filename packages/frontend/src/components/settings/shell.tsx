@@ -5,6 +5,7 @@ import type { SettingsNavItem } from "./nav"
 import { ChevronDown, ChevronRight } from "lucide-react"
 import { useNavFlash } from "./use-nav-flash"
 import { SettingsShellLayout, SettingsContentColumn } from "./shell-layout"
+import { getExtensionSection } from "./extensions-navigation"
 
 export interface SettingsSection {
   key: string
@@ -45,13 +46,11 @@ type NestedModeProps = {
 
 export type SettingsShellProps = BaseProps & (FlatModeProps | NestedModeProps)
 
-// 导航视觉：分组行与叶子同级（13 Medium、ink-secondary）——6 组里既有可展开分组也有单叶子，
-// 两者是同一层选择，不能靠字号把分组画成更弱的区块标题。
-// 选中 = 白底 + 发丝线 + 左侧 2×14 信号条，hover 只跳一阶底色。
-const NAV_GROUP = "flex h-11 md:h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] font-medium text-ink-secondary transition-colors duration-[160ms] hover:bg-surface-hover hover:text-foreground aria-expanded:text-foreground"
-const NAV_SUB = "flex h-11 md:h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] text-ink-secondary transition-colors duration-[160ms] hover:bg-surface-hover hover:text-foreground"
-const NAV_LEAF = "flex h-11 md:h-8 w-full items-center gap-2 rounded-lg border px-2 text-left text-[13px] transition-colors duration-[160ms]"
-const NAV_LEAF_ACTIVE = "border-border bg-surface font-medium text-foreground"
+// 分组与普通叶子沿用同层字阶，扩展子页缩进；选中使用青绿色浅底与信号条。
+const NAV_GROUP = "flex h-11 md:h-10 w-full items-center gap-2 rounded-lg px-2 text-left text-sm font-medium text-ink-secondary transition-colors duration-[160ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring hover:bg-surface-hover hover:text-foreground aria-expanded:text-foreground"
+const NAV_SUB = "flex h-11 md:h-10 w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-ink-secondary transition-colors duration-[160ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring hover:bg-surface-hover hover:text-foreground"
+const NAV_LEAF = "flex h-11 md:h-10 w-full items-center gap-2 rounded-lg border px-2 text-left text-sm transition-colors duration-[160ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+const NAV_LEAF_ACTIVE = "border-transparent bg-signal-soft font-semibold text-signal-text"
 const NAV_LEAF_IDLE = "border-transparent text-ink-secondary hover:bg-surface-hover hover:text-foreground"
 const NAV_ICON = "h-[1.125rem] w-[1.125rem] shrink-0"
 const NAV_LIST = "flex flex-col gap-0.5"
@@ -76,7 +75,7 @@ function NavChevron({ open }: { open: boolean }) {
 
 /**
  * SettingsShell: 统一支持扁平与树形导航的设置容器。
- * 外壳 = 232 宽导航列（右发丝线）+ 内容列（个人 752 / 系统 988 居中）。
+ * 外壳 = 252 宽导航列（右发丝线）+ 内容列（个人 752 / 系统 988 居中）。
  * 导航列走画布底色、内容列走白底，卡片再靠发丝线分层——全程不用阴影。
  */
 export function SettingsShell(props: SettingsShellProps) {
@@ -268,10 +267,10 @@ function SettingsShellNestedImpl({
             if (itemRootKey && itemRootKey !== activeMain) onChangeMain(itemRootKey)
             onChangeSub(item.key)
           }}
-          className={cn(NAV_LEAF, isActiveLeaf ? NAV_LEAF_ACTIVE : NAV_LEAF_IDLE)}
+          className={cn(NAV_LEAF, getExtensionSection(item.key) && "pl-9", isActiveLeaf ? NAV_LEAF_ACTIVE : NAV_LEAF_IDLE)}
         >
           <NavBar active={isActiveLeaf} />
-          {Icon && <span className={cn(NAV_ICON, isActiveLeaf ? "text-foreground" : "text-ink-tertiary")}>{Icon}</span>}
+          {Icon && !getExtensionSection(item.key) && <span className={cn(NAV_ICON, isActiveLeaf ? "text-foreground" : "text-ink-tertiary")}>{Icon}</span>}
           <span className="min-w-0 flex-1 truncate">{item.label}</span>
         </button>
       )

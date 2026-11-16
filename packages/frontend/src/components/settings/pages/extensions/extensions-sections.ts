@@ -2,8 +2,8 @@ import { LayoutGrid, Link2, Puzzle, Swords, Terminal } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
 /**
- * 能力扩展页的段模型：左侧段导航（SectionRail）与段内次级标签（SegmentedTabs）
- * 的配置、卡 key → 段/次级标签的路由。
+ * 能力扩展页的段模型：段文案/图标（段页头与总览能力行）、段内次级标签（SegmentedTabs）
+ * 与卡 key → 段/次级标签的路由。段导航本身归设置侧栏，这里不再有页内导航配置。
  * 纯数据模块（除 lucide 图标外不依赖 React），供页面与各段组件共用。
  */
 
@@ -12,8 +12,10 @@ export type ExtensionSection = "overview" | "mcp" | "skills" | "tools" | "extra"
 export type ExtensionSectionMeta = {
   key: ExtensionSection
   label: string
-  shortLabel: string
+  /** 段页头的一句话说明 */
   description: string
+  /** 总览能力行的一句话（比段页头说明更短，避免总览与段页头各写一份） */
+  summary: string
   icon: LucideIcon
 }
 
@@ -21,36 +23,36 @@ export const EXTENSION_SECTIONS: ExtensionSectionMeta[] = [
   {
     key: "overview",
     label: "总览",
-    shortLabel: "总览",
-    description: "三类能力的整体状态、待处理清单与其他增强入口",
+    description: "管理模型可使用的外部服务、Skill 与内置能力。",
+    summary: "工具与扩展的整体状态",
     icon: LayoutGrid,
   },
   {
     key: "mcp",
     label: "MCP 服务",
-    shortLabel: "MCP",
-    description: "MCP 服务模板、连接、凭据、工具与绑定作用域",
+    description: "连接外部工具与数据源，管理模型可以调用的服务。",
+    summary: "连接外部工具与数据源",
     icon: Link2,
   },
   {
     key: "skills",
     label: "Skill",
-    shortLabel: "Skill",
-    description: "Skill 安装、待审批调用、版本激活与绑定策略",
+    description: "管理第三方 Skill 的安装、调用审批、版本与绑定。",
+    summary: "安装、审批与绑定第三方 Skill",
     icon: Puzzle,
   },
   {
     key: "tools",
     label: "内置工具",
-    shortLabel: "工具",
     description: "Python 工具开关与运行时依赖管理",
+    summary: "在沙箱中执行 Python，管理运行依赖",
     icon: Terminal,
   },
   {
     key: "extra",
     label: "对话增强",
-    shortLabel: "增强",
     description: "模型大乱斗与标题智能总结",
+    summary: "模型大乱斗、标题智能总结",
     icon: Swords,
   },
 ]

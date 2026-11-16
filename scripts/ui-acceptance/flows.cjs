@@ -1,16 +1,276 @@
 'use strict';
 const f=require('./fixtures.cjs');
+
+// ── 设置页契约 ───────────────────────────────────────────────────────────────
+// 侧栏是唯一导航：叶子由 data-leaf-key 标识，选中态由 aria-current=page 标出。
+// 窄屏（<768）时导航在 Sheet 门户里，关闭即卸载，因此“当前页”只能在下次打开时核对。
+const NAV_SEL = 'nav[aria-label="设置导航"]';
+const CONTENT_SEL = '[data-settings-scroll="content"]';
+const MODULE_LOADING = /^正在加载设置模块[….]+$/;
+
+/** 系统设置叶子：key 与各页真实标题（不是共用页头文案）。 */
+const SYSTEM_LEAVES = [
+ ['overview','概览'],
+ ['connections','供应商与连接'],
+ ['models','模型管理'],
+ ['session-defaults','会话默认配置'],
+ ['search-knowledge','搜索与知识库'],
+ ['extensions','工具与扩展'],
+ ['extensions-mcp','MCP 服务'],
+ ['extensions-skills','Skill'],
+ ['extensions-tools','内置工具'],
+ ['extensions-extra','对话增强'],
+ ['users-registration','用户与访问'],
+ ['data-maintenance','数据与维护'],
+ ['logs-audit','Skill 审计日志'],
+ ['reasoning-network','生成与网络'],
+ ['branding','外观与站点'],
+];
+
+/** 个人设置叶子：key、页面标题（null 表示没有独立标题）、URL hash 锚点。 */
+const PERSONAL_LEAVES = [
+ ['profile','个人资料','settings-personal-preferences'],
+ ['skills','个人 Skills','settings-personal-skills'],
+ ['shares','最近分享','settings-share-management'],
+ ['security',null,'settings-personal-security'],
+];
+
+/** 扩展页内的次级标签：只有 MCP 与 Skill 有，其余段没有第二列导航。 */
+const SEGMENT_TABS = {
+ mcp:{ label:'MCP 服务次级标签', keys:['installations','connections','secrets','tools','bindings'], labels:['安装模板','连接','凭据','工具','绑定'], cardPrefix:'extensions:mcp-' },
+ skills:{ label:'Skill 次级标签', keys:['install','approvals','versions','bindings'], labels:['安装','待审批','版本','绑定'], cardPrefix:'extensions:skill-' },
+};
+const SEGMENT_TABLIST_LABELS = [SEGMENT_TABS.mcp.label, SEGMENT_TABS.skills.label];
+
 async function step(report,name,action) {
  try{await action();report.checks.push({name,status:'passed'});}
  catch(e){report.checks.push({name,status:'failed',error:e.message});}
 }
 async function ready(page) {
- await page.locator('body').waitFor({state:'visible'});
+ // body 在窄屏布局下高度为 0（内容由固定高度的 main 承载），不能再用 body 可见性判就绪
+ await page.evaluate(()=>document.readyState==='loading'?new Promise(r=>document.addEventListener('DOMContentLoaded',()=>r(null),{once:true})):null);
  await page.evaluate(()=>document.fonts.ready);
  await page.locator('[aria-busy="true"]').first().waitFor({state:'hidden',timeout:5000}).catch(()=>{});
  const loading=page.getByText(/^(正在加载[^\n]*[….]|加载中[….]*)$/).first();
  if(await loading.isVisible())await loading.waitFor({state:'hidden',timeout:45000});
 }
+
+// ── 设置导航操作 ─────────────────────────────────────────────────────────────
+
+async function navVisible(page){
+ const nav=page.locator(NAV_SEL).first();
+ return (await nav.count())>0 && (await nav.isVisible());
+}
+
+/** 打开设置导航：桌面为常驻 aside，窄屏为 Sheet 门户（关闭即卸载）。 */
+async function openSettingsNav(page){
+ if(await navVisible(page))return 'inline';
+ const trigger=page.getByRole('button',{name:'打开设置目录',exact:true});
+ await trigger.waitFor({timeout:20000});
+ await trigger.click();
+ await page.locator(NAV_SEL).first().waitFor({state:'visible',timeout:20000});
+ // Sheet 有开合动画：等一帧稳定后再点叶子，否则点击会和挂载/卸载撞车
+ await page.waitForTimeout(250);
+ return 'sheet';
+}
+
+/** 展开全部折叠分组：分组名会变，按 aria-expanded 状态遍历，不写死标签。 */
+async function expandSettingsGroups(page){
+ for(let pass=0;pass<8;pass+=1){
+  const collapsed=page.locator(NAV_SEL+' [aria-expanded="false"]');
+  const count=await collapsed.count();
+  if(!count)return;
+  for(let i=0;i<count;i+=1){const group=collapsed.nth(i);if(await group.isVisible())await group.click();}
+  await page.waitForTimeout(120);
+ }
+}
+
+async function leafLocator(page,key){
+ return page.locator(NAV_SEL+' button[data-leaf-key="'+key+'"]').first();
+}
+
+async function clickLeaf(page,key){
+ let lastError=null;
+ for(let attempt=0;attempt<3;attempt+=1){
+  await openSettingsNav(page);
+  await expandSettingsGroups(page);
+  const leaf=await leafLocator(page,key);
+  if(!await leaf.count())throw new Error('侧栏缺少叶子 '+key);
+  try{
+   // click 自带滚动定位；显式 scrollIntoViewIfNeeded 会在窄屏 Sheet 卸载时撞到 detached 节点
+   await leaf.click({timeout:8000});
+   await page.locator(CONTENT_SEL).first().waitFor({timeout:30000});
+   await page.getByText(MODULE_LOADING).first().waitFor({state:'hidden',timeout:45000}).catch(()=>{});
+   await ready(page);
+   return leaf;
+  }catch(e){
+   lastError=e;
+   await page.keyboard.press('Escape').catch(()=>{});
+   await page.waitForTimeout(300);
+  }
+ }
+ throw lastError||new Error('点击叶子失败：'+key);
+}
+
+/** 选中态：窄屏需先把 Sheet 打开，因为关闭时导航已卸载。 */
+async function assertLeafCurrent(page,key){
+ const mode=await openSettingsNav(page);
+ await expandSettingsGroups(page);
+ const leaf=await leafLocator(page,key);
+ const current=await leaf.getAttribute('aria-current');
+ if(current!=='page')throw new Error('叶子 '+key+' 未标记 aria-current=page（实际 '+current+'）');
+ if((await leaf.getAttribute('data-active'))===null)throw new Error('叶子 '+key+' 缺少 data-active');
+ // 窄屏：Sheet 是模态的，开着时内容区被 aria-hidden，后续 role 查询会全部落空。核对完立即收起。
+ if(mode==='sheet'){
+  await page.keyboard.press('Escape');
+  await page.locator(NAV_SEL).first().waitFor({state:'detached',timeout:15000}).catch(()=>{});
+ }
+ return leaf;
+}
+
+async function assertContentHeading(page,title){
+ const content=page.locator(CONTENT_SEL).first();
+ const heading=content.getByRole('heading',{name:title,exact:true}).first();
+ await heading.waitFor({timeout:45000});
+ return heading;
+}
+
+/** 内容区不得出现第二列导航（SectionRail），也不得重复当前页标记。 */
+async function assertSidebarIsOnlyNavigation(page){
+ const content=page.locator(CONTENT_SEL).first();
+ const navs=await content.locator('nav').count();
+ if(navs)throw new Error('内容区出现第二列导航：nav 元素 '+navs+' 个');
+ const labels=await content.locator('[role="tablist"]').evaluateAll(nodes=>nodes.filter(n=>n.getBoundingClientRect().height>0).map(n=>n.getAttribute('aria-label')));
+ const stray=labels.filter(label=>!SEGMENT_TABLIST_LABELS.includes(label));
+ if(stray.length)throw new Error('内容区出现额外可见 tablist：'+JSON.stringify(stray));
+ const current=await content.locator('[aria-current="page"]').count();
+ if(current)throw new Error('内容区重复出现 aria-current=page：'+current);
+}
+
+async function assertSheetClosed(page){
+ const nav=page.locator(NAV_SEL).first();
+ // Sheet 关闭有过渡：先等它卸载，再判定，避免把动画中间态当成“没收起”
+ if(await navVisible(page)){
+  await nav.waitFor({state:'detached',timeout:5000}).catch(()=>{});
+ }
+ if(await navVisible(page))throw new Error('选择叶子后设置目录没有收起');
+ const trigger=page.getByRole('button',{name:'打开设置目录',exact:true});
+ if(!await trigger.count())throw new Error('收起后缺少“打开设置目录”触发器');
+}
+
+async function segmentTab(page,tablistLabel,tabLabel){
+ const list=page.getByRole('tablist',{name:tablistLabel});
+ await list.waitFor({timeout:20000});
+ const tab=list.getByRole('tab',{name:tabLabel,exact:true}).first();
+ await tab.waitFor({timeout:15000});
+ return tab;
+}
+
+async function activeSegmentTab(page,tablistLabel){
+ const list=page.getByRole('tablist',{name:tablistLabel});
+ const selected=list.locator('[role="tab"][aria-selected="true"]');
+ await selected.first().waitFor({timeout:15000});
+ return (await selected.first().innerText()).trim();
+}
+
+function leavesFilter(){
+ if(!process.argv.includes('--system-leaves'))return null;
+ return (process.argv[process.argv.indexOf('--system-leaves')+1]||'').split(',').filter(Boolean);
+}
+
+// ── 设置子流程 ──────────────────────────────────────────────────────────────
+
+async function segmentTabsFlow(page,report,capture,segmentKey){
+ const spec=SEGMENT_TABS[segmentKey];
+ for(let i=0;i<spec.labels.length;i+=1){
+  const label=spec.labels[i], key=spec.keys[i];
+  await step(report,'segment-'+segmentKey+'-'+key,async()=>{
+   const tab=await segmentTab(page,spec.label,label);
+   await tab.click();
+   const list=page.getByRole('tablist',{name:spec.label});
+   await list.locator('[role="tab"][aria-selected="true"]').first().waitFor({state:'visible',timeout:15000});
+   if((await activeSegmentTab(page,spec.label))!==label)throw new Error('点击「'+label+'」后未成为选中标签');
+   const panel=page.locator('[data-card-key="'+spec.cardPrefix+key+'"]').first();
+   await panel.waitFor({timeout:25000});
+   if(!await panel.isVisible())throw new Error('「'+label+'」面板不可见');
+  });
+  await capture('segment-'+segmentKey+'-'+key);
+ }
+}
+
+async function searchLocate(page,report,capture,args){
+ await step(report,'search-locate-'+args.leafKey,async()=>{
+  await openSettingsNav(page);
+  const input=page.getByRole('textbox',{name:'搜索设置'});
+  await input.click();
+  await input.fill(args.query);
+  const option=page.getByRole('option',{name:new RegExp(args.query)}).first();
+  await option.waitFor({timeout:20000});
+  await option.click();
+  await page.waitForFunction(key=>{
+   const el=document.querySelector('[data-card-key="'+key+'"]');
+   return !!el && el.classList.contains('settings-flash');
+  },args.cardKey,{timeout:25000});
+  await page.locator(CONTENT_SEL+' [data-card-key="'+args.cardKey+'"]').first().waitFor({timeout:20000});
+  if(args.tabLabel&&args.tablistLabel&&(await activeSegmentTab(page,args.tablistLabel))!==args.tabLabel)
+   throw new Error('搜索「'+args.query+'」未切到「'+args.tabLabel+'」标签');
+  await assertLeafCurrent(page,args.leafKey);
+  const box=await page.locator(CONTENT_SEL+' [data-card-key="'+args.cardKey+'"]').first().boundingBox();
+  const view=await page.locator(CONTENT_SEL).first().boundingBox();
+  if(!box||!view)throw new Error('定位卡没有渲染出可视区域');
+  if(box.y+box.height<view.y||box.y>view.y+view.height)
+   throw new Error('定位卡滚出内容视口：card.y='+Math.round(box.y)+' view='+Math.round(view.y)+'..'+Math.round(view.y+view.height));
+  // 窄屏：搜索框在 Sheet 里，截图前先收起目录，画面才落在被定位的卡上
+  if(await navVisible(page)){
+   await page.keyboard.press('Escape');
+   await page.locator(NAV_SEL).first().waitFor({state:'detached',timeout:15000}).catch(()=>{});
+  }
+ });
+ await capture('search-'+args.leafKey);
+}
+
+async function draftRoundTrip(page,report,capture){
+ await step(report,'skill-draft-roundtrip',async()=>{
+  await clickLeaf(page,'extensions-skills');
+  const install=await segmentTab(page,SEGMENT_TABS.skills.label,'安装');
+  await install.click();
+  const source=page.getByPlaceholder('owner/repo@ref[:subdir] 或 github.com/.../SKILL.md');
+  await source.waitFor({timeout:20000});
+  await source.fill('fixture-org/fixture-skill@main');
+  await capture('skill-draft-filled');
+  await clickLeaf(page,'extensions-tools');
+  await clickLeaf(page,'extensions-skills');
+  await (await segmentTab(page,SEGMENT_TABS.skills.label,'安装')).click();
+  const again=page.getByPlaceholder('owner/repo@ref[:subdir] 或 github.com/.../SKILL.md');
+  await again.waitFor({timeout:20000});
+  const value=await again.inputValue();
+  if(value!=='fixture-org/fixture-skill@main')throw new Error('切叶子后 Skill 安装草稿丢失："'+value+'"');
+ });
+ await capture('skill-draft-restored');
+}
+
+async function drawerControls(page,report,capture){
+ await step(report,'drawer-open-close-focus',async()=>{
+  const trigger=page.getByRole('button',{name:'打开设置目录',exact:true});
+  await trigger.click();
+  await page.locator(NAV_SEL).first().waitFor({state:'visible',timeout:20000});
+  await capture('drawer-open');
+  await page.getByRole('button',{name:'收起设置目录',exact:true}).click();
+  await page.locator(NAV_SEL).first().waitFor({state:'detached',timeout:15000});
+  if(!await trigger.evaluate(el=>el===document.activeElement))throw new Error('关闭后焦点没有回到“打开设置目录”');
+ });
+ await step(report,'drawer-escape-focus',async()=>{
+  const trigger=page.getByRole('button',{name:'打开设置目录',exact:true});
+  await trigger.click();
+  await page.locator(NAV_SEL).first().waitFor({state:'visible',timeout:20000});
+  await page.keyboard.press('Escape');
+  await page.locator(NAV_SEL).first().waitFor({state:'detached',timeout:15000});
+  if(!await trigger.evaluate(el=>el===document.activeElement))throw new Error('Escape 关闭后焦点没有回到触发器');
+ });
+ await capture('drawer-closed');
+}
+
+// ── 既有流程（未改动） ──────────────────────────────────────────────────────
 async function selectorFlow(page,report,capture,controls={}) {
  const trigger=page.getByRole('combobox',{name:'选择模型'}).first();
  if(!await trigger.isVisible()){report.gaps.push({type:'model-selector-trigger-not-visible'});return;}
@@ -47,7 +307,6 @@ async function selectorFlow(page,report,capture,controls={}) {
  await step(report,'selector-keyboard-navigation',async()=>{
   await trigger.focus();await page.keyboard.press('Enter');await search.waitFor();await search.fill('Gemini');
   await search.press('ArrowDown');await page.keyboard.press('Enter');
-  // A keyboard operation must actually select or move a visible focused option.
   const state=await page.evaluate(()=>({role:document.activeElement?.getAttribute('role'),expanded:document.querySelector('[aria-label="选择模型"]')?.getAttribute('aria-expanded')}));
   await search.waitFor({state:'hidden'});
   if(!/Gemini/.test(await trigger.innerText()))throw new Error('ArrowDown/Enter未选择搜索结果');
@@ -58,6 +317,7 @@ async function selectorFlow(page,report,capture,controls={}) {
   const close=dialog.getByRole('button',{name:/关闭|Close/i}).first();await close.click();await dialog.waitFor({state:'hidden'});
  });
 }
+
 async function runFlow(page,scenario,report,capture,controls={}) {
  const flow=scenario.flow;
  if(flow==='login'||flow==='register') {
@@ -87,32 +347,99 @@ async function runFlow(page,scenario,report,capture,controls={}) {
   await step(report,'composer-input',async()=>{await textarea.fill('Fixture：请检查超长中文模型名与发送按钮位置，不实际发送。');});
   await capture('composer-filled');await selectorFlow(page,report,capture,controls);return;
  }
+
  if(flow==='personal') {
-  for(const [id,label]of [['profile','个人资料与偏好'],['skills','个人 Skills'],['shares','分享管理'],['security','账号安全']].filter(([id])=>!process.argv.includes('--security-only')||id==='security')){
-   const hashes={profile:'settings-personal-preferences',skills:'settings-personal-skills',shares:'settings-share-management',security:'settings-personal-security'};
-   await step(report,'personal-'+id,async()=>{const toggle=page.getByRole('button',{name:'打开设置目录',exact:true});if(await toggle.isVisible())await toggle.click();await page.getByRole('button',{name:label,exact:true}).first().click();await page.locator('#'+hashes[id]).waitFor({timeout:6000});await ready(page);});
-   if(id==='security')await step(report,'security-form-expanded',async()=>{await page.getByRole('button',{name:/安全设置（密码与登录）/}).click();await page.getByLabel('当前密码',{exact:true}).waitFor();await page.getByLabel('新密码',{exact:true}).waitFor();await page.getByLabel('确认新密码',{exact:true}).waitFor();});
-   await capture('personal-'+id);
-  }return;
- }
- if(flow==='system') {
-  const leaves=[['overview','概览'],['connections','供应商与连接'],['models','模型管理'],['search-knowledge','搜索与知识库'],['extensions','能力扩展'],['users-registration','用户与注册'],['branding','品牌与界面'],['logs-audit','日志与审计'],['data-maintenance','数据与维护'],['reasoning-network','推理与网络']];
-  for(const [key,label]of leaves.filter(([key])=>!process.argv.includes('--system-leaves')||process.argv[process.argv.indexOf('--system-leaves')+1].split(',').includes(key))){await step(report,'system-nav-'+key,async()=>{
-   const toggle=page.getByRole('button',{name:'打开设置目录',exact:true});if(await toggle.isVisible())await toggle.click();
-   const groups={connections:'模型与连接',models:'模型与连接','search-knowledge':'功能与工具',extensions:'功能与工具',branding:'系统与数据','logs-audit':'系统与数据','data-maintenance':'系统与数据','reasoning-network':'高级设置'};
-   const group=groups[key]&&page.getByRole('button',{name:groups[key],exact:true});
-   if(group&&await group.count()&&await group.getAttribute('aria-expanded')==='false')await group.click();
-   const target=page.getByRole('button',{name:label,exact:true});
-   if(await target.count()){await target.first().click();}
-   else await page.getByRole('link',{name:label,exact:true}).first().click();
-   await ready(page);
-   const anchors={overview:'待你完成',connections:'快速接入',models:'模型目录与能力','search-knowledge':'搜索与知识库',extensions:'能力扩展','users-registration':'用户管理',branding:'品牌与界面','logs-audit':'审计结果','data-maintenance':'数据与维护','reasoning-network':'推理与网络'};
-   await page.locator('[data-settings-scroll="content"]').getByText(anchors[key],{exact:true}).first().waitFor({timeout:45000});
-   await page.getByText(/^正在加载设置模块[….]+$/).first().waitFor({state:'hidden',timeout:45000});
-   report.checks.push({name:'system-content-'+key,status:'passed',anchor:anchors[key]});
-  });await capture('system-'+key);}
+  const securityOnly=process.argv.includes('--security-only');
+  for(const [key,title,hash] of PERSONAL_LEAVES.filter(leaf=>!securityOnly||leaf[0]==='security')){
+   await step(report,'personal-'+key,async()=>{
+    await clickLeaf(page,key);
+    if(page.viewportSize().width<768)await assertSheetClosed(page);
+    if(title)await assertContentHeading(page,title);
+    await page.locator('#'+hash).waitFor({timeout:15000});
+    await assertSidebarIsOnlyNavigation(page);
+    await assertLeafCurrent(page,key);
+   });
+   if(key==='security')await step(report,'security-form-expanded',async()=>{
+    await page.getByRole('button',{name:/安全设置（密码与登录）/}).click();
+    await page.getByLabel('当前密码',{exact:true}).waitFor();
+    await page.getByLabel('新密码',{exact:true}).waitFor();
+    await page.getByLabel('确认新密码',{exact:true}).waitFor();
+   });
+   await capture('personal-'+key);
+  }
   return;
  }
+
+ if(flow==='system') {
+  const filter=leavesFilter();
+  const narrow=page.viewportSize().width<768;
+  for(const [key,title] of SYSTEM_LEAVES.filter(leaf=>!filter||filter.includes(leaf[0]))){
+   await step(report,'system-nav-'+key,async()=>{
+    await clickLeaf(page,key);
+    if(narrow)await assertSheetClosed(page);
+    await assertContentHeading(page,title);
+    await assertSidebarIsOnlyNavigation(page);
+    await assertLeafCurrent(page,key);
+   });
+   await capture('system-'+key);
+   if(key==='extensions-mcp'&&(!filter||filter.includes('extensions-mcp'))){
+    await step(report,'extensions-mcp-empty-state',async()=>{
+     const panel=page.locator('[data-card-key="extensions:mcp-installations"]').first();
+     await panel.waitFor({timeout:20000});
+     await panel.getByText(/暂无安装模板|还没有安装|暂无/).first().waitFor({timeout:15000});
+    });
+    await capture('extensions-mcp-empty');
+    if(!process.argv.includes('--skip-segment-tabs'))await segmentTabsFlow(page,report,capture,'mcp');
+   }
+   if(key==='extensions-skills'&&(!filter||filter.includes('extensions-skills'))){
+    if(!process.argv.includes('--skip-segment-tabs'))await segmentTabsFlow(page,report,capture,'skills');
+   }
+  }
+  if(!filter||filter.includes('extensions-mcp'))await searchLocate(page,report,capture,{query:'MCP 凭据',cardKey:'extensions:mcp-secrets',leafKey:'extensions-mcp',tablistLabel:SEGMENT_TABS.mcp.label,tabLabel:'凭据'});
+  if(!filter||filter.includes('extensions-skills'))await searchLocate(page,report,capture,{query:'绑定策略',cardKey:'extensions:skill-bindings',leafKey:'extensions-skills',tablistLabel:SEGMENT_TABS.skills.label,tabLabel:'绑定'});
+  if(!filter||filter.includes('extensions-skills'))await draftRoundTrip(page,report,capture);
+  if(narrow)await drawerControls(page,report,capture);
+  return;
+ }
+
+ if(flow==='system-states') {
+  const variant=scenario.variant;
+  if(variant==='settings-loading'){
+   await step(report,'settings-loading-skeleton',async()=>{
+    // SectionFrame 的骨架（aria-busy）只出现在 内置工具 / 对话增强 这类卡片列表段
+    await clickLeaf(page,'extensions-tools');
+    const skeleton=page.locator(CONTENT_SEL+' [aria-busy="true"]').filter({visible:true}).first();
+    await skeleton.waitFor({timeout:25000});
+   });
+   await capture('settings-loading');
+   await step(report,'settings-loading-release',async()=>{
+    controls.releaseSettings();
+    await assertContentHeading(page,'内置工具');
+    await page.locator(CONTENT_SEL+' [aria-busy="true"]').filter({visible:true}).first().waitFor({state:'hidden',timeout:30000}).catch(()=>{});
+   });
+   await capture('settings-loading-ready');
+   return;
+  }
+  if(variant==='settings-error'){
+   await step(report,'settings-error-state',async()=>{
+    await clickLeaf(page,'extensions-tools');
+    const content=page.locator(CONTENT_SEL).first();
+    await content.getByText(/Fixture 系统设置暂不可用/).filter({visible:true}).first().waitFor({timeout:25000});
+    await content.getByRole('button',{name:'重试',exact:true}).filter({visible:true}).first().waitFor({timeout:15000});
+   });
+   await capture('settings-error');
+   await step(report,'settings-error-retry-recovers',async()=>{
+    controls.recoverSettings();
+    await page.locator(CONTENT_SEL).getByRole('button',{name:'重试',exact:true}).filter({visible:true}).first().click();
+    await assertContentHeading(page,'内置工具');
+    await page.locator(CONTENT_SEL).getByText(/Fixture 系统设置暂不可用/).filter({visible:true}).first().waitFor({state:'hidden',timeout:20000}).catch(()=>{});
+   });
+   await capture('settings-error-recovered');
+   return;
+  }
+  return;
+ }
+
  if(flow==='logs-error'){await step(report,'logs-first-load-error',async()=>{await page.getByRole('alert').filter({hasText:'日志加载失败'}).waitFor({timeout:15000});});await capture('logs-first-error');return;}
  if(flow==='share-error'){await step(report,'share-error-readonly',async()=>{await page.getByText(/分享.*(不存在|失效|过期)|无法.*分享|未找到/).first().waitFor();if(await page.locator('textarea').count())throw new Error('失效分享出现输入框');});return;}
  if(flow==='logs-system') {

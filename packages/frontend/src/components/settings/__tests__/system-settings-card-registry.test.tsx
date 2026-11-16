@@ -5,7 +5,7 @@ import {
   systemSettingsCards,
 } from "../system-settings-registry"
 
-/** 「能力扩展」页的 13 张卡，按页内段顺序（叶子 key 与导航树保持 extensions）。 */
+/** 扩展组的 13 张卡保留原标识，按子页归属定位。 */
 const EXTENSION_CARD_KEYS = [
   "extensions:mcp-installations",
   "extensions:mcp-connections",
@@ -28,7 +28,10 @@ const EXPECTED_CARDS: Record<string, string[]> = {
   models: ["catalog", "access"],
   "session-defaults": ["prompt"],
   "search-knowledge": ["web-search", "document-knowledge"],
-  extensions: EXTENSION_CARD_KEYS.map((key) => key.slice("extensions:".length)),
+  "extensions-mcp": ["mcp-installations", "mcp-connections", "mcp-secrets", "mcp-tools", "mcp-bindings"],
+  "extensions-skills": ["skill-install", "skill-approvals", "skill-versions", "skill-bindings"],
+  "extensions-tools": ["python-tools", "python-runtime"],
+  "extensions-extra": ["battle", "title-summary"],
   "users-registration": ["policy", "users"],
   branding: ["avatar", "branding"],
   "data-maintenance": ["retention", "compression", "concurrency", "task-trace", "system-log"],
@@ -37,7 +40,7 @@ const EXPECTED_CARDS: Record<string, string[]> = {
 
 describe("system-settings-card-registry", () => {
   test("extensions 卡恰好 13 条且 key 顺序与集合正确", () => {
-    const extensionCards = systemSettingsCards.filter((card) => card.leafKey === "extensions")
+    const extensionCards = systemSettingsCards.filter((card) => card.key.startsWith("extensions:"))
     expect(extensionCards).toHaveLength(13)
     expect(extensionCards.map((card) => card.key)).toEqual(EXTENSION_CARD_KEYS)
   })
@@ -58,11 +61,11 @@ describe("system-settings-card-registry", () => {
     }
   })
 
-  test("卡 key 全局唯一，且以 leafKey 为前缀（leafKey:cardKey）", () => {
+  test("卡 key 全局唯一，扩展卡保留原标识前缀", () => {
     const keys = systemSettingsCards.map((card) => card.key)
     expect(new Set(keys).size).toBe(keys.length)
     for (const card of systemSettingsCards) {
-      expect(card.key.startsWith(`${card.leafKey}:`)).toBe(true)
+      expect(card.key.startsWith(`${card.leafKey.startsWith("extensions-") ? "extensions" : card.leafKey}:`)).toBe(true)
     }
   })
 
@@ -79,16 +82,15 @@ describe("system-settings-card-registry", () => {
     const byLeaf = new Map<string, string[]>()
     for (const card of systemSettingsCards) {
       const list = byLeaf.get(card.leafKey) ?? []
-      // 快照用短 key（去掉 "leafKey:" 前缀）比对
-      list.push(card.key.slice(card.leafKey.length + 1))
+      list.push(card.key.slice(card.key.indexOf(":") + 1))
       byLeaf.set(card.leafKey, list)
     }
     expect(Object.fromEntries(byLeaf)).toEqual(EXPECTED_CARDS)
   })
 
-  test("describeSettingsLocation：拍平的 extensions 无分组前缀", () => {
-    expect(describeSettingsLocation("extensions", "extensions:mcp-secrets")).toBe("工具与扩展 · MCP 凭据")
-    expect(describeSettingsLocation("extensions", "extensions:python-tools")).toBe("工具与扩展 · Python 工具")
+  test("describeSettingsLocation：扩展卡显示所属子页", () => {
+    expect(describeSettingsLocation("extensions-mcp", "extensions:mcp-secrets")).toBe("工具与扩展 → MCP 服务 · MCP 凭据")
+    expect(describeSettingsLocation("extensions-tools", "extensions:python-tools")).toBe("工具与扩展 → 内置工具 · Python 工具")
   })
 
   test("describeSettingsLocation：拍平后的 users-registration / branding 无分组前缀", () => {

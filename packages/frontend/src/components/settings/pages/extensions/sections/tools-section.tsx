@@ -13,11 +13,11 @@ import { useSectionSettings } from "./use-section-settings"
  * 与卡片列表。卡保持受控（settings + update 从段内传入），切段（keep-alive）不会各自再发一遍
  * 设置请求；动态 Skill Runtime 开关也不在本段，它由 Skill 段页头唯一持有。
  */
-export function ToolsSection(): JSX.Element {
+export function ToolsSection({ active }: { active?: boolean }): JSX.Element {
   const state = useSectionSettings()
 
   return (
-    <SectionFrame sectionKey="tools" state={state}>
+    <SectionFrame sectionKey="tools" state={state} active={active}>
       {({ settings, update }) => (
         <>
           <PythonToolsCard settings={settings} update={update} />

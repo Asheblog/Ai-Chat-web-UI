@@ -101,7 +101,10 @@ export function InstallationsTab() {
 
   return (
     <div className="space-y-3">
-      <McpListHeader count={items.length} actionLabel="新建" onAction={openCreate} />
+      {/* 列表头只在有模板时出现：0 项时它与空态中央的「新建模板」重复，空态只留一个主操作 */}
+      {items.length > 0 && (
+        <McpListHeader count={items.length} actionLabel="新建" onAction={openCreate} />
+      )}
 
       {showForm && (
         <McpFormPanel

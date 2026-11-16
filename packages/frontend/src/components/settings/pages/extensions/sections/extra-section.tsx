@@ -11,11 +11,11 @@ import { useSectionSettings } from "./use-section-settings"
  * 与内置工具段同一套取数方式：段壳持三态，两张卡保持受控（settings + update 从外部
  * 传入），各自只提交自己那几个 key。段头文案同样来自 EXTENSION_SECTIONS。
  */
-export function ExtraSection(): JSX.Element {
+export function ExtraSection({ active }: { active?: boolean }): JSX.Element {
   const state = useSectionSettings()
 
   return (
-    <SectionFrame sectionKey="extra" state={state}>
+    <SectionFrame sectionKey="extra" state={state} active={active}>
       {({ settings, update }) => (
         <>
           <BattleCard settings={settings} update={update} />

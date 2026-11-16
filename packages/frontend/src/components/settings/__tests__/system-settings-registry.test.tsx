@@ -31,7 +31,7 @@ const EXPECTED_TOP_LEVEL_KEYS = [
   "overview",
   "model-connections",
   "search-knowledge",
-  "extensions",
+  "extensions-workspace",
   "users-registration",
   "data-logs",
   "branding",
@@ -47,7 +47,7 @@ const EXPECTED_GROUP_LABELS = [
   "外观与站点",
 ]
 
-/** 11 个叶子 key，按导航树渲染顺序。 */
+/** 15 个叶子 key，按导航树渲染顺序。 */
 const EXPECTED_LEAF_KEYS = [
   "overview",
   "connections",
@@ -55,6 +55,10 @@ const EXPECTED_LEAF_KEYS = [
   "session-defaults",
   "search-knowledge",
   "extensions",
+  "extensions-mcp",
+  "extensions-skills",
+  "extensions-tools",
+  "extensions-extra",
   "users-registration",
   "data-maintenance",
   "logs-audit",
@@ -104,9 +108,9 @@ describe("system-settings-registry", () => {
       expect(labels).toEqual(EXPECTED_GROUP_LABELS)
     })
 
-    test("只有「连接与模型」「数据与日志」是多叶子分组", () => {
+    test("连接与模型、工具与扩展和数据与日志具有子页", () => {
       const grouped = systemSettingsTree.filter((entry) => "children" in entry)
-      expect(grouped.map((group) => group.key)).toEqual(["model-connections", "data-logs"])
+      expect(grouped.map((group) => group.key)).toEqual(["model-connections", "extensions-workspace", "data-logs"])
     })
 
     test("连接与模型 = 供应商与连接 / 模型管理 / 会话默认配置", () => {
@@ -127,7 +131,7 @@ describe("system-settings-registry", () => {
 
     test("单叶子分组拍平为顶级叶子，旧 key 不变", () => {
       expect(findLeaf("search-knowledge")?.label).toBe("搜索与知识库")
-      expect(findLeaf("extensions")?.label).toBe("工具与扩展")
+      expect(findLeaf("extensions")?.label).toBe("总览")
       expect(findLeaf("users-registration")?.label).toBe("用户与访问")
       expect(findLeaf("branding")?.label).toBe("外观与站点")
     })
@@ -143,7 +147,7 @@ describe("system-settings-registry", () => {
       expect(getWorkspaceForLeaf("session-defaults")).toBe("model-connections")
     })
 
-    test("11 个叶子 key 全局唯一且顺序稳定", () => {
+    test("15 个叶子 key 全局唯一且顺序稳定", () => {
       const all = systemSettingsTree.flatMap((node) =>
         "children" in node ? node.children.map((child) => child.key) : [node.key],
       )
@@ -190,7 +194,7 @@ describe("system-settings-registry", () => {
       expect(getWorkspaceForLeaf("overview")).toBe("overview")
     })
 
-    test.each(["search-knowledge", "extensions", "users-registration", "branding"])(
+    test.each(["search-knowledge", "users-registration", "branding"])(
       "拍平叶子 %s 属于自身顶级条目",
       (key) => {
         expect(getWorkspaceForLeaf(key)).toBe(key)
@@ -199,6 +203,10 @@ describe("system-settings-registry", () => {
 
     test.each(["connections", "models", "session-defaults"])("%s 属于 model-connections", (key) => {
       expect(getWorkspaceForLeaf(key)).toBe("model-connections")
+    })
+
+    test.each(["extensions", "extensions-mcp", "extensions-skills", "extensions-tools", "extensions-extra"])("%s 属于 extensions-workspace", (key) => {
+      expect(getWorkspaceForLeaf(key)).toBe("extensions-workspace")
     })
 
     test.each(["data-maintenance", "logs-audit", "reasoning-network"])("%s 属于 data-logs", (key) => {

@@ -1,8 +1,9 @@
 import React from "react"
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { ExtensionsPage } from "../pages/extensions/ExtensionsPage"
 import { EXTENSION_CARD_ROUTES, routeForCard } from "../pages/extensions/extensions-sections"
+import { extensionLeafForSection } from "../extensions-navigation"
 import { consumeFlash, requestFlash } from "../settings-flash-bus"
 import { renderSystemLeaf, systemSettingsCards } from "../system-settings-registry"
 
@@ -29,7 +30,7 @@ vi.mock("@/features/skills/api", async (importOriginal) => ({
 }))
 
 /**
- * MCP 段（Task 5）挂载后会直接渲染 5 个既有 tab，它们各自拉取安装模板 / 绑定 / 凭据列表，
+ * MCP 段挂载后会直接渲染 5 个既有 tab，它们各自拉取安装模板 / 绑定 / 凭据列表，
  * 页头开关还直接读写信箱设置接口。这里全部 mock，保持既有段路由断言不变。
  */
 const mcpListMocks = vi.hoisted(() => ({
@@ -63,6 +64,8 @@ if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {}
 }
 
+const SKILL_SOURCE_PLACEHOLDER = "owner/repo@ref[:subdir] 或 github.com/.../SKILL.md"
+
 /** 页面根容器（只有它带 data-section），段内容占位面板带 data-section-panel。 */
 function rootOf(container: HTMLElement): HTMLElement {
   const el = container.querySelector<HTMLElement>("[data-section]")
@@ -77,7 +80,7 @@ function panelOf(container: HTMLElement, key: string): HTMLElement {
   return el
 }
 
-/** 渲染页面并在 act 内冲掉总览段的三路数据 promise，避免异步 setState 警告。 */
+/** 渲染页面并在 act 内冲掉段内数据 promise，避免异步 setState 警告。 */
 async function renderPage(node: React.ReactElement) {
   const view = render(node)
   await act(async () => {})
@@ -108,14 +111,17 @@ afterEach(() => {
   consumeFlash()
 })
 
-describe("ExtensionsPage 段路由", () => {
-  test("默认渲染总览段，无次级标签，未访问的段不挂载", async () => {
+describe("ExtensionsPage 段路由：受控段 + keep-alive", () => {
+  test("默认渲染总览段，页内不再有段导航（导航统一到设置侧栏）", async () => {
     const { container } = await renderPage(<ExtensionsPage />)
 
     const root = rootOf(container)
     expect(root.dataset.section).toBe("overview")
     expect(root.dataset.segment).toBeUndefined()
     expect(panelOf(container, "overview")).not.toHaveAttribute("hidden")
+    // 页内二次导航已删除：既没有段导航 tablist，段容器也不再自任 tabpanel
+    expect(screen.queryByRole("tablist", { name: "工具与扩展分段导航" })).toBeNull()
+    expect(container.querySelector('[role="tabpanel"]')).toBeNull()
     // 没访问过的段连容器都不渲染：不提前发请求，也不占 DOM
     expect(container.querySelector('[data-section-panel="mcp"]')).toBeNull()
     expect(container.querySelector('[data-section-panel="skills"]')).toBeNull()
@@ -123,12 +129,23 @@ describe("ExtensionsPage 段路由", () => {
     expect(container.querySelector('[data-section-panel="extra"]')).toBeNull()
   })
 
-  test("点击左栏「MCP 服务」切段并落到默认次级标签 installations", async () => {
-    const { container } = await renderPage(<ExtensionsPage />)
+  test("section prop 决定首屏段：宿主（侧栏）切叶子即可换段", async () => {
+    const { container } = await renderPage(<ExtensionsPage section="skills" />)
 
-    // MCP 段挂载后会拉设置与安装模板列表，flush 掉这些 promise 再断言
+    const root = rootOf(container)
+    expect(root.dataset.section).toBe("skills")
+    // 段内次级标签仍由页面持有，默认落安装
+    expect(root.dataset.segment).toBe("install")
+    expect(panelOf(container, "skills")).not.toHaveAttribute("hidden")
+    expect(screen.getByPlaceholderText(SKILL_SOURCE_PLACEHOLDER)).toBeInTheDocument()
+  })
+
+  test("section prop 变化经 applyRoute 切段：新段挂载、旧段保留但 hidden", async () => {
+    const { container, rerender } = await renderPage(<ExtensionsPage section="overview" />)
+    expect(container.querySelector('[data-section-panel="mcp"]')).toBeNull()
+
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "MCP 服务" }))
+      rerender(<ExtensionsPage section="mcp" />)
     })
 
     const root = rootOf(container)
@@ -140,38 +157,57 @@ describe("ExtensionsPage 段路由", () => {
     expect(screen.getByRole("tab", { name: "凭据" })).toBeInTheDocument()
   })
 
-  test("段标签与段内容区靠 id/aria-controls 关联，移动端段导航指向页面内容区", async () => {
-    const { container } = await renderPage(<ExtensionsPage />)
+  test("section prop 来回切换不重建已访问段：Skill 安装草稿与列表请求都保留", async () => {
+    const { container, rerender } = await renderPage(<ExtensionsPage section="skills" />)
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "MCP 服务" }))
+    const requestCount = () =>
+      overviewDataMocks.listSkillCatalog.mock.calls.length +
+      overviewDataMocks.listSkillBindings.mock.calls.length +
+      overviewDataMocks.listSkillApprovals.mock.calls.length
+    const afterFirstMount = requestCount()
+
+    fireEvent.change(screen.getByPlaceholderText(SKILL_SOURCE_PLACEHOLDER), {
+      target: { value: "anthropics/skills@main:skills/pptx" },
     })
 
-    const tab = screen.getByRole("tab", { name: "安装模板" })
-    expect(tab).toHaveAttribute("id", "mcp-tab-installations")
-    expect(tab).toHaveAttribute("aria-controls", "mcp-tab-panel-installations")
+    await act(async () => {
+      rerender(<ExtensionsPage section="tools" />)
+    })
+    expect(panelOf(container, "skills")).toHaveAttribute("hidden")
 
-    // 页头按钮叫「MCP 安装模板」而不是「新增 MCP 服务」：它只切到安装模板标签，不打开表单
-    expect(screen.getByRole("button", { name: "MCP 安装模板" })).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: "新增 MCP 服务" })).toBeNull()
+    await act(async () => {
+      rerender(<ExtensionsPage section="skills" />)
+    })
 
-    const contentPanel = container.querySelector<HTMLElement>('[data-section-panel="mcp"]')
-    const subPanel = contentPanel?.querySelector<HTMLElement>('[role="tabpanel"]')
-    expect(subPanel).toHaveAttribute("id", "mcp-tab-panel-installations")
-    expect(subPanel).toHaveAttribute("aria-labelledby", "mcp-tab-installations")
-
-    const railTablist = screen.getByRole("tablist", { name: "工具与扩展分段导航" })
-    for (const railTab of within(railTablist).getAllByRole("tab")) {
-      expect(railTab).toHaveAttribute("aria-controls", "extension-section-panel")
-    }
-    expect(container.querySelector("#extension-section-panel")).toBeInTheDocument()
+    expect(panelOf(container, "skills")).not.toHaveAttribute("hidden")
+    expect(screen.getByPlaceholderText(SKILL_SOURCE_PLACEHOLDER)).toHaveValue(
+      "anthropics/skills@main:skills/pptx",
+    )
+    // 段常驻后切回来不重建组件，catalog / bindings / approvals 不会重发
+    expect(requestCount()).toBe(afterFirstMount)
   })
 
-  test("冷启动带 initialCardKey 时首帧就落在目标段与次级标签", async () => {
-    requestFlash({ leafKey: "extensions", cardKey: "extensions:mcp-secrets", hostId: "layout" })
+  test("受控段下总览入口仍即时切段，并把目标段回调给宿主", async () => {
+    const onSectionChange = vi.fn<(section: string) => void>()
 
     const { container } = await renderPage(
-      <ExtensionsPage hostId="layout" initialCardKey="extensions:mcp-secrets" />,
+      <ExtensionsPage section="overview" onSectionChange={onSectionChange} />,
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /内置工具/ }))
+    })
+
+    expect(onSectionChange).toHaveBeenCalledWith("tools")
+    // 宿主还没回写 prop 时也立刻切过去，避免点了没反应
+    expect(rootOf(container).dataset.section).toBe("tools")
+  })
+})
+
+describe("ExtensionsPage 冷启动与深链", () => {
+  test("initialCardKey 在首帧优先于 section prop：深链不会先闪到总览", async () => {
+    const { container } = await renderPage(
+      <ExtensionsPage section="overview" initialCardKey="extensions:mcp-secrets" />,
     )
 
     const root = rootOf(container)
@@ -179,14 +215,20 @@ describe("ExtensionsPage 段路由", () => {
     expect(root.dataset.segment).toBe("secrets")
   })
 
-  test("冷启动后在下一宏任务重播定位请求，供 wrapper 重开重试窗口", async () => {
+  test("冷启动后在下一宏任务用当前 leafKey 重播定位请求", async () => {
     const seen: Array<{ leafKey?: string; cardKey?: string; hostId?: string }> = []
     const listener = (event: Event) => {
       seen.push((event as CustomEvent<{ leafKey?: string; cardKey?: string; hostId?: string }>).detail)
     }
     window.addEventListener("aichat:settings-flash-card", listener)
 
-    await renderPage(<ExtensionsPage hostId="layout" initialCardKey="extensions:mcp-installations" />)
+    await renderPage(
+      <ExtensionsPage
+        hostId="layout"
+        leafKey="extensions-mcp"
+        initialCardKey="extensions:mcp-installations"
+      />,
+    )
 
     await act(async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 0))
@@ -194,10 +236,26 @@ describe("ExtensionsPage 段路由", () => {
     window.removeEventListener("aichat:settings-flash-card", listener)
 
     expect(seen).toContainEqual({
-      leafKey: "extensions",
+      leafKey: "extensions-mcp",
       cardKey: "extensions:mcp-installations",
       hostId: "layout",
     })
+  })
+
+  test("默认 leafKey 为 extensions：旧叶子冷启动重播沿用旧 key，不硬编码子页", async () => {
+    const seen: Array<{ leafKey?: string }> = []
+    const listener = (event: Event) => {
+      seen.push((event as CustomEvent<{ leafKey?: string }>).detail)
+    }
+    window.addEventListener("aichat:settings-flash-card", listener)
+
+    await renderPage(<ExtensionsPage hostId="layout" initialCardKey="extensions:skill-versions" />)
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+    window.removeEventListener("aichat:settings-flash-card", listener)
+
+    expect(seen).toContainEqual({ leafKey: "extensions", cardKey: "extensions:skill-versions", hostId: "layout" })
   })
 
   test("其它宿主（dialog）的 flash 请求不参与本页定位且不被清空", async () => {
@@ -213,13 +271,13 @@ describe("ExtensionsPage 段路由", () => {
     })
   })
 
-  test("aichat:settings-flash-card 热更新定位", async () => {
-    const { container } = await renderPage(<ExtensionsPage hostId="layout" />)
+  test("已挂载时接受任一扩展子页 leafKey 的定位事件（不写死 extensions）", async () => {
+    const { container } = await renderPage(<ExtensionsPage hostId="layout" leafKey="extensions" />)
 
     await act(async () => {
       window.dispatchEvent(
         new CustomEvent("aichat:settings-flash-card", {
-          detail: { leafKey: "extensions", cardKey: "extensions:skill-versions", hostId: "layout" },
+          detail: { leafKey: "extensions-skills", cardKey: "extensions:skill-versions", hostId: "layout" },
         }),
       )
     })
@@ -227,6 +285,20 @@ describe("ExtensionsPage 段路由", () => {
     const root = rootOf(container)
     expect(root.dataset.section).toBe("skills")
     expect(root.dataset.segment).toBe("versions")
+  })
+
+  test("非扩展叶子的定位事件被忽略：本页不接管别的设置页请求", async () => {
+    const { container } = await renderPage(<ExtensionsPage hostId="layout" />)
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("aichat:settings-flash-card", {
+          detail: { leafKey: "models", cardKey: "extensions:skill-versions", hostId: "layout" },
+        }),
+      )
+    })
+
+    expect(rootOf(container).dataset.section).toBe("overview")
   })
 
   test("其它宿主的 settings-flash-card 事件不切本宿主页面的段", async () => {
@@ -242,85 +314,10 @@ describe("ExtensionsPage 段路由", () => {
 
     expect(rootOf(container).dataset.section).toBe("overview")
   })
-
-  test("点击左栏「内置工具」切段后渲染段头与 tools 面板", async () => {
-    const { container } = await renderPage(<ExtensionsPage />)
-
-    // 段内两卡读的是同一个设置（mock 已给非空），flush 掉它们的初次渲染再断言
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "内置工具" }))
-    })
-
-    expect(screen.getByRole("heading", { name: "内置工具" })).toBeInTheDocument()
-    expect(panelOf(container, "tools")).not.toHaveAttribute("hidden")
-    expect(panelOf(container, "overview")).toHaveAttribute("hidden")
-  })
-
-  test("点击左栏「对话增强」切段后渲染段头与 extra 面板", async () => {
-    const { container } = await renderPage(<ExtensionsPage />)
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "对话增强" }))
-    })
-
-    expect(screen.getByRole("heading", { name: "对话增强" })).toBeInTheDocument()
-    expect(panelOf(container, "extra")).not.toHaveAttribute("hidden")
-    expect(panelOf(container, "overview")).toHaveAttribute("hidden")
-  })
-
-  test("页头两个按钮分别切到「MCP 安装模板」与「从 GitHub 安装 Skill」的位置", async () => {
-    const { container } = await renderPage(<ExtensionsPage />)
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "从 GitHub 安装 Skill" }))
-    })
-    expect(rootOf(container).dataset.section).toBe("skills")
-    expect(rootOf(container).dataset.segment).toBe("install")
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "MCP 安装模板" }))
-    })
-    expect(rootOf(container).dataset.section).toBe("mcp")
-    expect(rootOf(container).dataset.segment).toBe("installations")
-  })
-
-  test("段级 keep-alive：切走再回来保留 Skill 安装输入，且不重发段内请求", async () => {
-    const { container } = await renderPage(<ExtensionsPage />)
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Skill" }))
-    })
-    const sourcePlaceholder = "owner/repo@ref[:subdir] 或 github.com/.../SKILL.md"
-    const requestCount = () =>
-      overviewDataMocks.listSkillCatalog.mock.calls.length +
-      overviewDataMocks.listSkillBindings.mock.calls.length +
-      overviewDataMocks.listSkillApprovals.mock.calls.length
-    const afterFirstMount = requestCount()
-
-    fireEvent.change(screen.getByPlaceholderText(sourcePlaceholder), {
-      target: { value: "anthropics/skills@main:skills/pptx" },
-    })
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "总览" }))
-    })
-    expect(panelOf(container, "skills")).toHaveAttribute("hidden")
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Skill" }))
-    })
-
-    expect(panelOf(container, "skills")).not.toHaveAttribute("hidden")
-    expect(screen.getByPlaceholderText(sourcePlaceholder)).toHaveValue(
-      "anthropics/skills@main:skills/pptx",
-    )
-    // 段常驻后切回来不重建组件，catalog / bindings / approvals 不会重发
-    expect(requestCount()).toBe(afterFirstMount)
-  })
 })
 
 describe("卡路由与注册表一致", () => {
-  test("13 条 extensions 卡逐条映射到正确的段与次级标签", () => {
+  test("13 条 extensions 卡逐条映射到正确的段、次级标签与新叶子", () => {
     const expected: Record<string, { section: string; segment?: string }> = {
       "extensions:mcp-installations": { section: "mcp", segment: "installations" },
       "extensions:mcp-connections": { section: "mcp", segment: "connections" },
@@ -336,31 +333,38 @@ describe("卡路由与注册表一致", () => {
       "extensions:battle": { section: "extra" },
       "extensions:title-summary": { section: "extra" },
     }
-    const cards = systemSettingsCards.filter((card) => card.leafKey === "extensions")
 
-    expect(cards).toHaveLength(13)
     expect(Object.keys(EXTENSION_CARD_ROUTES).sort()).toEqual(Object.keys(expected).sort())
     for (const [cardKey, route] of Object.entries(expected)) {
       expect(routeForCard(cardKey)).toEqual(route)
+      // 搜索定位用新叶子渲染页面，卡的归属叶子必须与段的叶子一致，否则会先渲染错页
+      const card = systemSettingsCards.find((item) => item.key === cardKey)
+      expect(card?.leafKey).toBe(extensionLeafForSection(route.section as never))
     }
     expect(routeForCard("extensions:unknown")).toBeNull()
   })
 })
 
 describe("注册表挂载路径", () => {
-  test("renderSystemLeaf('extensions', 'layout') 渲染出工具与扩展页（旧叶子 key 不变）", async () => {
+  test("renderSystemLeaf('extensions', 'layout') 渲染出工具与扩展总览页", async () => {
     await renderPage(<>{renderSystemLeaf("extensions", "layout")}</>)
 
-    expect(await screen.findByText("工具与扩展")).toBeInTheDocument()
+    expect(await screen.findByRole("heading", { name: "工具与扩展", level: 1 })).toBeInTheDocument()
   })
 
-  test("冷启动搜索定位：renderSystemLeaf 渲染期读取 flash 请求并落到目标段（回归：曾落回总览）", async () => {
-    requestFlash({ leafKey: "extensions", cardKey: "extensions:mcp-secrets", hostId: "layout" })
+  test("renderSystemLeaf('extensions-mcp', 'layout') 直接落到 MCP 段", async () => {
+    const { container } = await renderPage(<>{renderSystemLeaf("extensions-mcp", "layout")}</>)
 
-    const { container } = await renderPage(<>{renderSystemLeaf("extensions", "layout")}</>)
+    expect(await screen.findByRole("heading", { name: "MCP 服务", level: 1 })).toBeInTheDocument()
+    expect(rootOf(container).dataset.section).toBe("mcp")
+  })
 
-    const root = await screen.findByRole("heading", { name: "工具与扩展" })
-    expect(root).toBeInTheDocument()
+  test("冷启动搜索定位：renderSystemLeaf 渲染期读取 flash 请求并落到目标段与标签", async () => {
+    requestFlash({ leafKey: "extensions-mcp", cardKey: "extensions:mcp-secrets", hostId: "layout" })
+
+    const { container } = await renderPage(<>{renderSystemLeaf("extensions-mcp", "layout")}</>)
+
+    expect(await screen.findByRole("heading", { name: "MCP 服务", level: 1 })).toBeInTheDocument()
     const panel = container.querySelector<HTMLElement>("[data-section]")
     expect(panel?.dataset.section).toBe("mcp")
     expect(panel?.dataset.segment).toBe("secrets")

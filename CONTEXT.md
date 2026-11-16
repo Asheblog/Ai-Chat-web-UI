@@ -143,7 +143,7 @@ _Avoid_：用最小 Key 行 ID 冒充连接组身份；用 channelName / prefixI
 - **System Settings（系统设置）**：仅管理员可访问的系统级配置集合，用于管理模型、连接、能力、运行策略、治理审计和维护项
 - **Settings Top-Level Group（设置顶级分组）**：系统设置以概览和六组组织：连接与模型、搜索与知识库、工具与扩展、用户与访问、数据与日志、外观与站点；原叶子 key 继续映射到对应页面。
 - **Settings Page（设置页面）**：右侧内容区渲染的最小页面单位；在原十个叶子基础上新增会话默认配置，承载全局角色层提示词；生成与网络归入数据与日志，高级参数按需展开。
-- **Extensions Center（工具与扩展）**：把 MCP 服务、Skill、内置工具与对话增强四类能力收敛在同一系统设置页（叶子 key `extensions`），页内以段导航分「总览 / MCP 服务 / Skill / 内置工具 / 对话增强」，MCP 与 Skill 段内部再用次级标签复用原区块；三个总开关各只有一个控制点：`mcpGlobalEnabled` 在 MCP 段页头、`chatDynamicSkillRuntimeEnabled` 在 Skill 段页头、`pythonToolEnable` 在 Python 工具卡主开关，总览只显示状态与入口、不放开关。原「工具与扩展」「MCP 管理」「Skill 治理」三个叶子页已删除，Skill 治理不再单独成页
+- **Extensions Center（工具与扩展）**：系统设置侧栏下的能力分组，包含总览（`extensions`）、MCP 服务（`extensions-mcp`）、Skill（`extensions-skills`）、内置工具（`extensions-tools`）、对话增强（`extensions-extra`）。内容区不再重复段导航；MCP 与 Skill 内部使用横向标签。扩展子页共享常驻组件，往返保留标签与未保存草稿；原 `extensions:*` 卡片标识继续定位到对应子页。MCP、Skill Runtime、Python 三个总开关仍各只有原来的控制点，总览只显示状态和入口。
 - **Feature Card（功能卡）**：设置页内的白话化配置卡片（图标 + 标题 + 白话描述 + 主开关 + 常用项 + 「更多参数」折叠），默认折叠高级参数；来自 `components/settings/components/feature-card.tsx`
 
 ## 深度研究计划确认
