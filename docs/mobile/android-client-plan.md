@@ -65,7 +65,7 @@
 
 - `docs/mobile/android-client-plan.md`
 - `docs/adr/0026-android-client-uses-react-native-expo.md`
-- `CONTEXT.md` 中的移动端领域词汇
+- `GLOSSARY.md` 中的移动端领域词汇
 
 验收标准：
 
@@ -262,7 +262,7 @@
 
 ```text
 我们在 /home/wanglinyu/project/aichat 做 AIChat Android 客户端。
-请先阅读 docs/mobile/android-client-plan.md、CONTEXT.md 和 docs/adr/0026-android-client-uses-react-native-expo.md。
+请先阅读 docs/mobile/android-client-plan.md、GLOSSARY.md 和 docs/adr/0026-android-client-uses-react-native-expo.md。
 
 当前阶段是：阶段 X：……
 只做当前阶段，不扩范围，不顺手做下一阶段。

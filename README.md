@@ -174,7 +174,7 @@ Android App 连接你部署的 AI Chat 服务，支持登录、会话列表、�
 | 部署、反代、备份、升级或排障 | [部署指南](docs/DEPLOYMENT.md) |
 | 配置 AI 自助安装、MCP 与 Skill | [扩展使用指南](docs/EXTENSIONS.md) |
 | 理解模块划分与请求链路 | [架构说明](docs/Architecture.md) |
-| 查领域概念与规则 | [领域词汇表](CONTEXT.md) |
+| 查领域概念与规则 | [领域词汇表](GLOSSARY.md) |
 | 查近期变化与迁移影响 | [变更日志](CHANGELOG.md) |
 | 查架构决定与取舍 | [ADR](docs/adr/) |
 | 修改 README 封面 | [Figma 设计稿](https://www.figma.com/design/g8OE79vEs53TGlcJ6Q4Cva?node-id=14-707) · [封面设计与源码](docs/design/readme-cover.md) |
