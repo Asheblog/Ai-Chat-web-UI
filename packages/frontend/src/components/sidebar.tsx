@@ -288,237 +288,239 @@ export function Sidebar() {
   }, [sessionSearch, sessions])
 
   const sidebarContent = (
-    <div className="flex h-full w-full flex-col border-r border-border bg-canvas text-foreground lg:w-[268px]">
-      {/* 顶部文字LOGO + 折叠按钮 */}
-      <div className="flex h-14 items-center justify-between px-3">
-        <Link
-          href="/main"
-          onClick={handleLogoClick}
-          className="flex min-w-0 flex-1 select-none items-center gap-2"
-        >
-          <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[8px] bg-foreground text-background">
-            <MessageCircle className="h-4 w-4" />
-          </span>
-          <span
-            className="truncate text-[14px] font-medium leading-tight tracking-normal text-foreground"
-            title={(systemSettings?.brandText ?? publicBrandText ?? '').trim() || 'AIChat'}
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden border-r border-border bg-canvas text-foreground lg:w-[268px]">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {/* 顶部文字LOGO + 折叠按钮 */}
+        <div className="flex h-14 shrink-0 items-center justify-between px-3">
+          <Link
+            href="/main"
+            onClick={handleLogoClick}
+            className="flex min-w-0 flex-1 select-none items-center gap-2"
           >
-            {(systemSettings?.brandText ?? publicBrandText ?? '').trim() || 'AIChat'}
-          </span>
-        </Link>
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="折叠侧边栏"
-            className="v2-icon-button group/sidebar-toggle lg:hidden"
-            onClick={() => {
-              setSidebarCollapsed(true)
-              setIsMobileMenuOpen(false)
-            }}
-          >
-            <SidebarCollapseIcon className="h-5 w-5" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="收起侧边栏"
-            className="group/sidebar-toggle hidden h-8 w-8 rounded-[8px] text-ink-tertiary hover:bg-surface-hover hover:text-foreground lg:inline-flex"
-            onClick={() => setSidebarCollapsed(true)}
-          >
-            <SidebarCollapseIcon className="h-5 w-5" />
-          </Button>
-        </div>
-      </div>
-
-      {/* 顶部新建聊天按钮 */}
-      <div className="space-y-1.5 px-3 pb-3">
-        <Button
-          onClick={handleNewChat}
-          className="h-11 w-full justify-start gap-2 rounded-md bg-foreground sm:h-9 text-[13px] font-medium text-background hover:bg-[hsl(var(--foreground)/0.9)]"
-          disabled={isCreating || quotaExhausted}
-          aria-busy={isCreating}
-        >
-          {isCreating ? (
-            // 微型 loading，兼容浅/深色
-            <span className="mr-2 h-4 w-4 inline-block animate-spin rounded-full border-2 border-muted-foreground/40 border-t-muted-foreground" />
-          ) : (
-            <Plus className="h-4 w-4" />
-          )}
-          新建聊天
-        </Button>
-      </div>
-      {quotaExhausted && (
-        <div className="px-4 pb-4">
-          <div className="rounded-md border border-border bg-surface-subtle px-3 py-2 text-[11.5px] text-ink-tertiary space-y-1">
-            <p>今日匿名额度已用尽。</p>
-            <button
+            <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[8px] bg-foreground text-background">
+              <MessageCircle className="h-4 w-4" />
+            </span>
+            <span
+              className="truncate text-[14px] font-medium leading-tight tracking-normal text-foreground"
+              title={(systemSettings?.brandText ?? publicBrandText ?? '').trim() || 'AIChat'}
+            >
+              {(systemSettings?.brandText ?? publicBrandText ?? '').trim() || 'AIChat'}
+            </span>
+          </Link>
+          <div className="flex items-center gap-2">
+            <Button
               type="button"
-              className="text-signal hover:underline"
+              variant="ghost"
+              size="icon"
+              aria-label="折叠侧边栏"
+              className="v2-icon-button group/sidebar-toggle lg:hidden"
               onClick={() => {
-                try { window.location.href = '/auth/login' } catch {}
+                setSidebarCollapsed(true)
+                setIsMobileMenuOpen(false)
               }}
             >
-              登录后即可继续对话
-            </button>
+              <SidebarCollapseIcon className="h-5 w-5" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="收起侧边栏"
+              className="group/sidebar-toggle hidden h-8 w-8 rounded-[8px] text-ink-tertiary hover:bg-surface-hover hover:text-foreground lg:inline-flex"
+              onClick={() => setSidebarCollapsed(true)}
+            >
+              <SidebarCollapseIcon className="h-5 w-5" />
+            </Button>
           </div>
         </div>
-      )}
 
-      <div className="px-4 pb-4">
-        <div className="border-t border-border" />
-      </div>
-      <div className="px-4 pb-3">
-        <div className="flex items-center gap-2">
-          <SidebarSessionSearch onChange={setSessionSearch} />
-          {sessions.length > 0 && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-11 w-11 shrink-0 rounded-[8px] text-ink-tertiary hover:bg-destructive/10 hover:text-destructive sm:h-8 sm:w-8"
-                    aria-label="清空聊天记录"
-                    onClick={() => {
-                      setIncludePinned(false)
-                      setClearDialogOpen(true)
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">清空聊天记录</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
+        {/* 顶部新建聊天按钮 */}
+        <div className="shrink-0 space-y-1.5 px-3 pb-3">
+          <Button
+            onClick={handleNewChat}
+            className="h-11 w-full justify-start gap-2 rounded-md bg-foreground sm:h-9 text-[13px] font-medium text-background hover:bg-[hsl(var(--foreground)/0.9)]"
+            disabled={isCreating || quotaExhausted}
+            aria-busy={isCreating}
+          >
+            {isCreating ? (
+              // 微型 loading，兼容浅/深色
+              <span className="mr-2 h-4 w-4 inline-block animate-spin rounded-full border-2 border-muted-foreground/40 border-t-muted-foreground" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+            新建聊天
+          </Button>
         </div>
-      </div>
-      {/* 会话列表 */}
-      <ScrollArea className="flex-1 px-3 overflow-hidden">
-        <div className="space-y-1 pb-2">
-          {/* 加载骨架 */}
-          {isSessionsLoading && sessions.length === 0 && (
-            <>
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="rounded-[8px] border border-border px-2.5 py-2">
-                  <div className="h-3.5 w-28 animate-pulse rounded bg-surface-hover" />
-                  <div className="mt-2 flex items-center justify-between">
-                    <div className="h-3 w-16 animate-pulse rounded bg-surface-hover" />
-                    <div className="h-3 w-10 animate-pulse rounded bg-surface-hover" />
+        {quotaExhausted && (
+          <div className="shrink-0 px-4 pb-4">
+            <div className="rounded-md border border-border bg-surface-subtle px-3 py-2 text-[11.5px] text-ink-tertiary space-y-1">
+              <p>今日匿名额度已用尽。</p>
+              <button
+                type="button"
+                className="text-signal hover:underline"
+                onClick={() => {
+                  try { window.location.href = '/auth/login' } catch {}
+                }}
+              >
+                登录后即可继续对话
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="shrink-0 px-4 pb-4">
+          <div className="border-t border-border" />
+        </div>
+        <div className="shrink-0 px-4 pb-3">
+          <div className="flex items-center gap-2">
+            <SidebarSessionSearch onChange={setSessionSearch} />
+            {sessions.length > 0 && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-11 w-11 shrink-0 rounded-[8px] text-ink-tertiary hover:bg-destructive/10 hover:text-destructive sm:h-8 sm:w-8"
+                      aria-label="清空聊天记录"
+                      onClick={() => {
+                        setIncludePinned(false)
+                        setClearDialogOpen(true)
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">清空聊天记录</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </div>
+        </div>
+        {/* 会话列表 */}
+        <ScrollArea className="min-h-24 flex-1 overflow-hidden px-3">
+          <div className="space-y-1 pb-2">
+            {/* 加载骨架 */}
+            {isSessionsLoading && sessions.length === 0 && (
+              <>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="rounded-[8px] border border-border px-2.5 py-2">
+                    <div className="h-3.5 w-28 animate-pulse rounded bg-surface-hover" />
+                    <div className="mt-2 flex items-center justify-between">
+                      <div className="h-3 w-16 animate-pulse rounded bg-surface-hover" />
+                      <div className="h-3 w-10 animate-pulse rounded bg-surface-hover" />
+                    </div>
                   </div>
-                </div>
-              ))}
-            </>
-          )}
+                ))}
+              </>
+            )}
 
-          {/* 空态 */}
-          {!isSessionsLoading && sessions.length === 0 && (
-            <div className="py-6 text-center text-[11.5px] text-ink-tertiary">
-              <p>暂无会话</p>
-            </div>
-          )}
-
-          {!isSessionsLoading && sessions.length > 0 && groupedSessions.length === 0 && (
-            <div className="py-6 text-center text-[11.5px] text-ink-tertiary">
-              <p>没有匹配结果</p>
-            </div>
-          )}
-
-          {groupedSessions.map((group) => (
-            <div key={group.key} className="space-y-0.5">
-              <div className="flex items-center justify-between px-1 pb-1 pt-2 text-[11px] font-medium tracking-[0.04em] text-ink-tertiary">
-                <span className="inline-flex min-w-0 items-center gap-2">
-                  <Folder className="h-3 w-3 shrink-0 text-ink-tertiary" />
-                  <span className="truncate">{group.label}</span>
-                </span>
-                <span className="text-xs font-medium text-ink-tertiary">{group.sessions.length}</span>
+            {/* 空态 */}
+            {!isSessionsLoading && sessions.length === 0 && (
+              <div className="py-6 text-center text-[11.5px] text-ink-tertiary">
+                <p>暂无会话</p>
               </div>
-              {group.sessions.map((session) => (
-                <div
-                  key={session.id}
-                  className={cn(
-                    "group relative flex min-h-[46px] items-center justify-between rounded-[8px] border border-transparent px-2.5 py-1.5 transition-colors duration-[160ms] hover:bg-surface-hover",
-                    currentSession?.id === session.id && "border-border bg-surface text-foreground"
-                  )}
-                >
-                  <button
-                    type="button"
-                    className="min-w-0 flex-1 pr-2 text-left"
-                    onClick={() => handleSessionClick(session.id)}
-                  >
-                    <p className="flex items-center gap-1 truncate text-[13px] font-medium" title={session.title}>
-                      {session.pinnedAt ? (
-                        <Pin className="h-3 w-3 shrink-0 text-ink-tertiary" aria-hidden="true" />
-                      ) : null}
-                      <span className="truncate">{clipTitle(session.title, 28)}</span>
-                    </p>
-                    <p className="mt-0.5 truncate text-[11px] leading-relaxed text-ink-tertiary" title={session.lastMessagePreview || ''}>
-                      {session.lastMessagePreview?.trim() || '暂无消息摘要'}
-                    </p>
-                    <p className="mt-0.5 flex min-w-0 items-center gap-1 text-[10.5px] text-ink-tertiary">
-                      <span className="truncate">{formatSidebarDate(session.lastMessageAt || session.createdAt)}</span>
-                      {sessionUsageTotalsMap?.[session.id] && (
-                        <>
-                          <span className="opacity-60 shrink-0">·</span>
-                          <span className="shrink-0">{formatUsageLine(sessionUsageTotalsMap[session.id])}</span>
-                        </>
-                      )}
-                    </p>
-                  </button>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            size="icon-xs"
-                            variant="ghost"
-                            className="text-ink-tertiary opacity-70 transition hover:bg-surface-hover hover:text-foreground h-11 w-11 shrink-0 sm:h-8 sm:w-8 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              toggleSessionPin(session.id, !session.pinnedAt)
-                            }}
-                            aria-label={session.pinnedAt ? '取消置顶' : '置顶会话'}
-                          >
-                            {session.pinnedAt ? (
-                              <PinOff className="h-4 w-4" />
-                            ) : (
-                              <Pin className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>{session.pinnedAt ? '取消置顶' : '置顶'}</TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+            )}
 
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            size="icon-xs"
-                            variant="ghost"
-                            className="text-ink-tertiary opacity-70 transition hover:bg-destructive/10 hover:text-destructive h-11 w-11 shrink-0 sm:h-8 sm:w-8 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
-                            onClick={(e) => requestDeleteSession(session.id, e)}
-                            aria-label="删除会话"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>删除会话</TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
+            {!isSessionsLoading && sessions.length > 0 && groupedSessions.length === 0 && (
+              <div className="py-6 text-center text-[11.5px] text-ink-tertiary">
+                <p>没有匹配结果</p>
+              </div>
+            )}
+
+            {groupedSessions.map((group) => (
+              <div key={group.key} className="space-y-0.5">
+                <div className="flex items-center justify-between px-1 pb-1 pt-2 text-[11px] font-medium tracking-[0.04em] text-ink-tertiary">
+                  <span className="inline-flex min-w-0 items-center gap-2">
+                    <Folder className="h-3 w-3 shrink-0 text-ink-tertiary" />
+                    <span className="truncate">{group.label}</span>
+                  </span>
+                  <span className="text-xs font-medium text-ink-tertiary">{group.sessions.length}</span>
                 </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      </ScrollArea>
+                {group.sessions.map((session) => (
+                  <div
+                    key={session.id}
+                    className={cn(
+                      "group relative flex min-h-[46px] items-center justify-between rounded-[8px] border border-transparent px-2.5 py-1.5 transition-colors duration-[160ms] hover:bg-surface-hover",
+                      currentSession?.id === session.id && "border-border bg-surface text-foreground"
+                    )}
+                  >
+                    <button
+                      type="button"
+                      className="min-w-0 flex-1 pr-2 text-left"
+                      onClick={() => handleSessionClick(session.id)}
+                    >
+                      <p className="flex items-center gap-1 truncate text-[13px] font-medium" title={session.title}>
+                        {session.pinnedAt ? (
+                          <Pin className="h-3 w-3 shrink-0 text-ink-tertiary" aria-hidden="true" />
+                        ) : null}
+                        <span className="truncate">{clipTitle(session.title, 28)}</span>
+                      </p>
+                      <p className="mt-0.5 truncate text-[11px] leading-relaxed text-ink-tertiary" title={session.lastMessagePreview || ''}>
+                        {session.lastMessagePreview?.trim() || '暂无消息摘要'}
+                      </p>
+                      <p className="mt-0.5 flex min-w-0 items-center gap-1 text-[10.5px] text-ink-tertiary">
+                        <span className="truncate">{formatSidebarDate(session.lastMessageAt || session.createdAt)}</span>
+                        {sessionUsageTotalsMap?.[session.id] && (
+                          <>
+                            <span className="opacity-60 shrink-0">·</span>
+                            <span className="shrink-0">{formatUsageLine(sessionUsageTotalsMap[session.id])}</span>
+                          </>
+                        )}
+                      </p>
+                    </button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon-xs"
+                              variant="ghost"
+                              className="text-ink-tertiary opacity-70 transition hover:bg-surface-hover hover:text-foreground h-11 w-11 shrink-0 sm:h-8 sm:w-8 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleSessionPin(session.id, !session.pinnedAt)
+                              }}
+                              aria-label={session.pinnedAt ? '取消置顶' : '置顶会话'}
+                            >
+                              {session.pinnedAt ? (
+                                <PinOff className="h-4 w-4" />
+                              ) : (
+                                <Pin className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>{session.pinnedAt ? '取消置顶' : '置顶'}</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
 
-      <div className="border-t border-border bg-canvas px-3 pb-3 pt-2">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon-xs"
+                              variant="ghost"
+                              className="text-ink-tertiary opacity-70 transition hover:bg-destructive/10 hover:text-destructive h-11 w-11 shrink-0 sm:h-8 sm:w-8 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+                              onClick={(e) => requestDeleteSession(session.id, e)}
+                              aria-label="删除会话"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>删除会话</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
+
+      <div className="shrink-0 border-t border-border bg-canvas px-3 pb-3 pt-2">
         <nav aria-label="主导航" className="mb-2 space-y-0.5">
           <Button variant="ghost" className="h-11 w-full justify-start gap-2 px-2.5 text-[13px] font-normal text-muted-foreground hover:text-foreground sm:h-8" onClick={() => { router.push('/main/battle'); setIsMobileMenuOpen(false) }}><Trophy aria-hidden="true" className="h-4 w-4" />模型对战</Button>
           <Button variant="ghost" className="h-11 w-full justify-start gap-2 px-2.5 text-[13px] font-normal text-muted-foreground hover:text-foreground sm:h-8" onClick={openSettings}><Settings aria-hidden="true" className="h-4 w-4" />设置</Button>
