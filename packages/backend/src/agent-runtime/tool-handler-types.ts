@@ -176,6 +176,19 @@ export interface PdfExportHandlerConfig {
 }
 
 /**
+ * 搜索自动阅读复用的 URL 读取配置。
+ * 与 url reader 工具同源，决定浏览器可用性、渲染等待与响应体上限。
+ */
+export interface WebSearchUrlReaderConfig {
+  enableDeepseekFallback?: boolean
+  deepseekApiKey?: string
+  maxBodyBytes?: number
+  enableBrowser?: boolean
+  browserExecutablePath?: string
+  renderWaitMs?: number
+}
+
+/**
  * Web 搜索处理器配置
  */
 export interface WebSearchHandlerConfig {
@@ -199,8 +212,13 @@ export interface WebSearchHandlerConfig {
   autoReadAfterSearch?: boolean
   autoReadTopK?: number
   autoReadParallelism?: number
+  /** 单 URL 读取超时（既有含义不变）。 */
   autoReadTimeoutMs?: number
   autoReadMaxContentLength?: number
+  /** 自动阅读整批总时限，默认 18s；与单 URL 超时分别存储。 */
+  autoReadBatchTimeoutMs?: number
+  /** 自动阅读继承的 url reader 配置；缺省时用读取器默认值。 */
+  urlReader?: WebSearchUrlReaderConfig | null
   minSources?: number
   conflictEscalation?: 'off' | 'auto'
   localeRouting?: {

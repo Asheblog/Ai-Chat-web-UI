@@ -241,10 +241,27 @@ export const getTaskTrace = async (id: number) => {
 }
 
 export const exportTaskTrace = async (id: number) => {
-  const response = await client.get(`/task-trace/${id}/export`, {
-    responseType: 'blob',
-  })
-  return response.data as Blob
+  try {
+    const response = await client.get(`/task-trace/${id}/export`, {
+      responseType: 'blob',
+    })
+    return response.data as Blob
+  } catch (error) {
+    const data = (error as { response?: { data?: unknown } })?.response?.data
+    let reason: string | undefined
+    if (data instanceof Blob && data.type.includes('json')) {
+      try {
+        const body: unknown = JSON.parse(await data.text())
+        if (body && typeof body === 'object' && 'error' in body && typeof body.error === 'string') {
+          reason = body.error
+        }
+      } catch {
+        // A malformed download response retains the original transport error.
+      }
+    }
+    if (reason) throw new Error(reason)
+    throw error
+  }
 }
 
 export const cleanupTaskTraces = async (retentionDays?: number) => {

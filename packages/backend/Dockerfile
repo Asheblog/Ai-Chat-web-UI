@@ -23,6 +23,17 @@ RUN apt-get update && \
         gosu \
     && rm -rf /var/lib/apt/lists/*
 
+# Python 正文提取：独立 app venv，锁定依赖全部预装；与 Skill Python runtime 完全隔离。
+# requirements.lock 是 pip freeze 全量锁定（含传递依赖），只 COPY 锁文件以复用构建缓存。
+COPY packages/backend/scripts/web-extractor/requirements.lock /tmp/web-extractor-requirements.lock
+RUN python3 -m venv /opt/python-extractor && \
+    /opt/python-extractor/bin/pip install --no-cache-dir --disable-pip-version-check \
+        -r /tmp/web-extractor-requirements.lock && \
+    rm -f /tmp/web-extractor-requirements.lock
+
+# 运行时通过该变量定位解释器；不写死平台路径，Windows 宿主可覆盖成自己的 venv。
+ENV APP_WEB_EXTRACTOR_PYTHON="/opt/python-extractor/bin/python"
+
 # 启用 corepack 并固定 pnpm 版本，确保锁文件兼容
 RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
 
@@ -95,6 +106,8 @@ ENV DATABASE_URL="file:/app/data/app.db"
 ENV APP_DATA_DIR="/app/data"
 # Playwright-managed Chromium lives here; prefer it over apt chromium for CDP stability.
 ENV PLAYWRIGHT_BROWSERS_PATH="/ms-playwright"
+# 正文提取器解释器（构建阶段已装好 Trafilatura 锁定依赖）
+ENV APP_WEB_EXTRACTOR_PYTHON="/opt/python-extractor/bin/python"
 
 # 只安装运行时必需的系统依赖
 RUN apt-get update && \
@@ -125,6 +138,13 @@ COPY --from=build --chown=backend:nodejs /app/node_modules /app/node_modules
 COPY --from=build --chown=backend:nodejs /app/pnpm-workspace.yaml /app/pnpm-workspace.yaml
 COPY --from=build --chown=backend:nodejs /app/packages/shared /app/packages/shared
 COPY --from=build --chown=backend:nodejs /app/packages/backend /app/packages/backend
+
+# 复用构建阶段装好的提取器 venv（只读，非 root 可直接执行）
+COPY --from=base /opt/python-extractor /opt/python-extractor
+
+# 构建时校验提取器真实可用：依赖缺失或解析失败会让镜像构建失败，而不是静默降级
+RUN cd /app/packages/backend/scripts/web-extractor && \
+    /opt/python-extractor/bin/python smoke_test.py
 
 # Install Playwright Chromium matching playwright-core (used by export_pdf + url reader).
 # Prefer this over apt `/usr/bin/chromium`, which often fails CDP launch in containers.

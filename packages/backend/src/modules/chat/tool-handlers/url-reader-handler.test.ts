@@ -215,4 +215,36 @@ describe('UrlReaderToolHandler', () => {
     expect(content).toContain('## 正文内容')
     expect(content.endsWith('只有正文，没有任何配图。')).toBe(true)
   })
+  it('defaults to current content and passes an explicit history request to the reader', async () => {
+    const readSpy = jest.spyOn(urlReaderModule, 'readUrlContent').mockResolvedValue({
+      title: 'Article', url: 'https://example.com/article', content: '', textContent: '正文内容',
+    })
+    const handler = new UrlReaderToolHandler({ enabled: true })
+    const context = createContext({ modelCapabilities: { vision: false } })
+    await handler.handle({ id: 'current' }, { url: 'https://example.com/article' }, context)
+    expect(readSpy).toHaveBeenLastCalledWith('https://example.com/article', expect.objectContaining({
+      purpose: 'current', freshness: 'current',
+    }))
+    await handler.handle({ id: 'history' }, { url: 'https://example.com/article', purpose: 'history' }, context)
+    expect(readSpy).toHaveBeenLastCalledWith('https://example.com/article', expect.objectContaining({
+      purpose: 'history', freshness: 'default',
+    }))
+  })
+
+  it('keeps provenance and truncation on the final tool result', async () => {
+    const evidence = { title: 'Archive', url: 'https://example.com/article', content: '', textContent: '历史正文',
+      contentKind: 'article', fetchedAt: '2026-11-16T03:00:00Z', archivedAt: '20250102030405', truncated: true,
+    }
+    jest.spyOn(urlReaderModule, 'readUrlContent').mockResolvedValue(evidence)
+    const context = createContext({ modelCapabilities: { vision: false } })
+    await new UrlReaderToolHandler({ enabled: true }).handle(
+      { id: 'history' }, { url: evidence.url, purpose: 'history' }, context,
+    )
+    expect(context.sendToolEvent).toHaveBeenCalledWith(expect.objectContaining({
+      stage: 'result', details: expect.objectContaining({
+        contentKind: 'article', fetchedAt: evidence.fetchedAt, archivedAt: evidence.archivedAt, truncated: true,
+      }),
+    }))
+  })
+
 })

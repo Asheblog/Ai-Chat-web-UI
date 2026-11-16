@@ -612,7 +612,8 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         sessionId,
         actorUserId,
         builtins: {
-          webSearch: toolFlags.webSearch ? agentConfig : null,
+          // 自动阅读复用完整 url reader 配置，避免自动路径落回读取器默认值
+          webSearch: toolFlags.webSearch ? { ...agentConfig, urlReader: urlReaderConfig } : null,
           python: toolFlags.python ? pythonToolConfig : null,
           urlReader: toolFlags.urlReader ? {
             enableDeepseekFallback: urlReaderConfig.enableDeepseekFallback,
@@ -1372,6 +1373,8 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         const finalMetadata = {
           ...traceMetadataExtras,
           toolLogs: toolLogSummary,
+          // 裁剪前真实条数：recorder 用它写 metadataOmissions，避免只看得到前 50 条
+          toolLogsTotal: toolLogManager.getCount(),
           messageId: activeAssistantMessageId,
         };
         if (traceErrorMessage) {

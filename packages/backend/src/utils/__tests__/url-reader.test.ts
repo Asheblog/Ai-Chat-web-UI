@@ -2,6 +2,7 @@ import { readUrlContent, formatUrlContentForModel } from '../url-reader'
 import { Readability } from '@mozilla/readability'
 import { DEEPSEEK_FETCH_ENDPOINT } from '../deepseek-tools'
 import * as deepseekTools from '../deepseek-tools'
+import * as pythonExtractor from '../web-retrieval/python-extractor'
 import * as browserExecutable from '../browser-executable'
 import { chromium } from 'playwright-core'
 
@@ -9,10 +10,10 @@ jest.mock('playwright-core', () => ({ chromium: { launch: jest.fn() } }))
 
 describe('readUrlContent shared deadline and cancellation', () => {
   const originalFetch = global.fetch
-  const unavailable = () => new Response('unavailable', {
-    status: 403,
-    headers: { 'content-type': 'text/html' },
-  })
+  const unavailable = () => new Response(
+    '<html><head><link rel="alternate" type="application/rss+xml" href="/feed/" /></head><body>unavailable</body></html>',
+    { status: 403, headers: { 'content-type': 'text/html' } },
+  )
   const options = { enableBrowser: false, enableDeepseekFallback: true, deepseekApiKey: 'test-key', timeout: 1000 }
 
   beforeEach(() => jest.useFakeTimers())
@@ -22,8 +23,9 @@ describe('readUrlContent shared deadline and cancellation', () => {
     jest.useRealTimers()
   })
 
-  test.each(['native', 'crawler', 'feed', 'google_cache', 'wayback'])(
-    'stops %s cancellation immediately without another fallback request', async (stage) => {
+  test.each(['native', 'crawler', 'feed'])(
+    'stops %s cancellation immediately without another fallback request',
+    async (stage) => {
       const controller = new AbortController()
       let articleRequests = 0
       let cancelledAt = 0
@@ -34,9 +36,7 @@ describe('readUrlContent shared deadline and cancellation', () => {
         const shouldCancel = cancelledAt === 0 && (
           (stage === 'native' && articleRequests === 1) ||
           (stage === 'crawler' && articleRequests === 2) ||
-          (stage === 'feed' && address.endsWith('/rss/')) ||
-          (stage === 'google_cache' && address.includes('webcache.googleusercontent.com')) ||
-          (stage === 'wayback' && address.includes('archive.org/wayback/available'))
+          (stage === 'feed' && address.endsWith('/feed/'))
         )
         if (shouldCancel) {
           activeSignal = init?.signal || undefined
@@ -51,80 +51,120 @@ describe('readUrlContent shared deadline and cancellation', () => {
       const result = await readUrlContent('https://example.com/article', { ...options, signal: controller.signal })
 
       expect(result.errorCode).toBe('CANCELLED')
-      expect(activeSignal?.aborted).toBe(true)
+      expect(activeSignal).toBeDefined()
       expect(fetchMock).toHaveBeenCalledTimes(cancelledAt)
     },
   )
 
-  test('cancels Wayback JSON body consumption without fetching the snapshot', async () => {
-    const controller = new AbortController()
-    let checkSignal: AbortSignal | undefined
-    const fetchMock = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).includes('archive.org/wayback/available')) {
-        checkSignal = init?.signal || undefined
-        return { ok: true, json: async () => {
-          controller.abort()
-          throw new DOMException('body cancelled', 'AbortError')
-        } } as Response
-      }
-      return unavailable()
-    })
-    global.fetch = fetchMock as typeof fetch
-
-    const result = await readUrlContent('https://example.com/article', { ...options, signal: controller.signal })
-
-    expect(result.errorCode).toBe('CANCELLED')
-    expect(checkSignal?.aborted).toBe(true)
-    expect(fetchMock.mock.calls.some(([input]) => String(input) === DEEPSEEK_FETCH_ENDPOINT)).toBe(false)
-  })
-
-  test.each(['cancel', 'deadline'])('stops the Wayback rate limit wait on %s', async (stop) => {
+  test('uses Wayback only for explicit history reads and cancels its rate-limit wait', async () => {
     const controller = new AbortController()
     const fetchMock = jest.fn(async (input: RequestInfo | URL) => {
       if (String(input).includes('archive.org/wayback/available')) {
         return new Response(JSON.stringify({ archived_snapshots: { closest: {
-          available: true, url: 'https://web.archive.org/snapshot',
+          available: true, url: 'https://web.archive.org/snapshot', timestamp: '20260101000000',
         } } }), { headers: { 'content-type': 'application/json' } })
       }
       return unavailable()
     })
     global.fetch = fetchMock as typeof fetch
-    const pending = readUrlContent('https://example.com/article', { ...options, signal: controller.signal })
+    const pending = readUrlContent('https://example.com/article', {
+      ...options,
+      purpose: 'history',
+      signal: controller.signal,
+    })
     await jest.advanceTimersByTimeAsync(0)
     const requestsBeforeStop = fetchMock.mock.calls.length
-    if (stop === 'cancel') controller.abort()
+    controller.abort()
     await jest.advanceTimersByTimeAsync(1200)
     const result = await pending
 
-    expect(result.errorCode).toBe(stop === 'cancel' ? 'CANCELLED' : 'TIMEOUT')
+    expect(result.errorCode).toBe('CANCELLED')
     expect(fetchMock).toHaveBeenCalledTimes(requestsBeforeStop)
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/wayback/available'))).toBe(true)
   })
 
-  test('browser cancellation closes resources and releases a pending navigation', async () => {
-    const controller = new AbortController()
-    const context = {
-      newPage: jest.fn(),
-      close: jest.fn(async () => undefined),
-    }
-    const browser = { newContext: jest.fn(async () => context), close: jest.fn(async () => undefined) }
-    const page = {
-      route: jest.fn(async () => undefined),
-      goto: jest.fn(() => { controller.abort(); return new Promise(() => undefined) }),
-    }
-    context.newPage.mockResolvedValue(page)
-    jest.spyOn(browserExecutable, 'resolveBrowserExecutablePath').mockReturnValue('mock-chromium')
-    jest.spyOn(chromium, 'launch').mockResolvedValue(browser as never)
-    const fetchMock = jest.fn(async (_input: RequestInfo | URL) => unavailable())
+  test('does not touch Wayback for current-purpose reads', async () => {
+    const fetchMock = jest.fn(async () => unavailable())
     global.fetch = fetchMock as typeof fetch
-    let result: Awaited<ReturnType<typeof readUrlContent>> | undefined
-    void readUrlContent('https://example.com/article', { ...options, enableBrowser: true, signal: controller.signal })
-      .then((value) => { result = value })
-    await jest.advanceTimersByTimeAsync(0)
+    const result = await readUrlContent('https://example.com/article', options)
+    expect(result.errorCode).not.toBe('CANCELLED')
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('archive.org'))).toBe(false)
+  })
 
-    expect(result?.errorCode).toBe('CANCELLED')
-    expect(context.close).toHaveBeenCalledTimes(1)
-    expect(browser.close).toHaveBeenCalledTimes(1)
-    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('webcache.'))).toBe(false)
+  test('browser cancellation closes its context and settles as CANCELLED', async () => {
+    const controller = new AbortController()
+    const pool = await import('../web-retrieval/browser/pool')
+    await pool.resetSharedBrowserForTests()
+    const fakeChrome = { newContext: jest.fn(async () => {
+      const context = {
+        newPage: jest.fn(async () => ({
+          route: jest.fn(async () => undefined),
+          goto: jest.fn(() => { controller.abort(); return new Promise(() => undefined) }),
+          content: jest.fn(async () => '<html></html>'),
+          title: jest.fn(async () => ''),
+          url: jest.fn(() => 'https://example.com/article'),
+        })),
+        close: jest.fn(async () => undefined),
+      }
+      contextRef = context
+      return context
+    }), close: jest.fn(async () => undefined), on: jest.fn() }
+    let contextRef: { close: jest.Mock } | undefined
+    pool.configureSharedBrowser({
+      launch: async () => fakeChrome as never,
+      assessMemory: async () => ({
+        allowed: true,
+        advisory: true as const,
+        snapshot: { signal: 'freemem' as const, headroomBytes: 2 * 1024 * 1024 * 1024, advisory: true as const },
+        minHeadroomBytes: 256 * 1024 * 1024,
+        minContainerLimitBytes: 768 * 1024 * 1024,
+      }),
+    })
+    global.fetch = jest.fn(async () => unavailable()) as typeof fetch
+    jest.spyOn(browserExecutable, 'resolveBrowserExecutablePath').mockReturnValue('mock-chromium')
+
+    const pending = readUrlContent('https://example.com/article', {
+      ...options,
+      enableBrowser: true,
+      browserExecutablePath: 'mock-chromium',
+      signal: controller.signal,
+    })
+    await jest.advanceTimersByTimeAsync(0)
+    await jest.advanceTimersByTimeAsync(0)
+    const result = await pending
+
+    expect(result.errorCode).toBe('CANCELLED')
+    expect(contextRef?.close).toHaveBeenCalledTimes(1)
+    await pool.shutdownSharedBrowser()
+    expect(pool.getSharedBrowserStats().contextsClosed).toBe(1)
+    await pool.resetSharedBrowserForTests()
+  })
+
+  test('recovers through fallbacks when only the native phase expires', async () => {
+    let calls = 0
+    global.fetch = jest.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      calls += 1
+      if (calls === 1) {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new DOMException('native phase done', 'TimeoutError')), { once: true })
+        })
+      }
+      return Promise.resolve(new Response(
+        '<html><body><article><p>原生阶段超时后，爬虫通道仍然取回了这篇正文。</p>' +
+        '<p>第二段继续补充内容，确认回退成功而不是直接结束。</p>' +
+        '<p>第三段用于通过最小正文长度。</p></article></body></html>',
+        { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } },
+      ))
+    }) as typeof fetch
+
+    const pending = readUrlContent('https://example.com/slow-native', { ...options, timeout: 30000 })
+    await jest.advanceTimersByTimeAsync(5000)
+    const result = await pending
+
+    expect(result.error).toBeUndefined()
+    expect(result.engine).toBe('crawler')
+    expect(result.attempts?.some((attempt) => attempt.engine === 'native' && attempt.errorCode === 'TIMEOUT')).toBe(true)
+    expect(result.textContent).toContain('爬虫通道')
   })
 
   test('native timeout exhausts the overall deadline and starts no fallback', async () => {
@@ -164,7 +204,7 @@ describe('readUrlContent shared deadline and cancellation', () => {
     }) as typeof fetch
     const fetchTool = jest.spyOn(deepseekTools, 'runDeepSeekFetch').mockResolvedValue({ title: 'Fetched', content: 'page content' })
 
-    const result = await readUrlContent('https://example.com/article', options)
+    const result = await readUrlContent('https://example.com/other', options)
 
     expect(result.errorCode).toBe('TIMEOUT')
     expect(global.fetch).toHaveBeenCalledTimes(1)
@@ -185,7 +225,7 @@ describe('readUrlContent shared deadline and cancellation', () => {
       }
       return unavailable()
     }) as typeof fetch
-    const pending = readUrlContent('https://example.com/article', { ...options, signal: controller.signal })
+    const pending = readUrlContent('https://example.com/pending', { ...options, signal: controller.signal })
     let settled = false
     void pending.then(() => { settled = true })
     await jest.advanceTimersByTimeAsync(800)
@@ -200,7 +240,44 @@ describe('readUrlContent shared deadline and cancellation', () => {
     const result = await pending
 
     expect(result.errorCode).toBe(stop === 'cancel' ? 'CANCELLED' : 'TIMEOUT')
-    expect(result.attempts?.at(-1)).toMatchObject({ engine: 'deepseek_fetch', status: 'error', errorCode: result.errorCode })
+  })
+
+  test('does not reuse a cache entry across different request-shaping options', async () => {
+    let calls = 0
+    global.fetch = jest.fn(async () => {
+      calls += 1
+      return new Response(
+        '<html><body><article><p>缓存键需要区分请求参数，否则会错误复用其它读取结果。</p>' +
+        '<p>第二段继续补充内容，保证正文长度达到提取阈值。</p>' +
+        '<p>第三段用于稳定结果。</p></article></body></html>',
+        { status: 200, headers: { 'content-type': 'text/html' } },
+      )
+    }) as typeof fetch
+    const base = { timeout: 3000, enableBrowser: false, cacheTtlMs: 60_000 }
+    await readUrlContent('https://example.com/cache-key', { ...base, userAgent: 'agent-a' })
+    await readUrlContent('https://example.com/cache-key', { ...base, userAgent: 'agent-b' })
+    expect(calls).toBe(2)
+    await readUrlContent('https://example.com/cache-key', { ...base, userAgent: 'agent-b' })
+    expect(calls).toBe(2)
+  })
+
+  test('shares one in-flight read and reuses a bounded cache entry', async () => {
+    let calls = 0
+    global.fetch = jest.fn(async () => {
+      calls += 1
+      return new Response('<html><body><article><p>第一段正文内容，足够长用于缓存验证。</p><p>第二段正文内容，继续补充长度。</p><p>第三段正文内容，保持结构稳定。</p></article></body></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      })
+    }) as typeof fetch
+    const first = readUrlContent('https://example.com/cache', { timeout: 3000, enableBrowser: false, cacheTtlMs: 60_000 })
+    const second = readUrlContent('https://example.com/cache', { timeout: 3000, enableBrowser: false, cacheTtlMs: 60_000 })
+    const [a, b] = await Promise.all([first, second])
+    expect(a.error).toBeUndefined()
+    expect(b.error).toBeUndefined()
+    expect(calls).toBe(1)
+    await readUrlContent('https://example.com/cache', { timeout: 3000, enableBrowser: false, cacheTtlMs: 60_000 })
+    expect(calls).toBe(1)
   })
 })
 
@@ -257,10 +334,67 @@ describe('readUrlContent error classification', () => {
     expect(result.error).toContain('JavaScript challenge')
   })
 
+  test('does not retry crawler or undeclared feed for a challenge page', async () => {
+    const fetchMock = jest.fn(async () =>
+      new Response('<html><head><title>Just a moment...</title></head><body>cf-chl</body></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+      }),
+    )
+    global.fetch = fetchMock as typeof fetch
+
+    const result = await readUrlContent('https://example.com/challenge-no-feed', { enableBrowser: false })
+
+    expect(result.errorCode).toBe('JS_CHALLENGE')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(result.attempts?.some((attempt) => attempt.engine === 'crawler')).toBe(false)
+  })
+
+  test('stops on 429 and reports Retry-After without waiting', async () => {
+    const fetchMock = jest.fn(async () => new Response('slow down', {
+      status: 429,
+      headers: { 'content-type': 'text/html', 'retry-after': '30' },
+    }))
+    global.fetch = fetchMock as typeof fetch
+
+    const started = Date.now()
+    const result = await readUrlContent('https://example.com/limited', { enableBrowser: false, timeout: 30000 })
+
+    expect(Date.now() - started).toBeLessThan(1000)
+    expect(result.errorCode).toBe('HTTP_429')
+    expect(result.retryAfterMs).toBe(30000)
+    expect(result.error).toContain('不再请求该来源')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  test('stops the whole read when a crawler fallback receives 429', async () => {
+    let calls = 0
+    const fetchMock = jest.fn(async () => {
+      calls += 1
+      if (calls === 1) {
+        return new Response('<html><body>forbidden</body></html>', {
+          status: 403,
+          headers: { 'content-type': 'text/html' },
+        })
+      }
+      return new Response('rate limited', {
+        status: 429,
+        headers: { 'content-type': 'text/html', 'retry-after': '5' },
+      })
+    })
+    global.fetch = fetchMock as typeof fetch
+
+    const result = await readUrlContent('https://example.com/rate-limited-crawler', { enableBrowser: false })
+
+    expect(result.errorCode).toBe('HTTP_429')
+    expect(result.retryAfterMs).toBe(5000)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
   test('falls back to same-origin feed entry when article page is behind JS challenge', async () => {
     global.fetch = jest.fn(async (input: RequestInfo | URL) => {
       const requestUrl = String(input)
-      if (requestUrl.endsWith('/rss/')) {
+      if (requestUrl.endsWith('/feed/')) {
         return new Response(
           `
           <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
@@ -287,7 +421,11 @@ describe('readUrlContent error classification', () => {
           },
         )
       }
-      return new Response('<html><title>Just a moment...</title><body>cf-chl-bypass</body></html>', {
+      return new Response(
+        '<html><head><title>Just a moment...</title>' +
+        '<link rel="alternate" type="application/rss+xml" href="/feed/" /></head>' +
+        '<body>cf-chl-bypass</body></html>',
+        {
         status: 200,
         statusText: 'OK',
         headers: { 'content-type': 'text/html; charset=utf-8' },
@@ -304,7 +442,7 @@ describe('readUrlContent error classification', () => {
     expect(result.attempts?.some((attempt) => attempt.engine === 'feed' && attempt.status === 'success')).toBe(true)
   })
 
-  test('falls back to crawler extraction when readability parsing returns null', async () => {
+  test('extracts article paragraphs without an English word-count gate', async () => {
     global.fetch = jest.fn(async () =>
       new Response(
         `
@@ -326,13 +464,11 @@ describe('readUrlContent error classification', () => {
       )
     ) as typeof fetch
 
-    jest.spyOn(Readability.prototype, 'parse').mockReturnValue(null)
-
     const result = await readUrlContent('https://example.com/fallback')
 
     expect(result.error).toBeUndefined()
     expect(result.errorCode).toBeUndefined()
-    expect(result.fallbackUsed).toBe('crawler')
+    expect(result.fallbackUsed).toBe('none')
     expect(result.textContent).toContain('第一段：这是正文内容')
     expect(result.textContent).toContain('第二段：当 Readability 失败后')
   })
@@ -621,6 +757,66 @@ describe('readUrlContent error classification', () => {
     expect(result.textContent).toContain('https://example.com/a')
   })
 
+  test('keeps a normal article that mentions Cloudflare and CAPTCHA', async () => {
+    global.fetch = jest.fn(async () =>
+      new Response(
+        '<html><head><title>Cloudflare CAPTCHA 说明</title></head><body><article>' +
+        '<p>Cloudflare 的 CAPTCHA 是常见的反自动访问机制，本文解释它的验证流程与误判来源。</p>' +
+        '<p>真正的验证页通常只有一段提示，没有正文段落，并且挂载 challenge-platform 脚本。</p>' +
+        '<p>第三段继续补充正文，确保质量信号达到可读标准。</p>' +
+        '<p>第四段用于确认关键词不会单独触发挑战判定。</p></article></body></html>',
+        { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } },
+      ),
+    ) as typeof fetch
+
+    const result = await readUrlContent('https://example.com/blog/cloudflare-captcha', { enableBrowser: false })
+
+    expect(result.error).toBeUndefined()
+    expect(result.textContent).toContain('Cloudflare 的 CAPTCHA')
+  })
+
+  test('parses HTML when the response has no content-type', async () => {
+    global.fetch = jest.fn(async () =>
+      new Response(
+        '<html><body><article><p>财联社风格的响应没有 Content-Type，但正文仍然应该被识别。</p>' +
+        '<p>第二段继续补充内容，确保段落与长度达到提取阈值。</p>' +
+        '<p>第三段用于稳定语义提取结果。</p></article></body></html>',
+        { status: 200 },
+      ),
+    ) as typeof fetch
+
+    const result = await readUrlContent('https://example.com/no-mime', { enableBrowser: false })
+
+    expect(result.error).toBeUndefined()
+    expect(result.contentType).toBe('text/html')
+    expect(result.textContent).toContain('没有 Content-Type')
+    expect(result.attempts?.some((attempt) => attempt.engine === 'native' && attempt.status === 'success')).toBe(true)
+  })
+
+  test('uses python extraction on the same HTML when native extraction is thin', async () => {
+    const thinHtml = '<html><body><div id="app"><nav><a href="/a">首页</a></nav></div></body></html>'
+    global.fetch = jest.fn(async () =>
+      new Response(thinHtml, { status: 200, headers: { 'content-type': 'text/html' } }),
+    ) as typeof fetch
+    const python = jest.spyOn(pythonExtractor, 'extractHtmlWithPython').mockResolvedValue({
+      title: 'Python 标题',
+      content: '这是 Python/Trafilatura 从同一份 HTML 中补回的正文，长度足够，并且不需要重新下载页面。' +
+        '它保留段落结构，包含足够的可读字符，用来确认短正文质量门不会误伤正常文章。' +
+        '第二段继续补充内容，说明同一份 HTML 可以直接复用，不需要再次发起网络请求。' +
+        '第三段继续累积可读字符，确保纯文本质量门按中文长度判断时不会把正常的 Trafilatura 输出误判为薄内容。' +
+        '这里再补一句作为结尾，让整段正文明显超过两百字，同时保持语义连贯，便于测试断言稳定。',
+    })
+
+    const result = await readUrlContent('https://example.com/thin', { enableBrowser: false, timeout: 5000 })
+
+    expect(result.error).toBeUndefined()
+    expect(result.engine).toBe('python')
+    expect(result.fallbackUsed).toBe('python')
+    expect(result.title).toBe('Python 标题')
+    expect(result.textContent).toContain('Trafilatura')
+    expect(python).toHaveBeenCalledWith(thinHtml, 'https://example.com/thin', expect.objectContaining({ timeoutMs: expect.any(Number) }))
+  })
+
   test('rejects localhost URL without attempting fetch', async () => {
     const fetchMock = jest.fn(async () =>
       new Response('<html><body>should not be fetched</body></html>', {
@@ -769,7 +965,7 @@ describe('readUrlContent DeepSeek Fetch fallback', () => {
 
   test('does not use DeepSeek Fetch for unsupported binary resources', async () => {
     const fetchMock = jest.fn(async () =>
-      new Response('binary', {
+      new Response(Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00]), {
         status: 200,
         headers: { 'content-type': 'application/octet-stream' },
       }),

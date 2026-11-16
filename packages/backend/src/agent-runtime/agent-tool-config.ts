@@ -16,6 +16,7 @@ import {
   WEB_SEARCH_SCOPE_IDS,
   type WebSearchEngine,
 } from '@aichat/shared/web-search-contract';
+import { WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS } from '@aichat/shared';
 
 /**
  * Web 搜索配置
@@ -54,6 +55,8 @@ export interface AgentWebSearchConfig {
   autoReadParallelism?: number;
   autoReadTimeoutMs?: number;
   autoReadMaxContentLength?: number;
+  /** 自动阅读整批总时限，默认 18s；与单 URL 的 autoReadTimeoutMs 分别生效。 */
+  autoReadBatchTimeoutMs?: number;
   minSources?: number;
   conflictEscalation?: AgentWebSearchConflictEscalation;
   localeRouting?: AgentWebSearchLocaleRouting;
@@ -272,6 +275,16 @@ export const buildAgentWebSearchConfig = (
     300000
   );
 
+  // 自动阅读的批次总时限：覆盖排队、替补与全部 URL，独立于单 URL 的 autoReadTimeoutMs
+  const autoReadBatchTimeoutMs = clampNumber(
+    parseNumberSetting(
+      sysMap.web_search_auto_read_batch_timeout_ms ?? env.WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS,
+      { fallback: WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS.fallback }
+    ),
+    WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS.min,
+    WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS.max
+  );
+
   return {
     enabled,
     engines,
@@ -295,6 +308,7 @@ export const buildAgentWebSearchConfig = (
     autoReadParallelism,
     autoReadTimeoutMs,
     autoReadMaxContentLength,
+    autoReadBatchTimeoutMs,
     conflictEscalation: 'auto',
   };
 };

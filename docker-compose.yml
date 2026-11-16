@@ -34,6 +34,9 @@ services:
       - ENABLE_CORS=${ENABLE_CORS:-false}
       - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000}
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      # 追踪事件文件必须落在 /app/logs 持久化卷里，容器重建才不丢
+      - LOG_DIR=/app/logs
+      - TASK_TRACE_LOG_DIR=${TASK_TRACE_LOG_DIR:-/app/logs/task-trace}
       - DB_INIT_ON_START=${DB_INIT_ON_START:-false}
       - PYTHON_RUNTIME_RECONCILE_ON_START=${PYTHON_RUNTIME_RECONCILE_ON_START:-true}
       - SKILL_STORAGE_ROOT=/app/data/skills

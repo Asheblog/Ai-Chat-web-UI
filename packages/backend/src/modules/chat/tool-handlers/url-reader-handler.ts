@@ -48,6 +48,11 @@ export class UrlReaderToolHandler implements IToolHandler {
         parameters: {
           type: 'object',
           properties: {
+            purpose: {
+              type: 'string',
+              enum: ['current', 'history'],
+              description: 'Use current for the live page (default). Use history only when the user explicitly requests historical content or an archived version; archived content carries its snapshot timestamp.',
+            },
             url: {
               type: 'string',
               description: 'The complete URL to read content from (e.g., https://example.com/article)',
@@ -174,7 +179,10 @@ export class UrlReaderToolHandler implements IToolHandler {
     })
 
     try {
+      const purpose = args.purpose === 'history' ? 'history' : 'current'
       const result = await readUrlContent(url, {
+        purpose,
+        freshness: purpose === 'history' ? 'default' : 'current',
         timeout: this.config.timeout,
         maxContentLength: this.config.maxContentLength,
         maxBodyBytes: this.config.maxBodyBytes,
@@ -259,6 +267,10 @@ export class UrlReaderToolHandler implements IToolHandler {
           rendered: result.rendered,
           confidence: result.confidence,
           contentFormat: result.contentFormat,
+          contentKind: result.contentKind,
+          fetchedAt: result.fetchedAt,
+          archivedAt: result.archivedAt,
+          truncated: result.truncated,
           contentType: result.contentType,
           contentLength: result.contentLength,
           leadImageUrl: result.leadImageUrl,

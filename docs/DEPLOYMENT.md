@@ -128,6 +128,10 @@ CORS_ORIGIN=http://localhost:3000
 - 首次冷启动会执行依赖安装，耗时与网络/索引源有关，属于预期行为。
 - 本地 `npm run start:dev` / `npm run start:prod` 同样会自动执行一次 reconcile，可用 `PYTHON_RUNTIME_RECONCILE_ON_START=false` 关闭。
 
+### 网页读取资源与日志迁移
+
+网页读取与 PDF 报告共用受限浏览器配额，默认单页面并发、有限队列并按需回收。升级前的日志迁移、低内存行为和环境变量见[小容器中的网页读取与日志迁移](deploy/web-retrieval.md)。
+
 ### 注册策略
 
 - 首次启动时默认允许注册，首个用户会自动成为管理员。

@@ -5,147 +5,67 @@
  */
 
 import { JSDOM } from 'jsdom'
-import { Readability } from '@mozilla/readability'
 import { isDisallowedHostname } from './host-safety'
-import path from 'node:path'
 import { BackendLogger as log } from './logger'
 import {
   readPlaywrightChromiumExecutablePath,
   resolveBrowserExecutablePath as resolveSharedBrowserExecutablePath,
 } from './browser-executable'
-import {
-  DeepSeekToolError,
-  runDeepSeekFetch,
-} from './deepseek-tools'
+import { DeepSeekToolError, runDeepSeekFetch } from './deepseek-tools'
 import { combineAbortSignals } from './abort-signal'
+import { createReadBudget, type ReadBudget } from './web-retrieval/budget'
+import { classifyChallenge } from './web-retrieval/challenge'
+import { sniffContentType } from './web-retrieval/mime'
+import {
+  assessPlainTextQuality,
+  extractDocumentFromHtml,
+  type ExtractedDocument,
+} from './web-retrieval/html-document'
+import { discoverFeedCandidates } from './web-retrieval/feed'
+import { extractHtmlWithPython, getPythonHtmlExtractor } from './web-retrieval/python-extractor'
+import { BrowserCapacityError, renderWithSharedBrowser } from './web-retrieval/browser/pool'
+import {
+  BoundedMemoryStore,
+  InFlightReads,
+  isTimeSensitiveUrl,
+  resolveReadCacheTtlMs,
+} from './web-retrieval/cache'
+import type {
+  UrlReadAttempt,
+  UrlReadEngineName,
+  UrlReadErrorCode,
+  UrlReadImage,
+  UrlReadResult,
+  UrlReaderOptions,
+} from './web-retrieval/types'
 
-export type UrlReadErrorCode =
-  | 'INVALID_URL'
-  | 'DISALLOWED_URL'
-  | 'HTTP_403'
-  | 'HTTP_404'
-  | 'HTTP_4XX'
-  | 'HTTP_5XX'
-  | 'HTTP_ERROR'
-  | 'JS_CHALLENGE'
-  | 'ROBOTS_DENIED'
-  | 'UNSUPPORTED_CONTENT_TYPE'
-  | 'EMPTY_CONTENT'
-  | 'PARSE_EMPTY'
-  | 'TIMEOUT'
-  | 'CANCELLED'
-  | 'FETCH_FAILED'
-  | 'BODY_TOO_LARGE'
-  | 'BROWSER_UNAVAILABLE'
-  | 'UNKNOWN'
+export type {
+  ProvidedContent,
+  UrlReadAttempt,
+  UrlReadContentKind,
+  UrlReadEngineName,
+  UrlReadErrorCode,
+  UrlReadImage,
+  UrlReadResult,
+  UrlReaderOptions,
+} from './web-retrieval/types'
 
-export type UrlReadEngineName =
-  | 'native'
-  | 'crawler'
-  | 'browser'
-  | 'deepseek_fetch'
-  | 'image'
-  | 'text'
-  | 'feed'
-  | 'pdf'
-  | 'docx'
-  | 'csv'
-  | 'google_cache'
-  | 'wayback'
-
-export interface UrlReadAttempt {
-  engine: UrlReadEngineName
-  status: 'success' | 'error' | 'skipped'
-  durationMs: number
-  error?: string
-  errorCode?: UrlReadErrorCode
-  httpStatus?: number
-  contentType?: string
-  finalUrl?: string
-  rendered?: boolean
-}
-
-export interface UrlReadResult {
-  title: string
-  url: string
-  content: string
-  textContent: string
-  resourceType?: 'page' | 'image' | 'text' | 'feed' | 'pdf' | 'document' | 'table'
-  contentType?: string
-  contentLength?: number
-  excerpt?: string
-  byline?: string
-  siteName?: string
-  lang?: string
-  publishedTime?: string
-  wordCount?: number
-  error?: string
-  errorCode?: UrlReadErrorCode
-  httpStatus?: number
-  fallbackUsed?: 'none' | 'crawler' | 'browser' | 'deepseek_fetch' | 'document' | 'google_cache' | 'wayback'
-  engine?: UrlReadEngineName
-  attempts?: UrlReadAttempt[]
-  finalUrl?: string
-  rendered?: boolean
-  confidence?: number
-  contentFormat?: 'html' | 'text' | 'markdown' | 'json' | 'xml' | 'feed' | 'pdf' | 'docx' | 'csv' | 'image'
-  leadImageUrl?: string
-  images?: UrlReadImage[]
-}
-
-export interface UrlReaderOptions {
-  timeout?: number
-  maxContentLength?: number
-  userAgent?: string
-  maxBodyBytes?: number
-  enableBrowser?: boolean
-  browserExecutablePath?: string
-  renderWaitMs?: number
-  enableDeepseekFallback?: boolean
-  deepseekApiKey?: string
-  signal?: AbortSignal
-}
-
-export interface UrlReadImage {
-  url: string
-  alt?: string
-  width?: number
-  height?: number
-  source: 'meta' | 'content' | 'crawler' | 'direct'
-}
 
 const DEFAULT_TIMEOUT = 30000
+const PYTHON_EXTRACTION_TIMEOUT_MS = 1500
+const PYTHON_COLD_START_TIMEOUT_MS = 4000
+const MIN_PROVIDED_CONTENT_CHARS = 80
+const MAX_CACHE_ENTRY_BYTES = 512 * 1024
 const DEFAULT_MAX_CONTENT_LENGTH = 100000
 const DEFAULT_MAX_BODY_BYTES = 8 * 1024 * 1024
 const DEFAULT_USER_AGENT = 'Mozilla/5.0 (compatible; AIChat/1.0; +https://github.com/Asheblog/aichat)'
 const CRAWLER_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
-const GOOGLE_CACHE_TIMEOUT = 15000
 const WAYBACK_TIMEOUT = 20000
 const WAYBACK_CHECK_TIMEOUT = 10000
 const WAYBACK_RATE_LIMIT_DELAY_MS = 1200
 const CRAWLER_MIN_TEXT_LENGTH = 40
-const MAX_EXTRACTED_IMAGES = 8
-const MAX_HTML_PARSE_LENGTH = 1024 * 1024
 const MAX_FETCH_REDIRECTS = 5
-const DEFAULT_BROWSER_WAIT_MS = 1200
-const MAX_BROWSER_WAIT_MS = 8000
-const JS_CHALLENGE_PATTERNS: RegExp[] = [
-  /cf-chl/i,
-  /cloudflare/i,
-  /captcha/i,
-  /enable javascript/i,
-  /attention required/i,
-  /just a moment/i,
-  /verify you are human/i,
-]
-
-interface UrlReadBudget {
-  signal: AbortSignal
-  remainingMs: () => number
-  stopError: () => { message: string; errorCode: 'CANCELLED' | 'TIMEOUT' } | undefined
-}
-
 const withAbortSignal = <T>(operation: () => Promise<T>, signal?: AbortSignal | null): Promise<T> => {
   if (signal?.aborted) return Promise.reject(signal.reason)
   return new Promise<T>((resolve, reject) => {
@@ -218,15 +138,6 @@ const applyUrlTransformRules = (
   return { fetchUrl: url }
 }
 
-const trimHtmlForParsing = (html: string): string => {
-  if (!html) return ''
-  if (html.length <= MAX_HTML_PARSE_LENGTH) return html
-  return html.slice(0, MAX_HTML_PARSE_LENGTH)
-}
-
-/**
- * 验证 URL 格式和安全性
- */
 export function validatePublicHttpUrl(url: string): string {
   let normalized = url.trim()
 
@@ -253,12 +164,6 @@ export function validatePublicHttpUrl(url: string): string {
     }
     throw new Error(`Invalid URL format: ${url}`)
   }
-}
-
-function detectJsChallenge(html: string): boolean {
-  const normalized = (html || '').toLowerCase()
-  if (!normalized) return false
-  return JS_CHALLENGE_PATTERNS.some((pattern) => pattern.test(normalized))
 }
 
 function classifyHttpErrorCode(status: number, bodySnippet: string): UrlReadErrorCode {
@@ -415,60 +320,11 @@ const parsePositiveInt = (value: string | null): number | undefined => {
   return parsed
 }
 
-const extractSrcFromSrcSet = (value: string | null): string | null => {
-  if (!value) return null
-  const first = value
-    .split(',')
-    .map((item) => item.trim())
-    .find(Boolean)
-  if (!first) return null
-  const url = first.split(/\s+/)[0]?.trim()
-  return url || null
-}
 
 const sanitizeContentType = (contentType: string | null | undefined): string | undefined => {
   const normalized = (contentType || '').trim().toLowerCase()
   if (!normalized) return undefined
   return normalized.split(';')[0]?.trim() || undefined
-}
-
-const normalizeImageUrl = (value: string | null | undefined, baseUrl: string): string | null => {
-  if (!value) return null
-  const raw = value.trim()
-  if (!raw) return null
-  // 避免把大段 base64 data URL 写入日志、上下文和工具事件。
-  if (/^data:image\//i.test(raw)) return null
-  if (/^https?:\/\//i.test(raw)) {
-    try {
-      return validatePublicHttpUrl(raw)
-    } catch {
-      return null
-    }
-  }
-  if (raw.startsWith('//')) {
-    try {
-      return validatePublicHttpUrl(`https:${raw}`)
-    } catch {
-      return null
-    }
-  }
-  try {
-    const normalized = new URL(raw, baseUrl).toString()
-    validatePublicHttpUrl(normalized)
-    return normalized
-  } catch {
-    return null
-  }
-}
-
-const isLikelyDecorativeImage = (url: string): boolean => {
-  const normalized = url.toLowerCase()
-  return (
-    normalized.includes('favicon') ||
-    normalized.includes('sprite') ||
-    normalized.includes('/logo') ||
-    normalized.includes('icon')
-  )
 }
 
 const resolveImageDimensionsFromResponse = (response: Response): { width?: number; height?: number } => {
@@ -585,82 +441,13 @@ const decodeResponseBuffer = (
   return buffer.toString('utf8')
 }
 
-const collectImagesFromDocument = (
-  doc: any,
-  baseUrl: string,
-  contentSource: 'content' | 'crawler',
-): { leadImageUrl?: string; images?: UrlReadImage[] } => {
-  if (!doc) return {}
-
-  const images: UrlReadImage[] = []
-  const seen = new Set<string>()
-  const pushImage = (item: UrlReadImage) => {
-    const normalizedUrl = item.url.trim()
-    if (!normalizedUrl || seen.has(normalizedUrl)) return
-    seen.add(normalizedUrl)
-    images.push(item)
-  }
-
-  const metaImageCandidates = [
-    doc.querySelector('meta[property="og:image"]')?.getAttribute('content'),
-    doc.querySelector('meta[property="og:image:url"]')?.getAttribute('content'),
-    doc.querySelector('meta[name="twitter:image"]')?.getAttribute('content'),
-    doc.querySelector('meta[name="twitter:image:src"]')?.getAttribute('content'),
-  ]
-  for (const candidate of metaImageCandidates) {
-    const normalized = normalizeImageUrl(candidate, baseUrl)
-    if (!normalized) continue
-    pushImage({
-      url: normalized,
-      source: 'meta',
-    })
-  }
-
-  const contentRoots = Array.from(
-    doc.querySelectorAll('article,main,[role="main"],.article-content,.post-content,.entry-content') as
-      | ArrayLike<DomLikeElement>
-      | Iterable<DomLikeElement>,
-  )
-  if (contentRoots.length === 0 && doc.body) {
-    contentRoots.push(doc.body as DomLikeElement)
-  }
-  const imageElements = contentRoots.flatMap((root) =>
-    Array.from(root.querySelectorAll('img') as ArrayLike<DomLikeElement> | Iterable<DomLikeElement>),
-  )
-  for (const element of imageElements) {
-    const src =
-      element.getAttribute('src') ||
-      element.getAttribute('data-src') ||
-      element.getAttribute('data-original') ||
-      extractSrcFromSrcSet(element.getAttribute('srcset'))
-    const normalized = normalizeImageUrl(src, baseUrl)
-    if (!normalized || isLikelyDecorativeImage(normalized)) continue
-
-    pushImage({
-      url: normalized,
-      alt: (element.getAttribute('alt') || '').trim() || undefined,
-      width: parsePositiveInt(element.getAttribute('width')),
-      height: parsePositiveInt(element.getAttribute('height')),
-      source: contentSource,
-    })
-  }
-
-  if (images.length === 0) return {}
-  const bounded = images.slice(0, MAX_EXTRACTED_IMAGES)
-  const leadImageUrl = bounded[0]?.url
-  return {
-    leadImageUrl,
-    images: bounded,
-  }
-}
-
 async function fetchPageBody(
   url: string,
   timeout: number,
   headers: Record<string, string>,
   maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
   externalSignal?: AbortSignal,
-): Promise<{ response: Response; body: string; buffer?: Buffer; finalUrl: string }> {
+): Promise<{ response: Response; body: string; buffer?: Buffer; finalUrl: string; contentType: string }> {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeout)
   const combined = combineAbortSignals(controller.signal, externalSignal)
@@ -671,22 +458,48 @@ async function fetchPageBody(
       signal: combined.signal,
       redirect: 'manual',
     })
-    const contentType = response.headers.get('content-type') || ''
+    const declaredContentType = response.headers.get('content-type') || ''
+    const declared = sanitizeContentType(declaredContentType) || ''
+    const genericContentType =
+      !declared ||
+      [
+        'application/octet-stream',
+        'binary/octet-stream',
+        'application/binary',
+        'application/unknown',
+        'unknown/unknown',
+        'unknown',
+      ].includes(declared)
+    const urlImpliesDocument = isLikelyPdfUrl(finalUrl) || isLikelyDocxUrl(finalUrl) || isLikelyCsvUrl(finalUrl)
     const shouldReadBody =
       !response.ok ||
-      isHtmlContentType(contentType) ||
-      isTextLikeContentType(contentType) ||
-      isFeedContentType(contentType) ||
-      isPdfContentType(contentType) ||
-      isDocxContentType(contentType) ||
-      isCsvContentType(contentType) ||
-      isLikelyPdfUrl(finalUrl) ||
-      isLikelyDocxUrl(finalUrl) ||
-      isLikelyCsvUrl(finalUrl)
+      genericContentType ||
+      isHtmlContentType(declared) ||
+      isTextLikeContentType(declared) ||
+      isFeedContentType(declared) ||
+      isPdfContentType(declared) ||
+      isDocxContentType(declared) ||
+      isCsvContentType(declared) ||
+      urlImpliesDocument
     if (!shouldReadBody) {
-      return { response, body: '', finalUrl }
+      return { response, body: '', finalUrl, contentType: declared }
     }
     const buffer = await readResponseBufferWithLimit(response, maxBodyBytes, combined.signal)
+    // 有些服务端把 HTML 标成 text/plain；此时用前缀内容重新判断。
+    const shouldSniff = genericContentType || declared === 'text/plain'
+    const snack = sniffContentType({
+      buffer,
+      headerContentType: shouldSniff ? '' : declaredContentType,
+      url: finalUrl,
+    })
+    const contentType = snack.contentType
+    if (snack.sniffed) {
+      log.debug('url reader: sniffed response content type', {
+        url,
+        declared: snack.declared,
+        contentType,
+      })
+    }
     const shouldDecodeText =
       !response.ok ||
       isHtmlContentType(contentType) ||
@@ -694,7 +507,7 @@ async function fetchPageBody(
       isFeedContentType(contentType) ||
       isCsvContentType(contentType)
     const body = shouldDecodeText ? decodeResponseBuffer(buffer, contentType) : ''
-    return { response, body, buffer, finalUrl }
+    return { response, body, buffer, finalUrl, contentType }
   } finally {
     clearTimeout(timeoutId)
     combined.cleanup()
@@ -765,170 +578,6 @@ const extractTitleFromDocument = (doc: any): string => {
   const twitterTitle = doc.querySelector('meta[name="twitter:title"]')?.getAttribute('content')
   const h1Title = doc.querySelector('h1')?.textContent
   return (ogTitle || twitterTitle || doc.title || h1Title || '').trim()
-}
-
-const dedupeTextBlocks = (items: string[]): string[] => {
-  const seen = new Set<string>()
-  const deduped: string[] = []
-  for (const item of items) {
-    const key = item.trim().toLowerCase()
-    if (!key || seen.has(key)) continue
-    seen.add(key)
-    deduped.push(item)
-  }
-  return deduped
-}
-
-const extractCrawlerResultFromHtml = (
-  html: string,
-  url: string,
-  maxContentLength: number,
-): UrlReadResult | null => {
-  if (!html || !html.trim()) return null
-
-  const dom = new JSDOM(html, {
-    url,
-    runScripts: undefined,
-    resources: undefined,
-  })
-
-  try {
-    const doc = dom.window.document
-    const removableNodes = Array.from(
-      doc.querySelectorAll('script,style,noscript,svg,canvas,iframe,form,nav,aside') as
-        | ArrayLike<DomLikeElement>
-        | Iterable<DomLikeElement>,
-    )
-    removableNodes.forEach((node) => node.remove?.())
-
-    const preferredSelectors = [
-      'article',
-      'main',
-      '[role="main"]',
-      '.article-content',
-      '.post-content',
-      '.entry-content',
-      '.content',
-      '#content',
-      '.markdown-body',
-    ]
-    const candidateNodes: DomLikeElement[] = []
-    for (const selector of preferredSelectors) {
-      candidateNodes.push(
-        ...Array.from(
-          doc.querySelectorAll(selector) as ArrayLike<DomLikeElement> | Iterable<DomLikeElement>,
-        ),
-      )
-    }
-    if (candidateNodes.length === 0 && doc.body) {
-      candidateNodes.push(doc.body as DomLikeElement)
-    }
-
-    let bestText = ''
-    let bestHtml = ''
-    for (const node of candidateNodes) {
-      const text = normalizeTextContent(node?.textContent || '', maxContentLength)
-      if (text.length > bestText.length) {
-        bestText = text
-        bestHtml = typeof node?.innerHTML === 'string' ? node.innerHTML : ''
-      }
-    }
-
-    if (bestText.length < CRAWLER_MIN_TEXT_LENGTH) {
-      const blockTexts = dedupeTextBlocks(
-        Array.from(
-          doc.querySelectorAll('p,li,blockquote,pre,h1,h2,h3,h4') as
-            | ArrayLike<DomLikeElement>
-            | Iterable<DomLikeElement>,
-        )
-          .map((node) => normalizeTextContent(node.textContent || '', maxContentLength))
-          .filter((value) => value.length >= 24),
-      )
-      if (blockTexts.length > 0) {
-        const merged = normalizeTextContent(blockTexts.join('\n\n'), maxContentLength)
-        if (merged.length > bestText.length) {
-          bestText = merged
-          bestHtml = ''
-        }
-      }
-    }
-
-    if (bestText.length < CRAWLER_MIN_TEXT_LENGTH) {
-      const bodyText = normalizeTextContent(doc.body?.textContent || '', maxContentLength)
-      if (bodyText.length > bestText.length) {
-        bestText = bodyText
-        bestHtml = ''
-      }
-    }
-
-    if (bestText.length < CRAWLER_MIN_TEXT_LENGTH) {
-      return null
-    }
-
-    const imageEvidence = collectImagesFromDocument(doc, url, 'crawler')
-
-    return {
-      title: extractTitleFromDocument(doc),
-      url,
-      content: bestHtml,
-      textContent: bestText,
-      resourceType: 'page',
-      contentType: 'text/html',
-      excerpt: buildExcerpt(bestText),
-      wordCount: countWords(bestText),
-      fallbackUsed: 'crawler',
-      leadImageUrl: imageEvidence.leadImageUrl,
-      images: imageEvidence.images,
-    }
-  } finally {
-    dom.window.close()
-  }
-}
-
-const extractReadabilityResultFromHtml = (
-  html: string,
-  url: string,
-  maxContentLength: number,
-): UrlReadResult | null => {
-  const dom = new JSDOM(html, {
-    url,
-    runScripts: undefined,
-    resources: undefined,
-  })
-
-  try {
-    const imageEvidence = collectImagesFromDocument(dom.window.document, url, 'content')
-    const reader = new Readability(dom.window.document, {
-      charThreshold: 20,
-    })
-    const article = reader.parse()
-    if (!article) return null
-
-    const textContent = normalizeTextContent(article.textContent || '', maxContentLength)
-    if (!textContent || textContent.length < CRAWLER_MIN_TEXT_LENGTH) {
-      return null
-    }
-
-    return {
-      title: article.title || extractTitleFromDocument(dom.window.document),
-      url,
-      content: article.content || '',
-      textContent,
-      resourceType: 'page',
-      contentType: 'text/html',
-      excerpt: article.excerpt || buildExcerpt(textContent),
-      byline: article.byline || undefined,
-      siteName: article.siteName || undefined,
-      lang: article.lang || undefined,
-      publishedTime: article.publishedTime || undefined,
-      wordCount: countWords(textContent),
-      fallbackUsed: 'none',
-      leadImageUrl: imageEvidence.leadImageUrl,
-      images: imageEvidence.images,
-    }
-  } finally {
-    dom.window.close()
-  }
 }
 
 const getElementText = (root: any, selector: string): string => {
@@ -1098,12 +747,16 @@ const buildFeedItemResultFromXml = (
         const html = extractFeedEntryHtml(entry)
         if (!html) return null
         const wrappedHtml = `<article><h1>${escapeHtml(title)}</h1>${html}</article>`
-        const extracted =
-          extractReadabilityResultFromHtml(wrappedHtml, targetUrl, maxContentLength) ||
-          extractCrawlerResultFromHtml(wrappedHtml, targetUrl, maxContentLength)
+        const extracted = extractDocumentFromHtml(wrappedHtml, targetUrl, { maxContentLength })
         if (!extracted) return null
         return {
-          ...extracted,
+          ...buildDocumentResult(extracted, {
+            url: targetUrl,
+            finalUrl: targetUrl,
+            engine: 'feed',
+            fallbackUsed: 'document',
+            confidence: 0.85,
+          }),
           title: extracted.title || title,
           url: targetUrl,
           resourceType: 'page',
@@ -1294,9 +947,15 @@ async function buildDocxResultFromBuffer(
     const mammoth = await import('mammoth')
     const htmlResult = await mammoth.convertToHtml({ buffer })
     const html = htmlResult.value || ''
-    const readabilityResult = extractReadabilityResultFromHtml(html, url, maxContentLength)
-    const result = readabilityResult || extractCrawlerResultFromHtml(html, url, maxContentLength)
-    if (!result) return null
+    const extracted = extractDocumentFromHtml(html, url, { maxContentLength })
+    if (!extracted) return null
+    const result = buildDocumentResult(extracted, {
+      url,
+      finalUrl: url,
+      engine: 'docx',
+      fallbackUsed: 'document',
+      confidence: 0.9,
+    })
     return {
       ...result,
       resourceType: 'document',
@@ -1305,16 +964,11 @@ async function buildDocxResultFromBuffer(
       fallbackUsed: 'document',
       engine: 'docx',
       contentFormat: 'docx',
-      confidence: readabilityResult ? 0.9 : 0.75,
+      confidence: 0.9,
     }
   } catch {
     return null
   }
-}
-
-const clampBrowserWaitMs = (value?: number): number => {
-  if (!Number.isFinite(value) || (value as number) < 0) return DEFAULT_BROWSER_WAIT_MS
-  return Math.max(0, Math.min(MAX_BROWSER_WAIT_MS, Math.floor(value as number)))
 }
 
 const resolveBrowserExecutablePath = (explicitPath?: string): string | undefined => {
@@ -1333,190 +987,64 @@ const resolveBrowserExecutablePath = (explicitPath?: string): string | undefined
   })
 }
 
-async function renderHtmlWithLocalBrowser(
-  url: string,
-  opts: {
-    waitMs?: number
-    executablePath?: string
-    signal: AbortSignal
-    remainingMs: () => number
+class OriginThrottledError extends Error {
+  constructor(public readonly retryAfterMs: number | undefined, message = 'Origin asked the client to slow down') {
+    super(message)
+    this.name = 'OriginThrottledError'
+  }
+}
+
+const parseRetryAfterMs = (value: string | null, now = Date.now()): number | undefined => {
+  const raw = (value || '').trim()
+  if (!raw) return undefined
+  if (/^\d+$/.test(raw)) return Math.max(0, Number.parseInt(raw, 10) * 1000)
+  const at = Date.parse(raw)
+  return Number.isNaN(at) ? undefined : Math.max(0, at - now)
+}
+
+const isUsableDocument = (doc: ExtractedDocument): boolean =>
+  !doc.quality.isThin && !doc.quality.isLoginWall && !doc.quality.isDeletedNotice
+
+const buildDocumentResult = (
+  doc: ExtractedDocument,
+  options: {
+    url: string
+    finalUrl: string
+    engine: UrlReadEngineName
+    fallbackUsed: UrlReadResult['fallbackUsed']
+    confidence: number
   },
-): Promise<{ html: string; finalUrl: string; title: string }> {
-  const executablePath = resolveBrowserExecutablePath(opts.executablePath)
-  if (!executablePath) {
-    throw new Error('Local browser renderer is unavailable: no Chromium/Chrome/Edge executable was found')
-  }
+): UrlReadResult => ({
+  title: doc.title,
+  url: options.url,
+  content: doc.html,
+  textContent: doc.text,
+  resourceType: 'page',
+  contentType: 'text/html',
+  excerpt: doc.excerpt,
+  byline: doc.byline,
+  siteName: doc.siteName,
+  lang: doc.lang,
+  publishedTime: doc.publishedTime,
+  wordCount: doc.wordCount,
+  fallbackUsed: options.fallbackUsed,
+  engine: options.engine,
+  finalUrl: options.finalUrl,
+  rendered: options.engine === 'browser',
+  contentFormat: 'html',
+  confidence: options.confidence,
+  leadImageUrl: doc.leadImageUrl,
+  images: doc.images,
+  contentKind: doc.contentKind === 'structured' ? 'structured' : 'article',
+  truncated: doc.maxLengthTruncated,
+})
 
-  let imported: typeof import('playwright-core')
-  try {
-    imported = await import('playwright-core')
-  } catch {
-    throw new Error('Local browser renderer is unavailable: playwright-core is not installed')
-  }
-
-  const launchOptions = {
-    executablePath,
-    headless: true,
-    timeout: opts.remainingMs(),
-    args: [
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-      '--disable-background-networking',
-      '--disable-default-apps',
-      '--disable-extensions',
-      '--disable-sync',
-      '--no-first-run',
-      '--no-sandbox',
-    ],
-  }
-  const launch = () => imported.chromium.launch(launchOptions).then(async (browser) => {
-    if (opts.signal.aborted) {
-      await browser.close().catch(() => undefined)
-      opts.signal.throwIfAborted()
-    }
-    return browser
-  })
-  const browser = await withAbortSignal(launch, opts.signal)
-
-  try {
-    const context = await withAbortSignal(() => browser.newContext({
-      userAgent: CRAWLER_USER_AGENT,
-      locale: 'zh-CN',
-      viewport: { width: 1366, height: 900 },
-      ignoreHTTPSErrors: true,
-    }).then(async (context) => {
-      if (opts.signal.aborted) {
-        await context.close().catch(() => undefined)
-        opts.signal.throwIfAborted()
-      }
-      return context
-    }), opts.signal)
-    try {
-      const page = await withAbortSignal(() => context.newPage(), opts.signal)
-      await withAbortSignal(() => page.route('**/*', async (route) => {
-        const type = route.request().resourceType()
-        if (type === 'font' || type === 'media') {
-          await route.abort().catch(() => undefined)
-          return
-        }
-        await route.continue().catch(() => undefined)
-      }), opts.signal)
-      await withAbortSignal(() => page.goto(url, {
-        waitUntil: 'domcontentloaded',
-        timeout: opts.remainingMs(),
-      }), opts.signal)
-      await withAbortSignal(() => page.waitForLoadState('networkidle', {
-        timeout: Math.min(8000, opts.remainingMs()),
-      }), opts.signal).catch(() => undefined)
-      const waitMs = clampBrowserWaitMs(opts.waitMs)
-      if (waitMs > 0) {
-        await waitWithSignal(waitMs, opts.signal)
-      }
-      await withAbortSignal(() => page.evaluate(`
-        (async () => {
-          const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-          const height = Math.max(document.body?.scrollHeight || 0, document.documentElement?.scrollHeight || 0);
-          const steps = Math.min(6, Math.max(1, Math.ceil(height / 1200)));
-          for (let i = 1; i <= steps; i++) {
-            window.scrollTo(0, Math.floor((height * i) / steps));
-            await sleep(180);
-          }
-          window.scrollTo(0, 0);
-        })()
-      `), opts.signal).catch(() => undefined)
-
-      return {
-        html: await withAbortSignal(() => page.content(), opts.signal),
-        finalUrl: page.url(),
-        title: await withAbortSignal(() => page.title(), opts.signal).catch(() => ''),
-      }
-    } finally {
-      await context.close().catch(() => undefined)
-    }
-  } finally {
-    await browser.close().catch(() => undefined)
-  }
-}
-
-async function tryBrowserRenderedRead(
-  url: string,
-  budget: UrlReadBudget,
-  maxContentLength: number,
-  opts: UrlReaderOptions,
-): Promise<UrlReadResult | null> {
-  try {
-    const rendered = await renderHtmlWithLocalBrowser(url, {
-      waitMs: opts.renderWaitMs,
-      executablePath: opts.browserExecutablePath,
-      signal: budget.signal,
-      remainingMs: budget.remainingMs,
-    })
-    const htmlForParse = trimHtmlForParsing(rendered.html)
-    const readabilityResult = extractReadabilityResultFromHtml(htmlForParse, rendered.finalUrl, maxContentLength)
-    const result = readabilityResult || extractCrawlerResultFromHtml(htmlForParse, rendered.finalUrl, maxContentLength)
-    if (!result) return null
-    return {
-      ...result,
-      title: result.title || rendered.title,
-      fallbackUsed: 'browser',
-      engine: 'browser',
-      finalUrl: rendered.finalUrl,
-      rendered: true,
-      confidence: readabilityResult ? 0.82 : 0.68,
-    }
-  } catch (error) {
-    log.debug('url reader: browser renderer failed', {
-      url,
-      error: error instanceof Error ? error.message : String(error),
-    })
-    return null
-  }
-}
-
-async function fetchGoogleCache(
-  url: string,
-  options: UrlReaderOptions,
-): Promise<UrlReadResult | null> {
-  const { timeout = GOOGLE_CACHE_TIMEOUT, maxContentLength = DEFAULT_MAX_CONTENT_LENGTH } = options
-  const cacheUrl = `https://webcache.googleusercontent.com/search?q=cache:${encodeURIComponent(url)}`
-
-  try {
-    const { response, body, finalUrl } = await fetchPageBody(
-      cacheUrl,
-      timeout,
-      buildCrawlerHeaders(),
-      DEFAULT_MAX_BODY_BYTES,
-      options.signal,
-    )
-
-    if (!response.ok || !body || body.length < CRAWLER_MIN_TEXT_LENGTH) return null
-
-    const contentType = response.headers.get('content-type') || ''
-    if (isHtmlContentType(contentType)) {
-      const readabilityResult = extractReadabilityResultFromHtml(body, finalUrl, maxContentLength)
-      const crawlerResult = readabilityResult || extractCrawlerResultFromHtml(body, finalUrl, maxContentLength)
-      if (crawlerResult) {
-        return {
-          ...crawlerResult,
-          url,
-          finalUrl,
-          fallbackUsed: 'google_cache',
-          engine: 'google_cache',
-          contentFormat: 'html',
-          confidence: readabilityResult ? 0.65 : 0.5,
-        }
-      }
-      return null
-    }
-
-    return buildCrawlerResultFromText(body, finalUrl, maxContentLength, '', contentType)
-  } catch (error) {
-    log.debug('url reader: Google Cache fetch failed', {
-      url,
-      error: error instanceof Error ? error.message : String(error),
-    })
-    return null
-  }
+const formatWaybackTimestamp = (value?: string): string | undefined => {
+  if (!value || !/^\d{14}$/.test(value)) return undefined
+  const iso = value.slice(0, 4) + '-' + value.slice(4, 6) + '-' + value.slice(6, 8) + 'T' +
+    value.slice(8, 10) + ':' + value.slice(10, 12) + ':' + value.slice(12, 14) + 'Z'
+  const date = new Date(iso)
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString()
 }
 
 async function fetchWaybackMachine(
@@ -1527,21 +1055,19 @@ async function fetchWaybackMachine(
   const deadline = Date.now() + timeout
 
   try {
-    const checkUrl = `https://archive.org/wayback/available?url=${encodeURIComponent(url)}`
-
+    const checkUrl = 'https://archive.org/wayback/available?url=' + encodeURIComponent(url)
     const checkController = new AbortController()
     const checkTimeoutId = setTimeout(() => checkController.abort(), Math.min(timeout, WAYBACK_CHECK_TIMEOUT))
     const checkSignal = combineAbortSignals(checkController.signal, options.signal)
 
     let availability: {
-      archived_snapshots?: { closest?: { available?: boolean; url?: string; status?: string } }
+      archived_snapshots?: {
+        closest?: { available?: boolean; url?: string; status?: string; timestamp?: string }
+      }
     }
     try {
       const checkResponse = await withAbortSignal(() => fetch(checkUrl, {
-        headers: {
-          'User-Agent': CRAWLER_USER_AGENT,
-          Accept: 'application/json',
-        },
+        headers: { 'User-Agent': CRAWLER_USER_AGENT, Accept: 'application/json' },
         signal: checkSignal.signal,
       }), checkSignal.signal)
       if (!checkResponse.ok) return null
@@ -1554,41 +1080,40 @@ async function fetchWaybackMachine(
     const snapshot = availability?.archived_snapshots?.closest
     if (!snapshot?.available || !snapshot.url) return null
 
-    // Wayback Machine has rate limits; brief pause before fetching snapshot
     await waitWithSignal(WAYBACK_RATE_LIMIT_DELAY_MS, options.signal)
     options.signal?.throwIfAborted()
     const remaining = deadline - Date.now()
     if (remaining <= 0) return null
 
-    const { response, body, finalUrl } = await fetchPageBody(
+    const { response, body, finalUrl, contentType } = await fetchPageBody(
       snapshot.url,
       remaining,
       buildCrawlerHeaders(),
       DEFAULT_MAX_BODY_BYTES,
       options.signal,
     )
-
     if (!response.ok || !body || body.length < CRAWLER_MIN_TEXT_LENGTH) return null
+    const archivedAt = formatWaybackTimestamp(snapshot.timestamp)
 
-    const contentType = response.headers.get('content-type') || ''
     if (isHtmlContentType(contentType)) {
-      const readabilityResult = extractReadabilityResultFromHtml(body, finalUrl, maxContentLength)
-      const crawlerResult = readabilityResult || extractCrawlerResultFromHtml(body, finalUrl, maxContentLength)
-      if (crawlerResult) {
-        return {
-          ...crawlerResult,
+      const doc = extractDocumentFromHtml(body, finalUrl, { maxContentLength })
+      if (!doc || !isUsableDocument(doc)) return null
+      return {
+        ...buildDocumentResult(doc, {
           url,
           finalUrl,
-          fallbackUsed: 'wayback',
           engine: 'wayback',
-          contentFormat: 'html',
-          confidence: readabilityResult ? 0.6 : 0.45,
-        }
+          fallbackUsed: 'wayback',
+          confidence: 0.6,
+        }),
+        ...(archivedAt ? { archivedAt } : {}),
       }
-      return null
     }
 
-    return buildCrawlerResultFromText(body, finalUrl, maxContentLength, '', contentType)
+    const textResult = buildCrawlerResultFromText(body, finalUrl, maxContentLength, '', contentType)
+    return textResult
+      ? { ...textResult, fallbackUsed: 'wayback', engine: 'wayback', ...(archivedAt ? { archivedAt } : {}) }
+      : null
   } catch (error) {
     log.debug('url reader: Wayback Machine fetch failed', {
       url,
@@ -1598,90 +1123,95 @@ async function fetchWaybackMachine(
   }
 }
 
-const buildSameOriginFeedCandidates = (url: string): string[] => {
-  try {
-    const parsed = new URL(url)
-    const origin = parsed.origin
-    return [
-      '/rss/',
-      '/feed/',
-      '/rss.xml',
-      '/feed.xml',
-      '/atom.xml',
-      '/index.xml',
-    ].map((pathname) => new URL(pathname, origin).toString())
-  } catch {
-    return []
-  }
-}
-
 async function trySameOriginFeedFallback(
   url: string,
-  budget: UrlReadBudget,
+  budget: ReadBudget,
   maxContentLength: number,
-  maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
+  maxBodyBytes: number,
+  pageHtml: string,
 ): Promise<UrlReadResult | null> {
-  const candidates = buildSameOriginFeedCandidates(url)
-  for (const feedUrl of candidates) {
-    if (budget.stopError()) return null
-    try {
-      const { response, body, finalUrl } = await fetchPageBody(
-        feedUrl,
-        budget.remainingMs(),
-        buildCrawlerHeaders(),
-        maxBodyBytes,
-        budget.signal,
-      )
-      if (!response.ok || !body) continue
-      const contentType = response.headers.get('content-type') || ''
-      if (!isFeedContentType(contentType) && !/^\s*<(rss|feed)\b/i.test(body)) continue
-      const result = buildFeedItemResultFromXml(body, url, maxContentLength, finalUrl)
-      if (result) return result
-    } catch {
-      continue
+  const candidates = discoverFeedCandidates(pageHtml, url)
+  if (candidates.length === 0) return null
+  const lease = budget.beginPhase('feed')
+  try {
+    for (const candidate of candidates) {
+      if (budget.stopError() || lease.remainingMs() <= 0) return null
+      try {
+        const { response, body, finalUrl, contentType } = await fetchPageBody(
+          candidate.url,
+          Math.max(1, lease.remainingMs()),
+          buildCrawlerHeaders(),
+          maxBodyBytes,
+          lease.signal,
+        )
+        if (response.status === 429) {
+          throw new OriginThrottledError(parseRetryAfterMs(response.headers.get('retry-after')))
+        }
+        if (!response.ok || !body) continue
+        if (!isFeedContentType(contentType) && !/^\s*<(rss|feed)\b/i.test(body)) continue
+        const result = contentType.toLowerCase().includes('json')
+          ? buildJsonFeedResultFromText(body, url, maxContentLength, contentType)
+          : buildFeedItemResultFromXml(body, url, maxContentLength, finalUrl)
+        if (result) return result
+      } catch (error) {
+        if (error instanceof OriginThrottledError) throw error
+        continue
+      }
     }
+    return null
+  } finally {
+    lease.release()
   }
-  return null
 }
 
 async function tryCrawlerRefetch(
   url: string,
-  budget: UrlReadBudget,
+  budget: ReadBudget,
   maxContentLength: number,
   maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
 ): Promise<UrlReadResult | null> {
-  if (budget.stopError()) return null
+  const lease = budget.beginPhase('crawler')
   try {
-    const { response, body, finalUrl } = await fetchPageBody(
+    if (budget.stopError() || lease.remainingMs() <= 0) return null
+    const { response, body, finalUrl, contentType } = await fetchPageBody(
       url,
-      budget.remainingMs(),
+      Math.max(1, lease.remainingMs()),
       buildCrawlerHeaders(),
       maxBodyBytes,
-      budget.signal,
+      lease.signal,
     )
-    if (!response.ok || !body || detectJsChallenge(body)) {
-      return null
+    if (response.status === 429) {
+      throw new OriginThrottledError(parseRetryAfterMs(response.headers.get('retry-after')))
     }
-    const contentType = response.headers.get('content-type') || ''
+    if (!response.ok || !body) return null
     if (isHtmlContentType(contentType)) {
-      return extractCrawlerResultFromHtml(body, finalUrl, maxContentLength)
+      if (classifyChallenge({ html: body, status: response.status, url: finalUrl }).isChallenge) return null
+      const doc = extractDocumentFromHtml(body, finalUrl, { maxContentLength })
+      if (!doc || !isUsableDocument(doc)) return null
+      return buildDocumentResult(doc, {
+        url,
+        finalUrl,
+        engine: 'crawler',
+        fallbackUsed: 'crawler',
+        confidence: 0.7,
+      })
     }
     if (isTextLikeContentType(contentType)) {
-      return buildCrawlerResultFromText(body, finalUrl, maxContentLength)
+      return buildCrawlerResultFromText(body, finalUrl, maxContentLength, '', contentType)
     }
     return null
-  } catch {
+  } catch (error) {
+    if (error instanceof OriginThrottledError) throw error
     return null
+  } finally {
+    lease.release()
   }
 }
 
-/**
- * 使用 @mozilla/readability 提取网页正文内容
- */
 async function readUrlContentLocal(
   url: string,
   opts: UrlReaderOptions,
-  budget: UrlReadBudget,
+  budget: ReadBudget,
 ): Promise<UrlReadResult> {
   let validatedUrl = url.trim()
   let fetchUrl = validatedUrl
@@ -1694,6 +1224,7 @@ async function readUrlContentLocal(
     process.env.URL_READER_BROWSER_ENABLE !== 'false'
   )
   const attempts: UrlReadAttempt[] = []
+  const readStartedAt = Date.now()
 
   const recordAttempt = (
     startedAt: number,
@@ -1738,30 +1269,76 @@ async function readUrlContentLocal(
     }
   }
 
-  const tryBrowserFallback = async (reason: string): Promise<UrlReadResult | null> => {
-    if (!enableBrowser || budget.stopError()) return null
-    const browserStartedAt = Date.now()
-    const browserResult = await tryBrowserRenderedRead(fetchUrl, budget, maxContentLength, opts)
-    if (browserResult) {
-      recordAttempt(browserStartedAt, 'browser', 'success', {
-        finalUrl: browserResult.finalUrl || browserResult.url,
-        rendered: true,
-        contentType: browserResult.contentType,
+  const tryPythonExtraction = async (html: string): Promise<UrlReadResult | null> => {
+    if (budget.stopError()) return null
+    const startedAt = Date.now()
+    const lease = budget.beginPhase('python')
+    try {
+      if (lease.remainingMs() <= 0) return null
+      // 冷启动沿用准入总时限：剩余不足 4 秒就不启动 Python，避免 ready 之后再等正文。
+      let workerReady = false
+      try {
+        workerReady = getPythonHtmlExtractor().describeState().workerReady
+      } catch {
+        workerReady = false
+      }
+      if (!workerReady && budget.remainingMs() < PYTHON_COLD_START_TIMEOUT_MS) {
+        recordAttempt(startedAt, 'python', 'skipped', { error: 'Python 冷启动所需时间不足，已跳过' })
+        return null
+      }
+      const pythonBudget = workerReady ? PYTHON_EXTRACTION_TIMEOUT_MS : PYTHON_COLD_START_TIMEOUT_MS
+      const timeoutMs = Math.max(1, Math.min(pythonBudget, lease.remainingMs()))
+      const extracted = await withAbortSignal(
+        () => extractHtmlWithPython(html, fetchUrl, { signal: lease.signal, timeoutMs }),
+        lease.signal,
+      )
+      const text = extracted?.content ? normalizeTextContent(extracted.content, maxContentLength) : ''
+      const quality = assessPlainTextQuality(text)
+      if (!extracted || !text || quality.isThin || quality.isLinkFarm) {
+        recordAttempt(startedAt, 'python', 'skipped', {
+          error: 'Python 正文不可用：' + quality.textLength + ' chars / ' + quality.readableUnits +
+            ' units / linkDensity ' + quality.linkDensity.toFixed(2),
+        })
+        return null
+      }
+      recordAttempt(startedAt, 'python', 'success', { contentType: 'text/html' })
+      log.debug('url reader: python extraction success', { url: validatedUrl, wordCount: countWords(text) })
+      return toPublicResult({
+        title: (extracted.title || '').trim(),
+        url: validatedUrl,
+        content: '',
+        textContent: text,
+        resourceType: 'page',
+        excerpt: extracted.excerpt || buildExcerpt(text),
+        wordCount: countWords(text),
+        fallbackUsed: 'python',
+        engine: 'python',
+        finalUrl: fetchUrl,
+        contentFormat: 'text',
+        confidence: 0.75,
+        contentKind: 'article',
       })
-      log.debug('url reader: browser fallback success', { url: validatedUrl, reason })
-      return toPublicResult(browserResult)
+    } catch (error) {
+      recordAttempt(startedAt, 'python', 'error', {
+        error: error instanceof Error ? error.message : String(error),
+        errorCode: 'UNKNOWN',
+      })
+      return null
+    } finally {
+      lease.release()
     }
-    recordAttempt(browserStartedAt, 'browser', 'skipped', {
-      error: `Browser fallback did not extract readable content after ${reason}`,
-      rendered: true,
-    })
-    return null
   }
 
-  const tryFeedFallback = async (reason: string): Promise<UrlReadResult | null> => {
+  const tryFeedFallback = async (reason: string, pageHtml: string): Promise<UrlReadResult | null> => {
     if (budget.stopError()) return null
     const feedStartedAt = Date.now()
-    const feedResult = await trySameOriginFeedFallback(validatedUrl, budget, maxContentLength, maxBodyBytes)
+    const feedResult = await trySameOriginFeedFallback(
+      validatedUrl,
+      budget,
+      maxContentLength,
+      maxBodyBytes,
+      pageHtml,
+    )
     if (feedResult) {
       recordAttempt(feedStartedAt, 'feed', 'success', {
         finalUrl: feedResult.finalUrl || feedResult.url,
@@ -1771,52 +1348,138 @@ async function readUrlContentLocal(
       return toPublicResult(feedResult)
     }
     recordAttempt(feedStartedAt, 'feed', 'skipped', {
-      error: `Same-origin feed fallback did not match readable content after ${reason}`,
+      error: 'Same-origin feed fallback did not match readable content after ' + reason,
     })
     return null
   }
 
-  const tryCachedFallbacks = async (reason: string): Promise<UrlReadResult | null> => {
-    if (budget.stopError()) return null
-    const googleCacheStartedAt = Date.now()
-    const googleCacheResult = await fetchGoogleCache(validatedUrl, {
-      timeout: Math.min(GOOGLE_CACHE_TIMEOUT, budget.remainingMs()),
-      maxContentLength,
-      userAgent: CRAWLER_USER_AGENT,
-      signal: budget.signal,
-    })
-    if (googleCacheResult) {
-      recordAttempt(googleCacheStartedAt, 'google_cache', 'success', {
-        finalUrl: googleCacheResult.finalUrl || googleCacheResult.url,
-        contentType: googleCacheResult.contentType,
+  const tryBrowserFallback = async (reason: string): Promise<UrlReadResult | null> => {
+    if (!enableBrowser || budget.stopError()) return null
+    const browserStartedAt = Date.now()
+    const executablePath = resolveBrowserExecutablePath(opts.browserExecutablePath)
+    if (!executablePath) {
+      recordAttempt(browserStartedAt, 'browser', 'skipped', {
+        error: 'Local browser renderer is unavailable: no Chromium/Chrome/Edge executable was found',
+        errorCode: 'BROWSER_UNAVAILABLE',
       })
-      log.debug('url reader: Google Cache fallback success', { url: validatedUrl, reason })
-      return toPublicResult(googleCacheResult)
+      return null
     }
-    recordAttempt(googleCacheStartedAt, 'google_cache', 'skipped', {
-      error: `Google Cache did not return readable content after ${reason}`,
-    })
+    try {
+      const rendered = await renderWithSharedBrowser(fetchUrl, {
+        executablePath,
+        waitMs: opts.renderWaitMs,
+        signal: budget.signal,
+        remainingMs: budget.remainingMs,
+      })
+      const doc = extractDocumentFromHtml(rendered.html, rendered.finalUrl, { maxContentLength })
+      if (!doc || !isUsableDocument(doc)) {
+        recordAttempt(browserStartedAt, 'browser', 'skipped', {
+          error: 'Browser fallback did not extract readable content after ' + reason,
+          rendered: true,
+        })
+        return null
+      }
+      recordAttempt(browserStartedAt, 'browser', 'success', {
+        finalUrl: rendered.finalUrl,
+        rendered: true,
+        contentType: 'text/html',
+      })
+      log.debug('url reader: browser fallback success', { url: validatedUrl, reason })
+      return toPublicResult({
+        ...buildDocumentResult(doc, {
+          url: validatedUrl,
+          finalUrl: rendered.finalUrl,
+          engine: 'browser',
+          fallbackUsed: 'browser',
+          confidence: 0.82,
+        }),
+        title: doc.title || rendered.title,
+      })
+    } catch (error) {
+      const capacity = error instanceof BrowserCapacityError
+      const errorCode: UrlReadErrorCode = capacity ? 'BROWSER_BUSY' : 'BROWSER_UNAVAILABLE'
+      recordAttempt(browserStartedAt, 'browser', 'error', {
+        error: error instanceof Error ? error.message : String(error),
+        errorCode,
+        rendered: true,
+      })
+      return null
+    }
+  }
 
-    if (budget.stopError()) return null
+  const tryWaybackFallback = async (reason: string): Promise<UrlReadResult | null> => {
+    if (opts.purpose !== 'history' || budget.stopError()) return null
     const waybackStartedAt = Date.now()
-    const waybackResult = await fetchWaybackMachine(validatedUrl, {
-      timeout: Math.min(WAYBACK_TIMEOUT, budget.remainingMs()),
-      maxContentLength,
-      signal: budget.signal,
-    })
-    if (waybackResult) {
+    const lease = budget.beginPhase('wayback')
+    try {
+      if (lease.remainingMs() <= 0) return null
+      const waybackResult = await fetchWaybackMachine(validatedUrl, {
+        timeout: Math.max(1, Math.min(WAYBACK_TIMEOUT, lease.remainingMs())),
+        maxContentLength,
+        signal: lease.signal,
+      })
+      if (!waybackResult) {
+        recordAttempt(waybackStartedAt, 'wayback', 'skipped', {
+          error: 'Wayback Machine did not return readable content after ' + reason,
+        })
+        return null
+      }
       recordAttempt(waybackStartedAt, 'wayback', 'success', {
         finalUrl: waybackResult.finalUrl || waybackResult.url,
         contentType: waybackResult.contentType,
       })
       log.debug('url reader: Wayback Machine fallback success', { url: validatedUrl, reason })
       return toPublicResult(waybackResult)
+    } catch (error) {
+      recordAttempt(waybackStartedAt, 'wayback', 'error', {
+        error: error instanceof Error ? error.message : String(error),
+        errorCode: 'UNKNOWN',
+      })
+      return null
+    } finally {
+      lease.release()
     }
-    recordAttempt(waybackStartedAt, 'wayback', 'skipped', {
-      error: `Wayback Machine did not return readable content after ${reason}`,
-    })
+  }
 
-    return null
+  const recover = async (
+    reason: string,
+    pageHtml: string,
+    options: { challenge?: boolean } = {},
+  ): Promise<UrlReadResult | null> => {
+    if (!options.challenge) {
+      const crawlerStartedAt = Date.now()
+      const crawlerResult = await tryCrawlerRefetch(fetchUrl, budget, maxContentLength, maxBodyBytes)
+      if (crawlerResult) {
+        recordAttempt(crawlerStartedAt, 'crawler', 'success', {
+          finalUrl: crawlerResult.finalUrl || crawlerResult.url,
+          contentType: crawlerResult.contentType,
+        })
+        log.debug('url reader: crawler fallback success', { url: validatedUrl, reason })
+        return toPublicResult(crawlerResult)
+      }
+      recordAttempt(crawlerStartedAt, 'crawler', 'skipped', {
+        error: 'Crawler fallback did not extract readable content after ' + reason,
+      })
+      const feedResult = await tryFeedFallback(reason, pageHtml)
+      if (feedResult) return feedResult
+      const browserResult = await tryBrowserFallback(reason)
+      if (browserResult) return browserResult
+      return tryWaybackFallback(reason)
+    }
+
+    // JS challenge / JS shell：直接走浏览器渲染，不再重复抓同一份 HTML；
+    // 只有页面显式声明 feed 时才在浏览器失败后尝试 feed。
+    const browserResult = await tryBrowserFallback(reason)
+    if (browserResult) return browserResult
+    if (discoverFeedCandidates(pageHtml, validatedUrl).length > 0) {
+      const feedResult = await tryFeedFallback(reason, pageHtml)
+      if (feedResult) return feedResult
+    } else {
+      recordAttempt(readStartedAt, 'feed', 'skipped', {
+        error: 'Challenge page declares no feed; feed fallback not applicable',
+      })
+    }
+    return tryWaybackFallback(reason)
   }
 
   try {
@@ -1837,63 +1500,99 @@ async function readUrlContentLocal(
     log.debug('url reader: fetching', { url: validatedUrl, fetchUrl })
 
     const nativeStartedAt = Date.now()
-    const { response, body: responseBody, buffer: responseBuffer, finalUrl } = await fetchPageBody(
-      fetchUrl,
-      budget.remainingMs(),
-      buildPrimaryHeaders(userAgent),
-      maxBodyBytes,
-      opts.signal,
-    )
+    const nativeLease = budget.beginPhase('native')
+    let nativeOutcome: Awaited<ReturnType<typeof fetchPageBody>>
+    try {
+      nativeOutcome = await fetchPageBody(
+        fetchUrl,
+        Math.max(1, nativeLease.remainingMs()),
+        buildPrimaryHeaders(userAgent),
+        maxBodyBytes,
+        nativeLease.signal,
+      )
+    } catch (error) {
+      const stop = budget.stopError()
+      if (stop) {
+        recordAttempt(nativeStartedAt, 'native', 'error', {
+          error: stop.message,
+          errorCode: stop.errorCode,
+        })
+        return buildErrorResult(stop.message, stop.errorCode)
+      }
+      const name = error && typeof error === 'object' ? (error as { name?: string }).name : undefined
+      // 只有阶段预算到期（TimeoutError）才继续回退；调用方取消（AbortError）必须立即结束。
+      if (name === 'TimeoutError') {
+        // 仅是 5s 原生抓取阶段到期：记录后继续用剩余总预算走回退。
+        recordAttempt(nativeStartedAt, 'native', 'error', {
+          error: '原生抓取阶段超时（5s），改用回退通道',
+          errorCode: 'TIMEOUT',
+        })
+        const recovered = await recover('native phase timeout', '')
+        if (recovered) return recovered
+        return buildErrorResult('网页抓取超时：原生抓取阶段预算已用完，回退通道也未取到正文', 'TIMEOUT')
+      }
+      throw error
+    } finally {
+      nativeLease.release()
+    }
+    const { response, body: responseBody, buffer: responseBuffer, finalUrl, contentType } = nativeOutcome
     const stoppedAfterFetch = budget.stopError()
     if (stoppedAfterFetch) return buildErrorResult(stoppedAfterFetch.message, stoppedAfterFetch.errorCode)
     const status = response.status
     const statusText = response.statusText || 'Request failed'
-    const bodySnippet = responseBody.slice(0, 2000)
-    const contentType = response.headers.get('content-type') || ''
+    const bodySnippet = responseBody.slice(0, 4000)
     const normalizedContentType = sanitizeContentType(contentType)
+
+    if (status === 429) {
+      const retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'))
+      const retryText = retryAfterMs === undefined
+        ? '服务端要求稍后重试'
+        : '服务端要求约 ' + Math.ceil(retryAfterMs / 1000) + ' 秒后重试'
+      const message = 'HTTP 429: Too Many Requests（' + retryText + '，本次读取已停止，不再请求该来源）'
+      recordAttempt(nativeStartedAt, 'native', 'error', {
+        error: message,
+        errorCode: 'HTTP_429',
+        httpStatus: status,
+        contentType: normalizedContentType,
+        finalUrl,
+      })
+      return {
+        ...buildErrorResult(message, 'HTTP_429', status),
+        ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+      }
+    }
 
     if (!response.ok) {
       const errorCode = classifyHttpErrorCode(status, bodySnippet)
-      const blockedByChallenge = detectJsChallenge(bodySnippet)
+      const blockedByChallenge = classifyChallenge({ html: bodySnippet, status, url: finalUrl }).isChallenge
       const finalCode = blockedByChallenge ? 'JS_CHALLENGE' : errorCode
       recordAttempt(nativeStartedAt, 'native', 'error', {
-        error: `HTTP ${status}: ${statusText}`,
+        error: 'HTTP ' + status + ': ' + statusText,
         errorCode: finalCode,
         httpStatus: status,
         contentType: normalizedContentType,
         finalUrl,
       })
-      if (!blockedByChallenge && status !== 404) {
-        const crawlerStartedAt = Date.now()
-        const crawlerResult = await tryCrawlerRefetch(fetchUrl, budget, maxContentLength, maxBodyBytes)
-        if (crawlerResult) {
-          recordAttempt(crawlerStartedAt, 'crawler', 'success', {
-            finalUrl: crawlerResult.finalUrl || crawlerResult.url,
-            contentType: crawlerResult.contentType,
-          })
-          log.debug('url reader: crawler fallback success after non-2xx response', {
-            url: validatedUrl,
-            httpStatus: status,
-          })
-          return toPublicResult(crawlerResult)
-        }
-        recordAttempt(crawlerStartedAt, 'crawler', 'skipped', {
-          error: 'Crawler fallback did not extract readable content after non-2xx response',
-        })
-      }
       if (finalCode !== 'ROBOTS_DENIED') {
-        const feedResult = await tryFeedFallback(`HTTP ${status}`)
-        if (feedResult) return feedResult
-        const browserResult = await tryBrowserFallback(`HTTP ${status}`)
-        if (browserResult) return browserResult
-        const cachedResult = await tryCachedFallbacks(`HTTP ${status}`)
-        if (cachedResult) return cachedResult
+        if (!blockedByChallenge && status !== 404) {
+          const crawlerStartedAt = Date.now()
+          const crawlerResult = await tryCrawlerRefetch(fetchUrl, budget, maxContentLength, maxBodyBytes)
+          if (crawlerResult) {
+            recordAttempt(crawlerStartedAt, 'crawler', 'success', {
+              finalUrl: crawlerResult.finalUrl || crawlerResult.url,
+              contentType: crawlerResult.contentType,
+            })
+            return toPublicResult(crawlerResult)
+          }
+        }
+        const recovered = await recover('HTTP ' + status + (blockedByChallenge ? ' (JS challenge)' : ''), responseBody, {
+          challenge: blockedByChallenge,
+        })
+        if (recovered) return recovered
       }
-      const message =
-        finalCode === 'ROBOTS_DENIED'
-          ? `HTTP ${status}: ${statusText} (robots denied)`
-          : `HTTP ${status}: ${statusText}`
-
+      const message = finalCode === 'ROBOTS_DENIED'
+        ? 'HTTP ' + status + ': ' + statusText + ' (robots denied)'
+        : 'HTTP ' + status + ': ' + statusText
       log.error('url reader: failed', { url: validatedUrl, error: message, errorCode: finalCode, httpStatus: status })
       return buildErrorResult(message, finalCode, status)
     }
@@ -1903,10 +1602,7 @@ async function readUrlContentLocal(
         contentType: normalizedContentType,
         finalUrl,
       })
-      log.debug('url reader: direct image detected', {
-        url: validatedUrl,
-        contentType: normalizedContentType,
-      })
+      log.debug('url reader: direct image detected', { url: validatedUrl, contentType: normalizedContentType })
       return toPublicResult({
         ...buildDirectImageResult(response, finalUrl),
         finalUrl,
@@ -1919,10 +1615,7 @@ async function readUrlContentLocal(
     if ((isPdfContentType(contentType) || isLikelyPdfUrl(finalUrl)) && responseBuffer) {
       const pdfResult = await buildPdfResultFromBuffer(responseBuffer, finalUrl, maxContentLength, normalizedContentType)
       if (pdfResult) {
-        recordAttempt(nativeStartedAt, 'pdf', 'success', {
-          contentType: normalizedContentType,
-          finalUrl,
-        })
+        recordAttempt(nativeStartedAt, 'pdf', 'success', { contentType: normalizedContentType, finalUrl })
         return toPublicResult(pdfResult)
       }
       recordAttempt(nativeStartedAt, 'pdf', 'error', {
@@ -1937,10 +1630,7 @@ async function readUrlContentLocal(
     if ((isDocxContentType(contentType) || isLikelyDocxUrl(finalUrl)) && responseBuffer) {
       const docxResult = await buildDocxResultFromBuffer(responseBuffer, finalUrl, maxContentLength, normalizedContentType)
       if (docxResult) {
-        recordAttempt(nativeStartedAt, 'docx', 'success', {
-          contentType: normalizedContentType,
-          finalUrl,
-        })
+        recordAttempt(nativeStartedAt, 'docx', 'success', { contentType: normalizedContentType, finalUrl })
         return toPublicResult(docxResult)
       }
       recordAttempt(nativeStartedAt, 'docx', 'error', {
@@ -1953,19 +1643,13 @@ async function readUrlContentLocal(
     }
 
     if (!isHtmlContentType(contentType)) {
-      if (opts.signal?.aborted) {
-        return buildErrorResult('Request was cancelled', 'CANCELLED')
-      }
+      if (budget.stopError()) return buildErrorResult('Request was cancelled', 'CANCELLED')
       if (isFeedContentType(contentType) || /^\s*<(rss|feed)\b/i.test(responseBody)) {
-        const feedResult =
-          contentType.toLowerCase().includes('json')
-            ? buildJsonFeedResultFromText(responseBody, finalUrl, maxContentLength, normalizedContentType)
-            : buildFeedResultFromXml(responseBody, finalUrl, maxContentLength)
+        const feedResult = contentType.toLowerCase().includes('json')
+          ? buildJsonFeedResultFromText(responseBody, finalUrl, maxContentLength, normalizedContentType)
+          : buildFeedResultFromXml(responseBody, finalUrl, maxContentLength)
         if (feedResult) {
-          recordAttempt(nativeStartedAt, 'feed', 'success', {
-            contentType: normalizedContentType,
-            finalUrl,
-          })
+          recordAttempt(nativeStartedAt, 'feed', 'success', { contentType: normalizedContentType, finalUrl })
           return toPublicResult(feedResult)
         }
       }
@@ -1973,41 +1657,28 @@ async function readUrlContentLocal(
       if ((isCsvContentType(contentType) || isLikelyCsvUrl(finalUrl)) && responseBody) {
         const csvResult = await buildCsvResultFromText(responseBody, finalUrl, maxContentLength, normalizedContentType)
         if (csvResult) {
-          recordAttempt(nativeStartedAt, 'csv', 'success', {
-            contentType: normalizedContentType,
-            finalUrl,
-          })
+          recordAttempt(nativeStartedAt, 'csv', 'success', { contentType: normalizedContentType, finalUrl })
           return toPublicResult(csvResult)
         }
       }
 
       if (isTextLikeContentType(contentType)) {
         const lowerContentType = contentType.toLowerCase()
-        const textResult =
-          lowerContentType.includes('json') || lowerContentType.includes('+json')
-            ? buildJsonResultFromText(responseBody, finalUrl, maxContentLength, normalizedContentType)
-            : lowerContentType.includes('xml') || lowerContentType.includes('+xml')
-              ? buildXmlTextResult(responseBody, finalUrl, maxContentLength, normalizedContentType)
-              : buildCrawlerResultFromText(
-                  responseBody,
-                  finalUrl,
-                  maxContentLength,
-                  '',
-                  normalizedContentType,
-                )
+        const textResult = lowerContentType.includes('json') || lowerContentType.includes('+json')
+          ? buildJsonResultFromText(responseBody, finalUrl, maxContentLength, normalizedContentType)
+          : lowerContentType.includes('xml') || lowerContentType.includes('+xml')
+            ? buildXmlTextResult(responseBody, finalUrl, maxContentLength, normalizedContentType)
+            : buildCrawlerResultFromText(responseBody, finalUrl, maxContentLength, '', normalizedContentType)
         if (textResult) {
           recordAttempt(nativeStartedAt, textResult.engine || 'text', 'success', {
             contentType: normalizedContentType,
             finalUrl,
           })
-          log.debug('url reader: crawler fallback success for non-html text payload', {
-            url: validatedUrl,
-            contentType,
-          })
+          log.debug('url reader: text payload extracted', { url: validatedUrl, contentType })
           return toPublicResult(textResult)
         }
       }
-      const message = `Unsupported content type: ${contentType}. Only HTML pages are supported.`
+      const message = 'Unsupported content type: ' + contentType + '. Only HTML pages are supported.'
       recordAttempt(nativeStartedAt, 'native', 'error', {
         error: message,
         errorCode: 'UNSUPPORTED_CONTENT_TYPE',
@@ -2023,148 +1694,64 @@ async function readUrlContentLocal(
     }
 
     const html = responseBody
-    const htmlForParse = trimHtmlForParsing(html)
-    if (html.length !== htmlForParse.length) {
-      log.debug('url reader: html trimmed for parsing', {
-        url: validatedUrl,
-        originalLength: html.length,
-        trimmedLength: htmlForParse.length,
-        maxLength: MAX_HTML_PARSE_LENGTH,
-      })
-    }
-
-    if (detectJsChallenge(htmlForParse)) {
+    const challenge = classifyChallenge({ html, status, url: finalUrl })
+    if (challenge.isChallenge) {
       recordAttempt(nativeStartedAt, 'native', 'error', {
         error: 'The page appears to be protected by a JavaScript challenge or anti-bot verification',
         errorCode: 'JS_CHALLENGE',
         contentType: normalizedContentType,
         finalUrl,
       })
-      const crawlerStartedAt = Date.now()
-      const crawlerResult = await tryCrawlerRefetch(fetchUrl, budget, maxContentLength, maxBodyBytes)
-      if (crawlerResult) {
-        recordAttempt(crawlerStartedAt, 'crawler', 'success', {
-          finalUrl: crawlerResult.finalUrl || crawlerResult.url,
-          contentType: crawlerResult.contentType,
-        })
-        log.debug('url reader: crawler fallback success after JS challenge detection', {
-          url: validatedUrl,
-        })
-        return toPublicResult(crawlerResult)
-      }
-      recordAttempt(crawlerStartedAt, 'crawler', 'skipped', {
-        error: 'Crawler fallback did not extract readable content after JS challenge detection',
-      })
-      const feedResult = await tryFeedFallback('JS challenge detection')
-      if (feedResult) return feedResult
-      const browserResult = await tryBrowserFallback('JS challenge detection')
-      if (browserResult) return browserResult
-      const cachedResult = await tryCachedFallbacks('JS challenge detection')
-      if (cachedResult) return cachedResult
+      const recovered = await recover('JS challenge detection', html, { challenge: true })
+      if (recovered) return recovered
       const message = 'The page appears to be protected by a JavaScript challenge or anti-bot verification'
       log.error('url reader: failed', { url: validatedUrl, error: message, errorCode: 'JS_CHALLENGE' })
       return buildErrorResult(message, 'JS_CHALLENGE')
     }
 
-    if (!htmlForParse || htmlForParse.length < 100) {
+    if (!html || html.trim().length < 100) {
       recordAttempt(nativeStartedAt, 'native', 'error', {
         error: 'Page content is empty or too short',
         errorCode: 'EMPTY_CONTENT',
         contentType: normalizedContentType,
         finalUrl,
       })
-      const crawlerStartedAt = Date.now()
-      const crawlerResult = await tryCrawlerRefetch(fetchUrl, budget, maxContentLength, maxBodyBytes)
-      if (crawlerResult) {
-        recordAttempt(crawlerStartedAt, 'crawler', 'success', {
-          finalUrl: crawlerResult.finalUrl || crawlerResult.url,
-          contentType: crawlerResult.contentType,
-        })
-        log.debug('url reader: crawler fallback success after empty content', {
-          url: validatedUrl,
-          htmlLength: htmlForParse.length,
-        })
-        return toPublicResult(crawlerResult)
-      }
-      recordAttempt(crawlerStartedAt, 'crawler', 'skipped', {
-        error: 'Crawler fallback did not extract readable content after empty content',
-      })
-      const feedResult = await tryFeedFallback('empty content')
-      if (feedResult) return feedResult
-      const browserResult = await tryBrowserFallback('empty content')
-      if (browserResult) return browserResult
-      const cachedResult = await tryCachedFallbacks('empty content')
-      if (cachedResult) return cachedResult
+      const pythonOnEmpty = await tryPythonExtraction(html)
+      if (pythonOnEmpty) return pythonOnEmpty
+      const recovered = await recover('empty content', html)
+      if (recovered) return recovered
       const message = 'Page content is empty or too short'
       log.error('url reader: failed', { url: validatedUrl, error: message, errorCode: 'EMPTY_CONTENT' })
       return buildErrorResult(message, 'EMPTY_CONTENT')
     }
 
-    log.debug('url reader: parsing', { url: validatedUrl, htmlLength: htmlForParse.length })
+    log.debug('url reader: parsing', { url: validatedUrl, htmlLength: html.length })
 
-    const readabilityResult = extractReadabilityResultFromHtml(htmlForParse, finalUrl, maxContentLength)
-    if (readabilityResult) {
+    const doc = extractDocumentFromHtml(html, finalUrl, { maxContentLength })
+    if (doc && isUsableDocument(doc)) {
       recordAttempt(nativeStartedAt, 'native', 'success', {
         contentType: normalizedContentType,
         finalUrl,
       })
       log.debug('url reader: success', {
         url: validatedUrl,
-        title: readabilityResult.title,
-        wordCount: readabilityResult.wordCount,
+        title: doc.title,
+        wordCount: doc.wordCount,
       })
-      return toPublicResult({
-        ...readabilityResult,
+      return toPublicResult(buildDocumentResult(doc, {
+        url: validatedUrl,
+        finalUrl,
         engine: 'native',
-        finalUrl,
-        contentFormat: 'html',
+        fallbackUsed: 'none',
         confidence: 0.9,
-      })
+      }))
     }
 
-    const crawlerInlineResult = extractCrawlerResultFromHtml(htmlForParse, finalUrl, maxContentLength)
-    if (crawlerInlineResult) {
-      recordAttempt(nativeStartedAt, 'crawler', 'success', {
-        contentType: normalizedContentType,
-        finalUrl,
-      })
-      log.debug('url reader: crawler fallback success after readability parse miss', {
-        url: validatedUrl,
-        wordCount: crawlerInlineResult.wordCount,
-      })
-      return toPublicResult({
-        ...crawlerInlineResult,
-        engine: 'crawler',
-        finalUrl,
-        contentFormat: 'html',
-        confidence: 0.7,
-      })
-    }
+    const pythonResult = await tryPythonExtraction(html)
+    if (pythonResult) return pythonResult
 
-    const crawlerStartedAt = Date.now()
-    const crawlerRefetchResult = await tryCrawlerRefetch(fetchUrl, budget, maxContentLength, maxBodyBytes)
-    if (crawlerRefetchResult) {
-      recordAttempt(crawlerStartedAt, 'crawler', 'success', {
-        finalUrl: crawlerRefetchResult.finalUrl || crawlerRefetchResult.url,
-        contentType: crawlerRefetchResult.contentType,
-      })
-      log.debug('url reader: crawler fallback success after readability parse miss + refetch', {
-        url: validatedUrl,
-      })
-      return toPublicResult(crawlerRefetchResult)
-    }
-    recordAttempt(crawlerStartedAt, 'crawler', 'skipped', {
-      error: 'Crawler refetch did not extract readable content after readability parse miss',
-    })
-
-    const feedResult = await tryFeedFallback('readability parse miss')
-    if (feedResult) return feedResult
-
-    const browserResult = await tryBrowserFallback('readability parse miss')
-    if (browserResult) return browserResult
-
-    const cachedResult = await tryCachedFallbacks('readability parse miss')
-    if (cachedResult) return cachedResult
+    const recovered = await recover('native extraction insufficient', html)
+    if (recovered) return recovered
 
     {
       const message = 'Failed to extract article content. The page structure may not be suitable for reading mode.'
@@ -2178,44 +1765,222 @@ async function readUrlContentLocal(
       return buildErrorResult(message, 'PARSE_EMPTY')
     }
   } catch (error) {
+    if (error instanceof OriginThrottledError) {
+      const retryText = error.retryAfterMs === undefined
+        ? '服务端要求稍后重试'
+        : '服务端要求约 ' + Math.ceil(error.retryAfterMs / 1000) + ' 秒后重试'
+      const message = 'HTTP 429: Too Many Requests（' + retryText + '，本次读取已停止，不再请求该来源）'
+      recordAttempt(readStartedAt, 'native', 'error', { error: message, errorCode: 'HTTP_429' })
+      return {
+        ...buildErrorResult(message, 'HTTP_429', 429),
+        ...(error.retryAfterMs === undefined ? {} : { retryAfterMs: error.retryAfterMs }),
+      }
+    }
     const classified = classifyThrownError(error)
-    const shouldTryCrawlerFallback =
+    const shouldTryFallback =
       !budget.stopError() && classified.errorCode !== 'TIMEOUT' && classified.errorCode !== 'CANCELLED' &&
       classified.errorCode !== 'DISALLOWED_URL' && classified.errorCode !== 'INVALID_URL'
 
-    if (shouldTryCrawlerFallback) {
-      const crawlerStartedAt = Date.now()
-      const crawlerResult = await tryCrawlerRefetch(fetchUrl, budget, maxContentLength, maxBodyBytes)
-      if (crawlerResult) {
-        recordAttempt(crawlerStartedAt, 'crawler', 'success', {
-          finalUrl: crawlerResult.finalUrl || crawlerResult.url,
-          contentType: crawlerResult.contentType,
-        })
-        log.debug('url reader: crawler fallback success after thrown error', {
-          url: validatedUrl,
-        })
-        return toPublicResult(crawlerResult)
-      }
-      recordAttempt(crawlerStartedAt, 'crawler', 'skipped', {
-        error: 'Crawler fallback did not extract readable content after thrown error',
-      })
-      const feedResult = await tryFeedFallback(`thrown error: ${classified.errorCode}`)
-      if (feedResult) return feedResult
-      const browserResult = await tryBrowserFallback(`thrown error: ${classified.errorCode}`)
-      if (browserResult) return browserResult
-      const cachedResult = await tryCachedFallbacks(`thrown error: ${classified.errorCode}`)
-      if (cachedResult) return cachedResult
+    if (shouldTryFallback) {
+      const recovered = await recover('thrown error: ' + classified.errorCode, '')
+      if (recovered) return recovered
     }
 
-    const message =
-      classified.errorCode === 'TIMEOUT'
-        ? `Request timeout after ${timeout / 1000} seconds`
-        : classified.message
-
+    const message = classified.errorCode === 'TIMEOUT'
+      ? 'Request timeout after ' + timeout / 1000 + ' seconds'
+      : classified.message
     log.error('url reader: failed', { url: validatedUrl, error: message, errorCode: classified.errorCode })
-
     return buildErrorResult(message, classified.errorCode)
   }
+}
+
+async function executeRead(url: string, opts: UrlReaderOptions): Promise<UrlReadResult> {
+  const timeout = Number.isFinite(opts.timeout) && (opts.timeout as number) > 0
+    ? Math.max(1, Math.floor(opts.timeout as number)) : DEFAULT_TIMEOUT
+  const budget = createReadBudget({ totalMs: timeout, signal: opts.signal })
+  try {
+  const stoppedResult = (result: UrlReadResult): UrlReadResult => {
+    const stopped = budget.stopError()
+    return stopped
+      ? { ...result, content: '', textContent: '', error: stopped.message, errorCode: stopped.errorCode }
+      : result
+  }
+  if (budget.stopError()) {
+    return stoppedResult({ title: '', url: url.trim(), content: '', textContent: '', attempts: [] })
+  }
+  const localResult = await readUrlContentLocal(url, { ...opts, timeout }, budget)
+  const apiKey = (opts.deepseekApiKey || '').trim()
+  if (budget.stopError() || !opts.enableDeepseekFallback || !apiKey ||
+    localResult.errorCode === 'TIMEOUT' || localResult.errorCode === 'CANCELLED' ||
+    !isEligibleForDeepSeekFallback(localResult, url)) {
+    return stoppedResult(localResult)
+  }
+
+  const startedAt = Date.now()
+  try {
+    const fetched = await withAbortSignal(() => runDeepSeekFetch(localResult.url || url, {
+      apiKey,
+      signal: budget.signal,
+      timeoutMs: budget.remainingMs(),
+    }), budget.signal)
+    const content = normalizeTextContent(fetched.content, opts.maxContentLength || DEFAULT_MAX_CONTENT_LENGTH)
+    return stoppedResult({
+      title: fetched.title,
+      url: localResult.url || url,
+      finalUrl: localResult.url || url,
+      content: '',
+      textContent: content,
+      resourceType: 'page',
+      excerpt: buildExcerpt(content),
+      wordCount: countWords(content),
+      fallbackUsed: 'deepseek_fetch',
+      engine: 'deepseek_fetch',
+      contentFormat: 'markdown',
+      confidence: 0.7,
+      attempts: [
+        ...(localResult.attempts || []),
+        { engine: 'deepseek_fetch', status: 'success', durationMs: Date.now() - startedAt },
+      ],
+    })
+  } catch (error) {
+    const stopped = budget.stopError()
+    const toolCode = error instanceof DeepSeekToolError ? error.code : undefined
+    const terminalCode = stopped?.errorCode || (toolCode === 'TIMEOUT' || toolCode === 'CANCELLED' ? toolCode : undefined)
+    const message = stopped?.message || (error instanceof DeepSeekToolError
+      ? error.message : 'DeepSeek fetch failed before receiving a readable page')
+    return {
+      ...localResult,
+      ...(terminalCode ? { error: message, errorCode: terminalCode } : {}),
+      attempts: [
+        ...(localResult.attempts || []),
+        {
+          engine: 'deepseek_fetch',
+          status: 'error',
+          durationMs: Date.now() - startedAt,
+          error: message,
+          errorCode: terminalCode || (error instanceof DeepSeekToolError ? 'FETCH_FAILED' : 'UNKNOWN'),
+        },
+      ],
+    }
+  }
+  } finally {
+    budget.dispose()
+  }
+}
+
+const resultCache = new BoundedMemoryStore<UrlReadResult>({ maxEntries: 32, maxBytes: 4 * 1024 * 1024 })
+const inFlightReads = new InFlightReads<UrlReadResult>({ maxInFlight: 32 })
+
+const buildReadCacheKey = (url: string, opts: UrlReaderOptions): string => JSON.stringify([
+  url,
+  opts.purpose ?? 'current',
+  opts.maxContentLength ?? DEFAULT_MAX_CONTENT_LENGTH,
+  opts.enableBrowser !== false ? 'browser' : 'no-browser',
+  opts.enableDeepseekFallback ? 'deepseek' : 'no-deepseek',
+  opts.userAgent ?? '',
+  opts.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES,
+  opts.renderWaitMs ?? '',
+])
+
+/**
+ * 读取网页正文。同一 URL（相同用途与影响结果的配置）共享在途任务；
+ * 默认使用有界短缓存，current/时效页面绕过缓存。
+ */
+export async function readUrlContent(
+  url: string,
+  opts: UrlReaderOptions = {},
+): Promise<UrlReadResult> {
+  const timeout = Number.isFinite(opts.timeout) && (opts.timeout as number) > 0
+    ? Math.max(1, Math.floor(opts.timeout as number)) : DEFAULT_TIMEOUT
+  const maxContentLength = opts.maxContentLength || DEFAULT_MAX_CONTENT_LENGTH
+  const provided = opts.providedContent
+
+  if (provided && provided.kind === 'article') {
+    try {
+      const validated = validatePublicHttpUrl(url)
+      const content = normalizeTextContent(provided.content, maxContentLength)
+      if (content.length >= MIN_PROVIDED_CONTENT_CHARS) {
+        return {
+          title: '',
+          url: validated,
+          content: '',
+          textContent: content,
+          resourceType: 'page',
+          excerpt: buildExcerpt(content),
+          wordCount: countWords(content),
+          engine: 'provided',
+          fallbackUsed: 'provided',
+          contentKind: 'article',
+          fetchedAt: provided.fetchedAt,
+          attempts: [],
+        }
+      }
+    } catch (error) {
+      const classified = classifyThrownError(error)
+      return {
+        title: '',
+        url: url.trim(),
+        content: '',
+        textContent: '',
+        error: classified.message,
+        errorCode: classified.errorCode,
+        attempts: [],
+      }
+    }
+  }
+
+  // 测试默认不共享跨用例缓存，需要验证缓存时显式传 cacheTtlMs。
+  const testsDisableCache = process.env.NODE_ENV === 'test' && opts.cacheTtlMs === undefined
+  const bypassCache =
+    testsDisableCache || opts.freshness === 'current' || opts.purpose === 'history' || isTimeSensitiveUrl(url)
+  const key = buildReadCacheKey(url, opts)
+  if (!bypassCache) {
+    const hit = resultCache.get(key)
+    if (hit) {
+      log.debug('url reader: bounded cache hit', { url })
+      return { ...hit.value, attempts: [...(hit.value.attempts || [])] }
+    }
+  }
+
+  const run = (signal: AbortSignal) => executeRead(url, { ...opts, timeout, signal })
+  let result: UrlReadResult
+  try {
+    result = await inFlightReads.run(key, run, opts.signal)
+  } catch (error) {
+    if (error && typeof error === 'object' && (error as { name?: string }).name === 'AbortError') {
+      return {
+        title: '',
+        url: url.trim(),
+        content: '',
+        textContent: '',
+        error: 'Request was cancelled',
+        errorCode: 'CANCELLED',
+        attempts: [],
+      }
+    }
+    throw error
+  }
+  if (opts.signal?.aborted) {
+    return {
+      ...result,
+      content: '',
+      textContent: '',
+      error: 'Request was cancelled',
+      errorCode: 'CANCELLED',
+    }
+  }
+  const finalResult = result.error ? result : { ...result, fetchedAt: result.fetchedAt || new Date().toISOString() }
+
+  if (!bypassCache && !finalResult.error) {
+    const bytes = Buffer.byteLength(finalResult.textContent || '', 'utf8')
+    if (bytes > 0 && bytes <= MAX_CACHE_ENTRY_BYTES) {
+      resultCache.set(key, finalResult, {
+        ttlMs: resolveReadCacheTtlMs(url, opts.cacheTtlMs),
+        bytes,
+      })
+    }
+  }
+  return finalResult
 }
 
 const isUnsupportedFallbackContentType = (contentType: string): boolean => {
@@ -2246,9 +2011,7 @@ const isNonPageResource = (result: UrlReadResult, url: string): boolean => {
     return true
   }
   const contentType = (result.contentType || '').toLowerCase()
-  if (contentType && isUnsupportedFallbackContentType(contentType)) {
-    return true
-  }
+  if (contentType && isUnsupportedFallbackContentType(contentType)) return true
   return (
     /\.(?:png|jpe?g|gif|webp|svg|bmp|avif|pdf)(?:[?#]|$)/i.test(url) ||
     result.contentFormat === 'pdf' ||
@@ -2262,182 +2025,72 @@ const isEligibleForDeepSeekFallback = (result: UrlReadResult, url: string): bool
   return !isNonPageResource(result, url)
 }
 
-export async function readUrlContent(
-  url: string,
-  opts: UrlReaderOptions = {}
-): Promise<UrlReadResult> {
-  const timeout = Number.isFinite(opts.timeout) && (opts.timeout as number) > 0
-    ? Math.max(1, Math.floor(opts.timeout as number)) : DEFAULT_TIMEOUT
-  const deadline = Date.now() + timeout
-  const deadlineController = new AbortController()
-  const expire = () => deadlineController.abort(new DOMException('URL read deadline exceeded', 'TimeoutError'))
-  const timeoutId = setTimeout(expire, timeout)
-  const combined = combineAbortSignals(opts.signal, deadlineController.signal)
-  const remainingMs = () => {
-    const remaining = Math.max(0, deadline - Date.now())
-    if (remaining === 0 && !deadlineController.signal.aborted) expire()
-    return remaining
-  }
-  const budget: UrlReadBudget = {
-    signal: combined.signal,
-    remainingMs,
-    stopError: () => {
-      if (opts.signal?.aborted) return { message: 'Request was cancelled', errorCode: 'CANCELLED' }
-      if (remainingMs() === 0 || deadlineController.signal.aborted) {
-        return { message: `Request timeout after ${timeout / 1000} seconds`, errorCode: 'TIMEOUT' }
-      }
-      return undefined
-    },
-  }
-  const stoppedResult = (result: UrlReadResult): UrlReadResult => {
-    const stopped = budget.stopError()
-    return stopped ? { ...result, content: '', textContent: '', error: stopped.message, errorCode: stopped.errorCode } : result
-  }
-  try {
-    if (budget.stopError()) {
-      return stoppedResult({ title: '', url: url.trim(), content: '', textContent: '', attempts: [] })
-    }
-    const localResult = await readUrlContentLocal(url, { ...opts, timeout, signal: budget.signal }, budget)
-    const apiKey = (opts.deepseekApiKey || '').trim()
-    if (budget.stopError() || !opts.enableDeepseekFallback || !apiKey ||
-      localResult.errorCode === 'TIMEOUT' || localResult.errorCode === 'CANCELLED' ||
-      !isEligibleForDeepSeekFallback(localResult, url)) {
-      return stoppedResult(localResult)
-    }
-
-    const startedAt = Date.now()
-    try {
-      const fetched = await withAbortSignal(() => runDeepSeekFetch(localResult.url || url, {
-        apiKey,
-        signal: budget.signal,
-        timeoutMs: budget.remainingMs(),
-      }), budget.signal)
-      const content = normalizeTextContent(fetched.content, opts.maxContentLength || DEFAULT_MAX_CONTENT_LENGTH)
-      return stoppedResult({
-        title: fetched.title,
-        url: localResult.url || url,
-        finalUrl: localResult.url || url,
-        content: '',
-        textContent: content,
-        resourceType: 'page',
-        excerpt: buildExcerpt(content),
-        wordCount: countWords(content),
-        fallbackUsed: 'deepseek_fetch',
-        engine: 'deepseek_fetch',
-        contentFormat: 'markdown',
-        confidence: 0.7,
-        attempts: [
-          ...(localResult.attempts || []),
-          { engine: 'deepseek_fetch', status: 'success', durationMs: Date.now() - startedAt },
-        ],
-      })
-    } catch (error) {
-      const stopped = budget.stopError()
-      const toolCode = error instanceof DeepSeekToolError ? error.code : undefined
-      const terminalCode = stopped?.errorCode || (toolCode === 'TIMEOUT' || toolCode === 'CANCELLED' ? toolCode : undefined)
-      const message = stopped?.message || (error instanceof DeepSeekToolError
-        ? error.message : 'DeepSeek fetch failed before receiving a readable page')
-      return {
-        ...localResult,
-        ...(terminalCode ? { error: message, errorCode: terminalCode } : {}),
-        attempts: [
-          ...(localResult.attempts || []),
-          {
-            engine: 'deepseek_fetch',
-            status: 'error',
-            durationMs: Date.now() - startedAt,
-            error: message,
-            errorCode: terminalCode || (error instanceof DeepSeekToolError ? 'FETCH_FAILED' : 'UNKNOWN'),
-          },
-        ],
-      }
-    }
-  } finally {
-    clearTimeout(timeoutId)
-    combined.cleanup()
-  }
-}
-
 /**
  * 格式化读取结果供模型使用
  */
 export function formatUrlContentForModel(result: UrlReadResult): string {
   if (result.error) {
     const suffix = [
-      result.errorCode ? `错误码: ${result.errorCode}` : null,
-      typeof result.httpStatus === 'number' ? `HTTP: ${result.httpStatus}` : null,
-    ]
-      .filter(Boolean)
-      .join('，')
+      result.errorCode ? '错误码: ' + result.errorCode : null,
+      typeof result.httpStatus === 'number' ? 'HTTP: ' + result.httpStatus : null,
+    ].filter(Boolean).join('，')
     return suffix
-      ? `无法读取网页 "${result.url}"：${result.error}（${suffix}）`
-      : `无法读取网页 "${result.url}"：${result.error}`
+      ? '无法读取网页 "' + result.url + '"：' + result.error + '（' + suffix + '）'
+      : '无法读取网页 "' + result.url + '"：' + result.error
   }
 
   if (result.resourceType === 'image') {
     const parts: string[] = []
     parts.push('## 图片资源')
-    parts.push(`- **URL**: ${result.url}`)
-    if (result.finalUrl && result.finalUrl !== result.url) {
-      parts.push(`- **最终地址**: ${result.finalUrl}`)
-    }
-    if (result.contentType) {
-      parts.push(`- **类型**: ${result.contentType}`)
-    }
-    if (typeof result.contentLength === 'number') {
-      parts.push(`- **大小**: ${result.contentLength} bytes`)
-    }
-    if (result.leadImageUrl) {
-      parts.push(`- **图片**: ${result.leadImageUrl}`)
-    }
+    parts.push('- **URL**: ' + result.url)
+    if (result.finalUrl && result.finalUrl !== result.url) parts.push('- **最终地址**: ' + result.finalUrl)
+    if (result.contentType) parts.push('- **类型**: ' + result.contentType)
+    if (typeof result.contentLength === 'number') parts.push('- **大小**: ' + result.contentLength + ' bytes')
+    if (result.leadImageUrl) parts.push('- **图片**: ' + result.leadImageUrl)
     parts.push('')
     parts.push('该 URL 直接指向图片资源，没有可提取的网页正文。')
     return parts.join('\n')
   }
 
   const parts: string[] = []
-  parts.push(`## 网页信息`)
-  parts.push(`- **URL**: ${result.url}`)
-  if (result.finalUrl && result.finalUrl !== result.url) {
-    parts.push(`- **最终地址**: ${result.finalUrl}`)
-  }
-  if (result.title) {
-    parts.push(`- **标题**: ${result.title}`)
-  }
-  if (result.byline) {
-    parts.push(`- **作者**: ${result.byline}`)
-  }
-  if (result.siteName) {
-    parts.push(`- **来源**: ${result.siteName}`)
-  }
-  if (result.publishedTime) {
-    parts.push(`- **发布时间**: ${result.publishedTime}`)
-  }
-  if (result.wordCount) {
-    parts.push(`- **字数**: 约 ${result.wordCount} 词`)
+  parts.push('## 网页信息')
+  parts.push('- **URL**: ' + result.url)
+  if (result.finalUrl && result.finalUrl !== result.url) parts.push('- **最终地址**: ' + result.finalUrl)
+  if (result.title) parts.push('- **标题**: ' + result.title)
+  if (result.byline) parts.push('- **作者**: ' + result.byline)
+  if (result.siteName) parts.push('- **来源**: ' + result.siteName)
+  if (result.publishedTime) parts.push('- **发布时间**: ' + result.publishedTime)
+  if (result.archivedAt) parts.push('- **存档时间**: ' + result.archivedAt)
+  if (result.wordCount) parts.push('- **字数**: 约 ' + result.wordCount + ' 字/词')
+  if (result.contentKind === 'structured') {
+    parts.push('- **内容类型**: 结构化列表/表格')
+  } else if (result.contentKind === 'summary') {
+    parts.push('- **内容类型**: 摘要')
   }
   if (result.fallbackUsed === 'crawler') {
-    parts.push(`- **提取方式**: 爬虫回退`)
+    parts.push('- **提取方式**: 爬虫回退')
   } else if (result.fallbackUsed === 'browser') {
-    parts.push(`- **提取方式**: 本地浏览器渲染`)
+    parts.push('- **提取方式**: 本地浏览器渲染')
   } else if (result.fallbackUsed === 'deepseek_fetch') {
-    parts.push(`- **提取方式**: DeepSeek 网页抓取`)
+    parts.push('- **提取方式**: DeepSeek 网页抓取')
+  } else if (result.fallbackUsed === 'python') {
+    parts.push('- **提取方式**: Python/Trafilatura 提取')
+  } else if (result.fallbackUsed === 'provided') {
+    parts.push('- **提取方式**: 复用搜索正文')
   } else if (result.fallbackUsed === 'document') {
-    parts.push(`- **提取方式**: ${result.engine || '文档/结构化内容'} 引擎`)
-  } else if (result.fallbackUsed === 'google_cache') {
-    parts.push(`- **提取方式**: Google 缓存快照`)
+    parts.push('- **提取方式**: ' + (result.engine || '文档/结构化内容') + ' 引擎')
   } else if (result.fallbackUsed === 'wayback') {
-    parts.push(`- **提取方式**: Wayback Machine 存档`)
+    parts.push('- **提取方式**: Wayback Machine 存档')
   } else {
-    parts.push(`- **提取方式**: 标准正文提取`)
+    parts.push('- **提取方式**: 标准正文提取')
   }
   if (typeof result.confidence === 'number') {
-    parts.push(`- **置信度**: ${Math.round(result.confidence * 100)}%`)
+    parts.push('- **置信度**: ' + Math.round(result.confidence * 100) + '%')
   }
 
   if (result.excerpt) {
     parts.push('')
-    parts.push(`## 摘要`)
+    parts.push('## 摘要')
     parts.push(result.excerpt)
   }
 
@@ -2445,22 +2098,20 @@ export function formatUrlContentForModel(result: UrlReadResult): string {
   if (result.leadImageUrl || images.length > 0) {
     parts.push('')
     parts.push('## 图片证据')
-    if (result.leadImageUrl) {
-      parts.push(`- **主图**: ${result.leadImageUrl}`)
-    }
+    if (result.leadImageUrl) parts.push('- **主图**: ' + result.leadImageUrl)
     const candidateImages = images.filter((item) => item.url && item.url !== result.leadImageUrl).slice(0, 5)
     if (candidateImages.length > 0) {
       parts.push('- **候选图**:')
       for (const [index, image] of candidateImages.entries()) {
-        const sourceLabel = image.source ? ` [${image.source}]` : ''
-        const altLabel = image.alt ? `（${image.alt}）` : ''
-        parts.push(`  ${index + 1}. ${image.url}${altLabel}${sourceLabel}`)
+        const sourceLabel = image.source ? ' [' + image.source + ']' : ''
+        const altLabel = image.alt ? '（' + image.alt + '）' : ''
+        parts.push('  ' + (index + 1) + '. ' + image.url + altLabel + sourceLabel)
       }
     }
   }
 
   parts.push('')
-  parts.push(`## 正文内容`)
+  parts.push('## 正文内容')
   parts.push(result.textContent)
 
   return parts.join('\n')

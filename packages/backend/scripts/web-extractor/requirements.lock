@@ -1,0 +1,26 @@
+# Python extraction worker dependencies — fully pinned transitive lock.
+#
+# Regenerate (inside a throwaway venv, never the Skill runtime):
+#   python -m venv .scratch/web-extractor-venv
+#   .scratch/web-extractor-venv/Scripts/python.exe -m pip install trafilatura==2.3.1 lxml_html_clean
+#   .scratch/web-extractor-venv/Scripts/python.exe -m pip freeze > requirements.lock
+#
+# lxml_html_clean is required: lxml >= 5 removed lxml.html.clean, and trafilatura's
+# pruning path imports it at runtime (verified: without it the worker exits 3).
+babel==2.18.0
+certifi==2026.10.23
+charset-normalizer==3.5.2
+courlan==1.4.0
+dateparser==1.5.0
+htmldate==1.11.0
+justext==3.0.2
+lxml==6.1.3
+lxml-html-clean==0.4.6
+python-dateutil==4.0.0
+pytz==2026.6
+regex==2026.11.15
+tld==0.13.2
+trafilatura==2.3.1
+tzdata==2026.6
+tzlocal==5.4.5
+urllib3==2.8.0

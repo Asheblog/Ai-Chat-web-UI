@@ -1,0 +1,778 @@
+{
+  "baselineCommit": "18e1253963906faa9b0a539e74150ec6da1b715f",
+  "scope": "Windows host; sequential 12 URLs; 18s URL deadline; paid fallback disabled. Source contents are external observations, not verified market facts. Baseline nonempty results were not independently classified as articles. fetchCalls excludes browser resource requests. browserStats is captured before explicit shutdown.",
+  "baseline": {
+    "executedAt": "2026-11-16T04:16:41.613Z",
+    "environment": "Windows host, sequential URLs, 18s per URL, no paid fallback",
+    "rows": [
+      {
+        "url": "https://www.cnbc.com/2026/11/13/stock-market-next-week-outlook-for-nov-16-20-2026.html",
+        "durationMs": 18249,
+        "title": "",
+        "chars": 0,
+        "errorCode": "CANCELLED",
+        "error": "Request was cancelled",
+        "attempts": [
+          {
+            "engine": "native",
+            "status": "error",
+            "durationMs": 726,
+            "error": "The page appears to be protected by a JavaScript challenge or anti-bot verification",
+            "errorCode": "JS_CHALLENGE",
+            "contentType": "text/html",
+            "finalUrl": "https://www.cnbc.com/2026/11/13/stock-market-next-week-outlook-for-nov-16-20-2026.html"
+          },
+          {
+            "engine": "crawler",
+            "status": "skipped",
+            "durationMs": 522,
+            "error": "Crawler fallback did not extract readable content after JS challenge detection"
+          },
+          {
+            "engine": "feed",
+            "status": "skipped",
+            "durationMs": 3100,
+            "error": "Same-origin feed fallback did not match readable content after JS challenge detection"
+          },
+          {
+            "engine": "browser",
+            "status": "error",
+            "durationMs": 13870,
+            "error": "Request was cancelled",
+            "rendered": true,
+            "errorCode": "CANCELLED"
+          }
+        ]
+      },
+      {
+        "url": "https://stockapp.finance.qq.com/",
+        "durationMs": 7519,
+        "title": "行情中心_腾讯证券",
+        "engine": "browser",
+        "chars": 146,
+        "finalUrl": "https://stockapp.finance.qq.com/",
+        "attempts": [
+          {
+            "engine": "crawler",
+            "status": "skipped",
+            "durationMs": 61,
+            "error": "Crawler refetch did not extract readable content after readability parse miss"
+          },
+          {
+            "engine": "feed",
+            "status": "skipped",
+            "durationMs": 176,
+            "error": "Same-origin feed fallback did not match readable content after readability parse miss"
+          },
+          {
+            "engine": "browser",
+            "status": "success",
+            "durationMs": 7031,
+            "finalUrl": "https://stockapp.finance.qq.com/",
+            "rendered": true,
+            "contentType": "text/html"
+          }
+        ]
+      },
+      {
+        "url": "https://zh.tradingeconomics.com/united-states/stock-market",
+        "durationMs": 11604,
+        "title": "美国股市指数 - 价格 - 图表 - 历史数据",
+        "engine": "browser",
+        "chars": 60,
+        "finalUrl": "https://zh.tradingeconomics.com/united-states/stock-market",
+        "attempts": [
+          {
+            "engine": "native",
+            "status": "error",
+            "durationMs": 107,
+            "error": "The page appears to be protected by a JavaScript challenge or anti-bot verification",
+            "errorCode": "JS_CHALLENGE",
+            "contentType": "text/html",
+            "finalUrl": "https://zh.tradingeconomics.com/united-states/stock-market"
+          },
+          {
+            "engine": "crawler",
+            "status": "skipped",
+            "durationMs": 44,
+            "error": "Crawler fallback did not extract readable content after JS challenge detection"
+          },
+          {
+            "engine": "feed",
+            "status": "skipped",
+            "durationMs": 902,
+            "error": "Same-origin feed fallback did not match readable content after JS challenge detection"
+          },
+          {
+            "engine": "browser",
+            "status": "success",
+            "durationMs": 10543,
+            "finalUrl": "https://zh.tradingeconomics.com/united-states/stock-market",
+            "rendered": true,
+            "contentType": "text/html"
+          }
+        ]
+      },
+      {
+        "url": "https://zh.wikipedia.org/wiki/%E6%81%92%E7%94%9F%E6%8C%87%E6%95%B8",
+        "durationMs": 13899,
+        "title": "恒生指數",
+        "engine": "browser",
+        "chars": 24017,
+        "finalUrl": "https://zh.wikipedia.org/wiki/%E6%81%92%E7%94%9F%E6%8C%87%E6%95%B8",
+        "attempts": [
+          {
+            "engine": "native",
+            "status": "error",
+            "durationMs": 303,
+            "error": "The page appears to be protected by a JavaScript challenge or anti-bot verification",
+            "errorCode": "JS_CHALLENGE",
+            "contentType": "text/html",
+            "finalUrl": "https://zh.wikipedia.org/wiki/%E6%81%92%E7%94%9F%E6%8C%87%E6%95%B8"
+          },
+          {
+            "engine": "crawler",
+            "status": "skipped",
+            "durationMs": 91,
+            "error": "Crawler fallback did not extract readable content after JS challenge detection"
+          },
+          {
+            "engine": "feed",
+            "status": "skipped",
+            "durationMs": 1604,
+            "error": "Same-origin feed fallback did not match readable content after JS challenge detection"
+          },
+          {
+            "engine": "browser",
+            "status": "success",
+            "durationMs": 11893,
+            "finalUrl": "https://zh.wikipedia.org/wiki/%E6%81%92%E7%94%9F%E6%8C%87%E6%95%B8",
+            "rendered": true,
+            "contentType": "text/html"
+          }
+        ]
+      },
+      {
+        "url": "https://cn.investing.com/analysis/stock-markets",
+        "durationMs": 18336,
+        "title": "",
+        "chars": 0,
+        "errorCode": "CANCELLED",
+        "error": "Request was cancelled",
+        "attempts": [
+          {
+            "engine": "native",
+            "status": "error",
+            "durationMs": 83,
+            "error": "HTTP 403: Forbidden",
+            "errorCode": "HTTP_403",
+            "httpStatus": 403,
+            "contentType": "text/plain",
+            "finalUrl": "https://cn.investing.com/analysis/stock-markets"
+          },
+          {
+            "engine": "crawler",
+            "status": "skipped",
+            "durationMs": 67,
+            "error": "Crawler fallback did not extract readable content after non-2xx response"
+          },
+          {
+            "engine": "feed",
+            "status": "skipped",
+            "durationMs": 334,
+            "error": "Same-origin feed fallback did not match readable content after HTTP 403"
+          },
+          {
+            "engine": "browser",
+            "status": "error",
+            "durationMs": 17849,
+            "error": "Request was cancelled",
+            "rendered": true,
+            "errorCode": "CANCELLED"
+          }
+        ]
+      },
+      {
+        "url": "https://www.futunn.com/hk/stock/00017-HK/news",
+        "durationMs": 13192,
+        "title": "新世界發展 (00017) 新聞動態 - 富途牛牛",
+        "engine": "browser",
+        "chars": 541,
+        "finalUrl": "https://www.futunn.com/hk/stock/00017-HK/news",
+        "attempts": [
+          {
+            "engine": "crawler",
+            "status": "skipped",
+            "durationMs": 96,
+            "error": "Crawler refetch did not extract readable content after readability parse miss"
+          },
+          {
+            "engine": "feed",
+            "status": "skipped",
+            "durationMs": 546,
+            "error": "Same-origin feed fallback did not match readable content after readability parse miss"
+          },
+          {
+            "engine": "browser",
+            "status": "success",
+            "durationMs": 12325,
+            "finalUrl": "https://www.futunn.com/hk/stock/00017-HK/news",
+            "rendered": true,
+            "contentType": "text/html"
+          }
+        ]
+      },
+      {
+        "url": "https://www.tastymoney.hk/%E4%BC%98%E9%81%B8%E6%96%B0%E8%81%9E/80000065",
+        "durationMs": 18305,
+        "title": "",
+        "chars": 0,
+        "errorCode": "CANCELLED",
+        "error": "Request was cancelled",
+        "attempts": [
+          {
+            "engine": "native",
+            "status": "error",
+            "durationMs": 816,
+            "error": "The page appears to be protected by a JavaScript challenge or anti-bot verification",
+            "errorCode": "JS_CHALLENGE",
+            "contentType": "text/html",
+            "finalUrl": "https://www.tastymoney.hk/%E4%BC%98%E9%81%B8%E6%96%B0%E8%81%9E/80000065"
+          },
+          {
+            "engine": "crawler",
+            "status": "skipped",
+            "durationMs": 125,
+            "error": "Crawler fallback did not extract readable content after JS challenge detection"
+          },
+          {
+            "engine": "feed",
+            "status": "skipped",
+            "durationMs": 2936,
+            "error": "Same-origin feed fallback did not match readable content after JS challenge detection"
+          },
+          {
+            "engine": "browser",
+            "status": "error",
+            "durationMs": 14425,
+            "error": "Request was cancelled",
+            "rendered": true,
+            "errorCode": "CANCELLED"
+          }
+        ]
+      },
+      {
+        "url": "https://www.cls.cn/detail/2441507",
+        "durationMs": 201,
+        "title": "",
+        "chars": 0,
+        "errorCode": "UNSUPPORTED_CONTENT_TYPE",
+        "error": "Unsupported content type: . Only HTML pages are supported.",
+        "attempts": [
+          {
+            "engine": "native",
+            "status": "error",
+            "durationMs": 199,
+            "error": "Unsupported content type: . Only HTML pages are supported.",
+            "errorCode": "UNSUPPORTED_CONTENT_TYPE",
+            "finalUrl": "https://www.cls.cn/detail/2441507"
+          }
+        ]
+      },
+      {
+        "url": "https://finance.eastmoney.com/news/1345,202611163931603485.html",
+        "durationMs": 14754,
+        "title": "统计局：10月规模以上工业增加值同比增长4.8% 社会消费品零售总额同比增长0.4% _ 东方财富网",
+        "engine": "browser",
+        "chars": 4632,
+        "finalUrl": "https://finance.eastmoney.com/news/1345,202611163931603485.html",
+        "attempts": [
+          {
+            "engine": "native",
+            "status": "error",
+            "durationMs": 206,
+            "error": "The page appears to be protected by a JavaScript challenge or anti-bot verification",
+            "errorCode": "JS_CHALLENGE",
+            "contentType": "text/html",
+            "finalUrl": "https://finance.eastmoney.com/news/1345,202611163931603485.html"
+          },
+          {
+            "engine": "crawler",
+            "status": "skipped",
+            "durationMs": 23,
+            "error": "Crawler fallback did not extract readable content after JS challenge detection"
+          },
+          {
+            "engine": "feed",
+            "status": "skipped",
+            "durationMs": 680,
+            "error": "Same-origin feed fallback did not match readable content after JS challenge detection"
+          },
+          {
+            "engine": "browser",
+            "status": "success",
+            "durationMs": 13833,
+            "finalUrl": "https://finance.eastmoney.com/news/1345,202611163931603485.html",
+            "rendered": true,
+            "contentType": "text/html"
+          }
+        ]
+      },
+      {
+        "url": "https://www.tradingkey.com/zh-hans/analysis/stocks/more/262306069-japan-korea-stocks-skhy-kospi-nikkei-samsung-skhynix-softbank-kioxia-ppi-tradingkey",
+        "durationMs": 778,
+        "title": "日经跌0.62%、KOSPI跌 0.2%，三星与SK海力士逆势微涨，软银上涨1.5%",
+        "engine": "native",
+        "chars": 898,
+        "finalUrl": "https://www.tradingkey.com/zh-hans/analysis/stocks/more/262306069-japan-korea-stocks-skhy-kospi-nikkei-samsung-skhynix-softbank-kioxia-ppi-tradingkey",
+        "attempts": [
+          {
+            "engine": "native",
+            "status": "success",
+            "durationMs": 772,
+            "contentType": "text/html",
+            "finalUrl": "https://www.tradingkey.com/zh-hans/analysis/stocks/more/262306069-japan-korea-stocks-skhy-kospi-nikkei-samsung-skhynix-softbank-kioxia-ppi-tradingkey"
+          }
+        ]
+      },
+      {
+        "url": "https://finance.eastmoney.com/a/202611093926112578.html",
+        "durationMs": 10133,
+        "title": "午评：创业板指冲高回落涨0.56% 煤炭股集体走强 _ 东方财富网",
+        "engine": "browser",
+        "chars": 295,
+        "finalUrl": "https://finance.eastmoney.com/a/202611093926112578.html",
+        "attempts": [
+          {
+            "engine": "native",
+            "status": "error",
+            "durationMs": 464,
+            "error": "The page appears to be protected by a JavaScript challenge or anti-bot verification",
+            "errorCode": "JS_CHALLENGE",
+            "contentType": "text/html",
+            "finalUrl": "https://finance.eastmoney.com/a/202611093926112578.html"
+          },
+          {
+            "engine": "crawler",
+            "status": "skipped",
+            "durationMs": 61,
+            "error": "Crawler fallback did not extract readable content after JS challenge detection"
+          },
+          {
+            "engine": "feed",
+            "status": "skipped",
+            "durationMs": 713,
+            "error": "Same-origin feed fallback did not match readable content after JS challenge detection"
+          },
+          {
+            "engine": "browser",
+            "status": "success",
+            "durationMs": 8891,
+            "finalUrl": "https://finance.eastmoney.com/a/202611093926112578.html",
+            "rendered": true,
+            "contentType": "text/html"
+          }
+        ]
+      },
+      {
+        "url": "https://www.thepaper.cn/newsDetail_forward_34438501",
+        "durationMs": 8446,
+        "title": "A股震荡下行，三大股指涨跌互现：煤炭股领涨，两市成交1.48万亿",
+        "engine": "browser",
+        "chars": 1988,
+        "finalUrl": "https://www.thepaper.cn/newsDetail_forward_34438501",
+        "attempts": [
+          {
+            "engine": "native",
+            "status": "error",
+            "durationMs": 225,
+            "error": "The page appears to be protected by a JavaScript challenge or anti-bot verification",
+            "errorCode": "JS_CHALLENGE",
+            "contentType": "text/html",
+            "finalUrl": "https://www.thepaper.cn/newsDetail_forward_34438501"
+          },
+          {
+            "engine": "crawler",
+            "status": "skipped",
+            "durationMs": 125,
+            "error": "Crawler fallback did not extract readable content after JS challenge detection"
+          },
+          {
+            "engine": "feed",
+            "status": "skipped",
+            "durationMs": 1480,
+            "error": "Same-origin feed fallback did not match readable content after JS challenge detection"
+          },
+          {
+            "engine": "browser",
+            "status": "success",
+            "durationMs": 6613,
+            "finalUrl": "https://www.thepaper.cn/newsDetail_forward_34438501",
+            "rendered": true,
+            "contentType": "text/html"
+          }
+        ]
+      }
+    ]
+  },
+  "current": {
+    "executedAt": "2026-11-16T04:36:32.848Z",
+    "environment": "Windows host, sequential URLs, 18s per URL, no paid fallback",
+    "fetchCalls": 16,
+    "browserStats": {
+      "launched": 1,
+      "closed": 0,
+      "contextsOpened": 3,
+      "contextsClosed": 3,
+      "idleCloses": 0,
+      "launchFailures": 0,
+      "memorySkips": 0,
+      "pressureAborts": 0,
+      "crashed": 0,
+      "active": 0,
+      "queued": 0,
+      "connected": true
+    },
+    "rows": [
+      {
+        "url": "https://www.cnbc.com/2026/11/13/stock-market-next-week-outlook-for-nov-16-20-2026.html",
+        "durationMs": 1652,
+        "title": "The AI trade faces big tests next week, starting with Nvidia earnings and capped by Anthropic IPO",
+        "contentKind": "article",
+        "engine": "native",
+        "chars": 5488,
+        "fetchedAt": "2026-11-16T04:36:10.207Z",
+        "finalUrl": "https://www.cnbc.com/2026/11/13/stock-market-next-week-outlook-for-nov-16-20-2026.html",
+        "attempts": [
+          {
+            "engine": "native",
+            "status": "success",
+            "durationMs": 1631,
+            "contentType": "text/html",
+            "finalUrl": "https://www.cnbc.com/2026/11/13/stock-market-next-week-outlook-for-nov-16-20-2026.html"
+          }
+        ],
+        "truncated": false,
+        "httpFetches": 1
+      },
+      {
+        "url": "https://stockapp.finance.qq.com/",
+        "durationMs": 2680,
+        "title": "",
+        "chars": 0,
+        "errorCode": "PARSE_EMPTY",
+        "error": "Failed to extract article content. The page structure may not be suitable for reading mode.",
+        "attempts": [
+          {
+            "engine": "python",
+            "status": "skipped",
+            "durationMs": 881,
+            "error": "Python 正文不可用：0 chars / 0 units / linkDensity 0.00"
+          },
+          {
+            "engine": "crawler",
+            "status": "skipped",
+            "durationMs": 52,
+            "error": "Crawler fallback did not extract readable content after native extraction insufficient"
+          },
+          {
+            "engine": "feed",
+            "status": "skipped",
+            "durationMs": 1,
+            "error": "Same-origin feed fallback did not match readable content after native extraction insufficient"
+          },
+          {
+            "engine": "browser",
+            "status": "skipped",
+            "durationMs": 1627,
+            "error": "Browser fallback did not extract readable content after native extraction insufficient",
+            "rendered": true
+          },
+          {
+            "engine": "native",
+            "status": "error",
+            "durationMs": 2677,
+            "error": "Failed to extract article content. The page structure may not be suitable for reading mode.",
+            "errorCode": "PARSE_EMPTY",
+            "contentType": "text/html",
+            "finalUrl": "https://stockapp.finance.qq.com/"
+          }
+        ],
+        "httpFetches": 2
+      },
+      {
+        "url": "https://zh.tradingeconomics.com/united-states/stock-market",
+        "durationMs": 683,
+        "title": "美国股市指数 - 价格 - 图表 - 历史数据",
+        "contentKind": "article",
+        "engine": "native",
+        "chars": 1115,
+        "fetchedAt": "2026-11-16T04:36:13.584Z",
+        "finalUrl": "https://zh.tradingeconomics.com/united-states/stock-market",
+        "attempts": [
+          {
+            "engine": "native",
+            "status": "success",
+            "durationMs": 675,
+            "contentType": "text/html",
+            "finalUrl": "https://zh.tradingeconomics.com/united-states/stock-market"
+          }
+        ],
+        "truncated": false,
+        "httpFetches": 1
+      },
+      {
+        "url": "https://zh.wikipedia.org/wiki/%E6%81%92%E7%94%9F%E6%8C%87%E6%95%B8",
+        "durationMs": 2444,
+        "title": "恒生指數",
+        "contentKind": "article",
+        "engine": "native",
+        "chars": 24017,
+        "fetchedAt": "2026-11-16T04:36:16.044Z",
+        "finalUrl": "https://zh.wikipedia.org/wiki/%E6%81%92%E7%94%9F%E6%8C%87%E6%95%B8",
+        "attempts": [
+          {
+            "engine": "native",
+            "status": "success",
+            "durationMs": 2441,
+            "contentType": "text/html",
+            "finalUrl": "https://zh.wikipedia.org/wiki/%E6%81%92%E7%94%9F%E6%8C%87%E6%95%B8"
+          }
+        ],
+        "truncated": true,
+        "httpFetches": 1
+      },
+      {
+        "url": "https://cn.investing.com/analysis/stock-markets",
+        "durationMs": 8263,
+        "title": "",
+        "chars": 0,
+        "errorCode": "HTTP_403",
+        "error": "HTTP 403: Forbidden",
+        "attempts": [
+          {
+            "engine": "native",
+            "status": "error",
+            "durationMs": 64,
+            "error": "HTTP 403: Forbidden",
+            "errorCode": "HTTP_403",
+            "httpStatus": 403,
+            "contentType": "text/plain",
+            "finalUrl": "https://cn.investing.com/analysis/stock-markets"
+          },
+          {
+            "engine": "crawler",
+            "status": "skipped",
+            "durationMs": 33,
+            "error": "Crawler fallback did not extract readable content after HTTP 403"
+          },
+          {
+            "engine": "feed",
+            "status": "skipped",
+            "durationMs": 0,
+            "error": "Same-origin feed fallback did not match readable content after HTTP 403"
+          },
+          {
+            "engine": "browser",
+            "status": "error",
+            "durationMs": 8093,
+            "error": "browser render phase exceeded",
+            "errorCode": "BROWSER_UNAVAILABLE",
+            "rendered": true
+          }
+        ],
+        "httpFetches": 3
+      },
+      {
+        "url": "https://www.futunn.com/hk/stock/00017-HK/news",
+        "durationMs": 4830,
+        "title": "新世界發展 (00017) 新聞動態 - 富途牛牛",
+        "contentKind": "article",
+        "engine": "browser",
+        "chars": 9066,
+        "fetchedAt": "2026-11-16T04:36:29.143Z",
+        "finalUrl": "https://www.futunn.com/hk/stock/00017-HK/news",
+        "attempts": [
+          {
+            "engine": "python",
+            "status": "skipped",
+            "durationMs": 50,
+            "error": "Python 正文不可用：14 chars / 4 units / linkDensity 0.00"
+          },
+          {
+            "engine": "crawler",
+            "status": "skipped",
+            "durationMs": 72,
+            "error": "Crawler fallback did not extract readable content after native extraction insufficient"
+          },
+          {
+            "engine": "feed",
+            "status": "skipped",
+            "durationMs": 0,
+            "error": "Same-origin feed fallback did not match readable content after native extraction insufficient"
+          },
+          {
+            "engine": "browser",
+            "status": "success",
+            "durationMs": 4530,
+            "finalUrl": "https://www.futunn.com/hk/stock/00017-HK/news",
+            "rendered": true,
+            "contentType": "text/html"
+          }
+        ],
+        "truncated": false,
+        "httpFetches": 2
+      },
+      {
+        "url": "https://www.tastymoney.hk/%E4%BC%98%E9%81%B8%E6%96%B0%E8%81%9E/80000065",
+        "durationMs": 1790,
+        "title": "港股市場日報 | 11月16日開市前：AI硬件續崩、中概逆襲，ADR夜期齊高水90點，23600關口迎數據與財報雙考",
+        "contentKind": "article",
+        "engine": "native",
+        "chars": 9783,
+        "fetchedAt": "2026-11-16T04:36:30.950Z",
+        "finalUrl": "https://www.tastymoney.hk/%E4%BC%98%E9%81%B8%E6%96%B0%E8%81%9E/80000065",
+        "attempts": [
+          {
+            "engine": "native",
+            "status": "success",
+            "durationMs": 1788,
+            "contentType": "text/html",
+            "finalUrl": "https://www.tastymoney.hk/%E4%BC%98%E9%81%B8%E6%96%B0%E8%81%9E/80000065"
+          }
+        ],
+        "truncated": false,
+        "httpFetches": 1
+      },
+      {
+        "url": "https://www.cls.cn/detail/2441507",
+        "durationMs": 309,
+        "title": "【焦点复盘】科创50跌超5%失守半年线，存储芯片股午后局部反攻，万亿光模块龙头现天量巨震",
+        "contentKind": "article",
+        "engine": "native",
+        "chars": 2258,
+        "fetchedAt": "2026-11-16T04:36:31.260Z",
+        "finalUrl": "https://www.cls.cn/detail/2441507",
+        "attempts": [
+          {
+            "engine": "native",
+            "status": "success",
+            "durationMs": 305,
+            "contentType": "text/html",
+            "finalUrl": "https://www.cls.cn/detail/2441507"
+          }
+        ],
+        "truncated": false,
+        "httpFetches": 1
+      },
+      {
+        "url": "https://finance.eastmoney.com/news/1345,202611163931603485.html",
+        "durationMs": 404,
+        "title": "统计局：10月规模以上工业增加值同比增长4.8% 社会消费品零售总额同比增长0.4% _ 东方财富网",
+        "contentKind": "article",
+        "engine": "native",
+        "chars": 4530,
+        "fetchedAt": "2026-11-16T04:36:31.666Z",
+        "finalUrl": "https://finance.eastmoney.com/news/1345,202611163931603485.html",
+        "attempts": [
+          {
+            "engine": "native",
+            "status": "success",
+            "durationMs": 400,
+            "contentType": "text/html",
+            "finalUrl": "https://finance.eastmoney.com/news/1345,202611163931603485.html"
+          }
+        ],
+        "truncated": false,
+        "httpFetches": 1
+      },
+      {
+        "url": "https://www.tradingkey.com/zh-hans/analysis/stocks/more/262306069-japan-korea-stocks-skhy-kospi-nikkei-samsung-skhynix-softbank-kioxia-ppi-tradingkey",
+        "durationMs": 567,
+        "title": "日经跌0.62%、KOSPI跌 0.2%，三星与SK海力士逆势微涨，软银上涨1.5%",
+        "contentKind": "article",
+        "engine": "native",
+        "chars": 987,
+        "fetchedAt": "2026-11-16T04:36:32.236Z",
+        "finalUrl": "https://www.tradingkey.com/zh-hans/analysis/stocks/more/262306069-japan-korea-stocks-skhy-kospi-nikkei-samsung-skhynix-softbank-kioxia-ppi-tradingkey",
+        "attempts": [
+          {
+            "engine": "native",
+            "status": "success",
+            "durationMs": 564,
+            "contentType": "text/html",
+            "finalUrl": "https://www.tradingkey.com/zh-hans/analysis/stocks/more/262306069-japan-korea-stocks-skhy-kospi-nikkei-samsung-skhynix-softbank-kioxia-ppi-tradingkey"
+          }
+        ],
+        "truncated": false,
+        "httpFetches": 1
+      },
+      {
+        "url": "https://finance.eastmoney.com/a/202611093926112578.html",
+        "durationMs": 268,
+        "title": "午评：创业板指冲高回落涨0.56% 煤炭股集体走强 _ 东方财富网",
+        "contentKind": "article",
+        "engine": "native",
+        "chars": 292,
+        "fetchedAt": "2026-11-16T04:36:32.504Z",
+        "finalUrl": "https://finance.eastmoney.com/a/202611093926112578.html",
+        "attempts": [
+          {
+            "engine": "native",
+            "status": "success",
+            "durationMs": 265,
+            "contentType": "text/html",
+            "finalUrl": "https://finance.eastmoney.com/a/202611093926112578.html"
+          }
+        ],
+        "truncated": false,
+        "httpFetches": 1
+      },
+      {
+        "url": "https://www.thepaper.cn/newsDetail_forward_34438501",
+        "durationMs": 159,
+        "title": "A股震荡下行，三大股指涨跌互现：煤炭股领涨，两市成交1.48万亿",
+        "contentKind": "article",
+        "engine": "native",
+        "chars": 2208,
+        "fetchedAt": "2026-11-16T04:36:32.666Z",
+        "finalUrl": "https://www.thepaper.cn/newsDetail_forward_34438501",
+        "attempts": [
+          {
+            "engine": "native",
+            "status": "success",
+            "durationMs": 156,
+            "contentType": "text/html",
+            "finalUrl": "https://www.thepaper.cn/newsDetail_forward_34438501"
+          }
+        ],
+        "truncated": false,
+        "httpFetches": 1
+      }
+    ]
+  },
+  "followup": {
+    "scope": "News listing metadata classification changed after the complete 12-URL run; the original run remains unchanged.",
+    "verification": "94 affected Jest tests passed, tsc exited 0, and backend production build passed after classification correction.",
+    "rows": [
+      {
+        "source": "retrieval-core real Chrome repeat",
+        "url": "https://www.futunn.com/hk/stock/00017-HK/news",
+        "contentKind": "structured",
+        "engine": "browser",
+        "chars": 9077,
+        "durationApproxMs": 4100,
+        "links": 0
+      },
+      {
+        "source": "retrieval-core real Chrome repeat",
+        "url": "https://finance.eastmoney.com/a/202611093926112578.html",
+        "contentKind": "article",
+        "engine": "native",
+        "chars": 292,
+        "durationMs": 299,
+        "links": 0
+      }
+    ]
+  }
+}

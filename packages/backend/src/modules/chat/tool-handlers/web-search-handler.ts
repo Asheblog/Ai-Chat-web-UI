@@ -7,6 +7,8 @@ import {
   runWebSearchParallel,
   mergeWebSearchParallelResults,
   formatHitsForModel,
+  normalizeSearchUrl,
+  type WebSearchHit,
   type WebSearchQueryLanguage,
   type WebSearchParallelQuery,
   type WebSearchParallelQueryPlan,
@@ -15,7 +17,16 @@ import {
 } from '../../../utils/web-search'
 import { truncateText } from '../../../utils/parsers'
 import { WEB_SEARCH_SCOPE_IDS, isWebSearchScope } from '@aichat/shared/web-search-contract'
-import { readUrlContent, type UrlReadErrorCode } from '../../../utils/url-reader'
+import { WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS } from '@aichat/shared'
+import { readUrlContent, type UrlReadResult, type UrlReaderOptions } from '../../../utils/url-reader'
+import {
+  DEFAULT_AUTO_READ_BATCH_TIMEOUT_MS,
+  runSearchAutoReadBatch,
+  type AutoReadCandidate,
+  type AutoReadEvent,
+  type AutoReadFallbackUsed,
+  type AutoReadItem,
+} from './web-search-auto-read'
 import type {
   IToolHandler,
   ToolCall,
@@ -26,31 +37,6 @@ import type {
   WebSearchHandlerConfig,
 } from '../../../agent-runtime/tool-handler-types'
 
-interface AutoReadEvidenceItem {
-  url: string
-  title?: string
-  excerpt?: string
-  siteName?: string
-  byline?: string
-  wordCount?: number
-  content?: string
-  images?: Array<{
-    url: string
-  }>
-  error?: string
-  errorCode?: UrlReadErrorCode
-  httpStatus?: number
-  fallbackUsed:
-    | 'none'
-    | 'search_content'
-    | 'search_snippet'
-    | 'crawler'
-    | 'browser'
-    | 'deepseek_fetch'
-    | 'document'
-  rank: number
-}
-
 const DEFAULT_AUTO_READ_TOP_K = 2
 const DEFAULT_AUTO_READ_TIMEOUT_MS = 18000
 const DEFAULT_AUTO_READ_MAX_CONTENT_LENGTH = 24000
@@ -60,7 +46,8 @@ const DEFAULT_MODEL_RESULT_HITS = 5
 const DEFAULT_MODEL_TASK_RESULTS = 6
 const DEFAULT_MODEL_SNIPPET_CHARS = 360
 const DEFAULT_MODEL_SUMMARY_CHARS = 3200
-const DEFAULT_MODEL_EVIDENCE_ITEMS = 2
+// 与自动阅读的候选上限一致：模型最多看到 4 条阅读证据，不额外隐藏失败项
+const DEFAULT_MODEL_EVIDENCE_ITEMS = 4
 const DEFAULT_MODEL_EVIDENCE_ITEM_CHARS = 900
 const MAX_MODEL_EVIDENCE_IMAGES = 4
 const DEFAULT_PARALLEL_MAX_ENGINES = 5
@@ -151,18 +138,45 @@ const isHttpUrl = (value: string): boolean => {
   }
 }
 
-const dedupeSearchUrls = (hits: Array<{ url?: string }>, limit: number): string[] => {
-  if (limit <= 0) return []
-  const seen = new Set<string>()
-  const urls: string[] = []
-  for (const hit of hits) {
-    const rawUrl = typeof hit.url === 'string' ? hit.url.trim() : ''
-    if (!rawUrl || !isHttpUrl(rawUrl) || seen.has(rawUrl)) continue
-    seen.add(rawUrl)
-    urls.push(rawUrl)
-    if (urls.length >= limit) break
+/** 读取引擎回退来源 → 证据来源标签。google_cache 已删除，未知值不冒充回退来源。 */
+const normalizeReadFallbackUsed = (value: UrlReadResult['fallbackUsed']): AutoReadFallbackUsed => {
+  switch (value) {
+    case 'crawler':
+    case 'browser':
+    case 'deepseek_fetch':
+    case 'document':
+    case 'wayback':
+    case 'python':
+    case 'provided':
+      return value
+    default:
+      return 'none'
   }
-  return urls
+}
+
+/** 把一个搜索命中转成自动阅读候选；同一 URL 的去重与候选上限由批次调度负责。 */
+const buildAutoReadCandidate = (hit: WebSearchHit): AutoReadCandidate | null => {
+  const url = typeof hit.url === 'string' ? hit.url.trim() : ''
+  if (!url || !isHttpUrl(url)) return null
+  const content = typeof hit.content === 'string' ? hit.content : ''
+  const contentSource = hit.contentSource || hit.engine || hit.sourceEngines?.[0] || 'search'
+  return {
+    url,
+    title: hit.title,
+    engine: hit.sourceEngines?.[0] || hit.engine,
+    snippet: hit.snippet,
+    // 只有 article 会被复用成正文；summary / highlight / snippet 只能当摘要回退文本
+    searchContent:
+      content.trim() && hit.contentKind
+        ? {
+            content,
+            kind: hit.contentKind,
+            source: contentSource,
+            // 提供方的长度截断必须透传，不能把 Exa maxCharacters 的正文当完整全文
+            truncated: hit.contentMetadata?.truncated,
+          }
+        : undefined,
+  }
 }
 
 const classifyWebSearchErrorCode = (message: string): string => {
@@ -547,35 +561,53 @@ const collectReadImageUrls = (
 
 const buildSummaryForModel = (
   query: string,
-  hits: Array<{ title: string; url: string; snippet?: string; content?: string }>,
-  autoReadEvidence: AutoReadEvidenceItem[],
+  hits: WebSearchHit[],
+  autoReadEvidence: AutoReadItem[],
 ): string => {
   const base = formatHitsForModel(query, hits)
   if (autoReadEvidence.length === 0) {
     return `${base}\n\n注：本轮未读取网页正文，仅基于搜索摘要。`
   }
 
-  const successItems = autoReadEvidence.filter((item) => !item.error)
-  const failedItems = autoReadEvidence.filter((item) => item.error)
+  const bodyItems = autoReadEvidence.filter(
+    (item) => item.evidenceKind === 'article' || item.evidenceKind === 'structured',
+  )
+  const summaryItems = autoReadEvidence.filter((item) => item.evidenceKind === 'summary')
+  const failedItems = autoReadEvidence.filter((item) => item.evidenceKind === 'none')
   const lines: string[] = []
 
   lines.push('自动网页读取证据（按搜索结果顺序）：')
   for (const item of autoReadEvidence) {
-    if (item.error) {
-      const fallbackSuffix =
-        item.fallbackUsed === 'search_snippet' ? '，已回退为搜索摘要' : '，无可用回退正文'
-      lines.push(
-        `${item.rank}. 读取失败：${item.url} | ${item.errorCode || 'UNKNOWN'}${typeof item.httpStatus === 'number' ? ` (HTTP ${item.httpStatus})` : ''}${fallbackSuffix}`,
-      )
+    if (item.evidenceKind === 'none') {
+      const status = `${item.errorCode || 'UNKNOWN'}${typeof item.httpStatus === 'number' ? ` (HTTP ${item.httpStatus})` : ''}`
+      lines.push(`${item.rank}. 读取失败：${item.url} | ${status}，无可用回退正文`)
+      continue
+    }
+    if (item.evidenceKind === 'summary') {
+      const sourceSuffix = item.contentSource ? ` | 来源: ${item.contentSource}` : ''
+      const failSuffix = item.errorCode ? ` | 原文读取失败: ${item.errorCode}` : ''
+      lines.push(`${item.rank}. 仅取得摘要（不计为正文）：${item.url}${sourceSuffix}${failSuffix}`)
       if (item.content) {
-        lines.push(`   回退摘要：${truncateText(item.content, 600)}`)
+        lines.push(`   摘要：${truncateText(item.content, 600)}`)
+      }
+      if (item.images?.length) {
+        lines.push(`   图片证据: ${item.images.slice(0, MAX_MODEL_EVIDENCE_IMAGES).map((img) => img.url).join(' | ')}`)
       }
       continue
     }
     const title = item.title || item.url
+    const kindSuffix = item.evidenceKind === 'structured' ? '（结构化内容）' : ''
     const extractionSuffix = item.fallbackUsed === 'crawler' ? '（爬虫回退）' : ''
-    const reuseSuffix = item.fallbackUsed === 'search_content' ? '（搜索正文复用）' : ''
-    lines.push(`${item.rank}. ${title}${extractionSuffix}${reuseSuffix}`)
+    const reuseSuffix =
+      item.fallbackUsed === 'search_content'
+        ? `（搜索正文复用${item.contentSource ? ` · ${item.contentSource}` : ''}）`
+        : ''
+    const truncationSuffix = item.truncated
+      ? item.fallbackUsed === 'search_content'
+        ? '（提供方正文本已截断，非完整正文）'
+        : '（正文已截断，非完整正文）'
+      : ''
+    lines.push(`${item.rank}. ${title}${kindSuffix}${extractionSuffix}${reuseSuffix}${truncationSuffix}`)
     lines.push(`   URL: ${item.url}`)
     if (item.excerpt) {
       lines.push(`   摘要: ${truncateText(item.excerpt, 360)}`)
@@ -588,7 +620,7 @@ const buildSummaryForModel = (
     }
   }
 
-  return `${base}\n\n${lines.join('\n')}\n\n统计：自动读取成功 ${successItems.length} 条，失败 ${failedItems.length} 条。`
+  return `${base}\n\n${lines.join('\n')}\n\n统计：有效正文 ${bodyItems.length} 条，仅摘要 ${summaryItems.length} 条，失败 ${failedItems.length} 条。`
 }
 
 const slimHitsForModel = (hits: Array<{ title: string; url: string; snippet?: string; content?: string; imageUrl?: string; thumbnailUrl?: string; engine?: string; rank?: number; sourceEngines?: string[] }>) =>
@@ -613,45 +645,28 @@ const slimTaskResultsForModel = (tasks: Array<{ task: { engine: string; query: s
     error: item.error,
   }))
 
-const slimEvidenceForModel = (items: AutoReadEvidenceItem[]) =>
+const slimEvidenceForModel = (items: AutoReadItem[]) =>
   items.slice(0, DEFAULT_MODEL_EVIDENCE_ITEMS).map((item) => ({
     url: item.url,
     title: item.title,
+    evidenceKind: item.evidenceKind,
+    contentSource: item.contentSource,
     excerpt: item.excerpt ? truncateText(item.excerpt, DEFAULT_MODEL_SNIPPET_CHARS) : undefined,
     content: item.content ? truncateText(item.content, DEFAULT_MODEL_EVIDENCE_ITEM_CHARS) : undefined,
     images: Array.isArray(item.images) ? item.images.slice(0, MAX_MODEL_EVIDENCE_IMAGES) : undefined,
     siteName: item.siteName,
     byline: item.byline,
     wordCount: item.wordCount,
+    truncated: item.truncated,
+    fetchedAt: item.fetchedAt,
+    archivedAt: item.archivedAt,
     error: item.error,
     errorCode: item.errorCode,
     httpStatus: item.httpStatus,
     fallbackUsed: item.fallbackUsed,
+    skippedReason: item.skippedReason,
     rank: item.rank,
   }))
-
-async function mapWithConcurrency<TItem, TResult>(
-  items: TItem[],
-  concurrency: number,
-  mapper: (item: TItem, index: number) => Promise<TResult>,
-): Promise<TResult[]> {
-  if (items.length === 0) return []
-  const limit = Math.max(1, Math.floor(concurrency))
-  const results = new Array<TResult>(items.length)
-  let nextIndex = 0
-
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (true) {
-      const current = nextIndex
-      nextIndex += 1
-      if (current >= items.length) return
-      results[current] = await mapper(items[current], current)
-    }
-  })
-
-  await Promise.all(workers)
-  return results
-}
 
 export class WebSearchToolHandler implements IToolHandler {
   readonly toolName = 'web_search'
@@ -725,6 +740,9 @@ export class WebSearchToolHandler implements IToolHandler {
     const effectiveScope = isWebSearchScope(requestedScope) ? requestedScope : this.config.scope
     const autoReadEnabledForSearch =
       effectiveScope !== 'image' && this.config.autoReadAfterSearch !== false
+    const autoReadTopK = effectiveScope === 'image' ? 0 : clampAutoReadTopK(this.config.autoReadTopK)
+    // 自动阅读需要正文时，向支持正文的引擎请求既有正文能力；不新增服务、不改条数与长度上限
+    const autoReadNeedContent = autoReadEnabledForSearch && autoReadTopK > 0
     const expandedQueries = buildBilingualQueries(query, this.config)
     const activeEngines = pickActiveEngines(this.config, effectiveScope)
     const routingPlan = buildLanguageAwareSearchPlan({
@@ -880,7 +898,9 @@ export class WebSearchToolHandler implements IToolHandler {
         scope: effectiveScope,
         includeSummary: this.config.includeSummary,
         includeRawContent: this.config.includeRawContent,
-        deepseekNeedContent: autoReadEnabledForSearch,
+        autoReadNeedContent,
+        // DeepSeek 的正文需求与其它引擎同条件：topK=0 时不再索取正文
+        deepseekNeedContent: autoReadNeedContent,
         timeoutMs: parallelTimeoutMs,
         parallelMaxEngines: this.config.parallelMaxEngines,
         mergeStrategy: this.config.mergeStrategy,
@@ -929,7 +949,8 @@ export class WebSearchToolHandler implements IToolHandler {
             scope: effectiveScope,
             includeSummary: this.config.includeSummary,
             includeRawContent: this.config.includeRawContent,
-            deepseekNeedContent: autoReadEnabledForSearch,
+            autoReadNeedContent,
+            deepseekNeedContent: autoReadNeedContent,
             timeoutMs: parallelTimeoutMs,
             parallelMaxEngines: this.config.parallelMaxEngines,
             mergeStrategy: this.config.mergeStrategy,
@@ -953,7 +974,6 @@ export class WebSearchToolHandler implements IToolHandler {
 
       const hits = searchResult.hits
       const autoReadEnabled = autoReadEnabledForSearch
-      const autoReadTopK = effectiveScope === 'image' ? 0 : clampAutoReadTopK(this.config.autoReadTopK)
       const autoReadParallelism = clampPositiveInt(
         this.config.autoReadParallelism,
         DEFAULT_AUTO_READ_PARALLELISM,
@@ -973,205 +993,163 @@ export class WebSearchToolHandler implements IToolHandler {
         300000,
       )
 
-      const autoReadTargets = autoReadEnabled ? dedupeSearchUrls(hits, autoReadTopK) : []
+      // 批次总时限与单 URL 超时分别存储：autoReadTimeoutMs 依旧只表示"一个 URL 能等多久"
+      const autoReadBatchTimeoutMs = clampPositiveInt(
+        this.config.autoReadBatchTimeoutMs,
+        DEFAULT_AUTO_READ_BATCH_TIMEOUT_MS,
+        WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS.min,
+        WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS.max,
+      )
+      const readerConfig = this.config.urlReader
+      const deepseekApiKey = readerConfig?.deepseekApiKey || this.config.apiKeys?.deepseek
       const deepseekFetchEnabled =
-        Boolean(this.config.deepseekFetchEnabled) && Boolean(this.config.apiKeys?.deepseek)
-      const effectiveScopeForRead = (effectiveScope || '').trim().toLowerCase()
-      const searchContentByUrl = new Map(
-        hits
-          .filter(
-            (hit) =>
-              typeof hit.content === 'string' &&
-              hit.content.trim().length > 0 &&
-              Array.isArray(hit.sourceEngines) &&
-              hit.sourceEngines.includes('deepseek'),
-          )
-          .map((hit) => [hit.url, hit.content as string]),
-      )
-      const autoReadEvidence = await mapWithConcurrency(
-        autoReadTargets,
-        autoReadParallelism,
-        async (targetUrl, index): Promise<AutoReadEvidenceItem> => {
-          const rank = index + 1
-          const readCallId = `${callId}:read:${rank}`
-          const reusableSearchContent = searchContentByUrl.get(targetUrl)
-          const usesSearchContent =
-            Boolean(reusableSearchContent) && (effectiveScopeForRead === 'webpage' || !effectiveScopeForRead)
-          if (usesSearchContent) {
-            const content = truncateText(reusableSearchContent as string, DEFAULT_MODEL_EVIDENCE_CHARS)
-            const hit = hits.find((item) => item.url === targetUrl)
-            context.sendToolEvent({
-              id: readCallId,
-              tool: 'read_url',
-              stage: 'result',
-              query: targetUrl,
-              summary: '已复用搜索结果正文（未重复抓取）',
-              url: targetUrl,
-              title: hit?.title,
-              excerpt: truncateText(hit?.snippet || '', DEFAULT_MODEL_SNIPPET_CHARS),
-              details: {
-                groupId: callId,
-                url: targetUrl,
-                rank,
-                autoTriggered: true,
-                parentTool: 'web_search',
-                parentCallId: callId,
-                taskType: 'read_url',
-                fallbackUsed: 'search_content',
-                engine: 'search_result_content',
-              },
-            })
-            return {
-              url: targetUrl,
-              title: hit?.title,
-              excerpt: truncateText(hit?.snippet || '', DEFAULT_MODEL_SNIPPET_CHARS),
-              content,
-              fallbackUsed: 'search_content',
-              rank,
-            }
-          }
-          context.sendToolEvent({
-            id: readCallId,
-            tool: 'read_url',
-            stage: 'start',
-            query: targetUrl,
-            summary: '基于搜索结果自动读取网页正文',
-            url: targetUrl,
-            details: {
-              groupId: callId,
-              url: targetUrl,
-              rank,
-              autoTriggered: true,
-              parentTool: 'web_search',
-              parentCallId: callId,
-              taskType: 'read_url',
-            },
-          })
+        Boolean(this.config.deepseekFetchEnabled ?? readerConfig?.enableDeepseekFallback) &&
+        Boolean(deepseekApiKey)
+      // autoReadTopK = 0 表示关闭自动阅读；批次调度要求至少 1 条目标，不能在这里被抬回 1
+      const autoReadActive = autoReadEnabled && autoReadTopK > 0
+      const autoReadCandidates = autoReadActive
+        ? hits
+            .map((hit) => buildAutoReadCandidate(hit))
+            .filter((item): item is AutoReadCandidate => Boolean(item))
+        : []
+      const hitByUrl = new Map(hits.map((hit) => [normalizeSearchUrl(hit.url) || hit.url, hit]))
+      const readCallIdOf = (rank: number) => `${callId}:read:${rank}`
+      const readBaseDetails = (url: string, rank: number): ToolLogDetails => ({
+        groupId: callId,
+        url,
+        rank,
+        autoTriggered: true,
+        parentTool: 'web_search',
+        parentCallId: callId,
+        taskType: 'read_url',
+      })
 
-          const readResult = await readUrlContent(targetUrl, {
-            timeout: autoReadTimeoutMs,
-            maxContentLength: autoReadMaxContentLength,
+      const emitAutoReadStart = (event: AutoReadEvent) => {
+        if (event.stage !== 'start') return
+        context.sendToolEvent({
+          id: readCallIdOf(event.rank),
+          tool: 'read_url',
+          stage: 'start',
+          query: event.url,
+          summary: '基于搜索结果自动读取网页正文',
+          url: event.url,
+          details: { ...readBaseDetails(event.url, event.rank), urlTimeoutMs: event.timeoutMs },
+        })
+      }
+
+      const autoReadBatch = await runSearchAutoReadBatch({
+        candidates: autoReadCandidates,
+        perUrlTimeoutMs: autoReadTimeoutMs,
+        batchTimeoutMs: autoReadBatchTimeoutMs,
+        evidenceTarget: autoReadTopK,
+        parallelism: autoReadParallelism,
+        maxContentChars: autoReadMaxContentLength,
+        signal: context.requestSignal,
+        onEvent: emitAutoReadStart,
+        read: async ({ url, timeoutMs, signal }) => {
+          const readOptions: UrlReaderOptions = {
+            // 完整转发 url reader 配置：浏览器可用性、渲染等待、body 上限与 DeepSeek 开关
+            enableBrowser: readerConfig?.enableBrowser,
+            browserExecutablePath: readerConfig?.browserExecutablePath,
+            renderWaitMs: readerConfig?.renderWaitMs,
+            maxBodyBytes: readerConfig?.maxBodyBytes,
             enableDeepseekFallback: deepseekFetchEnabled,
-            deepseekApiKey: this.config.apiKeys?.deepseek,
-            signal: context.requestSignal,
-          })
-          if (readResult.error) {
-            const fallbackSnippet =
-              hits.find((hit) => hit.url === targetUrl)?.content ||
-              hits.find((hit) => hit.url === targetUrl)?.snippet ||
-              ''
-            const fallbackText = truncateText(fallbackSnippet, DEFAULT_MODEL_EVIDENCE_CHARS)
-            const evidenceItem: AutoReadEvidenceItem = {
-              url: targetUrl,
-              error: readResult.error,
-              errorCode: readResult.errorCode,
-              httpStatus: readResult.httpStatus,
-              content: fallbackText || undefined,
-              fallbackUsed: fallbackText ? 'search_snippet' : 'none',
-              rank,
-            }
-
-            const details: ToolLogDetails = {
-              groupId: callId,
-              url: targetUrl,
-              rank,
-              autoTriggered: true,
-              parentTool: 'web_search',
-              parentCallId: callId,
-              taskType: 'read_url',
-              errorCode: readResult.errorCode,
-              httpStatus: readResult.httpStatus,
-              fallbackUsed: evidenceItem.fallbackUsed,
-              attempts: readResult.attempts,
-              finalUrl: readResult.finalUrl,
-            }
-            if (fallbackText) {
-              details.resultText = fallbackText
-            }
-
-            context.sendToolEvent({
-              id: readCallId,
-              tool: 'read_url',
-              stage: 'error',
-              query: targetUrl,
-              summary:
-                evidenceItem.fallbackUsed === 'search_snippet'
-                  ? '网页读取失败，已回退到搜索摘要'
-                  : '网页读取失败且无可用摘要回退',
-              url: targetUrl,
-              error: readResult.error,
-              details,
-            })
-            return evidenceItem
+            deepseekApiKey,
+            timeout: timeoutMs,
+            maxContentLength: autoReadMaxContentLength,
+            // 搜索问题默认要当前内容；只有明确的回溯查询才需要 purpose: 'history'
+            purpose: 'current',
+            freshness: 'current',
+            signal,
           }
+          const readResult = await readUrlContent(url, readOptions)
+          // core 旧类型仍可能带已删除的 google_cache；统一收敛成证据来源标签，不冒充回退来源
+          return { ...readResult, fallbackUsed: normalizeReadFallbackUsed(readResult.fallbackUsed) }
+        },
+      })
 
-          const evidenceItem: AutoReadEvidenceItem = {
-            url: targetUrl,
-            title: readResult.title || undefined,
-            excerpt: readResult.excerpt || undefined,
-            siteName: readResult.siteName || undefined,
-            byline: readResult.byline || undefined,
-            wordCount: readResult.wordCount,
-            content: truncateText(readResult.textContent || '', DEFAULT_MODEL_EVIDENCE_CHARS),
-            // 页面本体抽不到图（JS 重页面/文档页）时保留命中项自带封面图，避免证据图整段为空
-            images: collectReadImageUrls(readResult, [
-              hits.find((hit) => hit.url === targetUrl)?.imageUrl,
-            ]).map((url) => ({ url })),
-            fallbackUsed:
-              readResult.fallbackUsed === 'crawler' ||
-              readResult.fallbackUsed === 'browser' ||
-              readResult.fallbackUsed === 'deepseek_fetch' ||
-              readResult.fallbackUsed === 'document'
-                ? readResult.fallbackUsed
-                : 'none',
-            rank,
-          }
+      const autoReadEvidence: AutoReadItem[] = []
+      for (const item of autoReadBatch.items) {
+        // 目标已达成 / 候选预算用完是正常收敛，不进证据列表，也不制造错误噪音
+        if (item.skippedReason === 'evidence_target_met' || item.skippedReason === 'candidate_budget') {
+          continue
+        }
+        const hit = hitByUrl.get(normalizeSearchUrl(item.url) || item.url)
+        // 页面本体抽不到图（JS 重页面/文档页）时保留命中项自带封面图，避免证据图整段为空
+        const images = collectReadImageUrls(
+          { leadImageUrl: item.leadImageUrl, images: item.images },
+          [hit?.imageUrl],
+        ).map((url) => ({ url }))
+        const enriched: AutoReadItem = images.length > 0 ? { ...item, images } : item
+        autoReadEvidence.push(enriched)
+
+        const details: ToolLogDetails = {
+          ...readBaseDetails(enriched.url, enriched.rank),
+          evidenceKind: enriched.evidenceKind,
+          contentSource: enriched.contentSource,
+          fallbackUsed: enriched.fallbackUsed,
+          skippedReason: enriched.skippedReason,
+          errorCode: enriched.errorCode,
+          httpStatus: enriched.httpStatus,
+          attempts: enriched.attempts,
+          finalUrl: enriched.finalUrl,
+          rendered: enriched.rendered,
+          contentFormat: enriched.contentFormat,
+        }
+        const readCallId = readCallIdOf(enriched.rank)
+        if (enriched.evidenceKind === 'summary' || enriched.evidenceKind === 'none') {
           context.sendToolEvent({
             id: readCallId,
             tool: 'read_url',
-            stage: 'result',
-            query: targetUrl,
-            summary: readResult.title
-              ? `已读取：${readResult.title}${evidenceItem.fallbackUsed === 'crawler' ? '（爬虫回退）' : ''}`
-              : evidenceItem.fallbackUsed === 'crawler'
-                ? '网页读取完成（爬虫回退）'
-                : '网页读取完成',
-            url: targetUrl,
-            title: readResult.title,
-            excerpt: readResult.excerpt,
-            wordCount: readResult.wordCount,
-            siteName: readResult.siteName,
-            byline: readResult.byline,
-            leadImageUrl: readResult.leadImageUrl,
-            details: {
-              groupId: callId,
-              url: targetUrl,
-              rank,
-              autoTriggered: true,
-              parentTool: 'web_search',
-              parentCallId: callId,
-              taskType: 'read_url',
-              title: readResult.title,
-              excerpt: readResult.excerpt,
-              wordCount: readResult.wordCount,
-              siteName: readResult.siteName,
-              byline: readResult.byline,
-              fallbackUsed: evidenceItem.fallbackUsed,
-              engine: readResult.engine,
-              attempts: readResult.attempts,
-              finalUrl: readResult.finalUrl,
-              rendered: readResult.rendered,
-              contentFormat: readResult.contentFormat,
-              leadImageUrl: readResult.leadImageUrl,
-              images: readResult.images,
-            },
+            stage: 'error',
+            query: enriched.url,
+            summary:
+              enriched.evidenceKind === 'summary'
+                ? '网页读取失败，已回退到搜索摘要（不计为正文）'
+                : enriched.skippedReason === 'batch_deadline'
+                  ? '批次总时限已用完，未读取该网页'
+                  : enriched.skippedReason === 'cancelled'
+                    ? '网页读取已取消'
+                    : '网页读取失败且无可用摘要回退',
+            url: enriched.url,
+            error: enriched.error,
+            details,
           })
-          return evidenceItem
-        },
-      )
+          continue
+        }
+        context.sendToolEvent({
+          id: readCallId,
+          tool: 'read_url',
+          stage: 'result',
+          query: enriched.url,
+          summary:
+            enriched.fallbackUsed === 'search_content'
+              ? '已复用搜索结果正文（未重复抓取）'
+              : enriched.title
+                ? `已读取：${enriched.title}${enriched.fallbackUsed === 'crawler' ? '（爬虫回退）' : ''}`
+                : '网页读取完成',
+          url: enriched.url,
+          title: enriched.title,
+          excerpt: enriched.excerpt,
+          wordCount: enriched.wordCount,
+          siteName: enriched.siteName,
+          byline: enriched.byline,
+          leadImageUrl: enriched.leadImageUrl,
+          details: {
+            ...details,
+            title: enriched.title,
+            excerpt: enriched.excerpt,
+            wordCount: enriched.wordCount,
+            siteName: enriched.siteName,
+            byline: enriched.byline,
+            leadImageUrl: enriched.leadImageUrl,
+            images: enriched.images,
+          },
+        })
+      }
 
-      const autoReadSucceeded = autoReadEvidence.filter((item) => !item.error).length
-      const autoReadFailed = autoReadEvidence.length - autoReadSucceeded
+      // 有效正文只算 article / structured；摘要单独计数，不冒充正文
+      const autoReadBodyCount = autoReadBatch.articleCount + autoReadBatch.structuredCount
       const taskSucceeded = searchResult.tasks.filter((item) => item.status === 'success').length
       const taskFailed = searchResult.tasks.length - taskSucceeded
 
@@ -1184,8 +1162,8 @@ export class WebSearchToolHandler implements IToolHandler {
         query,
         hits,
         summary:
-          autoReadTargets.length > 0
-            ? `搜索完成，自动读取正文 ${autoReadSucceeded}/${autoReadTargets.length} 条`
+          autoReadBatch.candidateCount > 0
+            ? `搜索完成，取得正文 ${autoReadBodyCount} 条（候选 ${autoReadBatch.candidatesExamined}/${autoReadBatch.candidateCount}，仅摘要 ${autoReadBatch.summaryCount}）`
             : `搜索完成，共 ${hits.length} 条结果`,
         details: {
           requestedLimit: modelRequestedLimit,
@@ -1197,9 +1175,15 @@ export class WebSearchToolHandler implements IToolHandler {
           searchTaskSucceeded: taskSucceeded,
           searchTaskFailed: taskFailed,
           autoReadEnabled,
-          autoReadRequested: autoReadTargets.length,
-          autoReadSucceeded,
-          autoReadFailed,
+          autoReadRequested: autoReadBatch.candidateCount,
+          autoReadSucceeded: autoReadBodyCount,
+          autoReadFailed: autoReadBatch.failedCount,
+          autoReadSummaryOnly: autoReadBatch.summaryCount,
+          autoReadCandidatesExamined: autoReadBatch.candidatesExamined,
+          autoReadDuplicateUrls: autoReadBatch.duplicateUrls.length,
+          autoReadBatchTimeoutMs: autoReadBatch.batchTimeoutMs,
+          autoReadBatchDeadlineExceeded: autoReadBatch.deadlineExceeded,
+          autoReadElapsedMs: autoReadBatch.batchElapsedMs,
           scope: effectiveScope,
           requiredSources: routingPlan.requiredSources,
           highRisk: routingPlan.highRisk,
@@ -1244,9 +1228,18 @@ export class WebSearchToolHandler implements IToolHandler {
             escalation: escalationInfo,
             autoReadStats: {
               enabled: autoReadEnabled,
-              requested: autoReadTargets.length,
-              succeeded: autoReadSucceeded,
-              failed: autoReadFailed,
+              requested: autoReadBatch.candidateCount,
+              succeeded: autoReadBodyCount,
+              failed: autoReadBatch.failedCount,
+              article: autoReadBatch.articleCount,
+              structured: autoReadBatch.structuredCount,
+              summary: autoReadBatch.summaryCount,
+              evidenceTarget: autoReadTopK,
+              candidatesExamined: autoReadBatch.candidatesExamined,
+              duplicateUrls: autoReadBatch.duplicateUrls.length,
+              batchTimeoutMs: autoReadBatch.batchTimeoutMs,
+              deadlineExceeded: autoReadBatch.deadlineExceeded,
+              elapsedMs: autoReadBatch.batchElapsedMs,
             },
           }),
         },

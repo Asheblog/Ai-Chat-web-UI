@@ -91,6 +91,7 @@ export const SYSTEM_SETTINGS_FIELD_MAP = {
   webSearchAutoBilingual: 'web_search_auto_bilingual',
   webSearchAutoBilingualMode: 'web_search_auto_bilingual_mode',
   webSearchAutoReadParallelism: 'web_search_auto_read_parallelism',
+  webSearchAutoReadBatchTimeoutMs: 'web_search_auto_read_batch_timeout_ms',
   webSearchDomainFilter: 'web_search_domain_filter',
   webSearchEnabledEngines: 'web_search_enabled_engines',
   webSearchEngineOrder: 'web_search_engine_order',
@@ -114,6 +115,17 @@ export const SYSTEM_SETTINGS_FIELD_MAP = {
 export type SystemSettingsField = keyof typeof SYSTEM_SETTINGS_FIELD_MAP
 export type SystemSettingsStorageKey =
   (typeof SYSTEM_SETTINGS_FIELD_MAP)[SystemSettingsField]
+
+/**
+ * 自动阅读批次总时限的配置边界。
+ * settings 层（API 校验 / 编解码 / 服务解析）、agent-tool-config 与搜索 handler 共用这一组值；
+ * 纯调度器另有仅供单元测试缩短 deadline 的内部下限，不属于可配置范围。
+ */
+export const WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS = {
+  min: 3000,
+  max: 120000,
+  fallback: 18000,
+} as const
 
 const HAS_OWN = Object.prototype.hasOwnProperty
 

@@ -1,0 +1,4 @@
+# Direct dependencies of the Trafilatura extraction worker.
+# The image installs requirements.lock, not this file.
+trafilatura==2.3.1
+lxml-html-clean==0.4.6

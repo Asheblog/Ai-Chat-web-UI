@@ -115,11 +115,16 @@ normalize_database_url() {
 
 normalize_database_url
 
+# 追踪事件文件（task-trace / latex-trace）必须落在持久化卷里才可恢复。
+# 这里显式导出：split 拓扑下本脚本就是后端进程的父进程，子进程只继承它的环境。
+export LOG_DIR
+export TASK_TRACE_LOG_DIR="${TASK_TRACE_LOG_DIR:-$LOG_DIR/task-trace}"
+
 DB_DIR="$(dirname "$DB_FILE")"
-mkdir -p "$DATA_DIR" "$LOG_DIR" "$DB_DIR" "$CHAT_IMAGE_DIR" || true
+mkdir -p "$DATA_DIR" "$LOG_DIR" "$TASK_TRACE_LOG_DIR" "$DB_DIR" "$CHAT_IMAGE_DIR" || true
 
 # 修复卷权限（容器首次创建命名卷时可能为 root:root）
-chown -R 1001:1001 "$DATA_DIR" "$LOG_DIR" "$CHAT_IMAGE_DIR" || true
+chown -R 1001:1001 "$DATA_DIR" "$LOG_DIR" "$TASK_TRACE_LOG_DIR" "$CHAT_IMAGE_DIR" || true
 if [ "$DB_DIR" != "$DATA_DIR" ]; then
   chown -R 1001:1001 "$DB_DIR" || true
 fi
