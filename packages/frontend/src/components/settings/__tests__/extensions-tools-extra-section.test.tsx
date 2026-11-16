@@ -18,6 +18,12 @@ vi.mock("@/features/settings/api", async (importOriginal) => ({
 }))
 
 /** 乱斗卡的非法值提示要断言：toast 换成 spy，不渲染 Toaster。 */
+/** 标题卡的「指定模型」选择器需要模型列表：给一份最小可用数据，避免真实请求。 */
+const useModelsStoreMock = vi.hoisted(() => vi.fn())
+vi.mock("@/store/models-store", () => ({
+  useModelsStore: () => useModelsStoreMock(),
+}))
+
 const toastSpy = vi.hoisted(() => vi.fn())
 vi.mock("@/components/ui/use-toast", () => ({
   useToast: () => ({ toast: toastSpy }),
@@ -41,6 +47,21 @@ function mockSettings(settings: Record<string, unknown> | null) {
 beforeEach(() => {
   vi.resetAllMocks()
   refreshSpy.mockReturnValue(Promise.resolve())
+  useModelsStoreMock.mockReturnValue({
+    models: [
+      {
+        id: "gpt-4o-mini",
+        rawId: "gpt-4o-mini",
+        name: "GPT-4o mini",
+        provider: "OpenAI",
+        channelName: "openai",
+        connectionId: 2,
+        modelType: "chat",
+      },
+    ],
+    isLoading: false,
+    fetchAll: vi.fn(() => Promise.resolve()),
+  })
   mockSettings(allEnabled)
   pythonRuntimeApiMocks.getPythonRuntimeStatus.mockResolvedValue({ data: emptyRuntimeStatus })
   updateSpy.mockReturnValue(Promise.resolve())
@@ -81,7 +102,7 @@ describe("内置工具段：两卡与唯一控制点", () => {
 
     fireEvent.click(within(card).getByRole("button", { name: "更多参数" }))
 
-    expect(within(card).getByText("Agent 工具最大迭代次数（0 表示无限制）")).toBeInTheDocument()
+    expect(within(card).getByText("Agent 工具循环上限（0 表示不限制）")).toBeInTheDocument()
     expect(within(card).queryByText("启用聊天侧第三方动态 Skill Runtime")).toBeNull()
     // 该 key 的唯一控制点已归 Skill 段页头：本卡只保留主开关
     expect(within(card).queryAllByRole("switch")).toHaveLength(1)
@@ -89,36 +110,29 @@ describe("内置工具段：两卡与唯一控制点", () => {
     await act(async () => {})
   })
 
-  test("改超时与 stdout 截断后保存，payload 精确等于 5 个 key（不再提交动态 Skill Runtime）", async () => {
+  test("旧的超时/stdout/代码长度输入已删除，保存只提交 pythonToolEnable 与迭代上限", async () => {
     mockSettings(toolsAndExtrasSettings)
     render(<ToolsSection />)
     const card = featureCardOf("Python 工具")
 
+    // 三个死键的输入不再渲染：改它们不影响任何执行
+    expect(within(card).queryByText("超时时间（毫秒）")).toBeNull()
+    expect(within(card).queryByText("stdout 截断字符数")).toBeNull()
+    expect(within(card).queryByText("代码长度限制")).toBeNull()
+
     fireEvent.click(screen.getByRole("switch", { name: "启用Python 工具" }))
-    fireEvent.change(within(card).getByDisplayValue("8000"), { target: { value: "9000" } })
-    // 两个 4000 分别是 stdout 截断与代码长度限制，前者在前
-    const [stdoutInput] = within(card).getAllByDisplayValue("4000")
-    fireEvent.change(stdoutInput, { target: { value: "5000" } })
+    fireEvent.click(within(card).getByRole("button", { name: "更多参数" }))
+    fireEvent.change(within(card).getByLabelText("Agent 工具循环上限（0 表示不限制）"), {
+      target: { value: "6" },
+    })
 
     fireEvent.click(within(card).getByRole("button", { name: "保存 Python 工具设置" }))
 
     await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1))
     expect(updateSpy.mock.calls[0][0]).toEqual({
       pythonToolEnable: true,
-      pythonToolTimeoutMs: 9000,
-      pythonToolMaxOutputChars: 5000,
-      pythonToolMaxSourceChars: 4000,
-      agentMaxToolIterations: 4,
+      agentMaxToolIterations: 6,
     })
-    expect(Object.keys(updateSpy.mock.calls[0][0]).sort()).toEqual(
-      [
-        "pythonToolEnable",
-        "pythonToolTimeoutMs",
-        "pythonToolMaxOutputChars",
-        "pythonToolMaxSourceChars",
-        "agentMaxToolIterations",
-      ].sort(),
-    )
 
     await act(async () => {})
   })
@@ -138,9 +152,6 @@ describe("内置工具段：两卡与唯一控制点", () => {
     await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1))
     expect(updateSpy.mock.calls[0][0]).toEqual({
       pythonToolEnable: false,
-      pythonToolTimeoutMs: 8000,
-      pythonToolMaxOutputChars: 4000,
-      pythonToolMaxSourceChars: 4000,
       agentMaxToolIterations: 4,
     })
 
@@ -188,7 +199,7 @@ describe("对话增强段：两卡与保存", () => {
     })
   })
 
-  test("标题总结开关保存 3 个 titleSummary* key", async () => {
+  test("标题总结开关保存：当前会话模型来源同时清空指定模型的两个 id", async () => {
     mockSettings(toolsAndExtrasSettings)
     render(<ExtraSection />)
     const card = featureCardOf("标题智能总结")
@@ -204,31 +215,42 @@ describe("对话增强段：两卡与保存", () => {
       titleSummaryEnabled: true,
       titleSummaryMaxLength: 20,
       titleSummaryModelSource: "current",
+      titleSummaryConnectionId: null,
+      titleSummaryModelId: null,
     })
   })
 })
 
 describe("对话增强段：草稿链路", () => {
-  test("标题总结：长度改 30 + 模型来源切到「指定模型（暂不支持）」后保存，payload 精确 3 个 key", async () => {
+  test("标题总结：切到指定模型并选中模型后，连接与模型成对进入 payload", async () => {
     mockSettings(toolsAndExtrasSettings)
     render(<ExtraSection />)
     const card = featureCardOf("标题智能总结")
 
     // 先开启智能标题：关闭态下长度输入与模型选择都是 disabled，改不动
-    const titleSummaryEnabled = true
     fireEvent.click(within(card).getAllByRole("switch")[0])
     fireEvent.change(within(card).getByDisplayValue("20"), { target: { value: "30" } })
 
     await userEvent.click(within(card).getByRole("combobox"))
-    await userEvent.click(await screen.findByRole("option", { name: "指定模型（暂不支持）" }))
+    await userEvent.click(await screen.findByRole("option", { name: "指定模型" }))
 
-    fireEvent.click(within(card).getByRole("button", { name: "保存标题总结设置" }))
+    // 未选具体模型前不允许保存，避免静默回落到会话模型
+    const save = within(card).getByRole("button", { name: "保存标题总结设置" })
+    expect(save).toBeDisabled()
+    expect(within(card).getByText(/请选择一个具体模型/)).toBeInTheDocument()
 
+    await userEvent.click(within(card).getByRole("combobox", { name: "选择标题模型" }))
+    await userEvent.click(await screen.findByRole("option", { name: /GPT-4o mini/ }))
+
+    fireEvent.click(save)
     await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1))
     expect(updateSpy.mock.calls[0][0]).toEqual({
-      titleSummaryEnabled,
+      titleSummaryEnabled: true,
       titleSummaryMaxLength: 30,
       titleSummaryModelSource: "specified",
+      titleSummaryConnectionId: 2,
+      // 模型线路身份（rawId），与后端「当前会话模型」分支同一字段含义
+      titleSummaryModelId: "gpt-4o-mini",
     })
   })
 

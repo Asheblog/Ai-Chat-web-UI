@@ -36,24 +36,15 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/main/settings/system/search-knowledge",
 }))
 
-/** 联网搜索 + RAG + 知识库 三卡所需 key 的完整设置 */
+/** 联网搜索 + 文档与知识库 两卡所需的完整设置 */
 const searchKnowledgeSettings: SystemSettings = {
   ...baseSettings,
-  webSearchAgentEnable: true,
   webSearchEnabledEngines: ["tavily"],
-  webSearchEngineOrder: ["tavily"],
-  webSearchResultLimit: 4,
-  webSearchDomainFilter: ["example.com"],
-  webSearchHasApiKeyTavily: true,
+  webSearchHasApiKeyDeepseek: false,
   webSearchScope: "webpage",
   webSearchIncludeSummary: false,
   webSearchIncludeRaw: false,
-  webSearchParallelMaxEngines: 3,
-  webSearchParallelMaxQueriesPerCall: 2,
-  webSearchParallelTimeoutMs: 12000,
-  webSearchAutoBilingual: true,
-  webSearchAutoBilingualMode: "conditional",
-  webSearchAutoReadParallelism: 2,
+  webSearchAutoReadBatchTimeoutMs: 18000,
   ragEnabled: true,
   ragEmbeddingConnectionId: 1,
   ragEmbeddingModelId: "text-embedding-3-small",
@@ -111,10 +102,15 @@ const getCard = (title: string) => {
   return section as HTMLElement
 }
 
+const saveSearchCard = async () => {
+  await userEvent.click(screen.getByRole("button", { name: "保存联网搜索设置" }))
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   refreshSpy.mockClear()
   updateSpy.mockClear()
+  updateSpy.mockResolvedValue(undefined)
   mockSystemSettings(searchKnowledgeSettings)
   useModelsStoreMock.mockReturnValue({
     models: sampleEmbeddingModels,
@@ -136,342 +132,292 @@ afterEach(() => {
   cleanup()
 })
 
-describe("SearchKnowledgePage", () => {
-  test("渲染三张功能卡：联网搜索 / RAG 文档解析 / 知识库", () => {
+describe("SearchKnowledgePage 结构", () => {
+  test("渲染联网搜索与文档与知识库两张卡", () => {
     render(<SearchKnowledgePage />)
     expect(screen.getByText("搜索与知识库")).toBeInTheDocument()
     expect(screen.getByText("联网搜索")).toBeInTheDocument()
-    expect(screen.getByText("RAG 文档解析")).toBeInTheDocument()
-    expect(screen.getByText("知识库")).toBeInTheDocument()
-    // 三个主开关
+    expect(screen.getByText("文档与知识库")).toBeInTheDocument()
+    // 文档能力只有一个模式选择器，不再是 RAG/知识库两个布尔主开关
     expect(screen.getByRole("switch", { name: "启用联网搜索" })).toBeInTheDocument()
-    expect(screen.getByRole("switch", { name: "启用RAG 文档解析" })).toBeInTheDocument()
-    expect(screen.getByRole("switch", { name: "启用知识库" })).toBeInTheDocument()
+    expect(screen.queryByRole("switch", { name: "启用知识库" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("switch", { name: "启用RAG 文档解析" })).not.toBeInTheDocument()
   })
 
-  test("联网搜索「更多参数」默认收起，点击后展开并行数值/双语/Metaso", async () => {
+  test("settings 为 null 且 isLoading 时显示加载骨架，不崩溃", () => {
+    mockSystemSettings(null, { isLoading: true })
+    const { container } = render(<SearchKnowledgePage />)
+    expect(container.querySelector(".animate-pulse")).not.toBeNull()
+    expect(screen.queryByText("联网搜索")).not.toBeInTheDocument()
+  })
+})
+
+describe("联网搜索：有序引擎列表", () => {
+  test("引擎顺序就是启用引擎数组本身，保存时不再提交独立顺序键", async () => {
     mockSystemSettings({
       ...searchKnowledgeSettings,
-      webSearchEnabledEngines: ["tavily", "metaso"],
-      webSearchEngineOrder: ["tavily", "metaso"],
+      webSearchEnabledEngines: ["tavily", "deepseek"],
+      webSearchHasApiKeyDeepseek: true,
     })
     render(<SearchKnowledgePage />)
     const card = getCard("联网搜索")
 
-    expect(within(card).queryByText("并行引擎上限（1-5）")).not.toBeInTheDocument()
-    expect(within(card).queryByText("自动双语检索")).not.toBeInTheDocument()
-    expect(within(card).queryByText("Metaso 默认搜索范围")).not.toBeInTheDocument()
+    expect(within(card).getByText("#1")).toBeInTheDocument()
+    await userEvent.click(within(card).getByRole("button", { name: "上移 DeepSeek" }))
+    expect(within(card).getByText("#1")).toBeInTheDocument()
 
-    await userEvent.click(within(card).getByRole("button", { name: "更多参数" }))
+    await saveSearchCard()
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1))
 
-    expect(within(card).getByText("并行引擎上限（1-5）")).toBeInTheDocument()
-    expect(within(card).getByText("自动双语检索")).toBeInTheDocument()
-    expect(within(card).getByText("Metaso 默认搜索范围")).toBeInTheDocument()
-  })
-
-  test("RAG「更多参数」默认收起，点击后展开性能/分块/存储管理", async () => {
-    render(<SearchKnowledgePage />)
-    const card = getCard("RAG 文档解析")
-
-    expect(within(card).queryByText("Embedding 性能参数")).not.toBeInTheDocument()
-    expect(within(card).queryByText("文档分块参数")).not.toBeInTheDocument()
-    expect(within(card).queryByText("存储管理")).not.toBeInTheDocument()
-
-    await userEvent.click(within(card).getByRole("button", { name: "更多参数" }))
-
-    expect(within(card).getByText("Embedding 性能参数")).toBeInTheDocument()
-    expect(within(card).getByText("文档分块参数")).toBeInTheDocument()
-    expect(within(card).getByText("存储管理")).toBeInTheDocument()
-  })
-
-  test("联网搜索保存 payload 完整且不含 python*/agentMaxToolIterations/chatDynamicSkillRuntimeEnabled", async () => {
-    render(<SearchKnowledgePage />)
-
-    fireEvent.change(screen.getByLabelText("每次融合结果数（1-10）"), {
-      target: { value: "5" },
-    })
-    await userEvent.click(screen.getByRole("button", { name: "保存联网搜索设置" }))
-
-    await waitFor(() => {
-      expect(updateSpy).toHaveBeenCalledTimes(1)
-    })
     const payload = updateSpy.mock.calls[0][0]
-    expect(payload).toEqual(
-      expect.objectContaining({
-        webSearchAgentEnable: true,
-        webSearchEnabledEngines: ["tavily"],
-        webSearchEngineOrder: ["tavily"],
-        webSearchResultLimit: 5,
-        webSearchDomainFilter: ["example.com"],
-        webSearchScope: "webpage",
-        webSearchIncludeSummary: false,
-        webSearchIncludeRaw: false,
-        // 并行引擎上限被 clamp 到已启用引擎数（仅 tavily → 1），与源页面一致
-        webSearchParallelMaxEngines: 1,
-        webSearchParallelMaxQueriesPerCall: 2,
-        webSearchParallelTimeoutMs: 12000,
-        webSearchParallelMergeStrategy: "hybrid_score_v1",
-        webSearchAutoBilingual: true,
-        webSearchAutoBilingualMode: "conditional",
-        webSearchAutoReadParallelism: 2,
-      }),
-    )
-    expect(payload).not.toHaveProperty("pythonToolEnable")
-    expect(payload).not.toHaveProperty("pythonToolTimeoutMs")
-    expect(payload).not.toHaveProperty("pythonToolMaxOutputChars")
-    expect(payload).not.toHaveProperty("pythonToolMaxSourceChars")
-    expect(payload).not.toHaveProperty("agentMaxToolIterations")
-    expect(payload).not.toHaveProperty("chatDynamicSkillRuntimeEnabled")
+    expect(payload.webSearchEnabledEngines).toEqual(["deepseek", "tavily"])
+    expect(payload).not.toHaveProperty("webSearchEngineOrder")
+    expect(payload).not.toHaveProperty("webSearchParallelMergeStrategy")
+    expect(payload).not.toHaveProperty("webSearchAutoBilingual")
   })
 
-  test("RAG 卡保存 payload 包含全部 rag* key", async () => {
+  test("取消勾选把引擎移出列表", async () => {
+    mockSystemSettings({
+      ...searchKnowledgeSettings,
+      webSearchEnabledEngines: ["tavily", "brave"],
+      webSearchHasApiKeyBrave: true,
+    })
     render(<SearchKnowledgePage />)
-    const card = getCard("RAG 文档解析")
+    const card = getCard("联网搜索")
 
-    await userEvent.click(within(card).getByRole("button", { name: "保存设置" }))
+    await userEvent.click(within(card).getByRole("checkbox", { name: "Brave" }))
+    await saveSearchCard()
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1))
+    expect(updateSpy.mock.calls[0][0].webSearchEnabledEngines).toEqual(["tavily"])
+  })
+
+  test("已启用但没配 Key 的引擎给出运行时跳过提示", () => {
+    mockSystemSettings({
+      ...searchKnowledgeSettings,
+      webSearchHasApiKeyTavily: false,
+    })
+    render(<SearchKnowledgePage />)
+    const card = getCard("联网搜索")
+
+    expect(within(card).getAllByText(/未配置 Key/).length).toBeGreaterThan(0)
+    expect(within(card).getByText(/联网搜索不会真正执行/)).toBeInTheDocument()
+  })
+})
+
+describe("联网搜索：双语、范围与执行参数", () => {
+  test("双语只有一个三态选择器，查询扩展数为 1 时提示不会生效", async () => {
+    mockSystemSettings({
+      ...searchKnowledgeSettings,
+      webSearchParallelMaxQueriesPerCall: 1,
+    })
+    render(<SearchKnowledgePage />)
+    const card = getCard("联网搜索")
+
+    expect(within(card).queryByRole("switch", { name: /自动双语/ })).not.toBeInTheDocument()
+    expect(within(card).getByLabelText("自动双语检索")).toBeInTheDocument()
+
+    await userEvent.click(within(card).getByRole("button", { name: "更多参数" }))
+    expect(within(card).getByText(/双语扩展不会生效/)).toBeInTheDocument()
+  })
+
+  test("搜索范围不依赖 Metaso：只启用 Tavily 时仍可设置范围", () => {
+    mockSystemSettings({
+      ...searchKnowledgeSettings,
+      webSearchEnabledEngines: ["tavily"],
+    })
+    render(<SearchKnowledgePage />)
+    const card = getCard("联网搜索")
+
+    expect(within(card).getByLabelText("默认搜索范围")).toBeInTheDocument()
+    expect(within(card).queryByLabelText("Metaso 默认搜索范围")).not.toBeInTheDocument()
+  })
+
+  test("自动阅读批次总时限在更多参数里可改并进 payload", async () => {
+    render(<SearchKnowledgePage />)
+    const card = getCard("联网搜索")
+
+    await userEvent.click(within(card).getByRole("button", { name: "更多参数" }))
+    const batchInput = within(card).getByLabelText("自动阅读批次总时限（毫秒）")
+    expect(batchInput).toHaveValue("18000")
+
+    fireEvent.change(batchInput, { target: { value: "21000" } })
+    await saveSearchCard()
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1))
+    expect(updateSpy.mock.calls[0][0].webSearchAutoReadBatchTimeoutMs).toBe(21000)
+  })
+
+  test("凭据留空不提交，显式清除提交空串", async () => {
+    render(<SearchKnowledgePage />)
+    const card = getCard("联网搜索")
+
+    const keyInput = within(card).getByLabelText("Tavily API Key")
+    expect(keyInput).toHaveValue("")
+
+    await userEvent.click(within(card).getByRole("button", { name: "清除 Tavily Key" }))
+    expect(within(card).getByText("保存后将删除 Tavily Key。")).toBeInTheDocument()
+
+    await saveSearchCard()
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1))
+    expect(updateSpy.mock.calls[0][0].webSearchApiKeyTavily).toBe("")
+  })
+})
+
+describe("保存失败", () => {
+  test("失败时提示失败并保留当前输入", async () => {
+    updateSpy.mockRejectedValueOnce(new Error("权限不足：仅管理员可修改"))
+    render(<SearchKnowledgePage />)
+    const card = getCard("联网搜索")
+
+    const limitInput = within(card).getByLabelText("每次融合结果数")
+    fireEvent.change(limitInput, { target: { value: "7" } })
+    await saveSearchCard()
 
     await waitFor(() => {
-      expect(updateSpy).toHaveBeenCalledTimes(1)
+      expect(toastSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: "destructive", title: expect.stringContaining("保存失败") }),
+      )
     })
+    expect(toastSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ title: "联网搜索设置已保存" }),
+    )
+    expect(limitInput).toHaveValue("7")
+  })
+})
+
+describe("文档与知识库", () => {
+  test("知识库模式下展示访问策略与知识库管理，并保存两个能力键", async () => {
+    render(<SearchKnowledgePage />)
+    const card = getCard("文档与知识库")
+
+    expect(within(card).getByRole("switch", { name: "允许匿名用户使用" })).toBeInTheDocument()
+    expect(within(card).getByRole("switch", { name: "允许注册用户使用" })).toBeInTheDocument()
+    expect(within(card).getByText(/单文件上限 50MB/)).toBeInTheDocument()
+
+    fireEvent.change(within(card).getByLabelText("Top K"), { target: { value: "6" } })
+    await userEvent.click(within(card).getByRole("button", { name: "保存设置" }))
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1))
+
     const payload = updateSpy.mock.calls[0][0]
     expect(payload).toEqual(
       expect.objectContaining({
         ragEnabled: true,
+        knowledgeBaseEnabled: true,
         ragEmbeddingConnectionId: 1,
         ragEmbeddingModelId: "text-embedding-3-small",
-        ragTopK: 5,
-        ragRelevanceThreshold: 0.3,
-        ragMaxContextTokens: 4000,
-        ragChunkSize: 1500,
-        ragChunkOverlap: 100,
+        ragTopK: 6,
         ragMaxFileSizeMb: 50,
-        ragMaxPages: 200,
-        ragRetentionDays: 30,
-        ragEmbeddingBatchSize: 1,
-        ragEmbeddingConcurrency: 1,
-      }),
-    )
-  })
-
-  test("知识库卡保存 payload 包含 knowledgeBase* 三个 key", async () => {
-    render(<SearchKnowledgePage />)
-    const card = getCard("知识库")
-
-    await userEvent.click(within(card).getByRole("button", { name: "保存设置" }))
-
-    await waitFor(() => {
-      expect(updateSpy).toHaveBeenCalledTimes(1)
-    })
-    expect(updateSpy.mock.calls[0][0]).toEqual(
-      expect.objectContaining({
-        knowledgeBaseEnabled: true,
         knowledgeBaseAllowAnonymous: false,
         knowledgeBaseAllowUsers: true,
       }),
     )
   })
 
-  test("关闭联网搜索主开关后保存，payload 中 webSearchAgentEnable=false", async () => {
-    render(<SearchKnowledgePage />)
-
-    await userEvent.click(screen.getByRole("switch", { name: "启用联网搜索" }))
-    await userEvent.click(screen.getByRole("button", { name: "保存联网搜索设置" }))
-
-    await waitFor(() => {
-      expect(updateSpy).toHaveBeenCalledTimes(1)
+  test("仅聊天附件模式保留检索参数但不显示知识库，保存时关闭知识库", async () => {
+    mockSystemSettings({
+      ...searchKnowledgeSettings,
+      knowledgeBaseEnabled: false,
     })
+    render(<SearchKnowledgePage />)
+    const card = getCard("文档与知识库")
+
+    expect(within(card).getByText("Embedding 模型")).toBeInTheDocument()
+    expect(within(card).getByLabelText("Top K")).toBeInTheDocument()
+    expect(within(card).queryByRole("switch", { name: "允许匿名用户使用" })).not.toBeInTheDocument()
+    expect(within(card).queryByText(/单文件上限/)).not.toBeInTheDocument()
+
+    fireEvent.change(within(card).getByLabelText("Top K"), { target: { value: "6" } })
+    await userEvent.click(within(card).getByRole("button", { name: "保存设置" }))
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1))
     expect(updateSpy.mock.calls[0][0]).toEqual(
-      expect.objectContaining({ webSearchAgentEnable: false }),
+      expect.objectContaining({ ragEnabled: true, knowledgeBaseEnabled: false }),
     )
   })
 
-  test("DeepSeek 默认不启用；启用后可排序，默认关闭 Fetch 且空 Key 不提交", async () => {
+  test("关闭模式下隐藏 Embedding 与检索参数，保存时两个能力键都为 false", async () => {
     mockSystemSettings({
       ...searchKnowledgeSettings,
-      webSearchHasApiKeyDeepseek: true,
+      ragEnabled: false,
+      knowledgeBaseEnabled: false,
     })
     render(<SearchKnowledgePage />)
-    const card = getCard("联网搜索")
-    const deepseek = within(card).getByRole("checkbox", { name: /DeepSeek/ })
+    const card = getCard("文档与知识库")
 
-    expect(deepseek).not.toBeChecked()
-    expect(within(card).getByRole("switch", { name: "启用 DeepSeek Fetch 付费回退" })).toBeInTheDocument()
-    expect(within(card).getByRole("switch", { name: "启用 DeepSeek Fetch 付费回退" })).not.toBeChecked()
-    expect(within(card).getByText(/不依赖上方联网搜索勾选/)).toBeInTheDocument()
-    await userEvent.click(deepseek)
-    expect(deepseek).toBeChecked()
-
-    const keyInput = within(card).getByLabelText("DeepSeek API Key")
-    expect(keyInput).toHaveValue("")
-    expect(within(card).getByRole("switch", { name: "启用 DeepSeek Fetch 付费回退" })).not.toBeChecked()
-    expect(within(card).getByText(/调用会产生 DeepSeek API 费用/)).toBeInTheDocument()
-    expect(within(card).getByText(/支持网页搜索，不支持图片检索/)).toBeInTheDocument()
-    expect(within(card).queryByText(/site_icon/)).not.toBeInTheDocument()
-    expect(within(card).getByText(/将继续使用服务器密钥/)).toBeInTheDocument()
-
-    await userEvent.click(within(card).getByRole("button", { name: "上移 DeepSeek" }))
-    expect(within(card).getByText("#1 DeepSeek")).toBeInTheDocument()
-    expect(within(card).getByText("#2 Tavily")).toBeInTheDocument()
-
-    await userEvent.click(within(card).getByRole("button", { name: "保存联网搜索设置" }))
-    await waitFor(() => {
-      expect(updateSpy).toHaveBeenCalledTimes(1)
-    })
-    const payload = updateSpy.mock.calls[0][0]
-    expect(payload).toEqual(
-      expect.objectContaining({
-        webSearchEnabledEngines: ["tavily", "deepseek"],
-        webSearchEngineOrder: ["deepseek", "tavily"],
-        webSearchDeepseekFetchEnable: false,
-      }),
-    )
-    expect(payload).not.toHaveProperty("webSearchApiKeyDeepseek")
-  })
-
-  test("DeepSeek Key 留空保留原值，显式清除提交空字符串并重置草稿", async () => {
-    mockSystemSettings({
-      ...searchKnowledgeSettings,
-      webSearchHasApiKeyDeepseek: true,
-    })
-    render(<SearchKnowledgePage />)
-    const card = getCard("联网搜索")
-    const keyInput = within(card).getByLabelText("DeepSeek API Key")
-
-    await userEvent.type(keyInput, "  sk-deepseek-test  ")
-    await userEvent.click(within(card).getByRole("button", { name: "保存联网搜索设置" }))
-    await waitFor(() => {
-      expect(updateSpy).toHaveBeenCalledTimes(1)
-    })
-    expect(updateSpy.mock.calls[0][0]).toEqual(
-      expect.objectContaining({ webSearchApiKeyDeepseek: "sk-deepseek-test" }),
-    )
-    await waitFor(() => expect(keyInput).toHaveValue(""))
-
-    await userEvent.click(within(card).getByRole("button", { name: "清除 DeepSeek Key" }))
-    expect(within(card).getByText("保存后将删除 DeepSeek Key。")).toBeInTheDocument()
-    await userEvent.click(within(card).getByRole("button", { name: "保存联网搜索设置" }))
-    await waitFor(() => {
-      expect(updateSpy).toHaveBeenCalledTimes(2)
-    })
-    expect(updateSpy.mock.calls[1][0]).toEqual(
-      expect.objectContaining({ webSearchApiKeyDeepseek: "" }),
-    )
-  })
-
-  test("DeepSeek Fetch 开启保存 true；并行引擎上限允许 5，读页并发仍限 4", async () => {
-    mockSystemSettings({
-      ...searchKnowledgeSettings,
-      webSearchEnabledEngines: ["tavily", "brave", "metaso", "exa", "deepseek"],
-      webSearchEngineOrder: ["tavily", "brave", "metaso", "exa", "deepseek"],
-      webSearchHasApiKeyDeepseek: true,
-      webSearchParallelMaxEngines: 3,
-    })
-    render(<SearchKnowledgePage />)
-    const card = getCard("联网搜索")
-
-    await userEvent.click(within(card).getByRole("switch", { name: "启用 DeepSeek Fetch 付费回退" }))
-    await userEvent.click(within(card).getByRole("button", { name: "更多参数" }))
-
-    const parallelInput = within(card).getByLabelText("并行引擎上限（1-5）")
-    fireEvent.change(parallelInput, { target: { value: "5" } })
-    expect(within(card).getByLabelText("自动网页读取并发（1-4）")).toBeInTheDocument()
-
-    await userEvent.click(within(card).getByRole("button", { name: "保存联网搜索设置" }))
-    await waitFor(() => {
-      expect(updateSpy).toHaveBeenCalledTimes(1)
-    })
-    expect(updateSpy.mock.calls[0][0]).toEqual(
-      expect.objectContaining({
-        webSearchDeepseekFetchEnable: true,
-        webSearchParallelMaxEngines: 5,
-        webSearchAutoReadParallelism: 2,
-      }),
-    )
-  })
-
-  test("仅启用 DeepSeek 时可获取网页原文并保存", async () => {
-    mockSystemSettings({
-      ...searchKnowledgeSettings,
-      webSearchEnabledEngines: ["deepseek"],
-      webSearchEngineOrder: ["deepseek"],
-    })
-    render(<SearchKnowledgePage />)
-    const card = getCard("联网搜索")
+    expect(within(card).queryByText("Embedding 模型")).not.toBeInTheDocument()
+    expect(within(card).queryByLabelText("Top K")).not.toBeInTheDocument()
 
     await userEvent.click(within(card).getByRole("button", { name: "更多参数" }))
-    expect(within(card).queryByText("Metaso 默认搜索范围")).not.toBeInTheDocument()
-    const rawContentSwitch = within(card).getByRole("switch", { name: "获取网页原文" })
-    expect(rawContentSwitch).not.toBeChecked()
-    await userEvent.click(rawContentSwitch)
-    await userEvent.click(within(card).getByRole("button", { name: "保存联网搜索设置" }))
-
-    await waitFor(() => {
-      expect(updateSpy).toHaveBeenCalledTimes(1)
-    })
+    fireEvent.change(within(card).getByLabelText("分块大小"), { target: { value: "1200" } })
+    await userEvent.click(within(card).getByRole("button", { name: "保存设置" }))
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1))
     expect(updateSpy.mock.calls[0][0]).toEqual(
-      expect.objectContaining({
-        webSearchEnabledEngines: ["deepseek"],
-        webSearchIncludeRaw: true,
-      }),
+      expect.objectContaining({ ragEnabled: false, knowledgeBaseEnabled: false }),
     )
   })
 
-  test("仅启用 Tavily 时仍可配置网页原文，且不显示 Metaso 范围与召回增强", async () => {
+  test("缺少 Embedding 模型时不允许保存，避免文档服务无法初始化", () => {
     mockSystemSettings({
       ...searchKnowledgeSettings,
-      webSearchEnabledEngines: ["tavily"],
-      webSearchEngineOrder: ["tavily"],
+      ragEmbeddingConnectionId: null,
+      ragEmbeddingModelId: "",
     })
     render(<SearchKnowledgePage />)
-    const card = getCard("联网搜索")
+    const card = getCard("文档与知识库")
 
-    await userEvent.click(within(card).getByRole("button", { name: "更多参数" }))
-    expect(within(card).getByRole("switch", { name: "获取网页原文" })).not.toBeChecked()
-    expect(within(card).queryByText("召回增强")).not.toBeInTheDocument()
-    expect(within(card).queryByText("Metaso 默认搜索范围")).not.toBeInTheDocument()
+    expect(within(card).getByText(/需要选择 Embedding 模型/)).toBeInTheDocument()
+    expect(within(card).getByRole("button", { name: "保存设置" })).toBeDisabled()
   })
 
-  test("仅启用 Exa 时显示召回增强与网页原文，不显示 Metaso 范围", async () => {
+  test("高级参数默认收起，展开后可改分块与文件上限", async () => {
+    render(<SearchKnowledgePage />)
+    const card = getCard("文档与知识库")
+
+    expect(within(card).queryByText("Embedding 性能")).not.toBeInTheDocument()
+    await userEvent.click(within(card).getByRole("button", { name: "更多参数" }))
+    expect(within(card).getByText("Embedding 性能")).toBeInTheDocument()
+    expect(within(card).getByText("文档分块与限制")).toBeInTheDocument()
+
+    fireEvent.change(within(card).getByLabelText("最大文件大小 (MB)"), { target: { value: "80" } })
+    await userEvent.click(within(card).getByRole("button", { name: "保存设置" }))
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1))
+    expect(updateSpy.mock.calls[0][0].ragMaxFileSizeMb).toBe(80)
+  })
+})
+describe("文档与知识库：旧组合（知识库开、文档解析关）", () => {
+  test("解析为知识库模式，不静默关掉知识库，并说明保存会一并开启文档解析", async () => {
     mockSystemSettings({
       ...searchKnowledgeSettings,
-      webSearchEnabledEngines: ["exa"],
-      webSearchEngineOrder: ["exa"],
-      webSearchHasApiKeyExa: true,
+      ragEnabled: false,
+      knowledgeBaseEnabled: true,
     })
     render(<SearchKnowledgePage />)
-    const card = getCard("联网搜索")
+    const card = getCard("文档与知识库")
 
-    await userEvent.click(within(card).getByRole("button", { name: "更多参数" }))
-    expect(within(card).getByText("召回增强")).toBeInTheDocument()
-    expect(within(card).getByRole("switch", { name: "获取网页原文" })).toBeInTheDocument()
-    expect(within(card).queryByText("Metaso 默认搜索范围")).not.toBeInTheDocument()
-  })
+    // 知识库这一侧的独立开关是合法状态：不能被解释成「关闭」
+    expect(within(card).getByRole("switch", { name: "允许匿名用户使用" })).toBeInTheDocument()
+    expect(within(card).getByText(/单文件上限 50MB/)).toBeInTheDocument()
+    expect(within(card).getByText(/知识库依赖文档解析能力/)).toBeInTheDocument()
 
-  test("DeepSeek 未勾选时 Fetch 仍可独立开启并保存", async () => {
-    render(<SearchKnowledgePage />)
-    const card = getCard("联网搜索")
-
-    expect(within(card).getByRole("checkbox", { name: /DeepSeek/ })).not.toBeChecked()
-    await userEvent.click(within(card).getByRole("switch", { name: "启用 DeepSeek Fetch 付费回退" }))
-    await userEvent.click(within(card).getByRole("button", { name: "保存联网搜索设置" }))
-
-    await waitFor(() => {
-      expect(updateSpy).toHaveBeenCalledTimes(1)
-    })
+    // 保存时把依赖补回来，而不是把知识库关掉
+    fireEvent.change(within(card).getByLabelText("Top K"), { target: { value: "6" } })
+    await userEvent.click(within(card).getByRole("button", { name: "保存设置" }))
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1))
     expect(updateSpy.mock.calls[0][0]).toEqual(
-      expect.objectContaining({
-        webSearchEnabledEngines: ["tavily"],
-        webSearchDeepseekFetchEnable: true,
-      }),
+      expect.objectContaining({ ragEnabled: true, knowledgeBaseEnabled: true }),
     )
   })
 
-  test("settings 为 null 且 isLoading 时显示加载骨架，不崩溃", () => {
-    mockSystemSettings(null, { isLoading: true })
-    const { container } = render(<SearchKnowledgePage />)
+  test("旧组合下缺少 Embedding 模型时不允许保存，避免知识库停在不可用状态", () => {
+    mockSystemSettings({
+      ...searchKnowledgeSettings,
+      ragEnabled: false,
+      knowledgeBaseEnabled: true,
+      ragEmbeddingConnectionId: null,
+      ragEmbeddingModelId: "",
+    })
+    render(<SearchKnowledgePage />)
+    const card = getCard("文档与知识库")
 
-    expect(container.querySelector(".animate-pulse")).not.toBeNull()
-    expect(screen.queryByRole("button", { name: "保存设置" })).not.toBeInTheDocument()
-    expect(screen.queryByText("联网搜索")).not.toBeInTheDocument()
+    expect(within(card).getByText(/需要选择 Embedding 模型/)).toBeInTheDocument()
+    expect(within(card).getByRole("button", { name: "保存设置" })).toBeDisabled()
   })
 })

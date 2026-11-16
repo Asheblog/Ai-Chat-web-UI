@@ -7,6 +7,10 @@ import type { RAGService, RAGResult } from '../../services/document/rag-service'
 import type { EnhancedRAGService } from '../../services/document/enhanced-rag-service'
 import type { DocumentService } from '../../services/document/document-service'
 import { KnowledgeBaseService } from '../../services/knowledge-base'
+import {
+  evaluateKnowledgeBaseAccess,
+  type KnowledgeBaseActorContext,
+} from '../../services/knowledge-base/knowledge-base-access'
 import { prisma } from '../../db'
 import { createLogger } from '../../utils/logger'
 
@@ -158,10 +162,41 @@ export class RAGContextBuilder {
   }
 
   /**
-   * 检查是否有可用的知识库
+   * 检查是否有可用的知识库。
+   *
+   * 请求体里的 knowledgeBaseIds 由客户端直接给出，所以这里必须先过服务端策略：
+   * - 知识库功能关闭时一律不可用（无论身份，含管理员）。
+   * - 传入 access 时再按角色策略判定匿名/注册用户；不传则只受功能总闸约束，
+   *   保持既有调用方（会话编排层）的接口契约不变。
    */
-  async hasKnowledgeBases(knowledgeBaseIds: number[]): Promise<boolean> {
+  async hasKnowledgeBases(
+    knowledgeBaseIds: number[],
+    access?: KnowledgeBaseActorContext,
+  ): Promise<boolean> {
     if (!knowledgeBaseIds || knowledgeBaseIds.length === 0) return false
+
+    const policy = await this.kbService.loadPolicy()
+    if (!policy.enabled) {
+      // 策略拒绝与"读取失败"要能区分：前者是预期结果（debug），后者会向上抛出由编排层记录
+      log.debug('Knowledge base gate denied', {
+        reason: 'feature_disabled',
+        knowledgeBaseCount: knowledgeBaseIds.length,
+      })
+      return false
+    }
+    if (access) {
+      const decision = evaluateKnowledgeBaseAccess(policy, access)
+      if (!decision.allowed) {
+        log.debug('Knowledge base gate denied', {
+          reason: decision.reason,
+          isAnonymous: access.isAnonymous,
+          isAdmin: access.isAdmin,
+          knowledgeBaseCount: knowledgeBaseIds.length,
+        })
+        return false
+      }
+    }
+
     return this.kbService.hasAnyDocuments(knowledgeBaseIds)
   }
 

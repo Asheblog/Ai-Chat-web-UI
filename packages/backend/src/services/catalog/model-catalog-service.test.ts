@@ -183,4 +183,166 @@ describe('ModelCatalogService', () => {
     expect(count).toBe(2)
     expect(refreshByGroupId).toHaveBeenCalledWith(1)
   })
+
+  it('exposes field-scoped override state and supported efforts per model', async () => {
+    const { prisma, service } = buildService()
+    prisma.connectionGroup.findMany.mockResolvedValueOnce([
+      {
+        id: 11,
+        displayName: 'Prod OpenAI',
+        provider: 'openai',
+        thinkingDialect: 'off',
+        baseUrl: 'https://api.openai.com/v1',
+        enable: true,
+        ownerUserId: null,
+        credentials: [],
+      },
+    ])
+    prisma.modelCatalog.findMany.mockResolvedValueOnce([
+      {
+        modelId: 'gpt-4o',
+        rawId: 'gpt-4o',
+        name: 'gpt-4o',
+        provider: 'openai',
+        connectionGroupId: 11,
+        connectionType: 'external',
+        modelType: 'chat',
+        tagsJson: '[]',
+        metaJson: JSON.stringify({ access_policy: { user: 'allow' }, temperature: 0.2 }),
+        capabilitiesJson: JSON.stringify({ flags: { vision: true }, source: 'manual' }),
+        manualOverride: true,
+        expiresAt: new Date('2099-01-01T00:00:00Z'),
+      },
+    ])
+
+    const result = await service.listModels({
+      type: 'user',
+      id: 1,
+      username: 'admin',
+      role: 'ADMIN',
+      status: 'ACTIVE',
+      identifier: 'a1',
+    } as any)
+
+    expect(result[0]?.overrides).toEqual({
+      capability: true,
+      parameters: true,
+      access: true,
+      any: true,
+    })
+    expect(result[0]?.efforts).toEqual(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
+  })
+
+  it('stores a manual context window under the manual key only', async () => {
+    const { prisma, service, parseCapabilityEnvelope } = buildService()
+    parseCapabilityEnvelope.mockReturnValue(null)
+    prisma.connectionGroup.findUnique.mockResolvedValue({
+      id: 1,
+      provider: 'openai',
+      thinkingDialect: 'off',
+      prefixId: null,
+    })
+    prisma.modelCatalog.findFirst.mockResolvedValue({
+      id: 9,
+      capabilitiesJson: '{}',
+      metaJson: JSON.stringify({ context_window: 32000 }),
+      manualOverride: false,
+    })
+    await service.saveOverride({ connectionId: 1, rawId: 'gpt-4', contextWindow: 128000 })
+    const update = prisma.modelCatalog.update.mock.calls[0][0]
+    const meta = JSON.parse(update.data.metaJson)
+    expect(meta.custom_context_window).toBe(128000)
+    expect(meta.context_window).toBe(32000)
+    expect(update.data.manualOverride).toBe(true)
+  })
+
+  it('clears only the requested override scope instead of deleting the row', async () => {
+    const { prisma, service, refreshByGroupId } = buildService()
+    prisma.connectionGroup.findMany.mockResolvedValue([
+      { id: 1, prefixId: 'px', provider: 'openai', thinkingDialect: 'off' },
+    ])
+    prisma.modelCatalog.findFirst.mockResolvedValue({
+      id: 7,
+      capabilitiesJson: JSON.stringify({ flags: { vision: true }, source: 'manual' }),
+      metaJson: JSON.stringify({ access_policy: { user: 'allow' }, custom_context_window: 64000 }),
+      manualOverride: true,
+    })
+    const count = await service.deleteOverrides({
+      all: false,
+      items: [{ connectionId: 1, rawId: 'model', fields: ['parameters'] }],
+    })
+    expect(count).toBe(1)
+    expect(prisma.modelCatalog.deleteMany).not.toHaveBeenCalled()
+    const update = prisma.modelCatalog.update.mock.calls[0][0]
+    const meta = JSON.parse(update.data.metaJson)
+    expect(meta.custom_context_window).toBeUndefined()
+    expect(meta.access_policy).toEqual({ user: 'allow' })
+    expect(JSON.parse(update.data.capabilitiesJson)).toEqual({ flags: { vision: true }, source: 'manual' })
+    expect(update.data.manualOverride).toBe(true)
+    expect(refreshByGroupId).toHaveBeenCalledWith(1)
+  })
+
+  it('treats a missing fields list as a full reset and deletes the row', async () => {
+    const { prisma, service } = buildService()
+    prisma.connectionGroup.findMany.mockResolvedValue([
+      { id: 1, prefixId: '', provider: 'openai', thinkingDialect: 'off' },
+    ])
+    prisma.modelCatalog.deleteMany.mockResolvedValue({ count: 1 })
+    const count = await service.deleteOverrides({
+      all: false,
+      items: [{ connectionId: 1, rawId: 'model' }],
+    })
+    expect(count).toBe(1)
+    expect(prisma.modelCatalog.update).not.toHaveBeenCalled()
+  })
+
+
+  it('trims Anthropic efforts by model instead of offering one provider-wide list', async () => {
+    const { prisma, service } = buildService()
+    prisma.connectionGroup.findMany.mockResolvedValueOnce([
+      {
+        id: 12,
+        displayName: 'Claude',
+        provider: 'anthropic',
+        thinkingDialect: 'off',
+        baseUrl: 'https://api.anthropic.com/v1',
+        enable: true,
+        ownerUserId: null,
+        credentials: [],
+      },
+    ])
+    const row = (rawId: string) => ({
+      modelId: rawId,
+      rawId,
+      name: rawId,
+      provider: 'anthropic',
+      connectionGroupId: 12,
+      connectionType: 'external',
+      modelType: 'chat',
+      tagsJson: '[]',
+      metaJson: '{}',
+      capabilitiesJson: '{}',
+      manualOverride: false,
+      expiresAt: new Date('2099-01-01T00:00:00Z'),
+    })
+    prisma.modelCatalog.findMany.mockResolvedValueOnce([
+      row('claude-opus-5-5'),
+      row('claude-sonnet-4-5'),
+      row('claude-opus-4-6'),
+    ])
+
+    const result = await service.listModels({
+      type: 'user',
+      id: 1,
+      username: 'admin',
+      role: 'ADMIN',
+      status: 'ACTIVE',
+      identifier: 'a1',
+    } as any)
+
+    const byId = Object.fromEntries(result.map((item) => [item.rawId, item.efforts]))
+    expect(byId['claude-opus-5-5']).toEqual(['low', 'medium', 'high', 'xhigh', 'max'])
+    expect(byId['claude-opus-4-6']).toEqual(['low', 'medium', 'high', 'max'])
+    expect(byId['claude-sonnet-4-5']).toEqual([])
+  })
 })

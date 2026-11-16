@@ -151,8 +151,7 @@ npm run dev
 可配置环境变量：
 
 - `SSE_HEARTBEAT_INTERVAL_MS`（默认 15000）SSE 心跳间隔（毫秒）
-- `PROVIDER_MAX_IDLE_MS`（默认 60000）兼容旧行为的退避阈值（系统设置中更细粒度配置会覆盖）
-- `PROVIDER_TIMEOUT_MS`（默认 300000）上游请求总体超时（毫秒）
+- `PROVIDER_TIMEOUT_MS`（默认 120000）上游请求总体超时（毫秒）；设置接口、聊天和压缩请求共用 `resolveStreamConfig` 的有效值解析
 - `PROVIDER_INITIAL_GRACE_MS`（默认 120000）首个增量到达的最长宽限时间（毫秒）
 - `PROVIDER_REASONING_IDLE_MS`（默认 300000）推理阶段允许的最大静默（毫秒）
 - `REASONING_KEEPALIVE_INTERVAL_MS`（默认 0，禁用）推理静默阶段多久发送一次保活提示（毫秒）

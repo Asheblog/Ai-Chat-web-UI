@@ -7,7 +7,6 @@ import type {
   SystemSettings,
   WebSearchBilingualMode,
   WebSearchEngine,
-  WebSearchMergeStrategy,
 } from '@/types'
 
 const client = apiHttpClient
@@ -78,7 +77,6 @@ export const updateSystemSettings = async (
   assignBrandColor('brandForeground')
   assignBrandColor('brandMutedForeground')
   if (typeof rest.sseHeartbeatIntervalMs === 'number') patch.sseHeartbeatIntervalMs = rest.sseHeartbeatIntervalMs
-  if (typeof rest.providerMaxIdleMs === 'number') patch.providerMaxIdleMs = rest.providerMaxIdleMs
   if (typeof rest.providerTimeoutMs === 'number') patch.providerTimeoutMs = rest.providerTimeoutMs
   if (typeof rest.providerInitialGraceMs === 'number') patch.providerInitialGraceMs = rest.providerInitialGraceMs
   if (typeof rest.providerReasoningIdleMs === 'number') patch.providerReasoningIdleMs = rest.providerReasoningIdleMs
@@ -113,7 +111,6 @@ export const updateSystemSettings = async (
     }
   }
   if (typeof rest.chatImageRetentionDays === 'number') patch.chatImageRetentionDays = rest.chatImageRetentionDays
-  if (typeof rest.assistantReplyHistoryLimit === 'number') patch.assistantReplyHistoryLimit = rest.assistantReplyHistoryLimit
   if (typeof rest.siteBaseUrl === 'string') patch.siteBaseUrl = rest.siteBaseUrl
   if (typeof rest.anonymousRetentionDays === 'number') patch.anonymousRetentionDays = rest.anonymousRetentionDays
   if (typeof rest.anonymousDailyQuota === 'number') patch.anonymousDailyQuota = rest.anonymousDailyQuota
@@ -128,7 +125,6 @@ export const updateSystemSettings = async (
   if (typeof rest.modelAccessDefaultUser === 'string') patch.modelAccessDefaultUser = rest.modelAccessDefaultUser
   if (typeof rest.webSearchAgentEnable === 'boolean') patch.webSearchAgentEnable = rest.webSearchAgentEnable
   if (Array.isArray(rest.webSearchEnabledEngines)) patch.webSearchEnabledEngines = rest.webSearchEnabledEngines
-  if (Array.isArray(rest.webSearchEngineOrder)) patch.webSearchEngineOrder = rest.webSearchEngineOrder
   if (typeof rest.webSearchResultLimit === 'number') patch.webSearchResultLimit = rest.webSearchResultLimit
   if (Array.isArray(rest.webSearchDomainFilter)) patch.webSearchDomainFilter = rest.webSearchDomainFilter
   if (typeof rest.webSearchScope === 'string') patch.webSearchScope = rest.webSearchScope
@@ -142,21 +138,16 @@ export const updateSystemSettings = async (
     patch.webSearchParallelMaxQueriesPerCall = rest.webSearchParallelMaxQueriesPerCall
   }
   if (typeof rest.webSearchParallelTimeoutMs === 'number') patch.webSearchParallelTimeoutMs = rest.webSearchParallelTimeoutMs
-  if (typeof rest.webSearchParallelMergeStrategy === 'string') {
-    patch.webSearchParallelMergeStrategy = rest.webSearchParallelMergeStrategy
-  }
-  if (typeof rest.webSearchAutoBilingual === 'boolean') patch.webSearchAutoBilingual = rest.webSearchAutoBilingual
   if (typeof rest.webSearchAutoBilingualMode === 'string') patch.webSearchAutoBilingualMode = rest.webSearchAutoBilingualMode
   if (typeof rest.webSearchAutoReadParallelism === 'number') {
     patch.webSearchAutoReadParallelism = rest.webSearchAutoReadParallelism
   }
+  if (typeof rest.extensionInstallToolEnable === 'boolean') patch.extensionInstallToolEnable = rest.extensionInstallToolEnable
+  if (typeof rest.webSearchAutoReadBatchTimeoutMs === 'number') patch.webSearchAutoReadBatchTimeoutMs = rest.webSearchAutoReadBatchTimeoutMs
   if (typeof rest.pythonToolEnable === 'boolean') patch.pythonToolEnable = rest.pythonToolEnable
   if (typeof rest.chatDynamicSkillRuntimeEnabled === 'boolean') {
     patch.chatDynamicSkillRuntimeEnabled = rest.chatDynamicSkillRuntimeEnabled
   }
-  if (typeof rest.pythonToolTimeoutMs === 'number') patch.pythonToolTimeoutMs = rest.pythonToolTimeoutMs
-  if (typeof rest.pythonToolMaxOutputChars === 'number') patch.pythonToolMaxOutputChars = rest.pythonToolMaxOutputChars
-  if (typeof rest.pythonToolMaxSourceChars === 'number') patch.pythonToolMaxSourceChars = rest.pythonToolMaxSourceChars
   if (typeof rest.agentMaxToolIterations === 'number') {
     const clamped = Math.max(0, Math.min(20, Math.round(rest.agentMaxToolIterations)))
     patch.agentMaxToolIterations = clamped

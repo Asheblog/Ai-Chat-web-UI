@@ -128,7 +128,7 @@ export function ExtensionsPage({
         <div className="flex items-start gap-3">
           <Layers className="mt-0.5 h-5 w-5 shrink-0 text-ink-tertiary" />
           <div className="space-y-1">
-            <h1 className="text-lg font-semibold">能力扩展</h1>
+            <h1 className="text-lg font-semibold">工具与扩展</h1>
             <p className="text-sm text-muted-foreground text-pretty">
               MCP 服务、Skill、内置工具与对话增强的统一入口
             </p>
@@ -167,14 +167,14 @@ export function ExtensionsPage({
           items={EXTENSION_SECTIONS}
           active={section}
           onChange={(next) => applyRoute({ section: next })}
-          ariaLabel="能力扩展分段导航"
+          ariaLabel="工具与扩展分段导航"
           panelId={SECTION_PANEL_ID}
         />
 
         <div
           id={SECTION_PANEL_ID}
           role="tabpanel"
-          aria-label="能力扩展内容"
+          aria-label="工具与扩展内容"
           className="min-w-0 flex-1 space-y-3 mt-3 md:mt-0"
         >
           {EXTENSION_SECTIONS.map((item) => {

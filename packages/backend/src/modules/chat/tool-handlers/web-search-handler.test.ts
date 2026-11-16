@@ -27,12 +27,10 @@ describe('WebSearchToolHandler DeepSeek integration', () => {
   const createConfig = (overrides: Record<string, unknown> = {}) => ({
     enabled: true,
     engines: ['deepseek'],
-    engineOrder: ['deepseek'],
     apiKeys: { deepseek: 'ds-key' },
     resultLimit: 5,
     domains: [],
     scope: 'webpage',
-    autoBilingual: false,
     autoReadAfterSearch: true,
     autoReadTopK: 1,
     parallelMaxEngines: 1,
@@ -230,7 +228,6 @@ describe('WebSearchToolHandler DeepSeek integration', () => {
     const handler = new WebSearchToolHandler(
       createConfig({
         engines: ['deepseek', 'tavily'],
-        engineOrder: ['deepseek', 'tavily'],
         apiKeys: { deepseek: 'ds-key', tavily: 'tv-key' },
         parallelMaxEngines: 5,
       }) as any,

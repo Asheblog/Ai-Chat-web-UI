@@ -22,7 +22,6 @@ import { WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS } from '@aichat/shared';
  * Web 搜索配置
  */
 export type AgentWebSearchEngine = WebSearchEngine
-export type AgentWebSearchMergeStrategy = 'hybrid_score_v1'
 export type AgentWebSearchBilingualMode = 'off' | 'conditional' | 'always'
 export type AgentWebSearchConflictEscalation = 'off' | 'auto'
 
@@ -34,8 +33,8 @@ export interface AgentWebSearchLocaleRouting {
 
 export interface AgentWebSearchConfig {
   enabled: boolean;
+  /** 有序启用引擎列表：成员 = 启用集合，数组顺序 = 并行调度与融合权重优先级。 */
   engines: AgentWebSearchEngine[];
-  engineOrder: AgentWebSearchEngine[];
   apiKeys: Partial<Record<AgentWebSearchEngine, string>>;
   resultLimit: number;
   domains: string[];
@@ -47,8 +46,6 @@ export interface AgentWebSearchConfig {
   parallelMaxEngines: number;
   parallelMaxQueriesPerCall: number;
   parallelTimeoutMs: number;
-  mergeStrategy: AgentWebSearchMergeStrategy;
-  autoBilingual: boolean;
   autoBilingualMode: AgentWebSearchBilingualMode;
   autoReadAfterSearch?: boolean;
   autoReadTopK?: number;
@@ -129,15 +126,6 @@ export const buildAgentWebSearchConfig = (
     ['tavily']
   );
 
-  const parsedOrder = parseEngineList(
-    sysMap.web_search_engine_order ?? env.WEB_SEARCH_ENGINE_ORDER,
-    engines
-  );
-  const engineOrder = [
-    ...parsedOrder.filter((engine) => engines.includes(engine)),
-    ...engines.filter((engine) => !parsedOrder.includes(engine)),
-  ];
-
   const apiKeys: Partial<Record<AgentWebSearchEngine, string>> = {};
   for (const engine of WEB_SEARCH_ENGINES) {
     const envName = `WEB_SEARCH_API_KEY_${engine.toUpperCase()}` as keyof NodeJS.ProcessEnv;
@@ -207,21 +195,6 @@ export const buildAgentWebSearchConfig = (
     120000
   );
 
-  const rawMergeStrategy = (
-    sysMap.web_search_parallel_merge_strategy ??
-    env.WEB_SEARCH_PARALLEL_MERGE_STRATEGY ??
-    'hybrid_score_v1'
-  )
-    .trim()
-    .toLowerCase();
-  const mergeStrategy: AgentWebSearchMergeStrategy =
-    rawMergeStrategy === 'hybrid_score_v1' ? 'hybrid_score_v1' : 'hybrid_score_v1';
-
-  const autoBilingual = parseBooleanSetting(
-    sysMap.web_search_auto_bilingual ?? env.WEB_SEARCH_AUTO_BILINGUAL,
-    true
-  );
-
   const rawBilingualMode = (
     sysMap.web_search_auto_bilingual_mode ??
     env.WEB_SEARCH_AUTO_BILINGUAL_MODE ??
@@ -288,7 +261,6 @@ export const buildAgentWebSearchConfig = (
   return {
     enabled,
     engines,
-    engineOrder,
     apiKeys,
     resultLimit,
     domains,
@@ -300,8 +272,6 @@ export const buildAgentWebSearchConfig = (
     parallelMaxEngines,
     parallelMaxQueriesPerCall,
     parallelTimeoutMs,
-    mergeStrategy,
-    autoBilingual,
     autoBilingualMode,
     autoReadAfterSearch,
     autoReadTopK,

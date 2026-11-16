@@ -4,7 +4,6 @@ import type { AgentWebSearchConfig } from '../../agent-runtime/agent-tool-config
 const createBaseConfig = (): AgentWebSearchConfig => ({
   enabled: true,
   engines: ['tavily', 'brave', 'metaso'],
-  engineOrder: ['tavily', 'brave', 'metaso'],
   apiKeys: {
     tavily: 'k1',
     brave: 'k2',
@@ -15,8 +14,6 @@ const createBaseConfig = (): AgentWebSearchConfig => ({
   parallelMaxEngines: 3,
   parallelMaxQueriesPerCall: 2,
   parallelTimeoutMs: 12000,
-  mergeStrategy: 'hybrid_score_v1',
-  autoBilingual: true,
   autoBilingualMode: 'conditional',
   autoReadAfterSearch: true,
   autoReadTopK: 2,

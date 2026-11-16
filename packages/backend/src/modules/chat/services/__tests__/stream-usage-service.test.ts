@@ -32,7 +32,6 @@ const baseParams = () => ({
   providerUsageSnapshot: null,
   reasoningEnabled: true,
   reasoningSaveToDb: true,
-  assistantReplyHistoryLimit: 3,
   traceRecorder: { log: jest.fn(), setMessageContext: jest.fn(), isEnabled: () => true } as any,
 })
 

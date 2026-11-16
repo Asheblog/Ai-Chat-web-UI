@@ -2,11 +2,8 @@
 
 import { Zap } from "lucide-react"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { FeatureCard } from "@/components/settings/components/feature-card"
 import { SettingRow } from "@/components/settings/components/setting-row"
-
-export type ReasoningEffort = 'unset' | 'low' | 'medium' | 'high' | 'max' | 'xhigh'
 
 export interface StreamPerformanceCardProps {
   streamDeltaChunkSize: number
@@ -15,14 +12,12 @@ export interface StreamPerformanceCardProps {
   onStreamDeltaFlushIntervalMsChange: (v: string) => void
   streamReasoningFlushIntervalMs: string
   onStreamReasoningFlushIntervalMsChange: (v: string) => void
-  streamKeepaliveIntervalMs: string
-  onStreamKeepaliveIntervalMsChange: (v: string) => void
-  openaiReasoningEffort: ReasoningEffort
-  onOpenaiReasoningEffortChange: (v: ReasoningEffort) => void
 }
 
 /**
- * 流式与性能卡：5 行全部位于「更多参数」折叠区（源 SystemReasoning 分片/flush/keepalive/reasoning_effort 行）。
+ * 流式与传输卡：正文与推理共用默认刷新节奏，推理通道缺省继承正文。
+ * 传输保活（streamKeepaliveIntervalMs、推理保活提示）不是常用选项：
+ * 前者由代理/SSE 心跳承担，控件先不下发，值原样保留在设置里。
  */
 export function StreamPerformanceCard({
   streamDeltaChunkSize,
@@ -31,16 +26,12 @@ export function StreamPerformanceCard({
   onStreamDeltaFlushIntervalMsChange,
   streamReasoningFlushIntervalMs,
   onStreamReasoningFlushIntervalMsChange,
-  streamKeepaliveIntervalMs,
-  onStreamKeepaliveIntervalMsChange,
-  openaiReasoningEffort,
-  onOpenaiReasoningEffortChange,
 }: StreamPerformanceCardProps) {
   return (
     <FeatureCard
       icon={Zap}
-      title="流式与性能"
-      description="控制流式输出的分片、刷新与 keepalive 节奏"
+      title="流式与传输"
+      description="流式输出的聚合与刷新节奏；传输保活由 SSE 心跳与反向代理承担"
       cardKey="reasoning-network:stream"
       moreLabel="更多参数"
       more={
@@ -73,7 +64,7 @@ export function StreamPerformanceCard({
 
           <SettingRow
             title="推理 flush 间隔（毫秒）"
-            description="推荐 1000ms；0 表示仅当标签闭合时推送（范围 0-3600000 ms）"
+            description="留空继承正文节奏；0 表示仅当标签闭合时推送（范围 0-3600000 ms）"
           >
             <Input
               type="text"
@@ -82,39 +73,6 @@ export function StreamPerformanceCard({
               onChange={(e) => onStreamReasoningFlushIntervalMsChange(e.target.value)}
               className="w-full sm:w-32 text-right"
             />
-          </SettingRow>
-
-          <SettingRow
-            title="Keepalive 间隔（毫秒）"
-            description="推荐 5000ms；0 表示仅在推理 keepalive 触发（范围 0-3600000 ms）"
-          >
-            <Input
-              type="text"
-              placeholder="5000"
-              value={streamKeepaliveIntervalMs}
-              onChange={(e) => onStreamKeepaliveIntervalMsChange(e.target.value)}
-              className="w-full sm:w-32 text-right"
-            />
-          </SettingRow>
-
-          <SettingRow
-            title="OpenAI reasoning_effort"
-            description="仅对支持该参数的模型生效"
-          >
-            <Select
-              value={openaiReasoningEffort}
-              onValueChange={(v) => onOpenaiReasoningEffortChange(v as ReasoningEffort)}
-            >
-              <SelectTrigger className="w-full sm:w-[220px]"><SelectValue placeholder="不设置" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unset">不设置</SelectItem>
-                <SelectItem value="low">low</SelectItem>
-                <SelectItem value="medium">medium</SelectItem>
-                <SelectItem value="high">high</SelectItem>
-                <SelectItem value="max">max</SelectItem>
-                <SelectItem value="xhigh">xhigh</SelectItem>
-              </SelectContent>
-            </Select>
           </SettingRow>
         </>
       }

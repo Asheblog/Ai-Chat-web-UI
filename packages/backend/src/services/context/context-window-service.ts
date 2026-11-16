@@ -4,6 +4,11 @@ import {
   getReasoningMaxOutputTokensDefault as defaultGetReasoningMaxOutputTokensDefault,
   getSystemContextTokenLimit as defaultGetSystemContextTokenLimit,
 } from '../settings/legacy-utils'
+import {
+  parseModelMeta,
+  readModelContextWindow,
+  readModelMaxOutputTokens,
+} from '../catalog/model-override'
 
 type Provider = string | null | undefined
 
@@ -40,42 +45,11 @@ const coercePositive = (value: number): number => {
   return Math.floor(value)
 }
 
-const parseMetaContextWindow = (metaJson: string | null | undefined): number | null => {
-  if (!metaJson) return null
-  try {
-    const parsed = JSON.parse(metaJson)
-    const value = parsed?.context_window
-    const num = typeof value === 'number' ? value : Number.parseInt(String(value ?? ''), 10)
-    if (Number.isFinite(num) && num > 0) {
-      return num
-    }
-  } catch {
-    // ignore invalid metaJson
-  }
-  return null
-}
+const parseMetaContextWindow = (metaJson: string | null | undefined): number | null =>
+  readModelContextWindow(parseModelMeta(metaJson))
 
-const parseMetaCompletionLimit = (metaJson: string | null | undefined): number | null => {
-  if (!metaJson) return null
-  try {
-    const parsed = JSON.parse(metaJson)
-    const candidates = [
-      parsed?.custom_max_output_tokens,
-      parsed?.max_output_tokens,
-      parsed?.max_completion_tokens,
-      parsed?.completion_limit,
-    ]
-    for (const candidate of candidates) {
-      const num = typeof candidate === 'number' ? candidate : Number.parseInt(String(candidate ?? ''), 10)
-      if (Number.isFinite(num) && num > 0) {
-        return num
-      }
-    }
-  } catch {
-    // ignore invalid metaJson
-  }
-  return null
-}
+const parseMetaCompletionLimit = (metaJson: string | null | undefined): number | null =>
+  readModelMaxOutputTokens(parseModelMeta(metaJson))
 
 export interface ContextWindowServiceDeps {
   prisma?: PrismaClient
@@ -182,7 +156,8 @@ export class ContextWindowService {
     this.contextCache.delete(key)
   }
 
-  async resolveCompletionLimit(options: { connectionId?: number | null; rawModelId?: string | null; provider?: Provider }) {
+  /** 返回 null 表示「自动」：调用方按协议决定省略上限或使用协议必填默认值。 */
+  async resolveCompletionLimit(options: { connectionId?: number | null; rawModelId?: string | null; provider?: Provider }): Promise<number | null> {
     const connectionId = options.connectionId ?? null
     const rawId = options.rawModelId ?? null
     const provider = options.provider ?? null
@@ -190,7 +165,7 @@ export class ContextWindowService {
     const now = this.now()
     const cached = this.completionCache.get(cacheKey)
     if (cached && cached.expiresAt > now) {
-      return cached.value
+      return cached.value > 0 ? cached.value : null
     }
 
     let completionLimit = 0
@@ -211,16 +186,12 @@ export class ContextWindowService {
     }
 
     if (!completionLimit) {
-      completionLimit = await this.getReasoningMaxOutputTokensDefault()
-      completionLimit = coercePositive(completionLimit)
-    }
-
-    if (!completionLimit) {
-      completionLimit = 1
+      // 系统值 0 表示自动：由调用方按协议处理，不拿上下文总量充当生成上限。
+      completionLimit = coercePositive(await this.getReasoningMaxOutputTokensDefault())
     }
 
     this.completionCache.set(cacheKey, { value: completionLimit, expiresAt: now + this.cacheTtlMs })
-    return completionLimit
+    return completionLimit > 0 ? completionLimit : null
   }
 
   invalidateCompletionLimitCache(connectionId?: number | null, rawModelId?: string | null) {

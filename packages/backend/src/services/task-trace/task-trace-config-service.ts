@@ -58,7 +58,7 @@ export const resolveConfigFromMap = (map?: Record<string, string> | null): TaskT
   const rawEnv = (map?.task_trace_env || '').toLowerCase()
   const env: TaskTraceConfig['env'] = rawEnv === 'both' || rawEnv === 'prod' ? (rawEnv as TaskTraceConfig['env']) : 'dev'
   const retentionDays = clampNumber(map?.task_trace_retention_days ?? process.env.TASK_TRACE_RETENTION_DAYS, 7, 1, 365)
-  const maxEvents = clampNumber(map?.task_trace_max_events ?? process.env.TASK_TRACE_MAX_EVENTS, 2000, 200, 200000)
+  const maxEvents = clampNumber(map?.task_trace_max_events ?? process.env.TASK_TRACE_MAX_EVENTS, 2000, 100, 200000)
   const idleTimeoutMs = clampNumber(map?.task_trace_idle_timeout_ms ?? process.env.TASK_TRACE_IDLE_TIMEOUT_MS, 30000, 1000, 600000)
   return {
     enabled,

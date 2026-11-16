@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ModelSelector } from '@/components/model-selector'
+import { MODEL_REASONING_EFFORT_OPTIONS, filterEffortOptions } from '@/components/model-selector/model-selector-effort'
 import { modelKeyFor } from '@/store/model-preference-store'
 import { useModelsStore, type ModelItem } from '@/store/models-store'
 import {
@@ -204,4 +205,20 @@ describe('ModelSelector combined model and reasoning effort', () => {
     expect(trigger).toHaveTextContent('Max')
     await user.keyboard('{Escape}')
   })
+
+describe('filterEffortOptions', () => {
+  it('keeps the default option and only the efforts the model supports', () => {
+    expect(filterEffortOptions(['low', 'high'], 'unset').map(option => option.value)).toEqual(['unset', 'low', 'high'])
+  })
+
+  it('keeps the current value even when the model does not list it', () => {
+    expect(filterEffortOptions(['low', 'high'], 'max').map(option => option.value)).toEqual(['unset', 'low', 'high', 'max'])
+  })
+
+  it('does not trim when the model exposes no effort metadata', () => {
+    expect(filterEffortOptions(undefined, 'unset').map(option => option.value)).toEqual(
+      MODEL_REASONING_EFFORT_OPTIONS.map(option => option.value),
+    )
+  })
+})
 })

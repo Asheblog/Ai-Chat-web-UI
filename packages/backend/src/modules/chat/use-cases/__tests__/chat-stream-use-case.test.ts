@@ -108,6 +108,13 @@ jest.mock('../../../chat/rag-context-builder', () => ({
   })),
 }))
 
+// 匿名会话续期会读写 chatSession 并依赖匿名会话上下文；本文件只验证编排层的
+// 知识库角色闸门，续期本身由 share/completion 各自的用例覆盖
+jest.mock('../../../chat/chat-common', () => ({
+  ...jest.requireActual('../../../chat/chat-common'),
+  extendAnonymousSession: jest.fn(async () => {}),
+}))
+
 // Mock trace-helpers
 jest.mock('../../../../utils/trace-helpers', () => ({
   __esModule: true,
@@ -132,6 +139,10 @@ jest.mock('../../../chat/image-generation-response', () => ({
 
 import { createChatStreamHandler } from '../chat-stream-use-case'
 import { ConnectionServiceError } from '../../../../services/connections/connection-service'
+import { RAGContextBuilder } from '../../../chat/rag-context-builder'
+import { getDocumentServices } from '../../../../services/document-services-factory'
+
+const mockGetDocumentServices = getDocumentServices as unknown as jest.Mock
 
 const createMockContext = (actorOverrides: Record<string, unknown> = {}) => {
   const jsonMock = jest.fn()
@@ -353,5 +364,119 @@ describe('createChatStreamHandler error handling', () => {
     expect(prepareArg).not.toHaveProperty('visionTranscriptionPrefix')
     expect(prepareArg).not.toHaveProperty('visionAttachmentImageCount')
     expect(prepareArg).not.toHaveProperty('historyImageDescriptions')
+  })
+})
+describe('知识库功能闸门按调用方角色放行', () => {
+  const RAGContextBuilderMock = RAGContextBuilder as unknown as jest.Mock
+
+  // 每次用例前重建干净的构造器实现，避免 mockImplementationOnce 队列跨用例残留
+  beforeEach(() => {
+    RAGContextBuilderMock.mockReset()
+    RAGContextBuilderMock.mockImplementation(() => ({
+      hasKnowledgeBases: jest.fn().mockResolvedValue(false),
+      enhanceFromKnowledgeBases: jest.fn(),
+      buildSystemPrompt: jest.fn(),
+    }))
+    mockGetDocumentServices.mockReset()
+    mockGetDocumentServices.mockReturnValue(null)
+  })
+
+  const buildRagHarness = () => {
+    const hasKnowledgeBases = jest.fn().mockResolvedValue(true)
+    const enhanceFromKnowledgeBases = jest.fn().mockResolvedValue({ context: '', result: { hits: [] } })
+    const buildSystemPrompt = jest.fn().mockReturnValue('')
+    RAGContextBuilderMock.mockImplementation(() => ({
+      hasKnowledgeBases,
+      enhanceFromKnowledgeBases,
+      buildSystemPrompt,
+    }))
+    mockGetDocumentServices.mockReturnValue({
+      ragService: {},
+      documentService: {},
+      enhancedRagService: null,
+    } as any)
+    return { hasKnowledgeBases, enhanceFromKnowledgeBases }
+  }
+
+  const buildHandler = (actorOverrides: Record<string, unknown> = {}) => {
+    const mockPrepare = jest.fn().mockRejectedValue(new Error('stop after RAG wiring check'))
+    const deps = createMinimalDeps({ mockPrepare })
+    const { c } = createMockContext(actorOverrides)
+    c.req.valid = jest.fn(() => ({
+      sessionId: 1,
+      content: 'hello',
+      clientMessageId: 'test-client-id',
+      knowledgeBaseIds: [3, 4],
+    }))
+    return { handler: createChatStreamHandler(deps), c, mockPrepare }
+  }
+
+  it('注册用户：闸门收到 isAnonymous=false / isAdmin=false', async () => {
+    const { hasKnowledgeBases } = buildRagHarness()
+    const { handler, c } = buildHandler()
+
+    await handler(c)
+
+    expect(hasKnowledgeBases).toHaveBeenCalledWith([3, 4], { isAnonymous: false, isAdmin: false })
+  })
+
+  it('管理员：闸门收到 isAdmin=true，不受用户策略拦截', async () => {
+    const { hasKnowledgeBases } = buildRagHarness()
+    const { handler, c } = buildHandler({ role: 'ADMIN' })
+
+    await handler(c)
+
+    expect(hasKnowledgeBases).toHaveBeenCalledWith([3, 4], { isAnonymous: false, isAdmin: true })
+  })
+
+  it('匿名访客：闸门收到 isAnonymous=true', async () => {
+    const { hasKnowledgeBases } = buildRagHarness()
+    const { handler, c } = buildHandler({ type: 'anonymous' })
+
+    await handler(c)
+
+    expect(hasKnowledgeBases).toHaveBeenCalledWith([3, 4], { isAnonymous: true, isAdmin: false })
+  })
+
+  it('策略拒绝（闸门返回 false）时不检索知识库', async () => {
+    const { hasKnowledgeBases, enhanceFromKnowledgeBases } = buildRagHarness()
+    hasKnowledgeBases.mockResolvedValue(false)
+    const { handler, c } = buildHandler({ type: 'anonymous' })
+
+    await handler(c)
+
+    expect(hasKnowledgeBases).toHaveBeenCalledTimes(1)
+    expect(enhanceFromKnowledgeBases).not.toHaveBeenCalled()
+  })
+
+  it('管理员也受功能总闸约束：闸门返回 false 时不检索', async () => {
+    const { hasKnowledgeBases, enhanceFromKnowledgeBases } = buildRagHarness()
+    hasKnowledgeBases.mockResolvedValue(false)
+    const { handler, c } = buildHandler({ role: 'ADMIN' })
+
+    await handler(c)
+
+    expect(hasKnowledgeBases).toHaveBeenCalledWith([3, 4], { isAnonymous: false, isAdmin: true })
+    expect(enhanceFromKnowledgeBases).not.toHaveBeenCalled()
+  })
+
+  it('闸门放行时按会话知识库检索', async () => {
+    const { enhanceFromKnowledgeBases } = buildRagHarness()
+    const { handler, c } = buildHandler()
+
+    await handler(c)
+
+    expect(enhanceFromKnowledgeBases).toHaveBeenCalledWith([3, 4], 'hello')
+  })
+
+  it('闸门抛错时降级为无 RAG，不中断请求', async () => {
+    const { hasKnowledgeBases, enhanceFromKnowledgeBases } = buildRagHarness()
+    hasKnowledgeBases.mockRejectedValue(new Error('kb policy read failed'))
+    const { handler, c, mockPrepare } = buildHandler()
+
+    await handler(c)
+
+    expect(enhanceFromKnowledgeBases).not.toHaveBeenCalled()
+    expect(mockPrepare).toHaveBeenCalled()
   })
 })

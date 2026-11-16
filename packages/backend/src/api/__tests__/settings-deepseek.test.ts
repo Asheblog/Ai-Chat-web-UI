@@ -23,6 +23,22 @@ describe('DeepSeek system settings HTTP boundary', () => {
     expect(updateSystemSettings).toHaveBeenCalledWith(payload)
   })
 
+  test('accepts the scholar search scope offered by settings', async () => {
+    const { app, updateSystemSettings } = setup()
+    const payload = { web_search_scope: 'scholar' }
+    const response = await app.request('/system', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) })
+    expect(response.status).toBe(200)
+    expect(updateSystemSettings).toHaveBeenCalledWith(payload)
+  })
+
+  test('accepts automatic output limits and forwards installation policy and reading deadline', async () => {
+    const { app, updateSystemSettings } = setup()
+    const payload = { reasoning_max_output_tokens_default: 0, extension_install_tool_enable: false, web_search_auto_read_batch_timeout_ms: 25000 }
+    const response = await app.request('/system', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) })
+    expect(response.status).toBe(200)
+    expect(updateSystemSettings).toHaveBeenCalledWith(payload)
+  })
+
   test('does not synthesize an omitted key or accept an internal vault reference', async () => {
     const { app, updateSystemSettings } = setup()
     const response = await app.request('/system', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ web_search_deepseek_fetch_enable: false, web_search_deepseek_secret_id: '99' }) })

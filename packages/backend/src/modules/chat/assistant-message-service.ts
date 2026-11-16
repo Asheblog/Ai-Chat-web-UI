@@ -101,7 +101,6 @@ export interface PersistAssistantFinalResponseParams {
   assistantClientMessageId?: string | null;
   fallbackClientMessageId?: string | null;
   parentMessageId?: number | null;
-  replyHistoryLimit?: number | null;
   content: string;
   streamReasoning?: string | null;
   reasoning?: string | null;
@@ -125,28 +124,24 @@ export interface PersistAssistantFinalResponseParams {
   provider?: string | null;
 }
 
-const clampReplyHistoryLimit = (value?: number | null) => {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    const normalized = Math.floor(value)
-    return Math.max(1, Math.min(20, normalized))
-  }
-  return 5
-}
-
-const ensureVariantWindow = async ({
+/**
+ * 重排同一父消息下的回答版本序号。
+ *
+ * 回答版本全部保留：这里不删除任何兄弟消息，也不触碰它们的 usageMetric（会话累计、
+ * 每日汇总直接聚合这张表）。只按创建时间把 variantIndex 重排为 1..N，维持前端版本
+ * 选择与重新生成语义；目标版本始终保留自己的 id。
+ */
+const syncVariantIndexes = async ({
   db,
   sessionId,
   parentMessageId,
   targetMessageId,
-  replyHistoryLimit,
 }: {
   db: DbClient
   sessionId: number
   parentMessageId: number
   targetMessageId: number
-  replyHistoryLimit?: number | null
 }) => {
-  const limit = clampReplyHistoryLimit(replyHistoryLimit)
   const siblings = await db.message.findMany({
     where: { sessionId, parentMessageId },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -172,28 +167,15 @@ const ensureVariantWindow = async ({
     return
   }
 
-  const overflow = Math.max(0, siblings.length - limit)
-  const removalIds: number[] = []
-  if (overflow > 0) {
-    const removable = siblings.filter((s) => s.id !== targetMessageId).slice(0, overflow)
-    removalIds.push(...removable.map((s) => s.id))
-  }
-
-  const survivors = siblings.filter((s) => !removalIds.includes(s.id))
   let index = 1
-  for (const survivor of survivors) {
-    if (survivor.variantIndex !== index) {
+  for (const sibling of siblings) {
+    if (sibling.variantIndex !== index) {
       await db.message.update({
-        where: { id: survivor.id },
+        where: { id: sibling.id },
         data: { variantIndex: index },
       })
     }
     index += 1
-  }
-
-  if (removalIds.length > 0) {
-    await db.usageMetric.deleteMany({ where: { messageId: { in: removalIds } } })
-    await db.message.deleteMany({ where: { id: { in: removalIds } } })
   }
 }
 
@@ -203,7 +185,6 @@ export const persistAssistantFinalResponse = async ({
   assistantClientMessageId,
   fallbackClientMessageId,
   parentMessageId,
-  replyHistoryLimit,
   content,
   streamReasoning,
   reasoning,
@@ -297,12 +278,11 @@ export const persistAssistantFinalResponse = async ({
       });
 
       if (parentMessageId) {
-        await ensureVariantWindow({
+        await syncVariantIndexes({
           db: tx,
           sessionId,
           parentMessageId,
           targetMessageId: targetId,
-          replyHistoryLimit,
         });
       } else {
         await tx.message.update({

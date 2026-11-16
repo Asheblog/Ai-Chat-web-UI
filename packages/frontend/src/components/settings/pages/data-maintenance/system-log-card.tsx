@@ -26,8 +26,9 @@ export interface SystemLogCardProps {
 }
 
 /**
- * 系统运行日志卡：日志级别/写入文件/保留天数（updateSystemLogConfig）+ 统计/清理
- * （getSystemLogStats/cleanupSystemLogs），适配自 SystemMonitoringPage。
+ * 系统运行日志卡：日志级别/写入文件/保留天数（updateSystemLogConfig）+ 统计/清理。
+ * 这些配置存在服务进程内存里（来自部署环境变量），不写系统设置表；
+ * 保留天数只作为「立即清理」的阈值，系统没有按时间自动删除日志的调度。
  */
 export function SystemLogCard({ isLoading }: SystemLogCardProps) {
   const { toast } = useToast()
@@ -69,7 +70,7 @@ export function SystemLogCard({ isLoading }: SystemLogCardProps) {
       const res = await updateSystemLogConfig(config)
       if (res.data) {
         setLogConfig(res.data)
-        toast({ title: "日志配置已更新" })
+        toast({ title: "日志配置已更新", description: "仅对当前服务进程生效" })
       }
     } catch (error: any) {
       toast({ title: "更新失败", description: error?.response?.data?.error || error?.message || "未知错误", variant: "destructive" })
@@ -98,13 +99,13 @@ export function SystemLogCard({ isLoading }: SystemLogCardProps) {
     <FeatureCard
       icon={FileText}
       title="系统运行日志"
-      description="后端日志级别、文件输出与保留"
+      description="后端日志级别、文件输出与清理；配置只作用于当前服务进程"
       cardKey="data-maintenance:system-log"
     >
       <div className="space-y-3">
         <SettingRow
           title="日志级别"
-          description="控制日志输出的详细程度"
+          description="控制当前进程的日志详细度；服务重启或重新部署后回到部署环境变量 LOG_LEVEL 的默认值"
           align="start"
         >
           <Select
@@ -112,7 +113,7 @@ export function SystemLogCard({ isLoading }: SystemLogCardProps) {
             onValueChange={(value) => handleLogConfigUpdate({ level: value as SystemLogConfig["level"] })}
             disabled={isLoading}
           >
-            <SelectTrigger className="w-full sm:w-[220px]">
+            <SelectTrigger className="w-full sm:w-[220px]" aria-label="日志级别">
               <SelectValue placeholder="选择级别" />
             </SelectTrigger>
             <SelectContent>
@@ -126,7 +127,7 @@ export function SystemLogCard({ isLoading }: SystemLogCardProps) {
 
         <SettingRow
           title="写入文件"
-          description="将日志同时写入文件，便于后续查询"
+          description="同时写入 JSON Lines 文件；重启后回到部署环境变量 SYSTEM_LOG_TO_FILE 的默认值。关闭后统计与清理读不到文件"
         >
           <Switch
             checked={logConfig?.toFile ?? true}
@@ -137,7 +138,7 @@ export function SystemLogCard({ isLoading }: SystemLogCardProps) {
 
         <SettingRow
           title="保留天数"
-          description="超过该天数的日志文件会被自动清理（范围 1-365）"
+          description="仅作为「立即清理」的删除阈值，系统不会按时间自动删除日志文件（范围 1-365 天）"
           align="start"
         >
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
@@ -165,6 +166,10 @@ export function SystemLogCard({ isLoading }: SystemLogCardProps) {
             </Button>
           </div>
         </SettingRow>
+
+        <p className="text-xs leading-5 text-muted-foreground">
+          日志级别、文件输出与保留天数属于运行时配置：只保存在当前服务进程，不写系统设置表。持久化的数据清理策略在「数据保留策略」卡。
+        </p>
 
         <SettingRow
           title={(

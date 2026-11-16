@@ -43,16 +43,30 @@ export function SettingsShellLayout({ title, className, nav, content, asideClass
   )
 }
 
-export function SettingsContentColumn({ children, measureClassName, notice, dimmed }: {
+export function SettingsContentColumn({ children, measureClassName, notice, dimmed, resetKey, skipScrollReset }: {
   children: ReactNode
   measureClassName: string
   notice?: ReactNode
   dimmed?: boolean
+  /** 变化即把内容区滚回顶部（页面 key） */
+  resetKey?: string
+  /** 卡定位期间跳过重置，避免与 SystemLeafWrapper 的滚动互相拉扯 */
+  skipScrollReset?: boolean
 }) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (skipScrollReset) return
+    const node = scrollRef.current
+    if (!node) return
+    if (typeof node.scrollTo === "function") node.scrollTo({ top: 0 })
+    else node.scrollTop = 0
+  }, [resetKey, skipScrollReset])
+
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface">
       {notice}
-      <div data-settings-scroll="content" className={cn("min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent hover:scrollbar-thumb-muted-foreground transition-opacity", dimmed && "opacity-60")}>
+      <div ref={scrollRef} data-settings-scroll="content" className={cn("min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent hover:scrollbar-thumb-muted-foreground transition-opacity", dimmed && "opacity-60")}>
         <div className={cn("mx-auto w-full min-w-0 px-4 py-5 md:px-6 md:py-6", measureClassName)}>{children}</div>
       </div>
     </section>

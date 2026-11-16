@@ -216,9 +216,15 @@ function ChatComposerPanelComponent({
   const attachmentsCount = selectedImages.length + workspaceFiles.length
   const hasReadyFiles = workspaceFiles.some((f) => f.status === 'ready')
   // 模型与强度共用同一入口；强度值仍由上层设置持有，面板不新增偏好状态。
+  // 深度思考关闭时后端不会下发强度，入口同步禁用，避免设置值看起来仍然生效。
   const reasoningControl = useMemo(
-    () => ({ value: effort, onChange: onEffortChange }),
-    [effort, onEffortChange],
+    () => ({
+      value: effort,
+      onChange: onEffortChange,
+      disabled: !thinkingEnabled,
+      disabledReason: thinkingEnabled ? undefined : '深度思考已关闭',
+    }),
+    [effort, onEffortChange, thinkingEnabled],
   )
 
   const openKnowledgeBaseSelector = useCallback(() => {

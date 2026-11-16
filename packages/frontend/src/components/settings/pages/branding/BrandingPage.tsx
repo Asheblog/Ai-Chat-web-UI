@@ -10,8 +10,8 @@ import { AvatarCard } from "./avatar-card"
 import { BrandingCard } from "./branding-card"
 
 /**
- * 品牌与界面页：页壳（单一 useSystemSettings + 共享骨架/错误重试），
- * 2 张 FeatureCard：AI 头像 / 品牌定制（文字 LOGO、全局系统提示词、图片访问域名）。
+ * 外观与站点页：品牌名、AI 头像与站点地址属于主层；6 个主题色 Token 在品牌卡的「主题配色」里。
+ * 全局系统提示词不在本页——它属于「连接与模型 → 会话默认配置」。
  */
 export function BrandingPage() {
   const {
@@ -51,9 +51,9 @@ export function BrandingPage() {
       <div className="flex items-center gap-3 pb-3 border-b border-border">
         <Palette className="w-5 h-5 text-ink-tertiary flex-shrink-0" />
         <div className="space-y-1">
-          <CardTitle>品牌与界面</CardTitle>
+          <CardTitle>外观与站点</CardTitle>
           <CardDescription className="text-sm text-muted-foreground">
-            AI 头像、品牌标识与站点信息
+            品牌名、AI 头像、站点地址与主题配色
           </CardDescription>
         </div>
       </div>

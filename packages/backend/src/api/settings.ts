@@ -12,8 +12,8 @@ import {
   PythonRuntimeServiceError,
   type PythonRuntimeService,
 } from '../services/python-runtime'
-import { RAG_SYSTEM_SETTINGS_KEYS, WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS } from '@aichat/shared'
-import { WEB_SEARCH_ENGINE_IDS } from '@aichat/shared/web-search-contract'
+import { RAG_SYSTEM_SETTINGS_KEYS } from '@aichat/shared'
+import { WEB_SEARCH_ENGINE_IDS, WEB_SEARCH_RANGES, WEB_SEARCH_SCOPE_IDS } from '@aichat/shared/web-search-contract'
 
 export interface SettingsApiDeps {
   settingsFacade: SettingsFacade
@@ -125,7 +125,6 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
     brand_muted_foreground: brandHexSchema,
     // 流式/稳定性相关配置
     sse_heartbeat_interval_ms: z.number().int().min(1000).max(600000).optional(),
-    provider_max_idle_ms: z.number().int().min(0).max(3600000).optional(),
     provider_timeout_ms: z.number().int().min(10000).max(3600000).optional(),
     provider_initial_grace_ms: z.number().int().min(0).max(3600000).optional(),
     provider_reasoning_idle_ms: z.number().int().min(0).max(3600000).optional(),
@@ -149,10 +148,9 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
     stream_delta_chunk_size: z.number().int().min(1).max(100).optional(),
     // 供应商参数（可选）
     openai_reasoning_effort: z.enum(['low', 'medium', 'high', 'max', 'xhigh', 'unset']).optional(),
-    reasoning_max_output_tokens_default: z.number().int().min(1).max(256000).nullable().optional(),
+    reasoning_max_output_tokens_default: z.number().int().min(0).max(256000).nullable().optional(),
     temperature_default: z.number().min(0).max(2).nullable().optional(),
     chat_image_retention_days: z.number().int().min(0).max(3650).optional(),
-    assistant_reply_history_limit: z.number().int().min(1).max(20).optional(),
     site_base_url: z.string().max(200).optional(),
     anonymous_retention_days: z.number().int().min(0).max(15).optional(),
     anonymous_daily_quota: z.number().int().min(0).optional(),
@@ -166,39 +164,58 @@ export const createSettingsApi = (deps: SettingsApiDeps) => {
     model_access_default_user: z.enum(['allow', 'deny']).optional(),
     web_search_agent_enable: z.boolean().optional(),
     web_search_enabled_engines: z.array(z.enum(WEB_SEARCH_ENGINE_IDS)).min(1).max(WEB_SEARCH_ENGINE_IDS.length).optional(),
-    web_search_engine_order: z.array(z.enum(WEB_SEARCH_ENGINE_IDS)).min(1).max(WEB_SEARCH_ENGINE_IDS.length).optional(),
     web_search_api_key_tavily: z.string().optional(),
     web_search_api_key_brave: z.string().optional(),
     web_search_api_key_metaso: z.string().optional(),
     web_search_api_key_exa: z.string().optional(),
     web_search_api_key_deepseek: z.string().optional(),
     web_search_deepseek_fetch_enable: z.boolean().optional(),
-    web_search_result_limit: z.number().int().min(1).max(10).optional(),
+    web_search_result_limit: z
+      .number()
+      .int()
+      .min(WEB_SEARCH_RANGES.resultLimit.min)
+      .max(WEB_SEARCH_RANGES.resultLimit.max)
+      .optional(),
     web_search_domain_filter: z.array(z.string().min(1)).optional(),
-    web_search_scope: z.enum(['webpage', 'document', 'paper', 'image', 'video', 'podcast']).optional(),
+    web_search_scope: z.enum(WEB_SEARCH_SCOPE_IDS).optional(),
     web_search_include_summary: z.boolean().optional(),
     web_search_include_raw: z.boolean().optional(),
-    web_search_parallel_max_engines: z.number().int().min(1).max(WEB_SEARCH_ENGINE_IDS.length).optional(),
-    web_search_parallel_max_queries_per_call: z.number().int().min(1).max(3).optional(),
-    web_search_parallel_timeout_ms: z.number().int().min(1000).max(120000).optional(),
-    web_search_parallel_merge_strategy: z.enum(['hybrid_score_v1']).optional(),
-    web_search_auto_bilingual: z.boolean().optional(),
+    web_search_parallel_max_engines: z
+      .number()
+      .int()
+      .min(WEB_SEARCH_RANGES.parallelMaxEngines.min)
+      .max(WEB_SEARCH_RANGES.parallelMaxEngines.max)
+      .optional(),
+    web_search_parallel_max_queries_per_call: z
+      .number()
+      .int()
+      .min(WEB_SEARCH_RANGES.parallelMaxQueriesPerCall.min)
+      .max(WEB_SEARCH_RANGES.parallelMaxQueriesPerCall.max)
+      .optional(),
+    web_search_parallel_timeout_ms: z
+      .number()
+      .int()
+      .min(WEB_SEARCH_RANGES.parallelTimeoutMs.min)
+      .max(WEB_SEARCH_RANGES.parallelTimeoutMs.max)
+      .optional(),
     web_search_auto_bilingual_mode: z.enum(['off', 'conditional', 'always']).optional(),
-    web_search_auto_read_parallelism: z.number().int().min(1).max(4).optional(),
+    web_search_auto_read_parallelism: z
+      .number()
+      .int()
+      .min(WEB_SEARCH_RANGES.autoReadParallelism.min)
+      .max(WEB_SEARCH_RANGES.autoReadParallelism.max)
+      .optional(),
     web_search_auto_read_batch_timeout_ms: z
       .number()
       .int()
-      .min(WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS.min)
-      .max(WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS.max)
+      .min(WEB_SEARCH_RANGES.autoReadBatchTimeoutMs.min)
+      .max(WEB_SEARCH_RANGES.autoReadBatchTimeoutMs.max)
       .optional(),
     agent_max_tool_iterations: z.number().int().min(0).max(20).optional(),
     mcp_global_enabled: z.boolean().optional(),
     extension_install_tool_enable: z.boolean().optional(),
     python_tool_enable: z.boolean().optional(),
     chat_dynamic_skill_runtime_enabled: z.boolean().optional(),
-    python_tool_timeout_ms: z.number().int().min(1000).max(60000).optional(),
-    python_tool_max_output_chars: z.number().int().min(256).max(20000).optional(),
-    python_tool_max_source_chars: z.number().int().min(256).max(20000).optional(),
     assistant_avatar: z.union([imagePayloadSchema, z.null()]).optional(),
     task_trace_enabled: z.boolean().optional(),
     task_trace_default_on: z.boolean().optional(),

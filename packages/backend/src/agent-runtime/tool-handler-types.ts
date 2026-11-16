@@ -193,8 +193,8 @@ export interface WebSearchUrlReaderConfig {
  */
 export interface WebSearchHandlerConfig {
   enabled: boolean
+  /** 有序引擎列表：成员即启用集合，数组顺序即调度优先级。 */
   engines: string[]
-  engineOrder: string[]
   apiKeys: Partial<Record<string, string>>
   deepseekFetchEnabled?: boolean
   resultLimit: number
@@ -206,8 +206,6 @@ export interface WebSearchHandlerConfig {
   parallelMaxEngines?: number
   parallelMaxQueriesPerCall?: number
   parallelTimeoutMs?: number
-  mergeStrategy?: string
-  autoBilingual?: boolean
   autoBilingualMode?: 'off' | 'conditional' | 'always'
   autoReadAfterSearch?: boolean
   autoReadTopK?: number

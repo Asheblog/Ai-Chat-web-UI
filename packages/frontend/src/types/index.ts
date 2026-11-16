@@ -10,7 +10,6 @@ export type {
   SystemSettings,
   WebSearchBilingualMode,
   WebSearchEngine,
-  WebSearchMergeStrategy,
 } from '@aichat/shared/settings-codec'
 
 export type {

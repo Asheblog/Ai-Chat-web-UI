@@ -9,6 +9,15 @@
 - **Markdown Render Snapshot（格式渲染快照）**：Worker 按消息身份、正文版本和来源正文生成 HTML；每条消息最多一个进行中任务与一个最新待处理快照。流式同源追加期间可沿用最近 HTML 并显示未渲染尾段；编辑、版本回退、身份变化必须失效。Worker 不可用时保留完整纯文本，不在主线程同步解析长文。同一快照失败后按客户端给出的重试间隔（默认 10 秒）最多恢复重试两次，成功后清零；Worker 迟到 ready 时立即重置重试预算并重新渲染已降级快照；身份/正文替换和卸载清理恢复计时器，避免迟到结果覆盖新内容。
 - **Markdown Worker Lifecycle（格式渲染服务生命周期）**：客户端等待 ready 握手（默认 15 秒，`effectiveType` 为 2g/3g 或下行低于 1.5Mbps 时 30 秒）；软超时只结算等待中的任务并降级纯文本，不终止 Worker，迟到的 ready 会广播给订阅者自愈；Worker 60 秒（弱网 120 秒）仍未 ready 才回收。单任务截止 15 秒，连续两次超时才重启 Worker。失败后按 10s→20s→40s→60s 指数冷却，不永久停用；`online` 事件、ready 握手和成功渲染都会清零预算。Worker 首包不包含 KaTeX，仅在正文命中公式时按需加载；KaTeX 样式与字体随应用本地打包，不依赖第三方 CDN。shutdown 清理任务和计时器并重置本地预算，重新加载可重新建立服务。
 
+## 设置与数据策略
+
+- **Answer Variant（回答版本）**：同一用户消息下每次生成的独立回答；全部版本及其历史用量保留，不按数量自动裁剪，版本索引仅排序。
+- **Retention Days（保留天数）**：图片附件、匿名会话和乱斗记录的 0 表示永久保留；正数按时间清理，当前活跃匿名会话始终排除。任务追踪保留天数只作为手动清理阈值。
+- **Ordered Search Engines（有序搜索引擎）**：web_search_enabled_engines 同时表达启用集合和优先顺序；至少一个引擎，空值回落 Tavily。双语行为仅由 off / conditional / always 模式表达。
+- **Automatic Output Limit（自动生成上限）**：全局值 0 表示按模型能力与协议解析；优先模型人工上限，其次已知模型表、显式系统上限，最后协议自动值，解析到的上限受剩余上下文约束。无已知上限时 OpenAI 系省略 max_tokens，Anthropic 使用保守 4096 并按剩余上下文收敛。
+- **Model Override Domains（模型覆写域）**：能力、生成参数、访问策略分别保存与重置；能力覆写优先于供应商声明，声明优先于模型名启发，最后回落连接默认。manualOverride 只汇总是否存在人工覆写；访问或参数覆写不冻结能力刷新。
+- **Connection Authentication（连接认证）**：bearer 使用连接凭据，none 不附认证，system_oauth 复用部署级 SYSTEM_OAUTH_TOKEN 并显示其配置状态。旧 session 认证标记为待重新配置，目录刷新跳过、聊天请求报错；旧值不会作为 API Key 发送。连接 external/local 类型退出产品与 API 语义，底层列仅为既有存储结构保留。
+
 ## 对话上下文与提示词
 
 - **Conversation Context Toggle（会话上下文开关）**：账号级设置 `users.contextEnabled`，控制**当前会话**的历史消息是否随请求发送；不改变消息入库，也不跨会话（跨会话长期记忆由 `app-info.features.long_term_memory` 单独表达，当前为 false）。服务端解析顺序固定为「请求显式值 → 账号偏好 → true」，收敛在 `resolveContextEnabled`，压缩门与请求构建共用同一结果；Battle 恒定关闭
@@ -132,9 +141,9 @@ _Avoid_：用最小 Key 行 ID 冒充连接组身份；用 channelName / prefixI
 - **Settings Center（设置中心）**：用户管理个人设置与管理员管理系统设置的统一入口
 - **Personal Settings Section（个人设置分区）**：独立个人设置页以既有 URL hash 表达资料、Skill、分享、安全分区，支持浏览器前进/后退，只挂载当前分区。设置弹窗使用独立局部导航，不改写独立页 hash；弹窗和叶子在首次访问时加载。
 - **System Settings（系统设置）**：仅管理员可访问的系统级配置集合，用于管理模型、连接、能力、运行策略、治理审计和维护项
-- **Settings Top-Level Group（设置顶级分组）**：系统设置左侧导航的顶级条目，含 4 个分组（模型与连接 / 功能与工具 / 系统与数据 / 高级设置）与 2 个顶级叶子（概览、用户与注册），把相关设置页面组织在同一操作语境下；原「成员与安全」分组只剩「用户与注册」一项，已拍平为顶级叶子
-- **Settings Page（设置页面）**：顶级分组下的具体配置页面，是右侧内容区渲染的最小页面单位；共 10 个（概览、供应商与连接、模型管理、搜索与知识库、能力扩展、用户与注册、品牌与界面、日志与审计、数据与维护、推理与网络）
-- **Extensions Center（能力扩展）**：把 MCP 服务、Skill、内置工具与对话增强四类能力收敛在同一系统设置页（叶子 key `extensions`），页内以段导航分「总览 / MCP 服务 / Skill / 内置工具 / 对话增强」，MCP 与 Skill 段内部再用次级标签复用原区块；三个总开关各只有一个控制点：`mcpGlobalEnabled` 在 MCP 段页头、`chatDynamicSkillRuntimeEnabled` 在 Skill 段页头、`pythonToolEnable` 在 Python 工具卡主开关，总览只显示状态与入口、不放开关。原「工具与扩展」「MCP 管理」「Skill 治理」三个叶子页已删除，Skill 治理不再单独成页
+- **Settings Top-Level Group（设置顶级分组）**：系统设置以概览和六组组织：连接与模型、搜索与知识库、工具与扩展、用户与访问、数据与日志、外观与站点；原叶子 key 继续映射到对应页面。
+- **Settings Page（设置页面）**：右侧内容区渲染的最小页面单位；在原十个叶子基础上新增会话默认配置，承载全局角色层提示词；生成与网络归入数据与日志，高级参数按需展开。
+- **Extensions Center（工具与扩展）**：把 MCP 服务、Skill、内置工具与对话增强四类能力收敛在同一系统设置页（叶子 key `extensions`），页内以段导航分「总览 / MCP 服务 / Skill / 内置工具 / 对话增强」，MCP 与 Skill 段内部再用次级标签复用原区块；三个总开关各只有一个控制点：`mcpGlobalEnabled` 在 MCP 段页头、`chatDynamicSkillRuntimeEnabled` 在 Skill 段页头、`pythonToolEnable` 在 Python 工具卡主开关，总览只显示状态与入口、不放开关。原「工具与扩展」「MCP 管理」「Skill 治理」三个叶子页已删除，Skill 治理不再单独成页
 - **Feature Card（功能卡）**：设置页内的白话化配置卡片（图标 + 标题 + 白话描述 + 主开关 + 常用项 + 「更多参数」折叠），默认折叠高级参数；来自 `components/settings/components/feature-card.tsx`
 
 ## 深度研究计划确认

@@ -3,8 +3,8 @@ import { computeCapabilities } from './providers'
 import { parseCapabilityEnvelope, type CapabilityFlags } from './capabilities'
 
 /**
- * 解析会话主模型的视觉/生图能力：优先取 ModelCatalog.capabilitiesJson，
- * 缺失时按模型 ID/标签启发式判定（与 agent 流 resolveModelCapabilities 同逻辑）。
+ * 解析会话主模型的视觉/生图能力：优先取 ModelCatalog.capabilitiesJson（目录刷新已合并供应商声明与启发式，
+ * 人工覆写位于最高层），缺失时按模型 ID 启发式兜底。连接标签不参与能力判定。
  */
 export async function resolveModelCapabilitiesForSession(
   prisma: PrismaClient,
@@ -13,27 +13,19 @@ export async function resolveModelCapabilitiesForSession(
   const connectionId = session.connectionId ?? null
   const rawModelId = session.modelRawId || ''
   if (!connectionId || !rawModelId) {
-    return computeCapabilities(rawModelId, [])
+    return computeCapabilities(rawModelId)
   }
   try {
     const catalog = await prisma.modelCatalog.findFirst({
       where: { connectionGroupId: connectionId, rawId: rawModelId },
-      select: { capabilitiesJson: true, tagsJson: true },
+      select: { capabilitiesJson: true },
     })
     const parsed = parseCapabilityEnvelope(catalog?.capabilitiesJson)
     if (parsed?.flags) {
       return parsed.flags
     }
-    const tags = (() => {
-      try {
-        const value = JSON.parse(catalog?.tagsJson || '[]')
-        return Array.isArray(value) ? value : []
-      } catch {
-        return []
-      }
-    })()
-    return computeCapabilities(rawModelId, tags)
+    return computeCapabilities(rawModelId)
   } catch {
-    return computeCapabilities(rawModelId, [])
+    return computeCapabilities(rawModelId)
   }
 }

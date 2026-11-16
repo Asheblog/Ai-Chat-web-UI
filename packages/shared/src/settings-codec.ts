@@ -6,11 +6,9 @@
  *   frontend types/index.ts 与 backend settings-service 之间的字段漂移。
  */
 
-import { isWebSearchEngine, WEB_SEARCH_ENGINE_IDS, type WebSearchEngine } from './web-search-contract.js'
-import { WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS } from './settings-contract.js'
+import { normalizeWebSearchEngines, WEB_SEARCH_RANGES, type WebSearchEngine } from './web-search-contract.js'
 export type { WebSearchEngine } from './web-search-contract.js'
 export type WebSearchBilingualMode = 'off' | 'conditional' | 'always'
-export type WebSearchMergeStrategy = 'hybrid_score_v1'
 
 export interface SystemSettings {
   allowRegistration: boolean
@@ -25,7 +23,6 @@ export interface SystemSettings {
   assistantAvatarRemove?: boolean
   // 流式/稳定性相关（系统级）
   sseHeartbeatIntervalMs?: number
-  providerMaxIdleMs?: number
   providerTimeoutMs?: number
   providerInitialGraceMs?: number
   providerReasoningIdleMs?: number
@@ -49,7 +46,6 @@ export interface SystemSettings {
   reasoningMaxOutputTokensDefault?: number | null
   temperatureDefault?: number | null
   chatImageRetentionDays?: number
-  assistantReplyHistoryLimit?: number | null
   siteBaseUrl?: string
   anonymousRetentionDays?: number
   anonymousDailyQuota?: number
@@ -63,7 +59,6 @@ export interface SystemSettings {
   modelAccessDefaultUser?: 'allow' | 'deny'
   webSearchAgentEnable?: boolean
   webSearchEnabledEngines?: WebSearchEngine[]
-  webSearchEngineOrder?: WebSearchEngine[]
   webSearchResultLimit?: number
   webSearchDomainFilter?: string[]
   webSearchHasApiKey?: boolean
@@ -81,17 +76,12 @@ export interface SystemSettings {
   webSearchParallelMaxEngines?: number
   webSearchParallelMaxQueriesPerCall?: number
   webSearchParallelTimeoutMs?: number
-  webSearchParallelMergeStrategy?: WebSearchMergeStrategy
-  webSearchAutoBilingual?: boolean
   webSearchAutoBilingualMode?: WebSearchBilingualMode
   webSearchAutoReadParallelism?: number
   /** 自动阅读整批总时限；与单 URL 的读取超时分别生效。 */
   webSearchAutoReadBatchTimeoutMs?: number
   pythonToolEnable?: boolean
   chatDynamicSkillRuntimeEnabled?: boolean
-  pythonToolTimeoutMs?: number
-  pythonToolMaxOutputChars?: number
-  pythonToolMaxSourceChars?: number
   agentMaxToolIterations?: number
   mcpGlobalEnabled?: boolean
   extensionInstallToolEnable?: boolean
@@ -146,47 +136,6 @@ const parseOptionalInt = (value: unknown): number | undefined => {
   return undefined
 }
 
-const parseWebSearchEngineList = (
-  value: unknown,
-  fallback: WebSearchEngine[],
-): WebSearchEngine[] => {
-  const normalize = (item: unknown): WebSearchEngine | null => {
-    if (typeof item !== 'string') return null
-    const lowered = item.trim().toLowerCase()
-    if (isWebSearchEngine(lowered)) {
-      return lowered
-    }
-    return null
-  }
-
-  let source: unknown[] = []
-  if (Array.isArray(value)) {
-    source = value
-  } else if (typeof value === 'string') {
-    const trimmed = value.trim()
-    if (trimmed.startsWith('[')) {
-      try {
-        const parsed = JSON.parse(trimmed)
-        if (Array.isArray(parsed)) source = parsed
-      } catch {
-        source = []
-      }
-    } else if (trimmed.length > 0) {
-      source = trimmed.split(/[,\n]/)
-    }
-  }
-
-  const normalized = Array.from(
-    new Set(
-      source
-        .map((item) => normalize(item))
-        .filter((item): item is WebSearchEngine => item !== null),
-    ),
-  )
-  if (normalized.length === 0) return [...fallback]
-  return normalized
-}
-
 /**
  * 将后端返回的 storage-key 系统设置载荷解析为前端消费的 camelCase SystemSettings。
  * 与 frontend features/settings/api.ts 历史实现保持一致。
@@ -205,8 +154,7 @@ export const parseSystemSettingsPayload = (
   const brandMutedForeground =
     typeof raw.brand_muted_foreground === 'string' ? raw.brand_muted_foreground : ''
   const sseHeartbeatIntervalMs = Number(raw.sse_heartbeat_interval_ms ?? 15000)
-  const providerMaxIdleMs = Number(raw.provider_max_idle_ms ?? 60000)
-  const providerTimeoutMs = Number(raw.provider_timeout_ms ?? 300000)
+  const providerTimeoutMs = Number(raw.provider_timeout_ms ?? 120000)
   const providerInitialGraceMs = Number(raw.provider_initial_grace_ms ?? 120000)
   const providerReasoningIdleMs = Number(raw.provider_reasoning_idle_ms ?? 300000)
   const reasoningKeepaliveIntervalMs = Number(raw.reasoning_keepalive_interval_ms ?? 0)
@@ -258,7 +206,7 @@ export const parseSystemSettingsPayload = (
     if (typeof parsed === 'number' && parsed > 0) {
       return Math.min(256000, parsed)
     }
-    return undefined
+    return 0
   })()
   const temperatureDefault = (() => {
     const value = raw.temperature_default
@@ -346,19 +294,12 @@ export const parseSystemSettingsPayload = (
     raw.model_access_default_user === 'deny' ? 'deny' : 'allow'
   const siteBaseUrl = typeof raw.site_base_url === 'string' ? raw.site_base_url : ''
   const webSearchAgentEnable = Boolean(raw.web_search_agent_enable ?? false)
-  const webSearchEnabledEngines = parseWebSearchEngineList(
-    raw.web_search_enabled_engines,
-    ['tavily'],
-  )
-  const webSearchEngineOrderRaw = parseWebSearchEngineList(
-    raw.web_search_engine_order,
-    webSearchEnabledEngines,
-  )
-  const webSearchEngineOrder = [
-    ...webSearchEngineOrderRaw.filter((engine) => webSearchEnabledEngines.includes(engine)),
-    ...webSearchEnabledEngines.filter((engine) => !webSearchEngineOrderRaw.includes(engine)),
-  ]
-  const webSearchResultLimit = Number(raw.web_search_result_limit ?? 4)
+  const webSearchEnabledEngines = normalizeWebSearchEngines(raw.web_search_enabled_engines)
+  const webSearchResultLimit = (() => {
+    const parsed = parseOptionalInt(raw.web_search_result_limit)
+    const { min, max, fallback } = WEB_SEARCH_RANGES.resultLimit
+    return typeof parsed === 'number' ? Math.max(min, Math.min(max, parsed)) : fallback
+  })()
   const webSearchDomainFilter = Array.isArray(raw.web_search_domain_filter)
     ? (raw.web_search_domain_filter as string[])
     : []
@@ -379,63 +320,35 @@ export const parseSystemSettingsPayload = (
   const webSearchIncludeRaw = Boolean(raw.web_search_include_raw ?? false)
   const webSearchParallelMaxEngines = (() => {
     const parsed = parseOptionalInt(raw.web_search_parallel_max_engines)
-    return typeof parsed === 'number' ? Math.max(1, Math.min(WEB_SEARCH_ENGINE_IDS.length, parsed)) : 3
+    const { min, max, fallback } = WEB_SEARCH_RANGES.parallelMaxEngines
+    return typeof parsed === 'number' ? Math.max(min, Math.min(max, parsed)) : fallback
   })()
   const webSearchParallelMaxQueriesPerCall = (() => {
     const parsed = parseOptionalInt(raw.web_search_parallel_max_queries_per_call)
-    return typeof parsed === 'number' ? Math.max(1, Math.min(3, parsed)) : 2
+    const { min, max, fallback } = WEB_SEARCH_RANGES.parallelMaxQueriesPerCall
+    return typeof parsed === 'number' ? Math.max(min, Math.min(max, parsed)) : fallback
   })()
   const webSearchParallelTimeoutMs = (() => {
     const parsed = parseOptionalInt(raw.web_search_parallel_timeout_ms)
-    return typeof parsed === 'number' ? Math.max(1000, Math.min(120000, parsed)) : 12000
+    const { min, max, fallback } = WEB_SEARCH_RANGES.parallelTimeoutMs
+    return typeof parsed === 'number' ? Math.max(min, Math.min(max, parsed)) : fallback
   })()
-  const webSearchParallelMergeStrategy: WebSearchMergeStrategy =
-    raw.web_search_parallel_merge_strategy === 'hybrid_score_v1'
-      ? 'hybrid_score_v1'
-      : 'hybrid_score_v1'
-  const webSearchAutoBilingual = Boolean(raw.web_search_auto_bilingual ?? true)
   const webSearchAutoBilingualMode: WebSearchBilingualMode =
     raw.web_search_auto_bilingual_mode === 'off' || raw.web_search_auto_bilingual_mode === 'always'
       ? raw.web_search_auto_bilingual_mode
       : 'conditional'
   const webSearchAutoReadParallelism = (() => {
     const parsed = parseOptionalInt(raw.web_search_auto_read_parallelism)
-    return typeof parsed === 'number' ? Math.max(1, Math.min(4, parsed)) : 2
+    const { min, max, fallback } = WEB_SEARCH_RANGES.autoReadParallelism
+    return typeof parsed === 'number' ? Math.max(min, Math.min(max, parsed)) : fallback
   })()
   const webSearchAutoReadBatchTimeoutMs = (() => {
     const parsed = parseOptionalInt(raw.web_search_auto_read_batch_timeout_ms)
-    const { min, max, fallback } = WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS
+    const { min, max, fallback } = WEB_SEARCH_RANGES.autoReadBatchTimeoutMs
     return typeof parsed === 'number' ? Math.max(min, Math.min(max, parsed)) : fallback
   })()
   const pythonToolEnable = Boolean(raw.python_tool_enable ?? false)
   const chatDynamicSkillRuntimeEnabled = Boolean(raw.chat_dynamic_skill_runtime_enabled ?? false)
-  const pythonToolTimeoutMs = (() => {
-    const v = raw.python_tool_timeout_ms
-    if (typeof v === 'number') return Math.max(1000, Math.min(60000, v))
-    if (typeof v === 'string' && v.trim() !== '') {
-      const parsed = Number.parseInt(v, 10)
-      if (Number.isFinite(parsed)) return Math.max(1000, Math.min(60000, parsed))
-    }
-    return 8000
-  })()
-  const pythonToolMaxOutputChars = (() => {
-    const v = raw.python_tool_max_output_chars
-    if (typeof v === 'number') return Math.max(256, Math.min(20000, v))
-    if (typeof v === 'string' && v.trim() !== '') {
-      const parsed = Number.parseInt(v, 10)
-      if (Number.isFinite(parsed)) return Math.max(256, Math.min(20000, parsed))
-    }
-    return 4000
-  })()
-  const pythonToolMaxSourceChars = (() => {
-    const v = raw.python_tool_max_source_chars
-    if (typeof v === 'number') return Math.max(256, Math.min(20000, v))
-    if (typeof v === 'string' && v.trim() !== '') {
-      const parsed = Number.parseInt(v, 10)
-      if (Number.isFinite(parsed)) return Math.max(256, Math.min(20000, parsed))
-    }
-    return 4000
-  })()
   const agentMaxToolIterations = (() => {
     const v = parseOptionalInt(raw.agent_max_tool_iterations)
     if (typeof v === 'number') {
@@ -526,7 +439,6 @@ export const parseSystemSettingsPayload = (
     brandForeground,
     brandMutedForeground,
     sseHeartbeatIntervalMs,
-    providerMaxIdleMs,
     providerTimeoutMs,
     providerInitialGraceMs,
     providerReasoningIdleMs,
@@ -548,7 +460,6 @@ export const parseSystemSettingsPayload = (
     reasoningMaxOutputTokensDefault,
     temperatureDefault,
     chatImageRetentionDays,
-    assistantReplyHistoryLimit: Number(raw.assistant_reply_history_limit ?? 5),
     siteBaseUrl,
     anonymousRetentionDays,
     anonymousDailyQuota,
@@ -562,7 +473,6 @@ export const parseSystemSettingsPayload = (
     modelAccessDefaultUser,
     webSearchAgentEnable,
     webSearchEnabledEngines,
-    webSearchEngineOrder,
     webSearchResultLimit,
     webSearchDomainFilter,
     webSearchHasApiKey: aggregatedHasKey,
@@ -578,16 +488,11 @@ export const parseSystemSettingsPayload = (
     webSearchParallelMaxEngines,
     webSearchParallelMaxQueriesPerCall,
     webSearchParallelTimeoutMs,
-    webSearchParallelMergeStrategy,
-    webSearchAutoBilingual,
     webSearchAutoBilingualMode,
     webSearchAutoReadParallelism,
     webSearchAutoReadBatchTimeoutMs,
     pythonToolEnable,
     chatDynamicSkillRuntimeEnabled,
-    pythonToolTimeoutMs,
-    pythonToolMaxOutputChars,
-    pythonToolMaxSourceChars,
     agentMaxToolIterations,
     mcpGlobalEnabled,
     extensionInstallToolEnable,

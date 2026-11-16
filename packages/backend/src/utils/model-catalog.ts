@@ -5,7 +5,9 @@ import {
   type CatalogItem,
   type ConnectionConfig,
   assertSupportedProvider,
+  isLegacySessionAuth,
   isSupportedProvider,
+  normalizeAuthType,
   SUPPORTED_PROVIDERS,
   computeCapabilities,
   detectModelType,
@@ -21,12 +23,17 @@ import {
 import {
   createCapabilityEnvelope,
   mergeCapabilityLayers,
+  parseCapabilityEnvelope,
   serializeCapabilityEnvelope,
   normalizeCapabilityFlags,
   hasDefinedCapability,
   type CapabilityFlags,
   type CapabilityEnvelope,
 } from './capabilities'
+import {
+  promoteLegacyContextOverride,
+  readModelOverrideState,
+} from '../services/catalog/model-override'
 
 export type ConnectionGroupWithCredentials = ConnectionGroup & { credentials: Connection[] }
 
@@ -70,8 +77,9 @@ export const buildConfigFromGroup = async (
   secretVault?: SecretVaultService,
 ): Promise<ConnectionConfig> => {
   assertSupportedProvider(group.provider)
+  const authType = normalizeAuthType(group.authType)
   let apiKey: string | undefined
-  if (group.authType === 'bearer' && credential.secretVaultId && secretVault) {
+  if (authType === 'bearer' && credential.secretVaultId && secretVault) {
     apiKey = await secretVault.decryptById(credential.secretVaultId).catch(() => {
       throw new Error('无法解密 API Key：Secret Vault 解密失败')
     })
@@ -80,13 +88,12 @@ export const buildConfigFromGroup = async (
     provider: group.provider as ConnectionConfig['provider'],
     baseUrl: group.baseUrl,
     enable: group.enable && credential.enable,
-    authType: group.authType as ConnectionConfig['authType'],
+    authType,
     apiKey,
     headers: parseJsonRecord(group.headersJson),
     prefixId: group.prefixId || undefined,
     tags: parseJsonArray(group.tagsJson, []),
     modelIds: parseJsonArray(credential.modelIdsJson, []),
-    connectionType: (group.connectionType as ConnectionConfig['connectionType']) || 'external',
     defaultCapabilities: parseCapabilitiesFromJson(group.defaultCapabilitiesJson),
   }
 }
@@ -127,7 +134,7 @@ export const pickCredentialForCatalogFetch = (
   const enabled = credentials.filter((item) => item.enable)
   const pool = enabled.length > 0 ? enabled : credentials
   if (pool.length === 0) return null
-  if ((group.authType as ConnectionConfig['authType']) === 'none') {
+  if (normalizeAuthType(group.authType) === 'none') {
     return pool[0] ?? null
   }
   return pool.find((item) => item.secretVaultId != null) ?? pool[0] ?? null
@@ -143,6 +150,15 @@ export async function refreshModelCatalogForConnectionGroup(
     log.debug('跳过个人连接组的模型刷新', {
       connectionGroupId: group.id,
       ownerUserId: group.ownerUserId,
+    })
+    return { connectionGroupId: group.id, total: 0 }
+  }
+
+  // 旧版 session 认证没有鉴权头实现：不要发未鉴权的目录请求，明确要求重新配置。
+  if (isLegacySessionAuth(group.authType)) {
+    log.warn('连接使用已移除的 Session 认证，跳过模型目录刷新', {
+      connectionGroupId: group.id,
+      provider: group.provider,
     })
     return { connectionGroupId: group.id, total: 0 }
   }
@@ -260,22 +276,33 @@ export async function refreshModelCatalogForConnectionGroup(
     const tagsJson = JSON.stringify(item.tags || [])
     const contextWindow = await resolveContextWindowForItem(item)
     const completionLimit = resolveCompletionLimitForItem(item)
-    const metaInput = row ? parseMeta(metaCache.get(key)) : {}
-    const capabilityLayers = ([
+    const storedMeta = row ? parseMeta(metaCache.get(key)) : {}
+    // 旧行把人工上下文窗口写进了 context_window；刷新前一次性提升到 manual 键，避免被探测值覆盖。
+    const metaInput = promoteLegacyContextOverride(storedMeta, row?.manualOverride)
+
+    const storedEnvelope = row ? parseCapabilityEnvelope(row.capabilitiesJson) : null
+    const manualCapabilities = Boolean(
+      storedEnvelope &&
+        (storedEnvelope.source === 'manual' ||
+          (!storedEnvelope.source && row?.manualOverride)),
+    )
+    // 层序（低 → 高）：连接默认 < 模型名启发 < 供应商声明。人工覆写不走层合并，直接保留。
+    const capabilityLayers = [
       connectionCapabilityLayer,
+      createCapabilityEnvelope(computeCapabilities(item.rawId), 'heuristic'),
       createCapabilityEnvelope(item.capabilities, item.capabilitySource || 'provider'),
-      createCapabilityEnvelope(computeCapabilities(item.rawId, item.tags), 'heuristic'),
-    ].filter((layer): layer is CapabilityEnvelope => Boolean(layer)))
+    ].filter((layer): layer is CapabilityEnvelope => Boolean(layer))
     const resolvedCapabilities = mergeCapabilityLayers(capabilityLayers)
     const capabilitiesJson = serializeCapabilityEnvelope(resolvedCapabilities)
     const modelType = detectModelType(item.rawId, item.tags)
 
-    if (contextWindow && (!row?.manualOverride || metaInput.context_window == null)) {
+    // 检测值只写检测键；人工值在 custom_* 里，读取时优先。
+    if (contextWindow) {
       metaInput.context_window = contextWindow
     } else if (!('context_window' in metaInput)) {
       metaInput.context_window = null
     }
-    if (completionLimit && (!row?.manualOverride || metaInput.max_output_tokens == null)) {
+    if (completionLimit) {
       metaInput.max_output_tokens = completionLimit
     } else if (!('max_output_tokens' in metaInput)) {
       metaInput.max_output_tokens = null
@@ -290,7 +317,7 @@ export async function refreshModelCatalogForConnectionGroup(
         rawId: item.rawId,
         name: item.name,
         provider: item.provider,
-        connectionType: item.connectionType,
+        connectionType: 'external',
         modelType,
         tagsJson,
         metaJson,
@@ -304,15 +331,16 @@ export async function refreshModelCatalogForConnectionGroup(
         rawId: item.rawId,
         name: item.name,
         provider: item.provider,
-        connectionType: item.connectionType,
+        // 旧列仅为兼容历史 schema 保留；连接类型已无运行时语义。
+        connectionType: 'external',
         modelType,
         lastFetchedAt: now,
         expiresAt,
         metaJson,
       }
 
-      if (!row.manualOverride) {
-        updateData.tagsJson = tagsJson
+      updateData.tagsJson = tagsJson
+      if (!manualCapabilities) {
         updateData.capabilitiesJson = capabilitiesJson
       }
 
@@ -321,7 +349,7 @@ export async function refreshModelCatalogForConnectionGroup(
   }
 
   const staleIds = existing
-    .filter((row) => !seen.has(row.modelId) && !row.manualOverride)
+    .filter((row) => !seen.has(row.modelId) && !readModelOverrideState(row).any)
     .map((row) => row.id)
 
   await prisma.$transaction(

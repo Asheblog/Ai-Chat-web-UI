@@ -182,10 +182,10 @@ afterEach(() => {
 })
 
 describe("UsersRegistrationPage", () => {
-  test("渲染页头「用户与注册」+「用户注册」卡 +「用户管理」分区标题", () => {
+  test("渲染页头「用户与访问」+「用户注册」卡 +「用户管理」分区标题", () => {
     render(<UsersRegistrationPage />)
 
-    expect(screen.getByText("用户与注册")).toBeInTheDocument()
+    expect(screen.getByText("用户与访问")).toBeInTheDocument()
     expect(screen.getByText("注册开放策略、每日额度与用户管理")).toBeInTheDocument()
     // 注册策略 FeatureCard
     expect(screen.getByText("用户注册")).toBeInTheDocument()

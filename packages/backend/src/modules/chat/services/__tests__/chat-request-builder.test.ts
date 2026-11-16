@@ -552,3 +552,170 @@ describe('resolveContextEnabled', () => {
     expect(resolveContextEnabled({ actorContextEnabled: null })).toBe(true)
   })
 })
+
+describe('ChatRequestBuilder model parameter and timeout contract', () => {
+  const prepareWith = async (options: {
+    settings?: Array<{ key: string; value: string }>
+    session?: any
+    payload?: Record<string, any>
+    completionLimit?: number | null
+    promptTokens?: number
+    contextLimit?: number
+  } = {}) => {
+    const { builder, prisma, tokenizer, resolveContextLimit, resolveCompletionLimit } = buildBuilder()
+    prisma.message.findMany.mockResolvedValue([])
+    prisma.systemSetting.findMany.mockResolvedValue(options.settings ?? [])
+    prisma.modelCatalog.findMany.mockResolvedValue([])
+    tokenizer.truncateMessages.mockResolvedValue([{ role: 'user', content: 'hi' }])
+    tokenizer.countConversationTokens.mockResolvedValue(options.promptTokens ?? 10)
+    resolveContextLimit.mockResolvedValue(options.contextLimit ?? 1000)
+    resolveCompletionLimit.mockResolvedValue(
+      options.completionLimit === undefined ? 500 : options.completionLimit,
+    )
+    return builder.prepare({
+      session: options.session ?? (baseSession as any),
+      payload: { sessionId: 1, content: 'hi', ...(options.payload ?? {}) } as any,
+      content: 'hi',
+      mode: 'stream',
+    })
+  }
+
+  const anthropicSession = (modelRawId: string) => ({
+    ...baseSession,
+    modelRawId,
+    connection: { ...baseSession.connection, provider: 'anthropic', baseUrl: 'https://api.anthropic.com/v1' },
+  })
+
+  it('omits effort the protocol cannot express instead of sending it', async () => {
+    const prepared = await prepareWith({
+      settings: [
+        { key: 'reasoning_enabled', value: 'true' },
+        { key: 'openai_reasoning_effort', value: 'none' },
+      ],
+      session: anthropicSession('claude-opus-5-5'),
+    })
+    expect(prepared.baseRequestBody.reasoning_effort).toBeUndefined()
+    expect(prepared.providerRequest.body.output_config).toBeUndefined()
+  })
+
+  it('maps a deepseek-compat effort to the documented value and drops temperature while thinking is on', async () => {
+    const prepared = await prepareWith({
+      settings: [{ key: 'reasoning_enabled', value: 'true' }],
+      session: {
+        ...baseSession,
+        reasoningEffort: 'medium',
+        connection: { ...baseSession.connection, thinkingDialect: 'deepseek_compat' },
+      },
+    })
+    expect(prepared.baseRequestBody.reasoning_effort).toBe('high')
+    expect(prepared.baseRequestBody.thinking).toEqual({ type: 'enabled' })
+    expect(prepared.baseRequestBody.temperature).toBeUndefined()
+  })
+
+  it('leaves effort and thinking silent by default', async () => {
+    const prepared = await prepareWith({ settings: [{ key: 'reasoning_enabled', value: 'true' }] })
+    expect(prepared.baseRequestBody.reasoning_effort).toBeUndefined()
+    expect(prepared.baseRequestBody.thinking).toBeUndefined()
+  })
+
+  it('omits max_tokens instead of reusing the context window when no output limit is known', async () => {
+    const prepared = await prepareWith({
+      completionLimit: null,
+      promptTokens: 100,
+      contextLimit: 4000,
+    })
+    expect(prepared.appliedMaxTokens).toBeNull()
+    expect(prepared.baseRequestBody.max_tokens).toBeUndefined()
+    expect(prepared.providerRequest.body.max_tokens).toBeUndefined()
+  })
+
+  it('supplies the conservative Anthropic max_tokens requirement instead of the context window', async () => {
+    const prepared = await prepareWith({
+      completionLimit: null,
+      promptTokens: 100,
+      contextLimit: 200000,
+      session: anthropicSession('claude-opus-5-5'),
+    })
+    expect(prepared.appliedMaxTokens).toBe(4096)
+    expect(prepared.providerRequest.body.max_tokens).toBe(4096)
+  })
+
+  it('bounds the Anthropic auto limit by the remaining context budget', async () => {
+    const prepared = await prepareWith({
+      completionLimit: null,
+      promptTokens: 3900,
+      contextLimit: 4000,
+      session: anthropicSession('claude-opus-5-5'),
+    })
+    expect(prepared.appliedMaxTokens).toBe(100)
+    expect(prepared.providerRequest.body.max_tokens).toBe(100)
+  })
+
+  it('keeps an explicit limit over the protocol auto value', async () => {
+    const prepared = await prepareWith({
+      completionLimit: 8000,
+      promptTokens: 100,
+      contextLimit: 200000,
+      session: anthropicSession('claude-opus-5-5'),
+    })
+    expect(prepared.providerRequest.body.max_tokens).toBe(8000)
+  })
+
+  it('refuses to send a request over a legacy session connection', async () => {
+    await expect(
+      prepareWith({ session: { ...baseSession, connection: { ...baseSession.connection, authType: 'session' } } }),
+    ).rejects.toThrow(/Session/)
+  })
+
+  it('does not send effort to an Anthropic model outside the official support list', async () => {
+    const prepared = await prepareWith({
+      settings: [{ key: 'reasoning_enabled', value: 'true' }],
+      session: anthropicSession('claude-sonnet-4-5'),
+      payload: { reasoningEffort: 'high' },
+    })
+    expect(prepared.baseRequestBody.reasoning_effort).toBeUndefined()
+    expect(prepared.providerRequest.body.output_config).toBeUndefined()
+    expect(prepared.providerRequest.body.thinking).toBeUndefined()
+  })
+
+  it('sends Anthropic effort through output_config only for a supported model', async () => {
+    const prepared = await prepareWith({
+      settings: [{ key: 'reasoning_enabled', value: 'true' }],
+      session: anthropicSession('claude-opus-5-5'),
+      payload: { reasoningEffort: 'high' },
+    })
+    expect(prepared.providerRequest.body.output_config).toEqual({ effort: 'high' })
+  })
+
+  describe('provider timeout resolution', () => {
+    const originalEnv = process.env.PROVIDER_TIMEOUT_MS
+    afterEach(() => {
+      if (originalEnv === undefined) delete process.env.PROVIDER_TIMEOUT_MS
+      else process.env.PROVIDER_TIMEOUT_MS = originalEnv
+    })
+
+    it('uses the shared 120s default when nothing is configured', async () => {
+      delete process.env.PROVIDER_TIMEOUT_MS
+      const prepared = await prepareWith()
+      expect(prepared.providerRequest.timeoutMs).toBe(120000)
+    })
+
+    it('keeps an explicit configured timeout', async () => {
+      delete process.env.PROVIDER_TIMEOUT_MS
+      const prepared = await prepareWith({ settings: [{ key: 'provider_timeout_ms', value: '60000' }] })
+      expect(prepared.providerRequest.timeoutMs).toBe(60000)
+    })
+
+    it('clamps a sub-minimum timeout to the settings contract floor', async () => {
+      delete process.env.PROVIDER_TIMEOUT_MS
+      const prepared = await prepareWith({ settings: [{ key: 'provider_timeout_ms', value: '5000' }] })
+      expect(prepared.providerRequest.timeoutMs).toBe(10000)
+    })
+
+    it('falls back to the environment value when no system setting exists', async () => {
+      process.env.PROVIDER_TIMEOUT_MS = '45000'
+      const prepared = await prepareWith()
+      expect(prepared.providerRequest.timeoutMs).toBe(45000)
+    })
+  })
+})

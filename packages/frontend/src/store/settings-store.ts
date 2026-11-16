@@ -149,10 +149,9 @@ export const useSettingsStore = create<SettingsStore>()(
           }))
             syncAssistantAvatar(updatedSettings.assistantAvatarUrl)
           } catch (error: any) {
-            set({
-              error: error.response?.data?.error || error.message || '更新系统设置失败',
-              isLoading: false,
-            })
+            const message = error.response?.data?.error || error.message || '更新系统设置失败'
+            set({ error: message, isLoading: false })
+            throw new Error(message)
           }
         },
 

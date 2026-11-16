@@ -16,20 +16,20 @@ export interface RetentionPolicyCardProps {
 }
 
 /**
- * 数据保留策略卡：4 个 key（chatImageRetentionDays/battleRetentionDays/
- * assistantReplyHistoryLimit/anonymousRetentionDays），draft + 校验模式适配自 SystemGeneralPage。
+ * 数据保留策略卡：3 个 key（chatImageRetentionDays/battleRetentionDays/anonymousRetentionDays）。
+ * 三个字段统一 0 语义：0 = 永久保留、跳过清理。AI 回答版本不再按条数裁剪，历史用量也不删，
+ * 因此这里没有「单条消息 AI 回答上限」入口。
  */
 export function RetentionPolicyCard({ settings, update }: RetentionPolicyCardProps) {
   const { toast } = useToast()
   const [retentionDraft, setRetentionDraft] = useState("30")
   const [battleRetentionDraft, setBattleRetentionDraft] = useState("15")
-  const [replyHistoryLimitDraft, setReplyHistoryLimitDraft] = useState("5")
   const [anonymousRetentionDraft, setAnonymousRetentionDraft] = useState("15")
+  const [saving, setSaving] = useState(false)
 
   const resetDrafts = useCallback(() => {
     setRetentionDraft(String(settings.chatImageRetentionDays ?? 30))
     setBattleRetentionDraft(String(settings.battleRetentionDays ?? 15))
-    setReplyHistoryLimitDraft(String(settings.assistantReplyHistoryLimit ?? 5))
     setAnonymousRetentionDraft(String(settings.anonymousRetentionDays ?? 15))
   }, [settings])
 
@@ -40,30 +40,23 @@ export function RetentionPolicyCard({ settings, update }: RetentionPolicyCardPro
   const normalizedInitials = {
     chatImageRetentionDays: String(settings.chatImageRetentionDays ?? 30),
     battleRetentionDays: String(settings.battleRetentionDays ?? 15),
-    assistantReplyHistoryLimit: String(settings.assistantReplyHistoryLimit ?? 5),
     anonymousRetentionDays: String(settings.anonymousRetentionDays ?? 15),
   }
 
   const fieldChanged =
     retentionDraft !== normalizedInitials.chatImageRetentionDays ||
     battleRetentionDraft !== normalizedInitials.battleRetentionDays ||
-    replyHistoryLimitDraft !== normalizedInitials.assistantReplyHistoryLimit ||
     anonymousRetentionDraft !== normalizedInitials.anonymousRetentionDays
 
   const handleSave = async () => {
     const parsedRetention = Number.parseInt(retentionDraft, 10)
-    if (Number.isNaN(parsedRetention) || parsedRetention < 0) {
-      toast({ title: "输入无效", description: "图片保留天数需为不小于 0 的整数", variant: "destructive" })
+    if (Number.isNaN(parsedRetention) || parsedRetention < 0 || parsedRetention > 3650) {
+      toast({ title: "输入无效", description: "图片保留天数需在 0 到 3650 之间（0 = 永久保留）", variant: "destructive" })
       return
     }
     const parsedBattleRetentionDays = Number.parseInt(battleRetentionDraft, 10)
     if (Number.isNaN(parsedBattleRetentionDays) || parsedBattleRetentionDays < 0 || parsedBattleRetentionDays > 3650) {
       toast({ title: "输入无效", description: "乱斗历史保留天数需在 0 到 3650 之间", variant: "destructive" })
-      return
-    }
-    const parsedReplyHistoryLimit = Number.parseInt(replyHistoryLimitDraft, 10)
-    if (Number.isNaN(parsedReplyHistoryLimit) || parsedReplyHistoryLimit < 1 || parsedReplyHistoryLimit > 20) {
-      toast({ title: "输入无效", description: "AI 回答历史上限需在 1 到 20 之间", variant: "destructive" })
       return
     }
     const parsedAnonymousRetention = Number.parseInt(anonymousRetentionDraft, 10)
@@ -72,24 +65,34 @@ export function RetentionPolicyCard({ settings, update }: RetentionPolicyCardPro
       return
     }
 
-    await update({
-      chatImageRetentionDays: parsedRetention,
-      battleRetentionDays: parsedBattleRetentionDays,
-      assistantReplyHistoryLimit: parsedReplyHistoryLimit,
-      anonymousRetentionDays: parsedAnonymousRetention,
-    })
-    toast({ title: "保留策略已保存" })
+    setSaving(true)
+    try {
+      await update({
+        chatImageRetentionDays: parsedRetention,
+        battleRetentionDays: parsedBattleRetentionDays,
+        anonymousRetentionDays: parsedAnonymousRetention,
+      })
+      toast({ title: "保留策略已保存" })
+    } catch (error: any) {
+      toast({
+        title: "保存失败",
+        description: error?.message || "保留策略未保存，请重试",
+        variant: "destructive",
+      })
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
     <FeatureCard
       icon={Clock}
       title="数据保留策略"
-      description="控制系统数据的自动清理规则"
+      description="控制系统数据的清理规则：0 表示永久保留"
       cardKey="data-maintenance:retention"
       footer={
         <div className="flex justify-end">
-          <Button onClick={handleSave} disabled={!fieldChanged}>
+          <Button onClick={handleSave} disabled={!fieldChanged || saving}>
             保存保留策略
           </Button>
         </div>
@@ -103,7 +106,7 @@ export function RetentionPolicyCard({ settings, update }: RetentionPolicyCardPro
               <Badge className="bg-warning/10 text-warning">存储优化</Badge>
             </div>
           )}
-          description="超过此天数的聊天图片将被自动清理（0 表示永久保留，范围 0-3650 天）"
+          description="超过此天数的聊天图片会被清理（0 表示永久保留，范围 0-3650 天）"
           align="start"
         >
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
@@ -121,7 +124,7 @@ export function RetentionPolicyCard({ settings, update }: RetentionPolicyCardPro
 
         <SettingRow
           title="乱斗历史保留天数（battle/share）"
-          description="按创建时间自动清理已结束的乱斗与分享记录（0 表示关闭自动清理，范围 0-3650 天）"
+          description="按创建时间清理已结束的乱斗与分享记录（0 表示永久保留，范围 0-3650 天）"
           align="start"
         >
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
@@ -138,26 +141,8 @@ export function RetentionPolicyCard({ settings, update }: RetentionPolicyCardPro
         </SettingRow>
 
         <SettingRow
-          title="单条消息 AI 回答上限"
-          description="同一条用户消息最多保留的 AI 回答数量（范围 1-20），超过后自动删除最旧的回答"
-          align="start"
-        >
-          <div className="flex w-full flex-wrap items-center justify-end gap-2">
-            <Input
-              id="assistantReplyHistoryLimit"
-              type="text"
-              inputMode="numeric"
-              value={replyHistoryLimitDraft}
-              onChange={(e) => setReplyHistoryLimitDraft(e.target.value)}
-              className="w-full sm:w-28 text-right"
-            />
-            <span className="text-sm text-muted-foreground whitespace-nowrap">条</span>
-          </div>
-        </SettingRow>
-
-        <SettingRow
           title="匿名访客数据保留天数"
-          description="匿名用户的聊天记录保留时长（0 表示永久保留，范围 0-15 天）"
+          description="匿名会话超过此天数后清理，当前活跃会话始终保留（0 表示永久保留，范围 0-15 天）"
           align="start"
         >
           <div className="flex w-full flex-wrap items-center justify-end gap-2">
@@ -171,6 +156,10 @@ export function RetentionPolicyCard({ settings, update }: RetentionPolicyCardPro
             <span className="text-sm text-muted-foreground whitespace-nowrap">天</span>
           </div>
         </SettingRow>
+
+        <p className="text-xs leading-5 text-muted-foreground">
+          AI 回答版本全部保留，不再按条数自动删除；已有回答的历史用量统计同样保留。
+        </p>
       </div>
     </FeatureCard>
   )

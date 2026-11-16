@@ -38,6 +38,23 @@ describe('settings-store persist 迁移', () => {
     expect(Object.prototype.hasOwnProperty.call(state, 'newConversationContextEnabled')).toBe(false)
   })
 
+  it('保存失败向调用方报错并保留有效设置', async () => {
+    const api = await import('@/features/settings/api')
+    const { useSettingsStore } = await import('@/store/settings-store')
+    const current = { brandText: '当前站点', allowRegistration: false }
+    useSettingsStore.setState({ systemSettings: current, error: null })
+    vi.mocked(api.updateSystemSettings).mockRejectedValueOnce({
+      response: { data: { error: '品牌名称不能为空' } },
+    })
+
+    await expect(useSettingsStore.getState().updateSystemSettings({ brandText: '' }))
+      .rejects.toThrow('品牌名称不能为空')
+
+    expect(useSettingsStore.getState().systemSettings).toEqual(current)
+    expect(useSettingsStore.getState().error).toBe('品牌名称不能为空')
+    expect(useSettingsStore.getState().isLoading).toBe(false)
+  })
+
   it('persist 落 assistantAvatarUrl，systemSettings 不落盘', async () => {
     const { useSettingsStore } = await import('@/store/settings-store')
     const avatarUrl = '/chat-images/profiles/2026/11/14/a.png'

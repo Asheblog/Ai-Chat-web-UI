@@ -1,5 +1,6 @@
 import type { PrismaClient, Prisma } from '@prisma/client'
 import { SUPPORTED_PROVIDERS } from '../../utils/providers'
+import { parseBooleanSetting } from '../../utils/parsers'
 import { prisma as defaultPrisma } from '../../db'
 import {
   getQuotaPolicy as defaultGetQuotaPolicy,
@@ -16,11 +17,12 @@ import {
   resolveConfiguredProfileImageBaseUrl,
 } from '../../utils/profile-images'
 import type { Actor } from '../../types'
+import { resolveStreamConfig } from '../stream/stream-config-resolver'
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../../config/storage'
 import { invalidateModelAccessDefaultsCache as defaultInvalidateModelAccessDefaultsCache } from '../../utils/model-access-policy'
 import type { SecretVaultService } from '../secret-vault'
 import { hasDeepseekSearchKey, saveDeepseekSearchKey } from './deepseek-search-credentials'
-import { WEB_SEARCH_ENGINE_IDS } from '@aichat/shared/web-search-contract'
+import { normalizeWebSearchEngines, WEB_SEARCH_ENGINE_IDS } from '@aichat/shared/web-search-contract'
 import {
   BRAND_THEME_STORAGE_KEYS,
   normalizeBrandHex,
@@ -75,7 +77,6 @@ export interface SettingsServiceDeps {
 
 const BRANDING_CACHE_TTL_MS = 30_000
 const WEB_SEARCH_ENGINES = WEB_SEARCH_ENGINE_IDS
-type WebSearchEngine = (typeof WEB_SEARCH_ENGINES)[number]
 
 const emptyBrandTheme = (): Record<BrandThemeStorageKey, string> =>
   Object.fromEntries(BRAND_THEME_STORAGE_KEYS.map((key) => [key, ''])) as Record<
@@ -272,18 +273,11 @@ export class SettingsService {
     }
 
     const settingsObj = Object.fromEntries(map.entries())
-    const webSearchEnabledEngines = this.parseWebSearchEngineList(
+    const runtime = resolveStreamConfig({ sysMap: settingsObj })
+    const webSearchEnabledEngines = normalizeWebSearchEngines(
       settingsObj.web_search_enabled_engines ?? process.env.WEB_SEARCH_ENABLED_ENGINES,
       ['tavily'],
     )
-    const webSearchEngineOrder = this.parseWebSearchEngineList(
-      settingsObj.web_search_engine_order ?? process.env.WEB_SEARCH_ENGINE_ORDER,
-      webSearchEnabledEngines,
-    )
-    const normalizedWebSearchEngineOrder = [
-      ...webSearchEngineOrder.filter((engine) => webSearchEnabledEngines.includes(engine)),
-      ...webSearchEnabledEngines.filter((engine) => !webSearchEngineOrder.includes(engine)),
-    ]
     const webSearchHasApiKeyTavily = Boolean(
       settingsObj.web_search_api_key_tavily || process.env.WEB_SEARCH_API_KEY_TAVILY || '',
     )
@@ -299,9 +293,6 @@ export class SettingsService {
     const webSearchHasApiKeyDeepseek = await hasDeepseekSearchKey(settingsObj, this.secretVault)
     const webSearchHasApiKey =
       webSearchHasApiKeyTavily || webSearchHasApiKeyBrave || webSearchHasApiKeyMetaso || webSearchHasApiKeyExa || webSearchHasApiKeyDeepseek
-    const webSearchParallelMergeStrategy = this.parseWebSearchMergeStrategy(
-      settingsObj.web_search_parallel_merge_strategy ?? process.env.WEB_SEARCH_PARALLEL_MERGE_STRATEGY,
-    )
     const webSearchAutoBilingualMode = this.parseWebSearchBilingualMode(
       settingsObj.web_search_auto_bilingual_mode ?? process.env.WEB_SEARCH_AUTO_BILINGUAL_MODE,
     )
@@ -315,17 +306,16 @@ export class SettingsService {
       brand_foreground: read('brand_foreground', ''),
       brand_muted_foreground: read('brand_muted_foreground', ''),
       registration_enabled: (read('registration_enabled', process.env.REGISTRATION_ENABLED || 'true') || 'true') === 'true',
-      sse_heartbeat_interval_ms: Number(read('sse_heartbeat_interval_ms', process.env.SSE_HEARTBEAT_INTERVAL_MS || '15000')),
-      provider_max_idle_ms: Number(read('provider_max_idle_ms', process.env.PROVIDER_MAX_IDLE_MS || '30000')),
-      provider_timeout_ms: Number(read('provider_timeout_ms', process.env.PROVIDER_TIMEOUT_MS || '300000')),
-      provider_initial_grace_ms: Number(read('provider_initial_grace_ms', process.env.PROVIDER_INITIAL_GRACE_MS || '0')),
-      provider_reasoning_idle_ms: Number(read('provider_reasoning_idle_ms', process.env.PROVIDER_REASONING_IDLE_MS || '0')),
-      reasoning_keepalive_interval_ms: Number(read('reasoning_keepalive_interval_ms', process.env.REASONING_KEEPALIVE_INTERVAL_MS || '0')),
-      stream_delta_flush_interval_ms: Number(read('stream_delta_flush_interval_ms', process.env.STREAM_DELTA_FLUSH_INTERVAL_MS || '0')),
-      stream_reasoning_flush_interval_ms: Number(read('stream_reasoning_flush_interval_ms', process.env.STREAM_REASONING_FLUSH_INTERVAL_MS || '0')),
-      stream_keepalive_interval_ms: Number(read('stream_keepalive_interval_ms', process.env.STREAM_KEEPALIVE_INTERVAL_MS || '0')),
-      usage_emit: this.parseBoolean(settingsObj.usage_emit, process.env.USAGE_EMIT),
-      usage_provider_only: this.parseBoolean(settingsObj.usage_provider_only, process.env.USAGE_PROVIDER_ONLY),
+      sse_heartbeat_interval_ms: runtime.heartbeatIntervalMs,
+      provider_timeout_ms: runtime.providerTimeoutMs,
+      provider_initial_grace_ms: runtime.providerInitialGraceMs,
+      provider_reasoning_idle_ms: runtime.providerReasoningIdleMs,
+      reasoning_keepalive_interval_ms: runtime.reasoningKeepaliveIntervalMs,
+      stream_delta_flush_interval_ms: runtime.streamDeltaFlushIntervalMs,
+      stream_reasoning_flush_interval_ms: runtime.streamReasoningFlushIntervalMs,
+      stream_keepalive_interval_ms: runtime.streamKeepaliveIntervalMs,
+      usage_emit: runtime.usageEmit,
+      usage_provider_only: runtime.usageProviderOnly,
       chat_system_prompt: settingsObj.chat_system_prompt || process.env.CHAT_SYSTEM_PROMPT || '',
       context_compression_enabled: this.parseBoolean(settingsObj.context_compression_enabled, process.env.CONTEXT_COMPRESSION_ENABLED || 'true'),
       context_compression_threshold_ratio: Math.max(
@@ -345,17 +335,16 @@ export class SettingsService {
         50,
         12,
       ),
-      reasoning_enabled: this.parseBoolean(settingsObj.reasoning_enabled, process.env.REASONING_ENABLED || 'true'),
-      reasoning_save_to_db: this.parseBoolean(settingsObj.reasoning_save_to_db, process.env.REASONING_SAVE_TO_DB || 'false'),
+      reasoning_enabled: runtime.reasoningEnabled,
+      reasoning_save_to_db: runtime.reasoningSaveToDb,
       reasoning_tags_mode: settingsObj.reasoning_tags_mode || process.env.REASONING_TAGS_MODE || 'default',
       reasoning_custom_tags: settingsObj.reasoning_custom_tags || process.env.REASONING_CUSTOM_TAGS || '',
-      stream_delta_chunk_size: Number(read('stream_delta_chunk_size', process.env.STREAM_DELTA_CHUNK_SIZE || '3')),
+      stream_delta_chunk_size: runtime.streamDeltaChunkSize,
       openai_reasoning_effort: settingsObj.openai_reasoning_effort || process.env.OPENAI_REASONING_EFFORT || 'unset',
       reasoning_max_output_tokens_default: Number(
-        read('reasoning_max_output_tokens_default', process.env.REASONING_MAX_OUTPUT_TOKENS_DEFAULT || '32000'),
+        read('reasoning_max_output_tokens_default', process.env.REASONING_MAX_OUTPUT_TOKENS_DEFAULT || '0'),
       ),
       chat_image_retention_days: Number(read('chat_image_retention_days', String(CHAT_IMAGE_DEFAULT_RETENTION_DAYS))),
-      assistant_reply_history_limit: Number(read('assistant_reply_history_limit', process.env.ASSISTANT_REPLY_HISTORY_LIMIT || '5')),
       site_base_url: read('site_base_url', process.env.SITE_BASE_URL || ''),
       anonymous_retention_days: quotaPolicy.anonymousRetentionDays,
       anonymous_daily_quota: quotaPolicy.anonymousDailyQuota,
@@ -367,7 +356,6 @@ export class SettingsService {
       battle_retention_days: this.parseIntInRange(settingsObj.battle_retention_days, process.env.BATTLE_RETENTION_DAYS, 0, 3650, 15),
       web_search_agent_enable: this.parseBoolean(settingsObj.web_search_agent_enable, process.env.WEB_SEARCH_AGENT_ENABLE || 'false'),
       web_search_enabled_engines: webSearchEnabledEngines,
-      web_search_engine_order: normalizedWebSearchEngineOrder,
       web_search_result_limit: this.parseIntInRange(settingsObj.web_search_result_limit, process.env.WEB_SEARCH_RESULT_LIMIT, 1, 10, 4),
       web_search_domain_filter: this.parseDomainFilter(settingsObj.web_search_domain_filter),
       web_search_has_api_key_tavily: webSearchHasApiKeyTavily,
@@ -401,8 +389,6 @@ export class SettingsService {
         120000,
         12000,
       ),
-      web_search_parallel_merge_strategy: webSearchParallelMergeStrategy,
-      web_search_auto_bilingual: this.parseBoolean(settingsObj.web_search_auto_bilingual, process.env.WEB_SEARCH_AUTO_BILINGUAL || 'true'),
       web_search_auto_bilingual_mode: webSearchAutoBilingualMode,
       web_search_auto_read_parallelism: this.parseIntInRange(
         settingsObj.web_search_auto_read_parallelism,
@@ -426,31 +412,11 @@ export class SettingsService {
         4,
       ),
       mcp_global_enabled: this.parseBoolean(settingsObj.mcp_global_enabled, process.env.MCP_GLOBAL_ENABLED || 'true'),
+      extension_install_tool_enable: this.parseBoolean(settingsObj.extension_install_tool_enable, process.env.EXTENSION_INSTALL_TOOL_ENABLE || 'true'),
       python_tool_enable: this.parseBoolean(settingsObj.python_tool_enable, process.env.PYTHON_TOOL_ENABLE || 'false'),
       chat_dynamic_skill_runtime_enabled: this.parseBoolean(
         settingsObj.chat_dynamic_skill_runtime_enabled,
         process.env.CHAT_DYNAMIC_SKILL_RUNTIME_ENABLED || 'false',
-      ),
-      python_tool_timeout_ms: this.parseIntInRange(
-        settingsObj.python_tool_timeout_ms,
-        process.env.PYTHON_TOOL_TIMEOUT_MS,
-        1000,
-        60000,
-        8000,
-      ),
-      python_tool_max_output_chars: this.parseIntInRange(
-        settingsObj.python_tool_max_output_chars,
-        process.env.PYTHON_TOOL_MAX_OUTPUT_CHARS,
-        256,
-        20000,
-        4000,
-      ),
-      python_tool_max_source_chars: this.parseIntInRange(
-        settingsObj.python_tool_max_source_chars,
-        process.env.PYTHON_TOOL_MAX_SOURCE_CHARS,
-        256,
-        20000,
-        4000,
       ),
       task_trace_enabled: this.parseBoolean(settingsObj.task_trace_enabled, 'false'),
       task_trace_default_on: this.parseBoolean(settingsObj.task_trace_default_on, 'false'),
@@ -498,9 +464,9 @@ export class SettingsService {
       rag_max_pages: this.parseIntInRange(settingsObj.rag_max_pages, '200', 10, 1000, 200),
       rag_retention_days: this.parseIntInRange(settingsObj.rag_retention_days, '30', 1, 365, 30),
       // 知识库设置
-      knowledge_base_enabled: this.parseBoolean(settingsObj.knowledge_base_enabled, 'false'),
-      knowledge_base_allow_anonymous: this.parseBoolean(settingsObj.knowledge_base_allow_anonymous, 'false'),
-      knowledge_base_allow_users: this.parseBoolean(settingsObj.knowledge_base_allow_users, 'true'),
+      knowledge_base_enabled: parseBooleanSetting(settingsObj.knowledge_base_enabled, false),
+      knowledge_base_allow_anonymous: parseBooleanSetting(settingsObj.knowledge_base_allow_anonymous, false),
+      knowledge_base_allow_users: parseBooleanSetting(settingsObj.knowledge_base_allow_users, true),
     }
 
     // 只接受显式配置的基址（含协议补全与校验）；未配置时输出同源相对路径（/chat-images/...），
@@ -530,7 +496,6 @@ export class SettingsService {
         model_access_default_user: formatted.model_access_default_user,
         web_search_agent_enable: formatted.web_search_agent_enable,
         web_search_enabled_engines: formatted.web_search_enabled_engines,
-        web_search_engine_order: formatted.web_search_engine_order,
         web_search_result_limit: formatted.web_search_result_limit,
         web_search_domain_filter: formatted.web_search_domain_filter,
         web_search_has_api_key: formatted.web_search_has_api_key,
@@ -546,12 +511,11 @@ export class SettingsService {
         web_search_parallel_max_engines: formatted.web_search_parallel_max_engines,
         web_search_parallel_max_queries_per_call: formatted.web_search_parallel_max_queries_per_call,
         web_search_parallel_timeout_ms: formatted.web_search_parallel_timeout_ms,
-        web_search_parallel_merge_strategy: formatted.web_search_parallel_merge_strategy,
-        web_search_auto_bilingual: formatted.web_search_auto_bilingual,
         web_search_auto_bilingual_mode: formatted.web_search_auto_bilingual_mode,
         web_search_auto_read_parallelism: formatted.web_search_auto_read_parallelism,
         web_search_auto_read_batch_timeout_ms: formatted.web_search_auto_read_batch_timeout_ms,
         mcp_global_enabled: formatted.mcp_global_enabled,
+        extension_install_tool_enable: formatted.extension_install_tool_enable,
         python_tool_enable: formatted.python_tool_enable,
         chat_dynamic_skill_runtime_enabled: formatted.chat_dynamic_skill_runtime_enabled,
         assistant_avatar_url: formatted.assistant_avatar_url,
@@ -622,7 +586,6 @@ export class SettingsService {
     }
 
     assignIfNumber('sse_heartbeat_interval_ms', payload.sse_heartbeat_interval_ms)
-    assignIfNumber('provider_max_idle_ms', payload.provider_max_idle_ms)
     assignIfNumber('provider_timeout_ms', payload.provider_timeout_ms)
     assignIfNumber('provider_initial_grace_ms', payload.provider_initial_grace_ms)
     assignIfNumber('provider_reasoning_idle_ms', payload.provider_reasoning_idle_ms)
@@ -634,7 +597,6 @@ export class SettingsService {
     assignIfNumber('context_compression_threshold_ratio', payload.context_compression_threshold_ratio)
     assignIfNumber('context_compression_tail_messages', payload.context_compression_tail_messages)
     assignIfNumber('chat_image_retention_days', payload.chat_image_retention_days)
-    assignIfNumber('assistant_reply_history_limit', payload.assistant_reply_history_limit)
     assignIfNumber('web_search_result_limit', payload.web_search_result_limit)
     assignIfNumber('web_search_parallel_max_engines', payload.web_search_parallel_max_engines)
     assignIfNumber('web_search_parallel_max_queries_per_call', payload.web_search_parallel_max_queries_per_call)
@@ -642,9 +604,6 @@ export class SettingsService {
     assignIfNumber('web_search_auto_read_parallelism', payload.web_search_auto_read_parallelism)
     assignIfNumber('web_search_auto_read_batch_timeout_ms', payload.web_search_auto_read_batch_timeout_ms)
     assignIfNumber('agent_max_tool_iterations', payload.agent_max_tool_iterations)
-    assignIfNumber('python_tool_timeout_ms', payload.python_tool_timeout_ms)
-    assignIfNumber('python_tool_max_output_chars', payload.python_tool_max_output_chars)
-    assignIfNumber('python_tool_max_source_chars', payload.python_tool_max_source_chars)
     assignIfNumber('task_trace_retention_days', payload.task_trace_retention_days)
     assignIfNumber('task_trace_max_events', payload.task_trace_max_events)
     assignIfNumber('task_trace_idle_timeout_ms', payload.task_trace_idle_timeout_ms)
@@ -676,7 +635,6 @@ export class SettingsService {
       SYSTEM_SETTINGS_FIELD_MAP.webSearchAgentEnable,
       SYSTEM_SETTINGS_FIELD_MAP.webSearchIncludeSummary,
       SYSTEM_SETTINGS_FIELD_MAP.webSearchIncludeRaw,
-      SYSTEM_SETTINGS_FIELD_MAP.webSearchAutoBilingual,
       SYSTEM_SETTINGS_FIELD_MAP.pythonToolEnable,
       SYSTEM_SETTINGS_FIELD_MAP.chatDynamicSkillRuntimeEnabled,
       SYSTEM_SETTINGS_FIELD_MAP.mcpGlobalEnabled,
@@ -727,7 +685,6 @@ export class SettingsService {
       { key: 'web_search_api_key_exa', value: payload.web_search_api_key_exa },
       { key: 'web_search_domain_filter', value: Array.isArray(payload.web_search_domain_filter) ? JSON.stringify(payload.web_search_domain_filter) : undefined },
       { key: 'web_search_scope', value: payload.web_search_scope },
-      { key: 'web_search_parallel_merge_strategy', value: payload.web_search_parallel_merge_strategy },
       { key: 'web_search_auto_bilingual_mode', value: payload.web_search_auto_bilingual_mode },
       { key: 'task_trace_env', value: payload.task_trace_env },
       { key: 'title_summary_model_source', value: payload.title_summary_model_source },
@@ -742,9 +699,6 @@ export class SettingsService {
 
     if (Array.isArray(payload.web_search_enabled_engines)) {
       updates.push(upsert('web_search_enabled_engines', JSON.stringify(payload.web_search_enabled_engines)))
-    }
-    if (Array.isArray(payload.web_search_engine_order)) {
-      updates.push(upsert('web_search_engine_order', JSON.stringify(payload.web_search_engine_order)))
     }
 
     // RAG embedding connection ID (需要特殊处理 null 值)
@@ -775,19 +729,16 @@ export class SettingsService {
       this.invalidateBattlePolicyCache()
     }
 
-    if (payload.assistant_avatar) {
+    if (payload.assistant_avatar !== undefined) {
+      const current = await this.prisma.systemSetting.findUnique({ where: { key: 'assistant_avatar_path' } })
       let storedPath: string | null
       try {
-        storedPath = await this.replaceProfileImage(payload.assistant_avatar, { currentPath: undefined })
+        storedPath = await this.replaceProfileImage(payload.assistant_avatar, { currentPath: current?.value })
       } catch (error) {
         throw new SettingsServiceError('Invalid assistant avatar payload', 400)
       }
-      if (storedPath) {
-        updates.push(upsert('assistant_avatar_path', storedPath))
-      }
-    }
-    if (payload.assistant_avatar === null) {
-      updates.push(upsert('assistant_avatar_path', ''))
+      updates.push(upsert('assistant_avatar_path', storedPath || ''))
+      this.invalidateBrandingCache()
     }
 
     if (typeof payload.reasoning_max_output_tokens_default === 'number') {
@@ -865,61 +816,6 @@ export class SettingsService {
       } catch {}
     }
     return []
-  }
-
-  private parseWebSearchEngineList(raw: unknown, fallback: WebSearchEngine[]): WebSearchEngine[] {
-    const normalize = (value: unknown): WebSearchEngine | null => {
-      if (typeof value !== 'string') return null
-      const lowered = value.trim().toLowerCase()
-      return WEB_SEARCH_ENGINES.includes(lowered as WebSearchEngine)
-        ? (lowered as WebSearchEngine)
-        : null
-    }
-
-    const collectFromString = (value: string): string[] => {
-      const trimmed = value.trim()
-      if (!trimmed) return []
-      if (trimmed.startsWith('[')) {
-        try {
-          const parsed = JSON.parse(trimmed)
-          if (Array.isArray(parsed)) {
-            return parsed
-              .map((item) => (typeof item === 'string' ? item.trim() : ''))
-              .filter(Boolean)
-          }
-        } catch {
-          // ignore and fallback to CSV parsing
-        }
-      }
-      return trimmed
-        .split(/[,\n]/)
-        .map((item) => item.trim())
-        .filter(Boolean)
-    }
-
-    const source = Array.isArray(raw)
-      ? raw
-      : typeof raw === 'string'
-        ? collectFromString(raw)
-        : []
-
-    const normalized = Array.from(
-      new Set(
-        source
-          .map((item) => normalize(item))
-          .filter((item): item is WebSearchEngine => item !== null),
-      ),
-    )
-    if (normalized.length === 0) {
-      return [...fallback]
-    }
-    return normalized
-  }
-
-  private parseWebSearchMergeStrategy(value: unknown): 'hybrid_score_v1' {
-    return typeof value === 'string' && value.trim().toLowerCase() === 'hybrid_score_v1'
-      ? 'hybrid_score_v1'
-      : 'hybrid_score_v1'
   }
 
   private parseWebSearchBilingualMode(value: unknown): 'off' | 'conditional' | 'always' {

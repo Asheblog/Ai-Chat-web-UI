@@ -228,7 +228,20 @@ export class ChatImageService {
     return []
   }
 
+  /**
+   * 清理过期聊天图片。
+   *
+   * 保留天数契约：0 表示永久保留（跳过清理），正数按天计算截止线，
+   * 非法值回落到部署默认天数。与 battleRetentionDays 的 0 语义一致。
+   */
   async cleanupExpired(retentionDays: number): Promise<void> {
+    const effectiveDays =
+      Number.isFinite(retentionDays) && retentionDays >= 0
+        ? retentionDays
+        : CHAT_IMAGE_DEFAULT_RETENTION_DAYS
+
+    if (effectiveDays === 0) return
+
     const now = Date.now()
     if (now - this.lastCleanupAt < CLEANUP_INTERVAL_MS) return
     this.lastCleanupAt = now
@@ -237,16 +250,7 @@ export class ChatImageService {
       return
     }
 
-    const effectiveDays =
-      Number.isFinite(retentionDays) && retentionDays >= 0
-        ? retentionDays
-        : CHAT_IMAGE_DEFAULT_RETENTION_DAYS
-    if (effectiveDays < 0) return
-
-    const cutoff =
-      effectiveDays === 0
-        ? new Date(now - 1000)
-        : new Date(now - effectiveDays * 24 * 60 * 60 * 1000)
+    const cutoff = new Date(now - effectiveDays * 24 * 60 * 60 * 1000)
 
     try {
       const expiredAttachments = await this.prisma.messageAttachment.findMany({

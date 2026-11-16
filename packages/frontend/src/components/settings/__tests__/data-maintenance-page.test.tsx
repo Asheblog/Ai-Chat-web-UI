@@ -43,8 +43,9 @@ vi.mock("next/navigation", () => ({
 }))
 
 /**
- * 数据与维护页所需 key：baseSettings 已含 chatImageRetentionDays/assistantReplyHistoryLimit/
+ * 数据与维护页所需 key：baseSettings 已含 chatImageRetentionDays/
  * anonymousRetentionDays/battleRetentionDays/taskTrace* 等；压缩 3 key 缺省由组件默认覆盖（0.5/12/true）。
+ * 回答版本上限已整体移除，页面不再读取 assistantReplyHistoryLimit。
  */
 const dataMaintenanceSettings: SystemSettings = {
   ...baseSettings,
@@ -115,9 +116,11 @@ describe("DataMaintenancePage", () => {
     expect(screen.getByText("系统运行日志")).toBeInTheDocument()
   })
 
-  test("保留策略卡保存 payload 精确 4 key；battleRetentionDays=-2 阻止保存并 toast", async () => {
+  test("保留策略卡不再提供回答版本上限入口，保存 payload 精确 3 key", async () => {
     await renderPage()
     const card = getCard("数据保留策略")
+
+    expect(within(card).queryByText("单条消息 AI 回答上限")).not.toBeInTheDocument()
 
     // 修改乱斗历史保留天数 15 → 60，保存
     fireEvent.change(within(card).getByDisplayValue("15"), { target: { value: "60" } })
@@ -129,7 +132,6 @@ describe("DataMaintenancePage", () => {
     expect(updateSpy.mock.calls[0][0]).toEqual({
       chatImageRetentionDays: 30,
       battleRetentionDays: 60,
-      assistantReplyHistoryLimit: 5,
       anonymousRetentionDays: 10,
     })
 
@@ -144,11 +146,50 @@ describe("DataMaintenancePage", () => {
     )
   })
 
-  test("压缩卡保存 payload 精确 3 key；关闭启用开关后阈值/保留输入 disabled", async () => {
+  test("保留天数填 0 视为永久保留并按 0 提交", async () => {
+    await renderPage()
+    const card = getCard("数据保留策略")
+
+    fireEvent.change(within(card).getByDisplayValue("30"), { target: { value: "0" } })
+    await userEvent.click(within(card).getByRole("button", { name: "保存保留策略" }))
+
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledTimes(1)
+    })
+    expect(updateSpy.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ chatImageRetentionDays: 0 }),
+    )
+  })
+
+  test("保存失败时 toast 服务端文案、保留当前输入，且不提示已保存", async () => {
+    await renderPage()
+    const card = getCard("数据保留策略")
+    updateSpy.mockRejectedValueOnce(new Error("system_settings 写入失败"))
+
+    fireEvent.change(within(card).getByDisplayValue("10"), { target: { value: "3" } })
+    await userEvent.click(within(card).getByRole("button", { name: "保存保留策略" }))
+
+    await waitFor(() => {
+      expect(toastSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "保存失败",
+          description: "system_settings 写入失败",
+          variant: "destructive",
+        }),
+      )
+    })
+    expect(toastSpy).not.toHaveBeenCalledWith(expect.objectContaining({ title: "保留策略已保存" }))
+    expect(within(card).getByDisplayValue("3")).toBeInTheDocument()
+  })
+
+  test("压缩卡触发阈值/尾部消息数收进高级参数；保存 payload 精确 3 key", async () => {
     await renderPage()
     const card = getCard("上下文压缩")
 
-    // 修改压缩阈值 0.5 → 0.6，保存
+    // 默认收起：阈值/尾部输入不在可交互层
+    expect(within(card).queryByDisplayValue("0.5")).not.toBeInTheDocument()
+
+    await userEvent.click(within(card).getByRole("button", { name: "高级参数" }))
     fireEvent.change(within(card).getByDisplayValue("0.5"), { target: { value: "0.6" } })
     await userEvent.click(within(card).getByRole("button", { name: "保存压缩设置" }))
 
@@ -161,7 +202,7 @@ describe("DataMaintenancePage", () => {
       contextCompressionTailMessages: 12,
     })
 
-    // 关闭启用开关 → 阈值/保留输入 disabled
+    // 关闭启用开关 → 高级参数内的输入 disabled
     await userEvent.click(within(card).getAllByRole("switch")[0])
     expect(within(card).getByDisplayValue("0.6")).toBeDisabled()
     expect(within(card).getByDisplayValue("12")).toBeDisabled()
@@ -180,24 +221,49 @@ describe("DataMaintenancePage", () => {
     expect(updateSpy.mock.calls[0][0]).toEqual({ chatMaxConcurrentStreams: 3 })
   })
 
-  test("任务追踪：保留天数行内保存 payload；启用开关切换触发 update({ taskTraceEnabled })", async () => {
+  test("任务追踪：卡头总开关自动保存；保留天数行内保存且文案声明不会自动清理", async () => {
     await renderPage()
     const card = getCard("任务追踪")
 
-    // 保留天数 7 → 30 行内保存
+    expect(within(card).getByText(/仅作为「立即清理」的删除阈值/)).toBeInTheDocument()
+
     fireEvent.change(within(card).getByDisplayValue("7"), { target: { value: "30" } })
-    await userEvent.click(within(card).getAllByRole("button", { name: "保存" })[0])
+    await userEvent.click(within(card).getByRole("button", { name: "保存" }))
 
     await waitFor(() => {
       expect(updateSpy).toHaveBeenCalledTimes(1)
     })
     expect(updateSpy.mock.calls[0][0]).toEqual({ taskTraceRetentionDays: 30 })
 
-    // 启用开关切换（true → false）自动保存
+    // 总开关（卡头 Switch）切换（true → false）自动保存
     updateSpy.mockClear()
     await userEvent.click(within(card).getAllByRole("switch")[0])
     await waitFor(() => {
       expect(updateSpy).toHaveBeenCalledWith({ taskTraceEnabled: false })
+    })
+  })
+
+  test("任务追踪：生效环境给出三档环境语义并沿用已存环境值", async () => {
+    await renderPage()
+    const card = getCard("任务追踪")
+
+    expect(within(card).getByText("仅开发环境（非 production）")).toBeInTheDocument()
+    expect(within(card).getByText(/四道闸门/)).toBeInTheDocument()
+  })
+
+  test("任务追踪：单条追踪最大事件数收在高级参数，并接受 100 的下限", async () => {
+    await renderPage()
+    const card = getCard("任务追踪")
+
+    expect(within(card).queryByDisplayValue("2000")).not.toBeInTheDocument()
+    await userEvent.click(within(card).getByRole("button", { name: "高级参数" }))
+
+    const maxEventsRow = within(card).getByText("单条追踪最大事件数").closest('[role="group"]') as HTMLElement
+    fireEvent.change(within(maxEventsRow).getByDisplayValue("2000"), { target: { value: "100" } })
+    await userEvent.click(within(maxEventsRow).getByRole("button", { name: "保存" }))
+
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledWith({ taskTraceMaxEvents: 100 })
     })
   })
 
@@ -211,6 +277,14 @@ describe("DataMaintenancePage", () => {
     await waitFor(() => {
       expect(systemApiMocks.updateSystemLogConfig).toHaveBeenCalledWith({ level: "error" })
     })
+  })
+
+  test("系统日志说明进程级配置，保留天数只服务立即清理", async () => {
+    await renderPage()
+    const card = getCard("系统运行日志")
+
+    expect(within(card).getByText(/只保存在当前服务进程，不写系统设置表/)).toBeInTheDocument()
+    expect(within(card).getByText(/系统不会按时间自动删除日志文件/)).toBeInTheDocument()
   })
 
   test("任务追踪「立即清理」调用 cleanupTaskTraces", async () => {

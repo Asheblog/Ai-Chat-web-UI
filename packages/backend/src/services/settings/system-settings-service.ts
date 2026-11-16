@@ -111,8 +111,9 @@ export class SystemSettingsService {
       select: { value: true },
     })
     const envDefault = process.env.REASONING_MAX_OUTPUT_TOKENS_DEFAULT
-    const parsed = parseIntSafe(record?.value ?? envDefault, 32_000)
-    const value = clampReasoningMaxTokens(parsed) || 32_000
+    // 未配置 = 自动（0）：生成上限按模型协议与上下文解析，不再回落到写死的 32000。
+    const parsed = parseIntSafe(record?.value ?? envDefault, 0)
+    const value = clampReasoningMaxTokens(parsed)
 
     this.cachedReasoningMaxTokens = {
       value,

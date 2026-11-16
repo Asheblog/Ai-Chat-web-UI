@@ -65,4 +65,37 @@ describe('ContextWindowService', () => {
     const value = await svc.resolveCompletionLimit({ provider: 'openai', rawModelId: 'deepseek-chat' })
     expect(value).toBe(4096)
   })
+
+  test('prefers the manual generation limit over the detected one', async () => {
+    const prisma = createMockPrisma(JSON.stringify({ max_output_tokens: 8192, custom_max_output_tokens: 2048 }))
+    const svc = new ContextWindowService({
+      prisma: prisma as any,
+      getReasoningMaxOutputTokensDefault: async () => 32000,
+    })
+    expect(await svc.resolveCompletionLimit({ connectionId: 1, rawModelId: 'x' })).toBe(2048)
+  })
+
+  test('prefers the manual context window over the detected one', async () => {
+    const prisma = createMockPrisma(JSON.stringify({ context_window: 32000, custom_context_window: 128000 }))
+    const svc = new ContextWindowService({ prisma: prisma as any, getSystemContextTokenLimit: async () => 1000 })
+    expect(await svc.resolveContextLimit({ connectionId: 1, rawModelId: 'x' })).toBe(128000)
+  })
+
+  test('returns auto when no explicit generation limit is configured', async () => {
+    const prisma = createMockPrisma(null)
+    const svc = new ContextWindowService({
+      prisma: prisma as any,
+      getReasoningMaxOutputTokensDefault: async () => 0,
+    })
+    expect(await svc.resolveCompletionLimit({ provider: 'anthropic', rawModelId: 'claude-sonnet-4-5' })).toBeNull()
+  })
+
+  test('keeps an explicit system generation limit', async () => {
+    const prisma = createMockPrisma(null)
+    const svc = new ContextWindowService({
+      prisma: prisma as any,
+      getReasoningMaxOutputTokensDefault: async () => 32000,
+    })
+    expect(await svc.resolveCompletionLimit({ provider: 'anthropic', rawModelId: 'claude-sonnet-4-5' })).toBe(32000)
+  })
 })

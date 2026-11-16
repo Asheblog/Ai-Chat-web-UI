@@ -46,7 +46,6 @@ const makeGroup = (overrides: Partial<SystemConnectionGroup>): SystemConnectionG
   baseUrl: "https://api.openai.com/v1",
   authType: "bearer",
   tags: [],
-  connectionType: "external",
   defaultCapabilities: {},
   apiKeys: [{ id: 1, apiKeyLabel: "Key 1", modelIds: [], enable: true, hasStoredApiKey: true, apiKeyMasked: "sk-***" }],
   createdAt: "2026-01-01T00:00:00.000Z",
@@ -251,13 +250,13 @@ describe("SystemConnectionsPage 模板卡 + 向导 Sheet", () => {
       expect(services.createSystemConnection).toHaveBeenCalledTimes(1)
     })
     const payload = services.createSystemConnection.mock.calls[0][0] as Record<string, unknown>
+    expect("connectionType" in payload).toBe(false)
     expect(payload).toEqual(
       expect.objectContaining({
         displayName: "Google 生产",
         provider: "google_genai",
         baseUrl: "https://generativelanguage.googleapis.com/v1beta",
         authType: "bearer",
-        connectionType: "external",
       }),
     )
     await waitFor(() => {

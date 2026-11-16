@@ -10,7 +10,7 @@ import { RegistrationPolicyCard } from "./registration-policy-card"
 import { SystemUsersPage } from "../SystemUsers"
 
 /**
- * 用户与注册页：页壳（单一 useSystemSettings + 共享骨架/错误重试），
+ * 用户与访问页：页壳（单一 useSystemSettings + 共享骨架/错误重试），
  * 上分区「注册策略」FeatureCard（allowRegistration/anonymousDailyQuota/defaultUserDailyQuota），
  * 下分区「用户管理」原样内嵌 SystemUsersPage（自身状态自管）。
  */
@@ -53,7 +53,7 @@ export function UsersRegistrationPage() {
       <div className="flex items-center gap-3 pb-3 border-b border-border">
         <UserPlus className="w-5 h-5 text-ink-tertiary flex-shrink-0" />
         <div className="space-y-1">
-          <CardTitle>用户与注册</CardTitle>
+          <CardTitle>用户与访问</CardTitle>
           <CardDescription className="text-sm text-muted-foreground">
             注册开放策略、每日额度与用户管理
           </CardDescription>

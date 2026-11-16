@@ -12,6 +12,7 @@ import { buildChatProviderRequest } from '../../../utils/chat-provider'
 import { extractTextFromResponsesResponse } from '../../../utils/openai-responses'
 import { readProviderJson } from '../../../utils/anthropic'
 import { BackendLogger as log } from '../../../utils/logger'
+import { resolveStreamConfig } from '../../../services/stream/stream-config-resolver'
 import {
   loadSystemSettingsMap,
   type SystemSettingsMap,
@@ -181,7 +182,7 @@ export class ConversationCompressionService {
       session: params.session,
       messages: summaryInputMessages,
       actorContent: params.actorContent,
-      timeoutMs: this.parseIntInRange(settings.provider_timeout_ms, 300000, 10000, 3600000),
+      timeoutMs: resolveStreamConfig({ sysMap: settings }).providerTimeoutMs,
     })
 
     const normalizedSummary = summary.trim()

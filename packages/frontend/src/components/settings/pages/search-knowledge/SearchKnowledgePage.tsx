@@ -6,9 +6,8 @@ import { Button } from "@/components/ui/button"
 import { CardDescription, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useSystemSettings } from "@/hooks/use-system-settings"
+import { DocumentKnowledgeCard } from "./document-knowledge/document-knowledge-card"
 import { WebSearchCard } from "./web-search-card"
-import { RagCard } from "./rag-card"
-import { KnowledgeBaseCard } from "./knowledge-base-card"
 
 export function SearchKnowledgePage() {
   const {
@@ -61,13 +60,7 @@ export function SearchKnowledgePage() {
         refresh={fetchSystemSettings}
         isLoading={isLoading}
       />
-      <RagCard
-        settings={settings}
-        update={updateSystemSettings}
-        refresh={fetchSystemSettings}
-        isLoading={isLoading}
-      />
-      <KnowledgeBaseCard
+      <DocumentKnowledgeCard
         settings={settings}
         update={updateSystemSettings}
         refresh={fetchSystemSettings}

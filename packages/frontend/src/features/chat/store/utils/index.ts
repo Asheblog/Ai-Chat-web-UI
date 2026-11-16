@@ -113,45 +113,6 @@ export const shouldEnablePythonToolForSession = (session: ChatSession | null): b
   return typeof preference === 'boolean' ? preference : false
 }
 
-const getAssistantVariantLimit = () => {
-  const settings = useSettingsStore.getState().systemSettings
-  const raw = settings?.assistantReplyHistoryLimit
-  if (typeof raw === 'number' && Number.isFinite(raw)) {
-    return Math.max(1, Math.min(20, Math.floor(raw)))
-  }
-  return 5
-}
-
-export const enforceVariantLimitLocally = (
-  metas: MessageMeta[],
-  parentToken: MessageId,
-): { metas: MessageMeta[]; removedIds: MessageId[] } => {
-  const limit = getAssistantVariantLimit()
-  if (limit <= 0) {
-    return { metas, removedIds: [] }
-  }
-  const parentKey = messageKey(parentToken)
-  const variants = metas
-    .filter(
-      (meta) =>
-        meta.role === 'assistant' &&
-        meta.parentMessageId != null &&
-        messageKey(meta.parentMessageId) === parentKey,
-    )
-    .sort(compareVariantMeta)
-  if (variants.length <= limit) {
-    return { metas, removedIds: [] }
-  }
-  const removeCount = variants.length - limit
-  const toRemove = variants.slice(0, removeCount).map((meta) => meta.id)
-  if (toRemove.length === 0) {
-    return { metas, removedIds: [] }
-  }
-  const removeKeys = new Set(toRemove.map((id) => messageKey(id)))
-  const nextMetas = metas.filter((meta) => !removeKeys.has(messageKey(meta.id)))
-  return { metas: nextMetas, removedIds: toRemove }
-}
-
 export const createMeta = (message: Message, overrides: Partial<MessageMeta> = {}): MessageMeta => {
   const stableKey = resolveStableKey(
     { id: message.id, clientMessageId: message.clientMessageId ?? null, stableKey: message.stableKey ?? null },

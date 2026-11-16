@@ -13,7 +13,6 @@ export interface StreamConfig {
 
   // 心跳与超时
   heartbeatIntervalMs: number
-  providerMaxIdleMs: number
   providerTimeoutMs: number
   providerInitialGraceMs: number
   providerReasoningIdleMs: number
@@ -38,7 +37,6 @@ export interface StreamConfig {
 
   // Agent 配置
   agentMaxToolIterations: number
-  assistantReplyHistoryLimit: number
 
   // Trace 配置
   traceIdleTimeoutMs: number | null
@@ -84,11 +82,6 @@ export function resolveStreamConfig(params: StreamConfigResolverParams): StreamC
     sysMap.sse_heartbeat_interval_ms,
     'SSE_HEARTBEAT_INTERVAL_MS',
     { fallback: 15000 }
-  )
-  const providerMaxIdleMs = parseIntConfig(
-    sysMap.provider_max_idle_ms,
-    'PROVIDER_MAX_IDLE_MS',
-    { fallback: 60000 }
   )
   const providerTimeoutMs = parseIntConfig(
     sysMap.provider_timeout_ms,
@@ -184,15 +177,6 @@ export function resolveStreamConfig(params: StreamConfigResolverParams): StreamC
     20
   )
 
-  const assistantReplyHistoryLimit = clampNumber(
-    parseIntConfig(
-      sysMap.assistant_reply_history_limit,
-      'ASSISTANT_REPLY_HISTORY_LIMIT',
-      { fallback: 5 }
-    ),
-    1,
-    20
-  )
 
   // Trace 配置 (从 traceDecision 传入，这里设置默认值)
   const traceIdleTimeoutMs = parseIntConfig(
@@ -205,7 +189,6 @@ export function resolveStreamConfig(params: StreamConfigResolverParams): StreamC
     usageEmit,
     usageProviderOnly,
     heartbeatIntervalMs,
-    providerMaxIdleMs,
     providerTimeoutMs,
     providerInitialGraceMs,
     providerReasoningIdleMs,
@@ -222,7 +205,6 @@ export function resolveStreamConfig(params: StreamConfigResolverParams): StreamC
     maxConcurrentStreams,
     concurrencyErrorMessage,
     agentMaxToolIterations,
-    assistantReplyHistoryLimit,
     traceIdleTimeoutMs: traceIdleTimeoutMs > 0 ? traceIdleTimeoutMs : null,
   }
 }

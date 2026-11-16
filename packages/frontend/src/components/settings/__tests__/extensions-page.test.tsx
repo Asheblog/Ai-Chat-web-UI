@@ -160,7 +160,7 @@ describe("ExtensionsPage 段路由", () => {
     expect(subPanel).toHaveAttribute("id", "mcp-tab-panel-installations")
     expect(subPanel).toHaveAttribute("aria-labelledby", "mcp-tab-installations")
 
-    const railTablist = screen.getByRole("tablist", { name: "能力扩展分段导航" })
+    const railTablist = screen.getByRole("tablist", { name: "工具与扩展分段导航" })
     for (const railTab of within(railTablist).getAllByRole("tab")) {
       expect(railTab).toHaveAttribute("aria-controls", "extension-section-panel")
     }
@@ -348,10 +348,10 @@ describe("卡路由与注册表一致", () => {
 })
 
 describe("注册表挂载路径", () => {
-  test("renderSystemLeaf('extensions', 'layout') 渲染出能力扩展页", async () => {
+  test("renderSystemLeaf('extensions', 'layout') 渲染出工具与扩展页（旧叶子 key 不变）", async () => {
     await renderPage(<>{renderSystemLeaf("extensions", "layout")}</>)
 
-    expect(await screen.findByText("能力扩展")).toBeInTheDocument()
+    expect(await screen.findByText("工具与扩展")).toBeInTheDocument()
   })
 
   test("冷启动搜索定位：renderSystemLeaf 渲染期读取 flash 请求并落到目标段（回归：曾落回总览）", async () => {
@@ -359,7 +359,7 @@ describe("注册表挂载路径", () => {
 
     const { container } = await renderPage(<>{renderSystemLeaf("extensions", "layout")}</>)
 
-    const root = await screen.findByRole("heading", { name: "能力扩展" })
+    const root = await screen.findByRole("heading", { name: "工具与扩展" })
     expect(root).toBeInTheDocument()
     const panel = container.querySelector<HTMLElement>("[data-section]")
     expect(panel?.dataset.section).toBe("mcp")

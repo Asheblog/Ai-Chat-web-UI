@@ -10,6 +10,7 @@ import { determineChatImageBaseUrl } from '../../../utils/chat-images';
 import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../../../config/storage';
 import { consumeActorQuota, serializeQuotaSnapshot } from '../../../services/quota/legacy-utils';
 import { cleanupAnonymousSessions } from '../../../services/cleanup/legacy-utils';
+import { knowledgeBaseActorContext } from '../../../services/knowledge-base';
 import { resolveContextLimit, resolveCompletionLimit } from '../../../services/context/legacy-utils';
 import { TaskTraceRecorder, summarizeSseLine, type TaskTraceStatus } from '../../../utils/task-trace';
 import { shouldEnableTaskTrace } from '../../../services/task-trace/legacy-utils';
@@ -376,8 +377,12 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
             enhancedRagService: docServices.enhancedRagService,
           });
 
-          // 仅检查知识库（会话文档不再走 RAG 管线）
-          hasKnowledgeBases = await ragContextBuilder.hasKnowledgeBases(knowledgeBaseIds);
+          // 仅检查知识库（会话文档不再走 RAG 管线）；功能总闸之外必须带调用方角色，
+          // 否则匿名/注册用户的策略配置对会话编排层不生效。
+          hasKnowledgeBases = await ragContextBuilder.hasKnowledgeBases(
+            knowledgeBaseIds,
+            knowledgeBaseActorContext(actor),
+          );
 
           if (hasKnowledgeBases) {
             log.debug('KB RAG enhancement enabled', {
@@ -511,17 +516,6 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
         sysMap,
         env: process.env.NODE_ENV,
       });
-      const assistantReplyHistoryLimit = (() => {
-        const raw =
-          sysMap.assistant_reply_history_limit ||
-          process.env.ASSISTANT_REPLY_HISTORY_LIMIT ||
-          '5'
-        const parsed = Number.parseInt(String(raw), 10)
-        if (Number.isFinite(parsed) && parsed > 0) {
-          return Math.min(20, parsed)
-        }
-        return 5
-      })()
       const effectiveReasoningEnabled = preparedRequest.reasoning.enabled
       const effectiveReasoningEffort = preparedRequest.reasoning.effort
       if (effectiveReasoningEnabled) {
@@ -761,7 +755,6 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
           streamProgressPersistIntervalMs: STREAM_PROGRESS_PERSIST_INTERVAL_MS,
           traceRecorder,
           idleTimeoutMs: traceDecision.config.idleTimeoutMs,
-          assistantReplyHistoryLimit,
           maxConcurrentStreams: resolvedMaxConcurrentStreams,
           concurrencyErrorMessage,
           ragService: sessionRagService, // 传递 RAG 服务实例
@@ -864,7 +857,6 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
       let USAGE_PROVIDER_ONLY = streamConfig.usageProviderOnly;
       // 心跳与超时参数
       const heartbeatIntervalMs = streamConfig.heartbeatIntervalMs;
-      const providerMaxIdleMs = streamConfig.providerMaxIdleMs;
       const providerTimeoutMs = providerRequest.timeoutMs;
 
       // 推理链（CoT）配置
@@ -1292,7 +1284,6 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
               assistantClientMessageId,
               fallbackClientMessageId: clientMessageId,
               parentMessageId: userMessageRecord?.id ?? null,
-              replyHistoryLimit: assistantReplyHistoryLimit,
               content: finalText,
               streamReasoning: shouldPersistReasoning ? reasoningBuffer.trim() : null,
               reasoning: shouldPersistReasoning ? reasoningBuffer.trim() : null,
@@ -2044,7 +2035,6 @@ export const createChatStreamHandler = (deps: ChatStreamRoutesDeps) => {
                   typeof payload?.saveReasoning === 'boolean'
                     ? payload.saveReasoning
                     : REASONING_SAVE_TO_DB,
-                assistantReplyHistoryLimit,
                 traceRecorder,
                 timing: {
                   requestStartedAt,

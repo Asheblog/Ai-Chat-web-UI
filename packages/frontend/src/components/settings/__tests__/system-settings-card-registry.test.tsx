@@ -5,7 +5,7 @@ import {
   systemSettingsCards,
 } from "../system-settings-registry"
 
-/** 「能力扩展」页的 13 张卡，按页内段顺序。 */
+/** 「能力扩展」页的 13 张卡，按页内段顺序（叶子 key 与导航树保持 extensions）。 */
 const EXTENSION_CARD_KEYS = [
   "extensions:mcp-installations",
   "extensions:mcp-connections",
@@ -26,7 +26,8 @@ const EXTENSION_CARD_KEYS = [
 const EXPECTED_CARDS: Record<string, string[]> = {
   connections: ["quick-connect", "advanced"],
   models: ["catalog", "access"],
-  "search-knowledge": ["web-search", "rag", "knowledge-base"],
+  "session-defaults": ["prompt"],
+  "search-knowledge": ["web-search", "document-knowledge"],
   extensions: EXTENSION_CARD_KEYS.map((key) => key.slice("extensions:".length)),
   "users-registration": ["policy", "users"],
   branding: ["avatar", "branding"],
@@ -85,27 +86,30 @@ describe("system-settings-card-registry", () => {
     expect(Object.fromEntries(byLeaf)).toEqual(EXPECTED_CARDS)
   })
 
-  test("describeSettingsLocation：extensions 卡级路径「分组 → 叶子 · 卡」", () => {
-    expect(describeSettingsLocation("extensions", "extensions:mcp-secrets")).toBe(
-      "功能与工具 → 能力扩展 · MCP 凭据",
-    )
-    expect(describeSettingsLocation("extensions", "extensions:python-tools")).toBe(
-      "功能与工具 → 能力扩展 · Python 工具",
-    )
+  test("describeSettingsLocation：拍平的 extensions 无分组前缀", () => {
+    expect(describeSettingsLocation("extensions", "extensions:mcp-secrets")).toBe("工具与扩展 · MCP 凭据")
+    expect(describeSettingsLocation("extensions", "extensions:python-tools")).toBe("工具与扩展 · Python 工具")
   })
 
-  test("describeSettingsLocation：拍平后的 users-registration 无分组前缀", () => {
-    expect(describeSettingsLocation("users-registration")).toBe("用户与注册")
+  test("describeSettingsLocation：拍平后的 users-registration / branding 无分组前缀", () => {
+    expect(describeSettingsLocation("users-registration")).toBe("用户与访问")
     expect(describeSettingsLocation("users-registration", "users-registration:policy")).toBe(
-      "用户与注册 · 用户注册",
+      "用户与访问 · 用户注册",
     )
+    expect(describeSettingsLocation("branding", "branding:branding")).toBe("外观与站点 · 品牌与站点")
   })
 
-  test("describeSettingsLocation：其余分组路径保持不变", () => {
+  test("describeSettingsLocation：多叶子分组路径走新分组名", () => {
     expect(describeSettingsLocation("data-maintenance", "data-maintenance:compression")).toBe(
-      "系统与数据 → 数据与维护 · 上下文压缩",
+      "数据与日志 → 数据与维护 · 上下文压缩",
     )
-    expect(describeSettingsLocation("models", "models:catalog")).toBe("模型与连接 → 模型管理 · 模型目录与能力")
+    expect(describeSettingsLocation("models", "models:catalog")).toBe("连接与模型 → 模型管理 · 模型目录与能力")
+    expect(describeSettingsLocation("session-defaults", "session-defaults:prompt")).toBe(
+      "连接与模型 → 会话默认配置 · 全局系统提示词",
+    )
+    expect(describeSettingsLocation("reasoning-network", "reasoning-network:stream")).toBe(
+      "数据与日志 → 生成与网络（高级） · 流式与传输",
+    )
   })
 
   test("describeSettingsLocation：未知叶子或未知卡返回 null", () => {

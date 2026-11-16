@@ -12,6 +12,7 @@ import {
   deleteModelOverrides,
   deleteAllModelOverrides,
   refreshModelCatalog,
+  type ModelOverrideField,
 } from "@/services/system-models"
 
 const ACCESS_OPTIONS: Array<{ value: 'inherit' | 'allow' | 'deny'; label: string }> = [
@@ -19,7 +20,6 @@ const ACCESS_OPTIONS: Array<{ value: 'inherit' | 'allow' | 'deny'; label: string
   { value: 'allow', label: '允许' },
   { value: 'deny', label: '禁止' },
 ]
-const LEGACY_REMOVED_CAP_TAGS = new Set(['file_upload', 'web_search', 'code_interpreter', 'file'])
 
 export type ModelSortField = 'name' | 'provider'
 export type ModelSortOrder = 'asc' | 'desc'
@@ -70,7 +70,7 @@ export function useSystemModels() {
           String(value || '').toLowerCase().includes(kw)
         )
       })
-      .filter((model: any) => (onlyOverridden ? model?.overridden : true))
+      .filter((model: any) => (onlyOverridden ? (model?.overrides?.any ?? model?.overridden) : true))
 
     filtered.sort((a: any, b: any) => {
       let comparison = 0
@@ -106,23 +106,11 @@ export function useSystemModels() {
     })
   }, [list])
 
+  // 能力只有一个入口：直接写 capabilities 覆写，连接标签不再参与判定。
   const buildCapabilityPayload = (model: any, key: ModelCapKey, value: boolean) => {
-    const tags = Array.isArray(model.tags) ? model.tags.map((tag: any) => ({ name: String(tag?.name || '') })) : []
-    const baseTags = tags.filter((tag: any) => {
-      const name = String(tag?.name || '').trim()
-      if (!name) return false
-      if (MODEL_CAP_KEYS.includes(name as ModelCapKey)) return false
-      return !LEGACY_REMOVED_CAP_TAGS.has(name)
-    })
-    const enabledCaps = new Set<ModelCapKey>(MODEL_CAP_KEYS.filter((k) => hasCapability(model, k)) as ModelCapKey[])
-    if (value) enabledCaps.add(key); else enabledCaps.delete(key)
     const capabilityState = capabilityStateOf(model)
     capabilityState[key] = value
-
-    return {
-      tags: baseTags.concat(Array.from(enabledCaps).map((k) => ({ name: k }))),
-      capabilities: capabilityState,
-    }
+    return { capabilities: capabilityState }
   }
 
   const handleToggleCapability = async (model: any, key: ModelCapKey, value: boolean) => {
@@ -130,7 +118,6 @@ export function useSystemModels() {
     try {
       setSavingKey(`${model.connectionId}:${model.id}`)
       await updateModelCapabilities(model.connectionId, model.rawId, {
-        tags: payload.tags,
         capabilities: payload.capabilities,
       })
       await fetchAll()
@@ -344,7 +331,6 @@ export function useSystemModels() {
         const payload = buildCapabilityPayload(model, key, value)
         try {
           await updateModelCapabilities(model.connectionId, model.rawId, {
-            tags: payload.tags,
             capabilities: payload.capabilities,
           })
           success += 1
@@ -372,17 +358,36 @@ export function useSystemModels() {
     }
   }
 
-  const resetModel = async (model: any) => {
+  const RESET_LABELS: Record<ModelOverrideField | 'all', string> = {
+    capabilities: '能力覆写',
+    parameters: '生成参数覆写',
+    access: '访问策略覆写',
+    all: '全部覆写',
+  }
+
+  const resetModel = async (model: any, field?: ModelOverrideField) => {
     try {
-      await deleteModelOverrides([{ connectionId: model.connectionId, rawId: model.rawId }])
+      setSavingKey(keyOf(model))
+      await deleteModelOverrides([
+        {
+          connectionId: model.connectionId,
+          rawId: model.rawId,
+          ...(field ? { fields: [field] } : {}),
+        },
+      ])
       await fetchAll()
-      toast({ title: '已重置', description: `${model.name || model.id} 的覆写配置已清除` })
+      toast({
+        title: '已重置',
+        description: `${model.name || model.id} 的${RESET_LABELS[field ?? 'all']}已清除`,
+      })
     } catch (err: any) {
       toast({
         title: '重置失败',
         description: err?.message || '操作失败',
         variant: 'destructive',
       })
+    } finally {
+      setSavingKey('')
     }
   }
 
@@ -424,15 +429,19 @@ export function useSystemModels() {
 
   const handleExport = () => {
     if (typeof window === 'undefined') return
-    const overrides = (models || []).filter((model: any) => model.overridden)
+    const overrides = (models || []).filter((model: any) => model.overrides?.any ?? model.overridden)
     const items = overrides.map((model: any) => ({
       connectionId: model.connectionId,
       rawId: model.rawId,
-      tags: model.tags || [],
-      capabilities: model.capabilities || {},
-      capabilitySource: model.capabilitySource || null,
-      accessPolicy: model.accessPolicy || undefined,
-      temperature: model.temperature ?? null,
+      ...(model.overrides?.capability ? { capabilities: model.capabilities || {} } : {}),
+      ...(model.overrides?.access ? { accessPolicy: model.accessPolicy || undefined } : {}),
+      ...(model.overrides?.parameters
+        ? {
+            temperature: model.temperature ?? null,
+            contextWindow: model.contextWindow ?? null,
+            maxOutputTokens: model.maxOutputTokens ?? null,
+          }
+        : {}),
     }))
     const blob = new Blob([JSON.stringify({ items }, null, 2)], { type: 'application/json;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -453,17 +462,6 @@ export function useSystemModels() {
       const items = Array.isArray(json?.items) ? json.items : []
       for (const item of items) {
         if (!item?.connectionId || !item?.rawId) continue
-        let tags = Array.isArray(item?.tags) ? item.tags : []
-        tags = tags.filter((tag: any) => {
-          const name = String(tag?.name || '').trim()
-          if (!name) return false
-          return !LEGACY_REMOVED_CAP_TAGS.has(name)
-        })
-        if ((!tags || tags.length === 0) && item?.capabilities && typeof item.capabilities === 'object') {
-          const caps = item.capabilities
-          const capTags = MODEL_CAP_KEYS.filter((key) => Boolean(caps[key])).map((key) => ({ name: key }))
-          tags = capTags
-        }
         let capPayload: Record<ModelCapKey, boolean> | undefined
         if (item?.capabilities && typeof item.capabilities === 'object') {
           capPayload = MODEL_CAP_KEYS.reduce((acc, key) => {
@@ -477,12 +475,19 @@ export function useSystemModels() {
           }
         }
         const accessPolicy = (item as any)?.accessPolicy || (item as any)?.access_policy
-        await updateModelCapabilities(Number(item.connectionId), String(item.rawId), {
-          tags,
-          capabilities: capPayload,
-          accessPolicy,
-          temperature: typeof item.temperature === 'number' ? item.temperature : null,
-        })
+        const options: Parameters<typeof updateModelCapabilities>[2] = {}
+        if (capPayload) options.capabilities = capPayload
+        if (accessPolicy !== undefined) options.accessPolicy = accessPolicy
+        if (Object.prototype.hasOwnProperty.call(item, 'temperature')) {
+          options.temperature = typeof item.temperature === 'number' ? item.temperature : null
+        }
+        if (Object.prototype.hasOwnProperty.call(item, 'contextWindow')) {
+          options.contextWindow = typeof item.contextWindow === 'number' ? item.contextWindow : null
+        }
+        if (Object.prototype.hasOwnProperty.call(item, 'maxOutputTokens')) {
+          options.maxOutputTokens = typeof item.maxOutputTokens === 'number' ? item.maxOutputTokens : null
+        }
+        await updateModelCapabilities(Number(item.connectionId), String(item.rawId), options)
       }
       await fetchAll()
       toast({ title: '导入完成', description: `共应用 ${items.length} 项覆写。` })
