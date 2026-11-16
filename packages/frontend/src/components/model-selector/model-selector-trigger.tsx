@@ -39,7 +39,7 @@ export const ModelSelectorTrigger = React.forwardRef<React.ElementRef<typeof But
         className={cn(
           'min-w-0 max-w-full justify-between gap-2 rounded-lg shadow-none transition-colors duration-[160ms] focus-visible:ring-2 focus-visible:ring-signal',
           effortLabel ? 'border-transparent bg-surface-subtle text-foreground hover:bg-surface-hover' : 'border-border bg-background text-foreground hover:bg-surface-hover',
-          inline ? 'h-11 max-w-[min(16rem,46vw)] px-2.5 md:h-9' : sizeClass, className)} {...buttonProps}>
+          inline ? 'h-11 px-2.5 md:h-auto md:min-h-9' : sizeClass, className)} {...buttonProps}>
         {describeIdentity ? (
           <span id={identityId} className="sr-only">
             {'当前模型：' + fullIdentity + '；思考强度：' + effortLabel}
@@ -47,12 +47,12 @@ export const ModelSelectorTrigger = React.forwardRef<React.ElementRef<typeof But
         ) : null}
         {effortLabel ? (
           <span className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
-            <span className={cn('truncate font-medium', inline ? 'text-xs md:text-sm' : 'text-sm')}>{visibleName}</span>
+            <span className={cn('truncate font-medium', inline ? 'text-xs md:overflow-visible md:whitespace-normal md:text-sm md:[overflow-wrap:anywhere]' : 'text-sm')}>{visibleName}</span>
             <span className="shrink-0 text-xs leading-4 text-muted-foreground">{effortLabel}</span>
           </span>
         ) : (
           <span className="min-w-0 flex-1 text-left">
-            <span className={cn('block truncate font-medium', inline ? 'text-xs md:text-sm' : 'text-sm')}>{visibleName}</span>
+            <span className={cn('block truncate font-medium', inline ? 'text-xs md:overflow-visible md:whitespace-normal md:text-sm md:[overflow-wrap:anywhere]' : 'text-sm')}>{visibleName}</span>
             {!inline && selected && source && <span className="block truncate text-[11px] text-muted-foreground">{source}</span>}
           </span>
         )}

@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
+import { useDesktopComposer } from '@/hooks/use-desktop-composer'
 import { Textarea } from '@/components/ui/textarea'
 import { Maximize2 } from 'lucide-react'
 import { ComposerAttachmentList } from '@/components/chat/composer-attachment-list'
@@ -45,24 +46,11 @@ export function WelcomeForm({ form, selectedModelId, onModelChange, modelDisable
     advancedDialog,
     sessionPromptDialog,
   } = form
-  const [isMobile, setIsMobile] = useState(false)
+  const isMobile = !useDesktopComposer()
   const { toolsOpen, setToolsOpen, toolsView, setToolsView, skillPanelOpen, setSkillPanelOpen,
     selectorOpen, setSelectorOpen, selectorView, openTools, runFromTools, openSkillPanelFromTools, openEffortView } = useComposerOverlayControls()
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    if (typeof window.matchMedia !== 'function') return
-    const mq = window.matchMedia('(max-width: 767px)')
-    const update = () => setIsMobile(mq.matches)
-    update()
-    const handle = (event: MediaQueryListEvent) => setIsMobile(event.matches)
-    if (typeof mq.addEventListener === 'function') {
-      mq.addEventListener('change', handle)
-      return () => mq.removeEventListener('change', handle)
-    }
-    mq.addListener(handle)
-    return () => mq.removeListener(handle)
-  }, [])
+
 
   const activePlaceholder = isMobile ? mobilePlaceholder : basePlaceholder
   const hasAttachments = attachments.selectedImages.length > 0 || attachments.workspaceFiles.length > 0
@@ -152,19 +140,9 @@ export function WelcomeForm({ form, selectedModelId, onModelChange, modelDisable
           )}
         </div>
 
-        {capabilities.length > 0 ? (
-          <div data-composer-layer="capabilities" className="mt-2.5">
-            <ComposerActiveCapabilities
-              items={capabilities}
-              mobile={isMobile}
-              onOverflowActivate={() => openTools('capabilities')}
-              disabled={creationDisabled}
-            />
-          </div>
-        ) : null}
 
         <div data-composer-layer="actions" className="mt-2.5 flex min-w-0 items-center gap-2">
-          <div className={cn(composerToolbarScrollClass, 'min-w-0 flex-1')}>
+          <div className={cn(composerToolbarScrollClass, 'shrink-0')}>
             <AttachmentUploadButton
               onPick={attachments.pickAttachments}
               disabled={creationDisabled}
@@ -209,7 +187,15 @@ export function WelcomeForm({ form, selectedModelId, onModelChange, modelDisable
             />
           </div>
 
+          <ComposerActiveCapabilities
+            items={capabilities}
+            mobile={isMobile}
+            onOverflowActivate={() => openTools('capabilities')}
+            disabled={creationDisabled}
+          />
+
           <ComposerModelActions
+            modelPlacement={isMobile ? 'mobile-header' : 'inline'}
             selectedModelId={selectedModelId} onModelChange={onModelChange}
             reasoningControl={{ value: advancedOptions.effort, onChange: advancedOptions.onEffortChange }}
             formatModelName={isMobile ? formatModelShortName : undefined}

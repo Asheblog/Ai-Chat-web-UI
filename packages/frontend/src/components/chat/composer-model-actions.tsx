@@ -1,5 +1,8 @@
 'use client'
 
+import { useLayoutEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { useDesktopComposer } from '@/hooks/use-desktop-composer'
 import { Loader2, Send, Square } from 'lucide-react'
 import type { ModelItem } from '@/store/models-store'
 import { ModelSelector } from '@/components/model-selector'
@@ -7,6 +10,7 @@ import type { ModelReasoningControl, ModelSelectorView } from '@/components/mode
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { composerToolbarSendSlotClass } from './composer-toolbar-primitives'
+import { MOBILE_MODEL_SELECTOR_ID } from './composer-layout'
 
 export interface ComposerModelControlProps {
   selectedModelId?: string | null
@@ -23,6 +27,7 @@ export interface ComposerModelControlProps {
 }
 
 interface ComposerModelActionsProps extends ComposerModelControlProps {
+  modelPlacement?: 'inline' | 'mobile-header'
   modelDisabled?: boolean
   disabled: boolean
   isStreaming?: boolean
@@ -33,12 +38,30 @@ interface ComposerModelActionsProps extends ComposerModelControlProps {
   sendTitle?: string
 }
 
-/** The model may truncate; send/stop always owns its full touch target. */
+/** 手机模型入口挂载到主顶栏；发送/停止始终留在输入框操作栏。 */
 export function ComposerModelActions({
   selectedModelId = null, onModelChange, reasoningControl, modelDisabled, disabled, isStreaming, isCreating,
-  selectorOpen, onSelectorOpenChange, selectorView, formatModelName,
+  selectorOpen, onSelectorOpenChange, selectorView, formatModelName, modelPlacement = 'inline',
   onSend, onStop, stopLabel = '停止', sendTitle,
 }: ComposerModelActionsProps) {
+  const isDesktop = useDesktopComposer()
+  const [headerTarget, setHeaderTarget] = useState<HTMLElement | null>(null)
+  useLayoutEffect(() => {
+    setHeaderTarget(modelPlacement === 'mobile-header' && !isDesktop
+      ? document.getElementById(MOBILE_MODEL_SELECTOR_ID)
+      : null)
+  }, [modelPlacement, isDesktop])
+  const modelSelector = onModelChange ? (
+    <ModelSelector
+      selectedModelId={selectedModelId} onModelChange={onModelChange}
+      reasoningControl={reasoningControl}
+      open={selectorOpen} onOpenChange={onSelectorOpenChange} defaultView={selectorView}
+      formatTriggerName={formatModelName} disabled={modelDisabled} variant="inline"
+      className={modelPlacement === 'mobile-header'
+        ? 'h-11 min-h-11 w-auto min-w-0 max-w-full'
+        : 'h-11 min-h-11 w-auto min-w-0 max-w-full md:h-auto md:min-h-9'}
+    />
+  ) : null
   const label = isStreaming ? stopLabel : isCreating ? '正在创建会话' : '发送'
   const sendButton = (
     <Button
@@ -63,24 +86,12 @@ export function ComposerModelActions({
   return (
     <div
       data-composer-model-actions="true"
-      className="flex min-w-0 flex-1 items-center justify-end gap-2 md:w-auto md:max-w-[17rem] md:flex-initial md:shrink-0"
+      className="ml-auto flex min-w-0 shrink items-center justify-end gap-2"
     >
-      {onModelChange && (
-        <div className="min-w-0 max-w-[218px] flex-1 md:w-[180px] md:flex-initial">
-          <ModelSelector
-            selectedModelId={selectedModelId}
-            onModelChange={onModelChange}
-            reasoningControl={reasoningControl}
-            open={selectorOpen}
-            onOpenChange={onSelectorOpenChange}
-            defaultView={selectorView}
-            formatTriggerName={formatModelName}
-            disabled={modelDisabled}
-            variant="inline"
-            className="h-11 min-h-11 w-full min-w-0 max-w-full md:h-9 md:min-h-9"
-          />
-        </div>
-      )}
+      {modelPlacement === 'mobile-header'
+        ? isDesktop ? null : headerTarget ? createPortal(modelSelector, headerTarget) : modelSelector
+        : modelSelector}
+
       <div className={composerToolbarSendSlotClass}>
         {sendTitle ? (
           <TooltipProvider><Tooltip><TooltipTrigger asChild>{sendButton}</TooltipTrigger>

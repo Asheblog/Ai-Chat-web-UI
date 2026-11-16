@@ -54,16 +54,19 @@ const selectedModel: ModelItem = {
 
 beforeEach(() => {
   localStorage.clear()
+  const headerSlot = document.createElement('div')
+  headerSlot.id = 'mobile-model-selector'
+  document.body.appendChild(headerSlot)
   vi.clearAllMocks()
   vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
-    matches: false, media: query, onchange: null, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    matches: query === '(min-width: 768px)', media: query, onchange: null, addEventListener: vi.fn(), removeEventListener: vi.fn(),
     addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
   })))
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
   Element.prototype.scrollIntoView = vi.fn()
   useModelsStore.setState({ models: [selectedModel], isLoading: false, error: null })
 })
-afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+afterEach(() => { cleanup(); document.getElementById('mobile-model-selector')?.remove(); vi.unstubAllGlobals() })
 
 describe('Welcome composer model action', () => {
   it('places the selected long-name model in the composer without submitting when opened', async () => {
@@ -101,8 +104,9 @@ describe('Welcome composer model action', () => {
 
     render(<WelcomeScreen />)
     const textbox = screen.getByRole('textbox', { name: '输入消息' })
-    const trigger = within(textbox.closest('.composer-shell') as HTMLElement)
+    const trigger = within(document.getElementById('mobile-model-selector')!)
       .getByRole('combobox', { name: '选择模型' })
+    expect(textbox.closest('.composer-shell')).not.toContainElement(trigger)
 
     expect(trigger.querySelector('.font-medium')?.textContent).toBe('V4.1 Flash')
     expect(trigger.getAttribute('title')).toContain('DeepSeek V4.1 Flash')
@@ -118,7 +122,7 @@ describe('Welcome composer model action', () => {
     }
     useModelsStore.setState({ models: [shortNameModel], isLoading: false, error: null })
     vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
-      matches: false, media: query, onchange: null, addEventListener: vi.fn(),
+      matches: query === '(min-width: 768px)', media: query, onchange: null, addEventListener: vi.fn(),
       removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
     })))
 

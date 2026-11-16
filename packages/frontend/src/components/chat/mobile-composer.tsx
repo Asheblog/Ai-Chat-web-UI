@@ -214,19 +214,9 @@ export function MobileComposer({
           ) : null}
         </div>
 
-        {capabilities.length > 0 ? (
-          <div data-composer-layer="capabilities" className="mt-2">
-            <ComposerActiveCapabilities
-              items={capabilities}
-              mobile
-              onOverflowActivate={() => openTools('capabilities')}
-              disabled={isStreaming}
-            />
-          </div>
-        ) : null}
 
         <div data-composer-layer="actions" className="mt-2 flex min-w-0 items-center gap-2">
-          <div className={cn(composerToolbarScrollClass, 'min-w-0 shrink md:flex-1')}>
+          <div className={cn(composerToolbarScrollClass, 'shrink-0')}>
             <AttachmentUploadButton
               onPick={onPickAttachments}
               disabled={isStreaming}
@@ -274,7 +264,15 @@ export function MobileComposer({
             />
           </div>
 
+          <ComposerActiveCapabilities
+            items={capabilities}
+            mobile={true}
+            onOverflowActivate={() => openTools('capabilities')}
+            disabled={isStreaming}
+          />
+
           <ComposerModelActions
+            modelPlacement={'mobile-header'}
             selectedModelId={selectedModelId} onModelChange={onModelChange}
             reasoningControl={reasoningControl}
             formatModelName={formatModelShortName}

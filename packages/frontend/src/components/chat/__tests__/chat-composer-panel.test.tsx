@@ -319,7 +319,7 @@ describe('ChatComposerPanel — mobile attachment entry and bottom bar geometry'
     expect(await screen.findByRole('dialog', { name: '编辑消息' })).toBeInTheDocument()
   })
 
-  it('lets the model column grow into spare space without covering the tools row', () => {
+  it('keeps the mobile send slot compact after moving the model to the header', () => {
     const { container } = render(
       <ChatComposerPanel {...createProps({ isDesktopComposer: false })} />,
     )
@@ -327,9 +327,9 @@ describe('ChatComposerPanel — mobile attachment entry and bottom bar geometry'
     const modelColumn = mobileRoot.querySelector('[data-composer-model-actions]') as HTMLElement
 
     expect(modelColumn).not.toBeNull()
-    // 回归：w-full 会让模型列占满整行，把附件与工具按钮压到 0 宽或被覆盖。
+    // 手机模型已移到顶栏，发送区域只占自己的宽度。
     expect(modelColumn.className).not.toMatch(/\bw-full\b/)
-    expect(modelColumn.className).toContain('flex-1')
+    expect(modelColumn.classList.contains('flex-1')).toBe(false)
     expect(modelColumn.className).toContain('min-w-0')
 
     const toolsRow = within(mobileRoot).getByRole('button', { name: '工具' }).closest('.composer-toolbar') as HTMLElement

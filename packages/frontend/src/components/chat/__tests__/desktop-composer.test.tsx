@@ -127,9 +127,11 @@ describe('DesktopComposer layout', () => {
 
     const shell = container.querySelector('.composer-shell') as HTMLElement
     expect(shell).not.toBeNull()
-    expect(layerOrder(shell)).toEqual(['attachments', 'text', 'capabilities', 'actions'])
+    expect(layerOrder(shell)).toEqual(['attachments', 'text', 'actions'])
     expect(within(shell).getByText('2026 产品体验调研.pdf')).toBeInTheDocument()
-    expect(within(shell).getByRole('group', { name: '已启用能力' })).toBeInTheDocument()
+    const capabilities = within(shell).getByRole('group', { name: '已启用能力' })
+    expect(capabilities.closest('[data-composer-layer="actions"]')).not.toBeNull()
+    expect(within(capabilities).getByRole('button', { name: '思考' })).toHaveTextContent('')
   })
 
   it('collapses the attachment and capability rows when nothing is attached or enabled', () => {

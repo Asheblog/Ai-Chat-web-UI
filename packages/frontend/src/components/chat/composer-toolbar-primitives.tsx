@@ -11,7 +11,7 @@ export const composerToolbarScrollClass =
   'composer-toolbar flex min-w-0 max-w-full flex-nowrap items-center overflow-x-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
 
 export const composerToolbarButtonClass =
-  'composer-toolbar-btn relative inline-flex shrink-0 touch-manipulation cursor-pointer items-center justify-center rounded-[8px] border border-transparent bg-transparent text-ink-tertiary transition-colors duration-[160ms] hover:bg-surface-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-45'
+  'composer-toolbar-btn relative inline-flex shrink-0 touch-manipulation cursor-pointer items-center justify-center rounded-[8px] border border-transparent bg-transparent text-ink-tertiary transition-colors duration-[160ms] hover:bg-surface-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-offset-[-2px]'
 
 export const composerToolbarIconClass = 'composer-toolbar-icon'
 
@@ -20,7 +20,7 @@ export const composerToolbarSendSlotClass = 'relative z-10 shrink-0'
 
 /** 工具入口：图标 + 文字，手机 44px、桌面 36px 触控区（Figma 01 / 03）。 */
 export const composerToolsTriggerClass =
-  'composer-tools-trigger inline-flex h-11 shrink-0 touch-manipulation cursor-pointer items-center gap-1.5 rounded-[8px] border border-transparent bg-transparent px-2 text-[13px] text-ink-tertiary transition-colors duration-[160ms] hover:bg-surface-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-45 md:h-9'
+  'composer-tools-trigger inline-flex h-11 shrink-0 touch-manipulation cursor-pointer items-center gap-1.5 rounded-[8px] border border-transparent bg-transparent px-2 text-[13px] text-ink-tertiary transition-colors duration-[160ms] hover:bg-surface-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-offset-[-2px] md:h-9'
 
 export type ComposerCapabilityId = 'thinking' | 'web-search' | 'deep-research' | 'python'
 

@@ -214,19 +214,9 @@ export function DesktopComposer({
             )}
           </div>
 
-          {capabilities.length > 0 ? (
-            <div data-composer-layer="capabilities" className="mt-2">
-              <ComposerActiveCapabilities
-                items={capabilities}
-                mobile={false}
-                onOverflowActivate={() => openTools('capabilities')}
-                disabled={textareaDisabled}
-              />
-            </div>
-          ) : null}
 
           <div data-composer-layer="actions" className="mt-2 flex min-w-0 items-center gap-2">
-            <div className={cn(composerToolbarScrollClass, 'min-w-0 shrink md:flex-1')}>
+            <div className={cn(composerToolbarScrollClass, 'shrink-0')}>
               <AttachmentUploadButton
                 onPick={onPickAttachments}
                 disabled={isStreaming}
@@ -273,6 +263,13 @@ export function DesktopComposer({
                 onToggleTrace={onToggleTrace}
               />
             </div>
+
+            <ComposerActiveCapabilities
+              items={capabilities}
+              mobile={false}
+              onOverflowActivate={() => openTools('capabilities')}
+              disabled={textareaDisabled}
+            />
 
             <ComposerModelActions
               selectedModelId={selectedModelId} onModelChange={onModelChange}

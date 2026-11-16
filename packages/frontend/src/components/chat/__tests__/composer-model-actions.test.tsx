@@ -35,6 +35,9 @@ function commonProps() {
 
 beforeEach(() => {
   localStorage.clear()
+  const headerSlot = document.createElement('div')
+  headerSlot.id = 'mobile-model-selector'
+  document.body.appendChild(headerSlot)
   vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
     matches: query === '(max-width: 767px)', media: query, onchange: null,
     addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(),
@@ -44,7 +47,7 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn()
   useModelsStore.setState({ models: [model], isLoading: false, error: null })
 })
-afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+afterEach(() => { cleanup(); document.getElementById('mobile-model-selector')?.remove(); vi.unstubAllGlobals() })
 
 describe('Composer model and send action isolation', () => {
   it('desktop exposes the selected long model outside the scrolling tools and never sends while opening it', async () => {
@@ -164,35 +167,21 @@ describe('Composer model actions controlled selector hooks', () => {
   })
 })
 
-describe('Composer model actions controlled selector hooks', () => {
-  it('opens the combined selector directly on the effort view for a thought chip', async () => {
-    const onEffortChange = vi.fn()
-    render(
-      <ComposerModelActions
+describe('Mobile model header placement', () => {
+  it('keeps model selection usable when rendered without the main header slot', async () => {
+    document.getElementById('mobile-model-selector')?.remove()
+    const user = userEvent.setup()
+    const onSend = vi.fn()
+    const { container } = render(
+      <ComposerModelActions modelPlacement="mobile-header"
         selectedModelId={modelKeyFor(model)} onModelChange={vi.fn()}
-        reasoningControl={{ value: 'low', onChange: onEffortChange }}
-        selectorOpen onSelectorOpenChange={vi.fn()} selectorView="effort"
-        disabled={false} onSend={vi.fn()}
-      />,
-    )
-
-    expect(await screen.findByRole('list', { name: '思考强度选项' })).toBeInTheDocument()
-  })
-
-  it('applies an optional display-only name formatter to the trigger', () => {
-    const shortModel: ModelItem = { ...model, name: 'DeepSeek V4.1 Flash' }
-    useModelsStore.setState({ models: [shortModel], isLoading: false, error: null })
-    render(
-      <ComposerModelActions
-        selectedModelId={modelKeyFor(shortModel)} onModelChange={vi.fn()}
         reasoningControl={{ value: 'max', onChange: vi.fn() }}
-        formatModelName={(name) => name.replace('DeepSeek ', '')}
-        disabled={false} onSend={vi.fn()}
-      />,
+        disabled={false} onSend={onSend} />,
     )
-
     const trigger = screen.getByRole('combobox', { name: '选择模型' })
-    expect(trigger).toHaveTextContent('V4.1 Flash')
-    expect(trigger.getAttribute('title')).toContain('DeepSeek V4.1 Flash')
+    expect(container).toContainElement(trigger)
+    await user.click(trigger)
+    expect(await screen.findByRole('textbox', { name: '搜索模型或供应商' })).toBeVisible()
+    expect(onSend).not.toHaveBeenCalled()
   })
 })

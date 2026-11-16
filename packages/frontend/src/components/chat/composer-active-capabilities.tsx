@@ -1,78 +1,73 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 export interface ComposerActiveCapability {
   id: string
-  /** 回显用短名，与工具面板行标题共用同一份能力元数据。 */
   label: string
   icon: ReactNode
   onActivate: () => void
-  /** 可选补充说明，用于 title 与无障碍描述。 */
   description?: string
 }
 
 export interface ComposerActiveCapabilitiesProps {
   items: ComposerActiveCapability[]
   mobile?: boolean
-  /** +N 的点击目标：打开工具面板。 */
   onOverflowActivate?: () => void
   disabled?: boolean
   className?: string
 }
 
-const chipHitClass =
-  'inline-flex h-11 shrink-0 touch-manipulation cursor-pointer items-center rounded-full disabled:pointer-events-none disabled:opacity-45 md:h-7'
+const buttonClass =
+  'inline-flex h-[var(--capability-size)] w-[var(--capability-size)] shrink-0 touch-manipulation cursor-pointer items-center justify-center rounded-full disabled:pointer-events-none disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal'
+const surfaceClass =
+  'inline-flex h-7 min-w-7 items-center justify-center rounded-full border border-signal/40 bg-signal-soft px-1 text-[12px] leading-none text-signal-text'
 
-const chipSurfaceClass =
-  'inline-flex h-7 min-w-7 items-center justify-center gap-1 rounded-full border border-signal/40 bg-signal-soft px-3 text-[12px] leading-none text-signal-text'
-
-/** 输入区已启用能力回显：点标签直达对应控制，多出的条目汇总为 +N。 */
+/** 与工具、发送同排；按实际剩余宽度显示图标，溢出汇总为 +N。 */
 export function ComposerActiveCapabilities({
-  items,
-  mobile = false,
-  onOverflowActivate,
-  disabled,
-  className,
+  items, mobile = false, onOverflowActivate, disabled, className,
 }: ComposerActiveCapabilitiesProps) {
-  if (items.length === 0) return null
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [slots, setSlots] = useState(items.length)
+  const buttonSize = mobile ? 44 : 36
+  const gap = 4
 
-  const limit = mobile ? 2 : 3
+  useLayoutEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const update = (width: number) => {
+      if (width <= 0) return
+      setSlots(Math.max(1, Math.floor((width + gap) / (buttonSize + gap))))
+    }
+    const style = getComputedStyle(container)
+    update(container.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0))
+    const observer = new ResizeObserver(([entry]) => update(entry.contentRect.width))
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [buttonSize, items.length])
+
+  if (items.length === 0) return null
+  const limit = slots >= items.length ? items.length : Math.max(0, slots - 1)
   const visible = items.slice(0, limit)
   const hiddenCount = items.length - visible.length
 
   return (
-    <div
-      role="group"
-      aria-label="已启用能力"
-      className={cn('flex min-w-0 flex-wrap items-center gap-2', className)}
-    >
+    <div ref={containerRef} role="group" aria-label="已启用能力"
+      style={{ '--capability-size': buttonSize + 'px', gap, minWidth: buttonSize } as CSSProperties}
+      className={cn('flex flex-1 flex-nowrap items-center', className)}>
       {visible.map((item) => (
-        <button
-          key={item.id}
-          type="button"
-          onClick={item.onActivate}
-          disabled={disabled}
-          title={item.description ?? item.label}
-          className={chipHitClass}
-        >
-          <span className={chipSurfaceClass}>
-            {item.icon}
-            <span>{item.label}</span>
-          </span>
+        <button key={item.id} type="button" onClick={item.onActivate} disabled={disabled}
+          aria-label={item.label} title={item.description ? item.label + '：' + item.description : item.label}
+          className={buttonClass}>
+          <span className={surfaceClass} aria-hidden="true">{item.icon}</span>
         </button>
       ))}
       {hiddenCount > 0 ? (
-        <button
-          type="button"
-          onClick={onOverflowActivate}
-          disabled={disabled}
-          aria-label={`还有 ${hiddenCount} 个已启用能力，打开工具面板`}
-          title="查看全部已启用能力"
-          className={cn(chipHitClass, 'min-w-11 justify-center')}
-        >
-          <span className={chipSurfaceClass}>+{hiddenCount}</span>
+        <button type="button" onClick={onOverflowActivate} disabled={disabled}
+          aria-label={'还有 ' + hiddenCount + ' 个已启用能力，打开工具面板'}
+          title="查看全部已启用能力" className={buttonClass}>
+          <span className={surfaceClass}>+{hiddenCount}</span>
         </button>
       ) : null}
     </div>

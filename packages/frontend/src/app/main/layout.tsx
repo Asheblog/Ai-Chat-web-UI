@@ -12,6 +12,7 @@ import { useAuthStore } from '@/store/auth-store'
 import { SkillApprovalInbox } from '@/components/skills/skill-approval-inbox'
 import { useMainBootstrap } from '@/hooks/use-main-bootstrap'
 import { AppShell } from '@/components/app-shell'
+import { MOBILE_MODEL_SELECTOR_ID } from '@/components/chat/composer-layout'
 
 // 首次安装向导只在管理员身份下加载；内部系统连接页再由向导自身分包。
 const SetupWizard = dynamic(
@@ -60,7 +61,7 @@ export default function MainLayout({
   const isAdmin = actorState === 'authenticated' && userRole === 'ADMIN'
 
   const toolbar = (
-            <div className="v2-toolbar sticky top-0 z-40 flex items-center justify-between gap-2 px-4 lg:hidden">
+            <div className="v2-toolbar sticky top-0 z-40 grid grid-cols-[56px_minmax(0,1fr)_56px] items-center gap-2 px-4 lg:hidden">
               <div>
                 <Button
                   variant="ghost"
@@ -79,7 +80,8 @@ export default function MainLayout({
                   <SidebarToggleIcon className="h-5 w-5" />
                 </Button>
               </div>
-              <div>
+              <div id={MOBILE_MODEL_SELECTOR_ID} className="flex min-w-0 items-center justify-center" />
+              <div className="justify-self-end">
                 <UserMenu variant="icon" />
               </div>
             </div>

@@ -71,6 +71,9 @@ const expectTouchTarget = (element: HTMLElement) => {
 
 beforeEach(() => {
   localStorage.clear()
+  const headerSlot = document.createElement('div')
+  headerSlot.id = 'mobile-model-selector'
+  document.body.appendChild(headerSlot)
   vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
     matches: query.includes('max-width: 767px'), media: query, onchange: null,
     addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(),
@@ -83,6 +86,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  document.getElementById('mobile-model-selector')?.remove()
   vi.unstubAllGlobals()
 })
 
@@ -109,7 +113,7 @@ describe('MobileComposer layout', () => {
     const layers = Array.from(editor.querySelectorAll('[data-composer-layer]')).map(
       (node) => node.getAttribute('data-composer-layer'),
     )
-    expect(layers).toEqual(['attachments', 'text', 'capabilities', 'actions'])
+    expect(layers).toEqual(['attachments', 'text', 'actions'])
     expect(within(editor).getByText('调研.pdf')).toBeInTheDocument()
   })
 
@@ -189,7 +193,7 @@ describe('MobileComposer tools and capabilities', () => {
     await waitFor(() => expect(onOpenSessionPrompt).toHaveBeenCalledTimes(1), { timeout: 1500 })
   })
 
-  it('summarises a third enabled capability behind +N', () => {
+  it('keeps fitting capability icons in the same action row', () => {
     render(
       <MobileComposer
         {...createProps({ thinkingEnabled: true, webSearchEnabled: true, pythonToolEnabled: true })}
@@ -199,8 +203,11 @@ describe('MobileComposer tools and capabilities', () => {
     const chips = screen.getByRole('group', { name: '已启用能力' })
     expect(within(chips).getByRole('button', { name: '思考' })).toBeInTheDocument()
     expect(within(chips).getByRole('button', { name: '联网' })).toBeInTheDocument()
-    expect(within(chips).getByRole('button', { name: '还有 1 个已启用能力，打开工具面板' })).toBeInTheDocument()
-    expect(within(chips).queryByRole('button', { name: 'Python' })).not.toBeInTheDocument()
+    expect(within(chips).getByRole('button', { name: 'Python' })).toBeInTheDocument()
+    expect(chips.closest('[data-composer-layer="actions"]')).not.toBeNull()
+    const model = screen.getByRole('combobox', { name: '选择模型' })
+    expect(document.getElementById('mobile-model-selector')).toContainElement(model)
+    expect(chips.closest('[data-composer-layer="actions"]')).not.toContainElement(model)
   })
 
   it('sends web search chips straight to the scope page', async () => {

@@ -1,99 +1,66 @@
-import { describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ComposerActiveCapabilities } from '@/components/chat/composer-active-capabilities'
 import { activeCapabilityItems } from './composer-tools-fixtures'
 
-describe('ComposerActiveCapabilities — 点击直达能力', () => {
-  it('每个已启用条目标签直接调用自己的 onActivate', () => {
+let resize: (width: number) => void
+beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', class {
+    constructor(callback: (entries: { contentRect: { width: number } }[]) => void) {
+      resize = (width) => callback([{ contentRect: { width } }])
+    }
+    observe() {}
+    disconnect() {}
+  })
+})
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+
+describe('ComposerActiveCapabilities', () => {
+  it('renders icons with accessible names and preserves activation', () => {
     const onActivate = vi.fn()
-    render(
-      <ComposerActiveCapabilities
-        items={activeCapabilityItems(['思考', '联网'], onActivate)}
-        mobile={false}
-      />,
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: '思考' }))
+    render(<ComposerActiveCapabilities items={activeCapabilityItems(['思考', '联网'], onActivate)} />)
+    const thinking = screen.getByRole('button', { name: '思考' })
+    expect(thinking).toHaveTextContent('')
+    expect(thinking.querySelector('[data-testid="cap-icon"]')).not.toBeNull()
+    fireEvent.click(thinking)
     expect(onActivate).toHaveBeenLastCalledWith(0, '思考')
-
     fireEvent.click(screen.getByRole('button', { name: '联网' }))
     expect(onActivate).toHaveBeenLastCalledWith(1, '联网')
   })
 
-  it('标签带图标并保留可访问名', () => {
-    render(<ComposerActiveCapabilities items={activeCapabilityItems(['思考'])} mobile={false} />)
-
-    const chip = screen.getByRole('button', { name: '思考' })
-    expect(chip.querySelector('[data-testid="cap-icon"]')).not.toBeNull()
-  })
-})
-
-describe('ComposerActiveCapabilities — 溢出汇总', () => {
-  it('手机最多两个可见条目，其余汇总为 +N 并打开面板', () => {
+  it('shows all fitting mobile icons, folds overflow and expands after resizing', () => {
     const onOverflowActivate = vi.fn()
-    render(
-      <ComposerActiveCapabilities
-        items={activeCapabilityItems(['思考', '联网', 'Python'])}
-        mobile
-        onOverflowActivate={onOverflowActivate}
-      />,
-    )
-
+    render(<ComposerActiveCapabilities items={activeCapabilityItems(['思考', '联网', 'Python'])} mobile onOverflowActivate={onOverflowActivate} />)
+    act(() => resize(140))
+    expect(screen.getByRole('button', { name: 'Python' })).toBeInTheDocument()
+    act(() => resize(92))
     expect(screen.getByRole('button', { name: '思考' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '联网' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Python' })).not.toBeInTheDocument()
-
-    const overflow = screen.getByRole('button', { name: '还有 1 个已启用能力，打开工具面板' })
-    expect(overflow.className).toContain('min-w-11')
-
-    fireEvent.click(overflow)
+    expect(screen.queryByRole('button', { name: '联网' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '还有 2 个已启用能力，打开工具面板' }))
     expect(onOverflowActivate).toHaveBeenCalledTimes(1)
-    expect(screen.getByText('+1')).toBeInTheDocument()
+    act(() => resize(140))
+    expect(screen.getByRole('button', { name: 'Python' })).toBeInTheDocument()
+    expect(screen.queryByText('+2')).not.toBeInTheDocument()
   })
 
-  it('桌面默认显示三个，超出部分同样汇总', () => {
-    const onOverflowActivate = vi.fn()
-    render(
-      <ComposerActiveCapabilities
-        items={activeCapabilityItems(['思考', '联网', '深度研究', 'Python'])}
-        mobile={false}
-        onOverflowActivate={onOverflowActivate}
-      />,
-    )
-
-    for (const label of ['思考', '联网', '深度研究']) {
-      expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
-    }
-    expect(screen.queryByRole('button', { name: 'Python' })).not.toBeInTheDocument()
-    expect(screen.getByText('+1')).toBeInTheDocument()
+  it('uses desktop button widths and reserves a slot for the exact hidden count', () => {
+    render(<ComposerActiveCapabilities items={activeCapabilityItems(['思考', '联网', '深度研究', 'Python'])} />)
+    act(() => resize(116))
+    expect(screen.getByRole('button', { name: '联网' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '还有 2 个已启用能力，打开工具面板' })).toHaveTextContent('+2')
+    act(() => resize(36))
+    expect(screen.getByRole('button', { name: '还有 4 个已启用能力，打开工具面板' })).toHaveTextContent('+4')
   })
 
-  it('没有溢出时不渲染 +N', () => {
-    render(<ComposerActiveCapabilities items={activeCapabilityItems(['思考', '联网'])} mobile />)
-
-    expect(screen.queryByRole('button', { name: /还有 .* 个已启用能力/ })).not.toBeInTheDocument()
-  })
-
-})
-
-describe('ComposerActiveCapabilities — 空与禁用', () => {
-  it('没有已启用能力时不渲染任何节点', () => {
+  it('renders nothing when no capabilities are enabled', () => {
     const { container } = render(<ComposerActiveCapabilities items={[]} mobile />)
-
     expect(container.innerHTML).toBe('')
   })
 
-  it('禁用时标签与 +N 都不可点击', () => {
-    render(
-      <ComposerActiveCapabilities
-        items={activeCapabilityItems(['思考', '联网', 'Python'])}
-        mobile
-        disabled
-        onOverflowActivate={vi.fn()}
-      />,
-    )
-
+  it('disables visible icons and overflow while busy', () => {
+    render(<ComposerActiveCapabilities items={activeCapabilityItems(['思考', '联网', 'Python'])} mobile disabled />)
+    act(() => resize(92))
     expect(screen.getByRole('button', { name: '思考' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /还有 1 个已启用能力/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '还有 2 个已启用能力，打开工具面板' })).toBeDisabled()
   })
 })
