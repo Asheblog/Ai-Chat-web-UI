@@ -4,6 +4,7 @@ import {
   type ThinkingDialect,
 } from "@aichat/shared"
 import type {
+  SystemConnectionAuthType,
   SystemConnectionGroup,
   SystemConnectionPayload,
 } from "@/services/system-connections"
@@ -26,11 +27,10 @@ export interface ConnectionFormState {
   provider: string
   thinkingDialect: ThinkingDialect
   baseUrl: string
-  authType: string
+  authType: SystemConnectionAuthType
   headers: string
   prefixId: string
   tags: string
-  connectionType: string
   keys: ConnectionKeyFormState[]
 }
 
@@ -60,7 +60,6 @@ export const DEFAULT_FORM: ConnectionFormState = {
   headers: "",
   prefixId: "",
   tags: "",
-  connectionType: "external",
   keys: [createEmptyKey(0)],
 }
 
@@ -124,7 +123,6 @@ export const buildPayload = (
     ...(headers ? { headers } : {}),
     prefixId: form.prefixId.trim() || undefined,
     tags: buildTags(form.tags),
-    connectionType: form.connectionType,
     defaultCapabilities: capabilities,
     apiKeys: form.keys.map((key) => ({
       ...(key.id ? { id: key.id } : {}),
@@ -145,7 +143,6 @@ export const createFormFromGroup = (group: SystemConnectionGroup): ConnectionFor
   headers: serializeHeaders(group.headers),
   prefixId: group.prefixId || "",
   tags: (group.tags || []).map((item) => item?.name).filter(Boolean).join(","),
-  connectionType: group.connectionType || "external",
   keys:
     group.apiKeys?.length > 0
       ? group.apiKeys.map((item, index) => ({
@@ -173,7 +170,6 @@ export const createFormFromTemplate = (template: ProviderTemplate): ConnectionFo
   headers: "",
   prefixId: "",
   tags: "",
-  connectionType: "external",
   keys: [createEmptyKey(0)],
 })
 

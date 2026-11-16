@@ -347,7 +347,7 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
       <AlertDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
         <DestructiveConfirmDialogContent
           title="确认清除全部覆写？"
-          description="该操作将移除全部模型能力覆写配置，并恢复默认策略。"
+          description="该操作会移除所有模型的能力、生成参数与访问策略覆写，并恢复自动探测与默认策略。"
           warning="清除后无法撤销，请确认已备份所需规则。"
           cancelLabel="取消"
           actionLabel={clearing ? '清除中…' : '确认清除'}
@@ -427,7 +427,7 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
                         </TableHead>
                       )
                     })}
-                    <TableHead className="text-center w-[56px]">手动</TableHead>
+                    <TableHead className="text-center w-[64px]">覆写</TableHead>
                     <TableHead className="text-center w-[64px]">操作</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -478,9 +478,15 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
                           )
                         })}
                         <TableCell className="py-3 px-3 text-center">
-                          {m.overridden ? (
+                          {m.overrides?.any ?? m.overridden ? (
                             <Badge className="bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 text-xs">
-                              是
+                              {[
+                                m.overrides?.capability ? '能力' : null,
+                                m.overrides?.parameters ? '参数' : null,
+                                m.overrides?.access ? '访问' : null,
+                              ]
+                                .filter(Boolean)
+                                .join('·') || '是'}
                             </Badge>
                           ) : (
                             <span className="text-xs text-muted-foreground">否</span>
@@ -500,7 +506,7 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-44">
                               <DropdownMenuItem onClick={()=>openTokenDialog(m)}>
-                                修改生成 Tokens
+                                修改生成上限
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={()=>openContextDialog(m)}>
                                 修改上下文窗口
@@ -510,10 +516,29 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
-                                disabled={!m.overridden || isBusy}
+                                disabled={!m.overrides?.capability || isBusy}
+                                onClick={()=>resetModel(m, 'capabilities')}
+                              >
+                                清除能力覆写
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                disabled={!m.overrides?.parameters || isBusy}
+                                onClick={()=>resetModel(m, 'parameters')}
+                              >
+                                清除生成参数覆写
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                disabled={!m.overrides?.access || isBusy}
+                                onClick={()=>resetModel(m, 'access')}
+                              >
+                                清除访问策略覆写
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                disabled={!(m.overrides?.any ?? m.overridden) || isBusy}
                                 onClick={()=>resetModel(m)}
                               >
-                                重置覆写
+                                清除全部覆写
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -562,7 +587,7 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>修改生成 Tokens</DialogTitle>
+            <DialogTitle>修改生成上限</DialogTitle>
             <DialogDescription>
               {tokenDialogModel?.name || tokenDialogModel?.id || '未选择模型'}
             </DialogDescription>
@@ -576,7 +601,9 @@ export function SystemModelsPage({ hideHeader = false }: { hideHeader?: boolean 
               className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={dialogSaving}
             />
-            <p className="text-sm text-muted-foreground">留空表示恢复供应商默认（通常 32K）。允许 1~256000。</p>
+            <p className="text-sm text-muted-foreground">
+              留空表示自动：按模型上下文与协议解析生成上限。填写则固定为该值（1~256000）。
+            </p>
           </div>
           <DialogFooter className="pt-4">
             <Button

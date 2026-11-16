@@ -93,7 +93,7 @@ async function initSqliteCompatibility(): Promise<void> {
 }
 
 // 立即初始化 SQLite 兼容性配置
-initSqliteCompatibility().catch(() => {})
+export const databaseReady = initSqliteCompatibility().catch(() => {})
 
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma

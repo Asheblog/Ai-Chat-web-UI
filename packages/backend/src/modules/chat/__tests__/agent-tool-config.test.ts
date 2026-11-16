@@ -3,9 +3,9 @@ import type { AgentWebSearchConfig, AgentPythonToolConfig, AgentWorkspaceToolCon
 import { BUILTIN_SKILL_SLUGS } from '../../skills/types'
 
 const webSearchConfig: AgentWebSearchConfig = {
-  enabled: true, engines: ['tavily'], engineOrder: ['tavily'], apiKeys: { tavily: 'k' },
+  enabled: true, engines: ['tavily'], apiKeys: { tavily: 'k' },
   resultLimit: 5, domains: [], parallelMaxEngines: 2, parallelMaxQueriesPerCall: 1,
-  parallelTimeoutMs: 15000, mergeStrategy: 'hybrid_score_v1', autoBilingual: false,
+  parallelTimeoutMs: 15000,
   autoBilingualMode: 'off',
 }
 const pythonToolConfig: AgentPythonToolConfig = { enabled: true, timeoutMs: 60000, maxOutputChars: 20000, maxSourceChars: 20000 }

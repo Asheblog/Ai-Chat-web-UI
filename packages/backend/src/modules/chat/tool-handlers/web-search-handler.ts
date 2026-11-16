@@ -200,13 +200,16 @@ const normalizeQueryLanguage = (
   query: string,
 ): WebSearchQueryLanguage => value ?? detectQueryLanguage(query)
 
+/**
+ * 双语扩展只看三态模式：off 不扩展、always 必扩展、conditional 按语种与主题词判断。
+ * 查询扩展数（parallelMaxQueriesPerCall）为 1 时上层不会追加第二条查询。
+ */
 const shouldExpandBilingual = (
   query: string,
   language: 'zh' | 'en' | 'unknown',
   mode: 'off' | 'conditional' | 'always',
-  enabled: boolean,
 ): boolean => {
-  if (!enabled || mode === 'off') return false
+  if (mode === 'off') return false
   if (mode === 'always') return true
   if (language === 'unknown') return true
   return BILINGUAL_TOPIC_RE.test(query)
@@ -224,12 +227,7 @@ const buildBilingualQueries = (
     1,
     3,
   )
-  const useBilingual = shouldExpandBilingual(
-    query,
-    queryLanguage,
-    bilingualMode,
-    config.autoBilingual !== false,
-  )
+  const useBilingual = shouldExpandBilingual(query, queryLanguage, bilingualMode)
 
   const queries: WebSearchParallelQuery[] = [{ query, queryLanguage }]
   if (useBilingual && maxQueries > 1) {
@@ -259,9 +257,10 @@ const buildBilingualQueries = (
 const pickActiveEngines = (config: WebSearchHandlerConfig, scope?: string): string[] => {
   const normalizedScope = (scope || 'webpage').trim().toLowerCase()
   const webOnly = normalizedScope !== 'webpage' && normalizedScope !== 'web'
+  // 启用引擎数组本身就是优先顺序：先按顺序去重，再按 Key 与范围过滤
   const order = Array.from(
     new Set(
-      [...(config.engineOrder || []), ...(config.engines || [])]
+      (config.engines || [])
         .map((item) => item.trim().toLowerCase())
         .filter(Boolean)
         .filter((engine) => !webOnly || engine !== 'deepseek'),
@@ -749,7 +748,7 @@ export class WebSearchToolHandler implements IToolHandler {
       originalQuery: query,
       expandedQueries,
       activeEngines,
-      engineOrder: this.config.engineOrder || [],
+      engineOrder: this.config.engines || [],
       minSources: this.config.minSources,
       conflictEscalation: this.config.conflictEscalation,
       localeRouting: this.config.localeRouting,
@@ -887,7 +886,7 @@ export class WebSearchToolHandler implements IToolHandler {
       )
       let searchResult = await runWebSearchParallel({
         engines: activeEngines,
-        engineOrder: this.config.engineOrder,
+        engineOrder: this.config.engines,
         apiKeys: this.config.apiKeys || {},
         queries: expandedQueries,
         queryPlans: routingPlan.queryPlans,
@@ -903,7 +902,6 @@ export class WebSearchToolHandler implements IToolHandler {
         deepseekNeedContent: autoReadNeedContent,
         timeoutMs: parallelTimeoutMs,
         parallelMaxEngines: this.config.parallelMaxEngines,
-        mergeStrategy: this.config.mergeStrategy,
         signal: context.requestSignal,
       })
       emitSearchTaskResultEvents(searchResult.tasks, 'initial')
@@ -935,7 +933,7 @@ export class WebSearchToolHandler implements IToolHandler {
           emitSearchTaskStartEvents(escalationPlans, 'escalation')
           const escalationResult = await runWebSearchParallel({
             engines: activeEngines,
-            engineOrder: this.config.engineOrder,
+            engineOrder: this.config.engines,
             apiKeys: this.config.apiKeys || {},
             queries: escalationPlans.map((item) => ({
               query: item.query,
@@ -953,14 +951,13 @@ export class WebSearchToolHandler implements IToolHandler {
             deepseekNeedContent: autoReadNeedContent,
             timeoutMs: parallelTimeoutMs,
             parallelMaxEngines: this.config.parallelMaxEngines,
-            mergeStrategy: this.config.mergeStrategy,
             signal: context.requestSignal,
           })
           emitSearchTaskResultEvents(escalationResult.tasks, 'escalation')
           searchResult = mergeWebSearchParallelResults(
             [searchResult, escalationResult],
             appliedLimit,
-            this.config.engineOrder,
+            this.config.engines,
           )
           executedSearchTaskCount += countPlannedTasks(escalationPlans)
           escalationInfo = {

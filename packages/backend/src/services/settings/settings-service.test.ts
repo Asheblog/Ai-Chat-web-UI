@@ -80,6 +80,34 @@ const adminActor = {
 } as any
 
 describe('SettingsService', () => {
+  it('exposes the same knowledge-base policy values as the execution gate', async () => {
+    const { service, prisma } = buildService()
+    prisma.systemSetting.findMany.mockResolvedValueOnce([
+      { key: 'knowledge_base_enabled', value: '1' },
+      { key: 'knowledge_base_allow_anonymous', value: 'yes' },
+      { key: 'knowledge_base_allow_users', value: 'on' },
+    ])
+    expect(await service.getSystemSettings(adminActor)).toMatchObject({
+      knowledge_base_enabled: true,
+      knowledge_base_allow_anonymous: true,
+      knowledge_base_allow_users: true,
+    })
+  })
+
+  it('returns the same effective defaults as the chat runtime and exposes installation policy', async () => {
+    const { service, prisma } = buildService()
+    prisma.systemSetting.findMany.mockResolvedValueOnce([])
+    const settings = await service.getSystemSettings(adminActor)
+    expect(settings).toMatchObject({
+      reasoning_save_to_db: true,
+      usage_emit: true,
+      provider_initial_grace_ms: 120000,
+      provider_reasoning_idle_ms: 300000,
+      stream_delta_chunk_size: 1,
+      extension_install_tool_enable: true,
+    })
+  })
+
   test.each([true, false])('excludes retired connections and models from setup diagnostics (enabled=%s)', async (enable) => {
     const rows = [{ id: 1, provider: 'ollama', enable }, { id: 2, provider: 'azure_openai', enable }]
     const prisma = {
@@ -206,6 +234,17 @@ describe('SettingsService', () => {
     await expect(
       service.updateSystemSettings({ assistant_avatar: { data: 'xxx', mime: 'image/png' } }),
     ).rejects.toThrow('Invalid assistant avatar payload')
+  })
+
+  it('clears the stored assistant avatar and deletes its file through the shared image lifecycle', async () => {
+    const { service, prisma, replaceProfileImage } = buildService()
+    prisma.systemSetting.findUnique.mockResolvedValue({ key: 'assistant_avatar_path', value: 'profiles/old.png' })
+    replaceProfileImage.mockResolvedValueOnce(null)
+    await service.updateSystemSettings({ assistant_avatar: null })
+    expect(replaceProfileImage).toHaveBeenCalledWith(null, { currentPath: 'profiles/old.png' })
+    expect(prisma.systemSetting.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { key: 'assistant_avatar_path' }, update: { value: '' },
+    }))
   })
 
   it('stores assistant avatar payload with replaceProfileImage', async () => {

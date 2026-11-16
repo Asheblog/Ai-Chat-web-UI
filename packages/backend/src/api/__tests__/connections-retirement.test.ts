@@ -45,4 +45,64 @@ describe('connection protocol API validation', () => {
     expect(response.status).toBe(200)
     expect(createSystemConnection).toHaveBeenCalledTimes(1)
   })
+
+  test('rejects the removed session auth on create, edit and verify but still imports it as a pending row', async () => {
+    const service = {
+      createSystemConnection: jest.fn().mockResolvedValue({ id: 1 }),
+      updateSystemConnection: jest.fn().mockResolvedValue({ id: 1 }),
+      verifyConnectionConfig: jest.fn().mockResolvedValue({ results: [] }),
+      importSystemConnections: jest.fn().mockResolvedValue({ createdGroups: 1 }),
+    }
+    const app = createConnectionsApi({ connectionService: service as unknown as ConnectionService })
+    const payload = {
+      displayName: 'Legacy',
+      provider: 'openai',
+      baseUrl: 'https://example.com',
+      authType: 'session',
+      apiKeys: [{ apiKey: 'test' }],
+    }
+    for (const [method, path] of [['POST', '/'], ['PUT', '/1'], ['POST', '/verify']]) {
+      const response = await app.request(`http://localhost${path}`, {
+        method,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      expect(response.status).toBe(400)
+    }
+    const imported = await app.request('http://localhost/import', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ schemaVersion: 2, connections: [payload] }),
+    })
+    expect(imported.status).toBe(200)
+    // 旧包里的 session 原样透传，由服务层落库为待配置旧行；不在 API 层归一成 bearer。
+    expect(service.importSystemConnections).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connections: [expect.objectContaining({ authType: 'session' })],
+      }),
+      expect.anything(),
+    )
+  })
+
+  test('ignores the retired local/external connection type instead of persisting it', async () => {
+    const createSystemConnection = jest.fn().mockResolvedValue({ id: 1 })
+    const app = createConnectionsApi({ connectionService: { createSystemConnection } as unknown as ConnectionService })
+    const response = await app.request('http://localhost/', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        displayName: 'External',
+        provider: 'openai',
+        baseUrl: 'https://example.com',
+        connectionType: 'local',
+        tags: [{ name: 'prod' }],
+        apiKeys: [{ apiKey: 'test' }],
+      }),
+    })
+    expect(response.status).toBe(200)
+    const payload = createSystemConnection.mock.calls[0][0]
+    expect(Object.prototype.hasOwnProperty.call(payload, 'connectionType')).toBe(false)
+    expect(payload.tags).toEqual([{ name: 'prod' }])
+  })
+
 })

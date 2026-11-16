@@ -12,9 +12,21 @@ import { CHAT_IMAGE_DEFAULT_RETENTION_DAYS } from '../config/storage'
 import {
   buildHeaders,
   assertSupportedProvider,
+  isLegacySessionAuth,
   type AuthType,
   type ProviderType,
 } from '../utils/providers'
+import {
+  resolveEffortForModel,
+  shouldSendTemperature,
+} from '../services/catalog/model-generation-parameters'
+import { resolveStreamConfig } from '../services/stream/stream-config-resolver'
+
+/** provider 超时的设置契约下限，与 api/settings.ts 的校验保持一致。 */
+const MIN_PROVIDER_TIMEOUT_MS = 10_000
+
+/** Anthropic 的 max_tokens 必填；自动模式下用保守值，避免把上下文总上限当输出上限。 */
+const AUTO_ANTHROPIC_MAX_OUTPUT_TOKENS = 4096
 import { buildChatProviderRequest } from '../utils/chat-provider'
 import type { RequestGenerationOptions } from './request-options'
 import { BUILTIN_SKILL_SLUGS, normalizeRequestedSkills, type RequestedSkillsPayload } from '../modules/skills/types'
@@ -33,7 +45,8 @@ export interface PreparedChatRequest {
   promptTokens: number
   contextLimit: number
   contextRemaining: number
-  appliedMaxTokens: number
+  /** 实际下发的输出上限；null 表示不下发（协议允许省略且没有已知值）。 */
+  appliedMaxTokens: number | null
   contextEnabled: boolean
   systemSettings: Record<string, string>
   providerRequest: {
@@ -245,26 +258,36 @@ export class ChatRequestBuilder {
       this.prependUserContent(messagesPayload, cacheSafePrefix)
     }
 
-    const temperature = await this.resolveTemperature({
-      connectionId: params.session.connectionId,
-      rawModelId: params.session.modelRawId,
-      connectionPrefixId: params.session.connection.prefixId,
-      systemSettings,
-    })
-
-    let baseRequestBody: any = {
-      model: params.session.modelRawId,
-      messages: messagesPayload,
-      stream: params.mode === 'stream',
-      temperature,
-      max_tokens: contextInfo.appliedMaxTokens,
-    }
-
     const reasoning = this.resolveReasoningOptions({
       payload: params.payload,
       session: params.session,
       settings: systemSettings,
     })
+
+    const shouldSendTemp = shouldSendTemperature({
+      provider: params.session.connection.provider as ProviderType,
+      thinkingDialect: params.session.connection.thinkingDialect,
+      reasoningEnabled: reasoning.enabled,
+    })
+    const temperature = shouldSendTemp
+      ? await this.resolveTemperature({
+          connectionId: params.session.connectionId,
+          rawModelId: params.session.modelRawId,
+          connectionPrefixId: params.session.connection.prefixId,
+          systemSettings,
+        })
+      : null
+
+    let baseRequestBody: any = {
+      model: params.session.modelRawId,
+      messages: messagesPayload,
+      stream: params.mode === 'stream',
+      ...(temperature != null ? { temperature } : {}),
+    }
+    // 未解析到输出上限时不下发 max_tokens：不能把上下文总上限当成输出上限。
+    if (contextInfo.appliedMaxTokens != null) {
+      baseRequestBody.max_tokens = contextInfo.appliedMaxTokens
+    }
 
     this.applyReasoningOptions(baseRequestBody, reasoning, params.session.connection.thinkingDialect)
     const customBodyResult = this.applyCustomBody(baseRequestBody, params.payload?.custom_body)
@@ -489,10 +512,17 @@ export class ChatRequestBuilder {
       rawModelId: params.modelRawId,
       provider: params.provider,
     })
-    const appliedMaxTokens = Math.max(
-      1,
-      Math.min(completionLimit || contextLimit, Math.max(1, contextRemaining)),
-    )
+    // 自动时按协议要：Anthropic 的 max_tokens 必填，取保守值并被剩余上下文收敛；
+    // OpenAI 系可省略，交给厂商按模型默认处理；都不再用上下文总上限当输出上限。
+    const protocolAutoLimit =
+      params.provider === 'anthropic'
+        ? Math.min(AUTO_ANTHROPIC_MAX_OUTPUT_TOKENS, Math.max(1, contextRemaining))
+        : null
+    const requestedLimit = completionLimit ?? protocolAutoLimit
+    const appliedMaxTokens =
+      requestedLimit == null
+        ? null
+        : Math.max(1, Math.min(requestedLimit, Math.max(1, contextRemaining)))
 
     return {
       truncatedContext: combined,
@@ -623,7 +653,7 @@ export class ChatRequestBuilder {
         ? params.payload.reasoningEnabled
         : params.session.reasoningEnabled ?? fallbackEnabled
 
-    const effort = (
+    const requested = (
       params.payload?.reasoningEffort ||
       params.session.reasoningEffort ||
       params.settings.openai_reasoning_effort ||
@@ -631,9 +661,23 @@ export class ChatRequestBuilder {
       ''
     ).toString()
 
+    // 默认 Auto：没有显式强度、或该协议/方言无法表达时不下发任何强度字段。
+    const connection = params.session.connection
+    const applied =
+      enabled && connection
+        ? resolveEffortForModel(
+            {
+              provider: connection.provider as ProviderType,
+              thinkingDialect: connection.thinkingDialect,
+              rawModelId: params.session.modelRawId,
+            },
+            requested,
+          )
+        : null
+
     return {
       enabled: Boolean(enabled),
-      effort,
+      effort: applied ?? '',
     }
   }
 
@@ -663,6 +707,13 @@ export class ChatRequestBuilder {
     const provider = params.session.connection.provider as ProviderType
     const baseUrl = params.session.connection.baseUrl.replace(/\/+$/, '')
     const extraHeaders = this.parseHeadersJson(params.session.connection.headersJson)
+    // 旧版 session 认证没有鉴权头实现：必须显式失败，绝不能把它当成无认证请求静默发出。
+    if (isLegacySessionAuth(params.session.connection.authType)) {
+      throw new ConnectionServiceError(
+        '此连接使用已移除的 Session 认证，未发送任何请求。请在系统设置中重新选择认证方式并填写 API Key。',
+        400,
+      )
+    }
     let decryptedKey: string | undefined
     if (params.session.connection.authType === 'bearer') {
       const secretVaultId = params.session.connection.secretVaultId
@@ -871,12 +922,10 @@ export class ChatRequestBuilder {
   }
 
   private resolveProviderTimeout(settings: Record<string, string>) {
-    const raw = settings.provider_timeout_ms || process.env.PROVIDER_TIMEOUT_MS || '300000'
-    const parsed = Number.parseInt(raw, 10)
-    if (Number.isFinite(parsed) && parsed > 0) {
-      return parsed
-    }
-    return 300000
+    // 复用共享流式配置解析：未配置时 120000（与 shared/API 默认一致），显式值优先。
+    const { providerTimeoutMs } = resolveStreamConfig({ sysMap: settings, env: process.env })
+    // 设置契约下限 10000（api/settings.ts 的 min），避免过短超时打断正常生成。
+    return Math.max(MIN_PROVIDER_TIMEOUT_MS, providerTimeoutMs)
   }
 
   private safeResolveHost(baseUrl: string): string | null {

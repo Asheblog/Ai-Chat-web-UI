@@ -14,12 +14,10 @@ const createContext = (signal?: AbortSignal) => ({
 const createConfig = (overrides: Record<string, unknown> = {}) => ({
   enabled: true,
   engines: ['tavily'],
-  engineOrder: ['tavily'],
   apiKeys: { tavily: 'tv-key' },
   resultLimit: 5,
   domains: [],
   scope: 'webpage',
-  autoBilingual: false,
   autoReadAfterSearch: true,
   autoReadTopK: 2,
   parallelMaxEngines: 1,
@@ -283,7 +281,7 @@ describe('WebSearchToolHandler auto-read batch', () => {
     const readSpy = jest.spyOn(urlReaderModule, 'readUrlContent')
 
     const handler = new WebSearchToolHandler(
-      createConfig({ engines: ['tavily'], engineOrder: ['tavily'], includeRawContent: false, autoReadTopK: 2 }) as any,
+      createConfig({ engines: ['tavily'], includeRawContent: false, autoReadTopK: 2 }) as any,
     )
     const result = await handler.handle(
       { id: 'call_body_capability', function: { name: 'web_search', arguments: '{}' } },
@@ -326,7 +324,6 @@ describe('WebSearchToolHandler auto-read batch', () => {
     const handler = new WebSearchToolHandler(
       createConfig({
         engines: ['tavily', 'metaso', 'exa'],
-        engineOrder: ['tavily', 'metaso', 'exa'],
         apiKeys: { tavily: 'tv', metaso: 'mt', exa: 'ex' },
         parallelMaxEngines: 5,
         includeRawContent: false,
@@ -365,7 +362,7 @@ describe('WebSearchToolHandler auto-read batch', () => {
     jest.spyOn(urlReaderModule, 'readUrlContent')
 
     const tavilyHandler = new WebSearchToolHandler(
-      createConfig({ engines: ['tavily'], engineOrder: ['tavily'], includeRawContent: false, autoReadTopK: 0 }) as any,
+      createConfig({ engines: ['tavily'], includeRawContent: false, autoReadTopK: 0 }) as any,
     )
     await tavilyHandler.handle(
       { id: 'call_body_off', function: { name: 'web_search', arguments: '{}' } },
@@ -377,7 +374,6 @@ describe('WebSearchToolHandler auto-read batch', () => {
     const deepseekHandler = new WebSearchToolHandler(
       createConfig({
         engines: ['deepseek'],
-        engineOrder: ['deepseek'],
         apiKeys: { deepseek: 'ds-key' },
         includeRawContent: false,
         autoReadTopK: 0,

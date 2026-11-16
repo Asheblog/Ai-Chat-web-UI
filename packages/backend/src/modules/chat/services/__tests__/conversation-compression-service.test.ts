@@ -93,75 +93,91 @@ describe("ConversationCompressionService", () => {
     jest.restoreAllMocks()
   })
 
-  it("compresses old messages and stores a summary group", async () => {
+  it.each([
+    { stored: undefined, environment: undefined, timeout: 120000 },
+    { stored: "60000", environment: "45000", timeout: 60000 },
+    { stored: undefined, environment: "45000", timeout: 45000 },
+  ])("compresses messages with the effective provider timeout $timeout", async ({ stored, environment, timeout }) => {
+    const previous = process.env.PROVIDER_TIMEOUT_MS
+    if (environment === undefined) delete process.env.PROVIDER_TIMEOUT_MS
+    else process.env.PROVIDER_TIMEOUT_MS = environment
+    const signal = new AbortController().signal
+    const timeoutSpy = jest.spyOn(AbortSignal, "timeout").mockReturnValue(signal)
     const { prisma, fetchFn, service } = createHarness()
+    try {
 
-    prisma.systemSetting.findMany.mockResolvedValue([
-      { key: "context_compression_enabled", value: "true" },
-      { key: "context_compression_threshold_ratio", value: "0.5" },
-      { key: "context_compression_tail_messages", value: "4" },
-      { key: "provider_timeout_ms", value: "120000" },
-    ])
-    prisma.message.findMany.mockResolvedValue(buildMessages(10))
-    prisma.messageGroup.create.mockResolvedValue({ id: 88 })
-    prisma.message.updateMany.mockResolvedValue({ count: 6 })
-    fetchFn.mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          choices: [{ message: { content: "用户需要持续推进重构并验证压缩上下文效果。" } }],
+      prisma.systemSetting.findMany.mockResolvedValue([
+        { key: "context_compression_enabled", value: "true" },
+        { key: "context_compression_threshold_ratio", value: "0.5" },
+        { key: "context_compression_tail_messages", value: "4" },
+        ...(stored ? [{ key: "provider_timeout_ms", value: stored }] : []),
+      ])
+      prisma.message.findMany.mockResolvedValue(buildMessages(10))
+      prisma.messageGroup.create.mockResolvedValue({ id: 88 })
+      prisma.message.updateMany.mockResolvedValue({ count: 6 })
+      fetchFn.mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            choices: [{ message: { content: "用户需要持续推进重构并验证压缩上下文效果。" } }],
+          }),
+          { status: 200 },
+        ),
+      )
+
+      const countSpy = jest.spyOn(Tokenizer, "countConversationTokens")
+      countSpy
+        .mockResolvedValueOnce(900)
+        .mockResolvedValueOnce(600)
+        .mockResolvedValueOnce(80)
+
+      const truncateSpy = jest.spyOn(Tokenizer, "truncateMessages")
+      truncateSpy.mockImplementation(async (messages: any[]) => messages)
+
+      const result = await service.compressIfNeeded({
+        session: baseSession as any,
+        actorContent: "继续执行实施计划",
+        protectedMessageId: 10,
+        historyUpperBound: new Date("2026-01-10T00:00:00.000Z"),
+      })
+
+      expect(timeoutSpy).toHaveBeenCalledWith(timeout)
+      expect(fetchFn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ signal }))
+      expect(result.applied).toBe(true)
+      expect(result.payload).toMatchObject({
+        groupId: 88,
+        compressedCount: 6,
+        thresholdTokens: 500,
+        beforeTokens: 900,
+        afterTokens: 380,
+        tailMessages: 4,
+      })
+
+      expect(prisma.message.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: { in: [1, 2, 3, 4, 5, 6] },
+          }),
         }),
-        { status: 200 },
-      ),
-    )
+      )
 
-    const countSpy = jest.spyOn(Tokenizer, "countConversationTokens")
-    countSpy
-      .mockResolvedValueOnce(900)
-      .mockResolvedValueOnce(600)
-      .mockResolvedValueOnce(80)
+      const createPayload = prisma.messageGroup.create.mock.calls[0][0]
+      expect(createPayload.data.summary).toContain("重构")
+      expect(JSON.parse(createPayload.data.compressedMessagesJson)).toHaveLength(6)
 
-    const truncateSpy = jest.spyOn(Tokenizer, "truncateMessages")
-    truncateSpy.mockImplementation(async (messages: any[]) => messages)
-
-    const result = await service.compressIfNeeded({
-      session: baseSession as any,
-      actorContent: "继续执行实施计划",
-      protectedMessageId: 10,
-      historyUpperBound: new Date("2026-01-10T00:00:00.000Z"),
-    })
-
-    expect(result.applied).toBe(true)
-    expect(result.payload).toMatchObject({
-      groupId: 88,
-      compressedCount: 6,
-      thresholdTokens: 500,
-      beforeTokens: 900,
-      afterTokens: 380,
-      tailMessages: 4,
-    })
-
-    expect(prisma.message.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          id: { in: [1, 2, 3, 4, 5, 6] },
-        }),
-      }),
-    )
-
-    const createPayload = prisma.messageGroup.create.mock.calls[0][0]
-    expect(createPayload.data.summary).toContain("重构")
-    expect(JSON.parse(createPayload.data.compressedMessagesJson)).toHaveLength(6)
-
-    const metadata = JSON.parse(createPayload.data.metadataJson)
-    expect(metadata).toMatchObject({
-      source: "auto",
-      thresholdRatio: 0.5,
-      thresholdTokens: 500,
-      beforeTokens: 900,
-      tailMessages: 4,
-      compressedCount: 6,
-      contextLimit: 1000,
-    })
+      const metadata = JSON.parse(createPayload.data.metadataJson)
+      expect(metadata).toMatchObject({
+        source: "auto",
+        thresholdRatio: 0.5,
+        thresholdTokens: 500,
+        beforeTokens: 900,
+        tailMessages: 4,
+        compressedCount: 6,
+        contextLimit: 1000,
+      })
+    } finally {
+      if (previous === undefined) delete process.env.PROVIDER_TIMEOUT_MS
+      else process.env.PROVIDER_TIMEOUT_MS = previous
+    }
   })
 
   it("skips compression when tokens are below threshold", async () => {

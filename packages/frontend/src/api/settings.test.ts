@@ -40,6 +40,11 @@ describe('updateSystemSettings DeepSeek 字段转发', () => {
     expect(requestBody()).not.toHaveProperty('web_search_result_limit')
   })
 
+  test('forwards automatic output limits and the writable tool policies', async () => {
+    await updateSystemSettings({ reasoningMaxOutputTokensDefault: 0, extensionInstallToolEnable: false, webSearchAutoReadBatchTimeoutMs: 25000 })
+    expect(requestBody()).toMatchObject({ reasoning_max_output_tokens_default: 0, extension_install_tool_enable: false, web_search_auto_read_batch_timeout_ms: 25000 })
+  })
+
   test('新 Key 原样转发，不裁剪为省略', async () => {
     await updateSystemSettings({
       webSearchApiKeyDeepseek: 'sk-deepseek-test',

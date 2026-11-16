@@ -15,11 +15,12 @@ export const getAggregatedModels = async () => {
   return response.data
 }
 
-export const updateModelTags = async (
+export type ModelOverrideField = 'capabilities' | 'parameters' | 'access'
+
+export const saveModelOverride = async (
   connectionId: number,
   rawId: string,
   payload: {
-    tags?: Array<{ name: string }>
     capabilities?: Record<string, boolean>
     maxOutputTokens?: number | null
     contextWindow?: number | null
@@ -35,9 +36,6 @@ export const updateModelTags = async (
   const body: Record<string, any> = {
     connectionId,
     rawId,
-  }
-  if (payload?.tags) {
-    body.tags = payload.tags
   }
   if (payload?.capabilities) {
     body.capabilities = payload.capabilities
@@ -64,7 +62,7 @@ export const refreshModelCatalog = async () => {
 }
 
 export const deleteModelOverrides = async (
-  items: Array<{ connectionId: number; rawId: string }>,
+  items: Array<{ connectionId: number; rawId: string; fields?: ModelOverrideField[] }>,
 ) => {
   const response = await client.delete<ApiResponse<any>>(
     '/catalog/models/tags',

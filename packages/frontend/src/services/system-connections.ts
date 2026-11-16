@@ -20,6 +20,8 @@ export interface SystemConnectionApiKey {
   updatedAt?: string
 }
 
+export type SystemConnectionAuthType = 'bearer' | 'none' | 'system_oauth'
+
 export interface SystemConnectionGroup {
   id: number
   displayName: string
@@ -27,11 +29,14 @@ export interface SystemConnectionGroup {
   provider: string
   thinkingDialect?: 'off' | 'deepseek_compat'
   baseUrl: string
-  authType: string
+  authType: SystemConnectionAuthType
+  /** 旧版 session 认证已移除：为 true 时必须重新选择认证方式并填写 Key。 */
+  authNeedsConfiguration?: boolean
+  /** authType=system_oauth 时是否检测到共享环境变量令牌（只读状态）。 */
+  systemOAuthConfigured?: boolean
   headers?: Record<string, string> | null
   prefixId?: string | null
   tags: Array<{ name: string }>
-  connectionType: string
   defaultCapabilities: Record<string, boolean>
   apiKeys: SystemConnectionApiKey[]
   createdAt: string
@@ -43,11 +48,10 @@ export interface SystemConnectionPayload {
   provider: string
   thinkingDialect?: 'off' | 'deepseek_compat'
   baseUrl: string
-  authType: string
+  authType: SystemConnectionAuthType
   headers?: Record<string, string>
   prefixId?: string
   tags: Array<{ name: string }>
-  connectionType: string
   defaultCapabilities: Record<string, boolean>
   apiKeys: Array<{
     id?: number
@@ -65,7 +69,6 @@ export interface VerifyConnectionModel {
   provider: string
   channelName?: string
   connectionBaseUrl?: string
-  connectionType?: string
   tags?: Array<{ name: string }>
   capabilities?: Record<string, boolean>
   capabilitySource?: string

@@ -44,7 +44,8 @@ export const resolveContextLimit = (options: ResolveContextLimitOptions): Promis
 export const invalidateContextWindowCache = (connectionId?: number | null, rawModelId?: string | null) =>
   resolveContextWindowService().invalidateContextWindowCache(connectionId, rawModelId)
 
-export const resolveCompletionLimit = (options: ResolveContextLimitOptions): Promise<number> =>
+/** null 表示自动：调用方按模型上下文预算收敛生成上限。 */
+export const resolveCompletionLimit = (options: ResolveContextLimitOptions): Promise<number | null> =>
   resolveContextWindowService().resolveCompletionLimit(options)
 
 export const invalidateCompletionLimitCache = (connectionId?: number | null, rawModelId?: string | null) =>

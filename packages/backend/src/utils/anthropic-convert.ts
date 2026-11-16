@@ -12,17 +12,20 @@ import {
   mapStopReason,
   toNumber,
 } from './anthropic-shared'
+import { resolveAnthropicEffort } from './anthropic-effort'
 
 const ANTHROPIC_DEFAULT_MAX_TOKENS = 4096
 
-const REASONING_EFFORT_BUDGETS: Record<string, number> = {
-  minimal: 1024,
-  low: 2048,
-  medium: 4096,
-  high: 8192,
-  xhigh: 16384,
-  max: 16384,
-}
+/**
+ * Anthropic 现行的强度控制是 output_config.effort（行为信号，作用于全部输出 token）。
+ * 旧的手动 thinking budget 已 deprecated：Claude 4.7+ 直接 400，只在自定义请求体显式给出时保留。
+ * effort 的支持面按模型区分（见 utils/anthropic-effort），未列入官方支持列表的模型不下发。
+ */
+const resolveOutputEffort = (body: Record<string, any>): string | null =>
+  resolveAnthropicEffort(
+    typeof body.model === 'string' ? body.model : null,
+    typeof body.reasoning_effort === 'string' ? body.reasoning_effort : null,
+  )
 
 type AnthropicContentBlock = Record<string, unknown>
 type AnthropicMessage = { role: 'user' | 'assistant'; content: AnthropicContentBlock[] }
@@ -179,17 +182,11 @@ const convertToolChoice = (choice: unknown): { toolChoice?: Record<string, unkno
   return {}
 }
 
-const resolveThinkingBudget = (body: Record<string, any>): number | null => {
-  if (isRecord(body.thinking) && body.thinking.type === 'enabled') {
-    const explicit = toNumber(body.thinking.budget_tokens)
-    if (explicit && explicit > 0) return Math.floor(explicit)
-    return 4096
-  }
-  if (typeof body.reasoning_effort === 'string' && body.reasoning_effort.trim()) {
-    const effort = body.reasoning_effort.trim().toLowerCase()
-    return REASONING_EFFORT_BUDGETS[effort] ?? 4096
-  }
-  return null
+/** 只有调用方显式给出 thinking budget 时才走旧的 enabled+budget_tokens 通道。 */
+const resolveExplicitThinkingBudget = (body: Record<string, any>): number | null => {
+  if (!isRecord(body.thinking) || body.thinking.type !== 'enabled') return null
+  const explicit = toNumber(body.thinking.budget_tokens)
+  return explicit && explicit > 0 ? Math.floor(explicit) : 4096
 }
 
 /**
@@ -320,15 +317,18 @@ export function convertChatCompletionsRequestToAnthropic(requestBody: any): any 
     next.tool_choice = toolChoice ?? { type: 'auto' }
   }
 
-  const thinkingBudget = resolveThinkingBudget(body)
-  if (thinkingBudget && thinkingBudget > 0) {
+  const explicitThinkingBudget = resolveExplicitThinkingBudget(body)
+  if (explicitThinkingBudget && explicitThinkingBudget > 0) {
     // Anthropic 要求 budget_tokens < max_tokens，否则直接 400。
-    maxTokens = Math.max(maxTokens, thinkingBudget + 1024)
+    maxTokens = Math.max(maxTokens, explicitThinkingBudget + 1024)
     next.max_tokens = maxTokens
     next.thinking = {
       type: 'enabled',
-      budget_tokens: Math.min(thinkingBudget, maxTokens - 1),
+      budget_tokens: Math.min(explicitThinkingBudget, maxTokens - 1),
     }
+  } else {
+    const effort = resolveOutputEffort({ model: next.model, reasoning_effort: body.reasoning_effort })
+    if (effort) next.output_config = { effort }
   }
 
   return next

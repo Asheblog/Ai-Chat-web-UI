@@ -781,4 +781,127 @@ describe('ConnectionService', () => {
       }
     })
   })
+
+  describe('connection auth contract', () => {
+    it('maps the retired session auth to bearer and marks it as needing configuration', async () => {
+      const { service, repository } = buildService()
+      repository.listSystemGroups.mockResolvedValue([
+        groupWithCredentials({ authType: 'session' as any }, [{ secretVaultId: null }]) as any,
+      ])
+      const [view] = await service.listSystemConnections()
+      expect(view.authType).toBe('bearer')
+      expect(view.authNeedsConfiguration).toBe(true)
+    })
+
+    it('does not mark bearer connections as needing configuration', async () => {
+      const { service, repository } = buildService()
+      repository.listSystemGroups.mockResolvedValue([groupWithCredentials() as any])
+      const [view] = await service.listSystemConnections()
+      expect(view.authType).toBe('bearer')
+      expect(view.authNeedsConfiguration).toBe(false)
+    })
+
+    it('reports whether the shared system oauth token exists', async () => {
+      const { service, repository } = buildService()
+      repository.listSystemGroups.mockResolvedValue([
+        groupWithCredentials({ authType: 'system_oauth' as any }) as any,
+      ])
+      const original = process.env.SYSTEM_OAUTH_TOKEN
+      try {
+        delete process.env.SYSTEM_OAUTH_TOKEN
+        expect((await service.listSystemConnections())[0].systemOAuthConfigured).toBe(false)
+        process.env.SYSTEM_OAUTH_TOKEN = 'global-token'
+        expect((await service.listSystemConnections())[0].systemOAuthConfigured).toBe(true)
+      } finally {
+        if (original === undefined) delete process.env.SYSTEM_OAUTH_TOKEN
+        else process.env.SYSTEM_OAUTH_TOKEN = original
+      }
+    })
+
+    it('imports a legacy session connection as a session row that still needs configuration', async () => {
+      const { service, repository } = buildService()
+      repository.listSystemGroups.mockResolvedValue([])
+      repository.createSystemGroup.mockResolvedValue({ ...baseGroup, id: 50, displayName: 'Legacy' } as any)
+      repository.createCredential.mockResolvedValue({
+        ...baseCredential,
+        id: 50,
+        connectionGroupId: 50,
+        secretVaultId: null,
+      } as any)
+      repository.findSystemGroupById.mockResolvedValue(
+        groupWithCredentials(
+          { id: 50, displayName: 'Legacy', authType: 'session' as any },
+          [{ id: 50 }],
+        ) as any,
+      )
+
+      await service.importSystemConnections({
+        schemaVersion: 2,
+        connections: [
+          {
+            displayName: 'Legacy',
+            provider: 'openai',
+            baseUrl: 'https://legacy.example/v1',
+            authType: 'session',
+            apiKeys: [{ apiKey: 'legacy-imported-key' }],
+          },
+        ],
+      })
+
+      // 不归一成 bearer：旧行必须保持 session，读取时才能标记待配置并阻断请求。
+      expect(repository.createSystemGroup).toHaveBeenCalledWith(
+        expect.objectContaining({ authType: 'session' }),
+      )
+    })
+
+    it('exports a legacy session row with its original authType', async () => {
+      const { service, repository, secretVault } = buildService()
+      repository.listSystemGroups.mockResolvedValue([
+        groupWithCredentials(
+          { id: 9, displayName: 'Legacy', authType: 'session' as any },
+          [{ id: 9, secretVaultId: 100 }],
+        ) as any,
+      ])
+      secretVault!.decryptById.mockResolvedValue('legacy-plain-key')
+
+      const exported = await service.exportSystemConnections()
+
+      expect(exported.connections[0]?.authType).toBe('session')
+      expect(exported.connections[0]?.apiKeys[0]?.apiKey).toBe('legacy-plain-key')
+    })
+
+    it('keeps a legacy session row pending when an import merges into it', async () => {
+      const { service, repository, secretVault } = buildService()
+      const existing = groupWithCredentials(
+        { id: 11, displayName: 'Legacy', authType: 'session' as any },
+        [{ id: 11, secretVaultId: 100 }],
+      )
+      repository.listSystemGroups.mockResolvedValue([existing as any])
+      repository.findSystemGroupById.mockResolvedValue(existing as any)
+      secretVault!.decryptById.mockResolvedValue('existing-legacy-key')
+      repository.updateSystemGroup.mockResolvedValue({ ...existing, id: 11 } as any)
+      repository.updateCredential.mockResolvedValue({ ...baseCredential, id: 11 } as any)
+      repository.createCredential.mockResolvedValue({ ...baseCredential, id: 12 } as any)
+
+      await service.importSystemConnections({
+        schemaVersion: 2,
+        connections: [
+          {
+            displayName: 'Legacy',
+            provider: 'openai',
+            baseUrl: 'https://api.openai.com/v1',
+            authType: 'bearer',
+            apiKeys: [{ apiKey: 'brand-new-key' }],
+          },
+        ],
+      })
+
+      // 合并不升级认证方式：不允许借导入把待配置旧行的 Key 静默当 bearer 用。
+      expect(repository.updateSystemGroup).toHaveBeenCalledWith(
+        11,
+        expect.objectContaining({ authType: 'session' }),
+      )
+    })
+  })
+
 })

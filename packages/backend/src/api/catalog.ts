@@ -99,7 +99,6 @@ catalog.put('/models/tags', requireUserActor, adminOnlyMiddleware, async (c) => 
     const payload: any = {
       connectionId,
       rawId,
-      tagsInput: body.tags,
       capabilitiesInput: body.capabilities,
       maxOutputTokens,
       contextWindow,

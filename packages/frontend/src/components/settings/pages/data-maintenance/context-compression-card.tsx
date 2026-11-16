@@ -17,14 +17,15 @@ export interface ContextCompressionCardProps {
 }
 
 /**
- * 上下文压缩卡：3 个 key（contextCompressionEnabled/ThresholdRatio/TailMessages），
- * draft + 校验模式适配自 SystemGeneralPage；关闭启用开关时后两行 disabled。
+ * 上下文压缩卡：contextCompressionEnabled 在主层，触发阈值和尾部保留条数收进「高级参数」。
+ * 默认 0.5 / 12 适用于绝大多数模型，只有需要调整费用或上下文占用时才展开。
  */
 export function ContextCompressionCard({ settings, update }: ContextCompressionCardProps) {
   const { toast } = useToast()
   const [enabled, setEnabled] = useState(true)
   const [thresholdDraft, setThresholdDraft] = useState("0.5")
   const [tailDraft, setTailDraft] = useState("12")
+  const [saving, setSaving] = useState(false)
 
   const resetDrafts = useCallback(() => {
     setEnabled(Boolean(settings.contextCompressionEnabled ?? true))
@@ -59,23 +60,76 @@ export function ContextCompressionCard({ settings, update }: ContextCompressionC
       return
     }
 
-    await update({
-      contextCompressionEnabled: enabled,
-      contextCompressionThresholdRatio: parsedCompressionRatio,
-      contextCompressionTailMessages: parsedCompressionTail,
-    })
-    toast({ title: "压缩设置已保存" })
+    setSaving(true)
+    try {
+      await update({
+        contextCompressionEnabled: enabled,
+        contextCompressionThresholdRatio: parsedCompressionRatio,
+        contextCompressionTailMessages: parsedCompressionTail,
+      })
+      toast({ title: "压缩设置已保存" })
+    } catch (error: any) {
+      toast({
+        title: "保存失败",
+        description: error?.message || "压缩设置未保存，请重试",
+        variant: "destructive",
+      })
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
     <FeatureCard
       icon={Shrink}
       title="上下文压缩"
-      description="对话过长时自动压缩，保留最近消息"
+      description="对话过长时自动压缩为摘要，保留最近消息"
       cardKey="data-maintenance:compression"
+      moreLabel="高级参数"
+      more={
+        <div className="space-y-3">
+          <SettingRow
+            title="压缩触发阈值（上下文比例）"
+            description="按模型上下文窗口动态计算，默认 0.5（范围 0.2-0.9）；调到更高更省费用、更低更少丢上下文"
+            align="start"
+          >
+            <div className="flex w-full flex-wrap items-center justify-end gap-2">
+              <Input
+                id="contextCompressionThresholdRatio"
+                type="text"
+                inputMode="decimal"
+                value={thresholdDraft}
+                onChange={(e) => setThresholdDraft(e.target.value)}
+                className="w-full sm:w-28 text-right"
+                disabled={!enabled || saving}
+              />
+              <span className="text-sm text-muted-foreground whitespace-nowrap">比例</span>
+            </div>
+          </SettingRow>
+
+          <SettingRow
+            title="压缩后保留最近消息数"
+            description="压缩时强制保留末尾消息，避免影响当前轮上下文（默认 12，范围 4-50）"
+            align="start"
+          >
+            <div className="flex w-full flex-wrap items-center justify-end gap-2">
+              <Input
+                id="contextCompressionTailMessages"
+                type="text"
+                inputMode="numeric"
+                value={tailDraft}
+                onChange={(e) => setTailDraft(e.target.value)}
+                className="w-full sm:w-28 text-right"
+                disabled={!enabled || saving}
+              />
+              <span className="text-sm text-muted-foreground whitespace-nowrap">条</span>
+            </div>
+          </SettingRow>
+        </div>
+      }
       footer={
         <div className="flex justify-end">
-          <Button onClick={handleSave} disabled={!fieldChanged}>
+          <Button onClick={handleSave} disabled={!fieldChanged || saving}>
             保存压缩设置
           </Button>
         </div>
@@ -89,51 +143,13 @@ export function ContextCompressionCard({ settings, update }: ContextCompressionC
               <Badge className="bg-ink-tertiary/10 text-ink-tertiary">推荐</Badge>
             </div>
           )}
-          description="达到阈值后自动将较早消息压缩为摘要，减少长会话上下文占用"
+          description="达到阈值后把较早消息压缩为摘要，减少长会话的上下文占用与费用"
         >
           <Switch
             id="contextCompressionEnabled"
             checked={enabled}
             onCheckedChange={(checked) => setEnabled(Boolean(checked))}
           />
-        </SettingRow>
-
-        <SettingRow
-          title="压缩触发阈值（上下文比例）"
-          description="按模型上下文窗口动态计算阈值，默认 0.5（范围 0.2-0.9）"
-          align="start"
-        >
-          <div className="flex w-full flex-wrap items-center justify-end gap-2">
-            <Input
-              id="contextCompressionThresholdRatio"
-              type="text"
-              inputMode="decimal"
-              value={thresholdDraft}
-              onChange={(e) => setThresholdDraft(e.target.value)}
-              className="w-full sm:w-28 text-right"
-              disabled={!enabled}
-            />
-            <span className="text-sm text-muted-foreground whitespace-nowrap">比例</span>
-          </div>
-        </SettingRow>
-
-        <SettingRow
-          title="压缩后保留最近消息数"
-          description="压缩时强制保留末尾消息，避免影响当前轮上下文（范围 4-50）"
-          align="start"
-        >
-          <div className="flex w-full flex-wrap items-center justify-end gap-2">
-            <Input
-              id="contextCompressionTailMessages"
-              type="text"
-              inputMode="numeric"
-              value={tailDraft}
-              onChange={(e) => setTailDraft(e.target.value)}
-              className="w-full sm:w-28 text-right"
-              disabled={!enabled}
-            />
-            <span className="text-sm text-muted-foreground whitespace-nowrap">条</span>
-          </div>
         </SettingRow>
       </div>
     </FeatureCard>

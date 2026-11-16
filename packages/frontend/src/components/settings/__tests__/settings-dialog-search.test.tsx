@@ -79,7 +79,7 @@ describe("SettingsDialog 搜索接入", () => {
     dispatchSelect({ key: "data-maintenance", cardKey: "data-maintenance:compression", origin: "search" })
     await waitFor(() => {
       const banner = screen.getByRole("status")
-      expect(banner.textContent).toContain("已定位到：系统与数据 → 数据与维护 · 上下文压缩")
+      expect(banner.textContent).toContain("已定位到：数据与日志 → 数据与维护 · 上下文压缩")
     })
   })
 

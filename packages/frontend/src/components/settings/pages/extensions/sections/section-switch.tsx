@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useState } from "react"
 import { Switch } from "@/components/ui/switch"
+import { useToast } from "@/components/ui/use-toast"
 import { useSystemSettings } from "@/hooks/use-system-settings"
 
 /** 页头单开关只服务全局能力开关；其余设置项归段壳里的卡片。 */
@@ -38,6 +39,7 @@ export function SectionSwitch({
   hint,
 }: SectionSwitchProps): JSX.Element {
   const { settings, update, refresh, isLoading, error } = useSystemSettings()
+  const { toast } = useToast()
   const [saving, setSaving] = useState(false)
   const switchId = useId()
 
@@ -53,13 +55,19 @@ export function SectionSwitch({
       setSaving(true)
       try {
         await update({ [settingsKey]: next })
-      } catch {
-        // 开关值直接来自 store：写入失败时 store 不变，UI 自动回到原状态
+      } catch (cause: any) {
+        // 开关值直接来自 store：写入失败时 store 不变，UI 自动回到原状态；
+        // 失败原因必须说出来，否则用户会以为「点了没反应」。
+        toast({
+          title: `${label}未保存`,
+          description: cause?.response?.data?.error || cause?.message || '写入失败，开关已回到原状态',
+          variant: "destructive",
+        })
       } finally {
         setSaving(false)
       }
     },
-    [settingsKey, update],
+    [settingsKey, update, toast, label],
   )
 
   // 未取到设置时不猜开关状态：宁可显示「状态未知」并禁用，也不给一个假的确定值。

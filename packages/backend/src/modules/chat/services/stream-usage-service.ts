@@ -33,7 +33,6 @@ export interface FinalizeParams {
   promptCacheMissTokens: number
   reasoningEnabled: boolean
   reasoningSaveToDb: boolean
-  assistantReplyHistoryLimit: number
   traceRecorder?: TaskTraceRecorder
   timing?: {
     requestStartedAt: number
@@ -173,7 +172,6 @@ export class StreamUsageService {
         assistantClientMessageId: params.assistantClientMessageId,
         fallbackClientMessageId: params.clientMessageId,
         parentMessageId: params.userMessageId ?? null,
-        replyHistoryLimit: params.assistantReplyHistoryLimit,
         content: trimmedContent,
         streamReasoning: shouldPersistReasoning ? params.reasoningBuffer.trim() : null,
         reasoning: shouldPersistReasoning ? params.reasoningBuffer.trim() : null,

@@ -9,7 +9,27 @@ import { PrismaClient } from '@prisma/client'
 import { actorMiddleware, adminOnlyMiddleware } from '../middleware/auth'
 import type { Actor, ApiResponse } from '../types'
 import { KnowledgeBaseService } from '../services/knowledge-base'
+import { knowledgeBaseAccessErrorMessage } from '../services/knowledge-base/knowledge-base-access'
 import { getDocumentServices } from '../services/document-services-factory'
+
+/**
+ * 用户消费面的统一闸门：列表、详情、检索都必须先过功能总闸与角色策略。
+ * 管理面（`/admin`、建库、上传、删除）走 adminOnlyMiddleware，不受角色策略影响。
+ */
+const rejectUnlessKnowledgeBaseAccessible = async (
+  kbService: KnowledgeBaseService,
+  actor: Actor,
+): Promise<Response | null> => {
+  const decision = await kbService.evaluateAccess(actor)
+  if (decision.allowed) return null
+  return Response.json(
+    {
+      success: false,
+      error: knowledgeBaseAccessErrorMessage(decision.reason),
+    } satisfies ApiResponse,
+    { status: 403 },
+  )
+}
 
 const createSchema = z.object({
   name: z.string().min(1).max(100),
@@ -66,6 +86,9 @@ export const createKnowledgeBasesApi = (prisma: PrismaClient) => {
   router.get('/', actorMiddleware, async (c) => {
     try {
       const actor = c.get('actor') as Actor
+      const denial = await rejectUnlessKnowledgeBaseAccessible(kbService, actor)
+      if (denial) return denial
+
       const userId = actor.type === 'user' ? actor.id : null
 
       const knowledgeBases = await kbService.list({
@@ -118,6 +141,9 @@ export const createKnowledgeBasesApi = (prisma: PrismaClient) => {
       }
 
       const actor = c.get('actor') as Actor
+      const denial = await rejectUnlessKnowledgeBaseAccessible(kbService, actor)
+      if (denial) return denial
+
       const userId = actor.type === 'user' ? actor.id : null
       const isAdmin = actor.type === 'user' && actor.role === 'ADMIN'
 
@@ -468,6 +494,9 @@ export const createKnowledgeBasesApi = (prisma: PrismaClient) => {
     try {
       const { query, knowledgeBaseIds } = c.req.valid('json')
       const actor = c.get('actor') as Actor
+      const denial = await rejectUnlessKnowledgeBaseAccessible(kbService, actor)
+      if (denial) return denial
+
       const userId = actor.type === 'user' ? actor.id : null
       const isAdmin = actor.type === 'user' && actor.role === 'ADMIN'
 

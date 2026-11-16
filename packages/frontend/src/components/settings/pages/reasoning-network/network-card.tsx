@@ -3,14 +3,12 @@
 import { Network } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
 import { FeatureCard } from "@/components/settings/components/feature-card"
 import { SettingRow } from "@/components/settings/components/setting-row"
 import { parseNumericInput } from "@/features/settings/shared"
 
 export interface NetworkValidity {
   hb: boolean
-  idle: boolean
   initialGrace: boolean
   reasoningIdle: boolean
   keepalive: boolean
@@ -20,8 +18,6 @@ export interface NetworkValidity {
 export interface NetworkCardProps {
   hbMs: number
   onHbMsChange: (v: number) => void
-  idleMs: number
-  onIdleMsChange: (v: number) => void
   initialGraceMs: number
   onInitialGraceMsChange: (v: number) => void
   reasoningIdleMs: number
@@ -30,22 +26,17 @@ export interface NetworkCardProps {
   onKeepaliveMsChange: (v: number) => void
   timeoutMs: number
   onTimeoutMsChange: (v: number) => void
-  usageEmit: boolean
-  onUsageEmitChange: (v: boolean) => void
-  usageProviderOnly: boolean
-  onUsageProviderOnlyChange: (v: boolean) => void
   validity: NetworkValidity
 }
 
 /**
- * 网络与超时卡：8 行全部位于「更多参数」折叠区（源 SystemNetwork 全部行，
- * 保留每字段 重置/禁用 按钮与范围无效红色描边）。
+ * 网络与超时卡：SSE 心跳、首帧宽限、思考静默上限与总体超时。
+ * 已移除「上游最大空闲」——该字段没有运行时消费者，留着只会让人误以为可调。
+ * usage 推送开关属部署内部协议策略，不进普通表单。
  */
 export function NetworkCard({
   hbMs,
   onHbMsChange,
-  idleMs,
-  onIdleMsChange,
   initialGraceMs,
   onInitialGraceMsChange,
   reasoningIdleMs,
@@ -54,10 +45,6 @@ export function NetworkCard({
   onKeepaliveMsChange,
   timeoutMs,
   onTimeoutMsChange,
-  usageEmit,
-  onUsageEmitChange,
-  usageProviderOnly,
-  onUsageProviderOnlyChange,
   validity,
 }: NetworkCardProps) {
   const msToSec = (v: number) => (v === 0 ? '已禁用' : `${Math.round(v / 1000)} 秒`)
@@ -87,23 +74,6 @@ export function NetworkCard({
               />
               <span className="text-sm text-muted-foreground">ms</span>
               <Button size="sm" variant="outline" onClick={() => onHbMsChange(15000)}>重置</Button>
-            </div>
-          </SettingRow>
-
-          <SettingRow
-            title="上游最大空闲"
-            description={`建议 ≥ 心跳间隔，当前约 ${msToSec(idleMs)}（范围 0-3600000 ms）`}
-          >
-            <div className="flex w-full flex-wrap items-center justify-end gap-2">
-              <Input
-                id="providerMaxIdle"
-                type="text"
-                value={idleMs}
-                onChange={(e) => onIdleMsChange(parseNumericInput(e.target.value, idleMs))}
-                className={inputClass(validity.idle)}
-              />
-              <span className="text-sm text-muted-foreground">ms</span>
-              <Button size="sm" variant="outline" onClick={() => onIdleMsChange(60000)}>重置</Button>
             </div>
           </SettingRow>
 
@@ -143,7 +113,7 @@ export function NetworkCard({
 
           <SettingRow
             title="推理保活提示间隔"
-            description={`大于 0 时在推理静默期间周期性发送“思考中”事件（范围 0-3600000 ms）`}
+            description="大于 0 时在推理静默期间周期性发送“思考中”事件（范围 0-3600000 ms）"
           >
             <div className="flex w-full flex-wrap items-center justify-end gap-2">
               <Input
@@ -171,22 +141,8 @@ export function NetworkCard({
                 className={inputClass(validity.timeout)}
               />
               <span className="text-sm text-muted-foreground">ms</span>
-              <Button size="sm" variant="outline" onClick={() => onTimeoutMsChange(300000)}>重置</Button>
+              <Button size="sm" variant="outline" onClick={() => onTimeoutMsChange(120000)}>重置</Button>
             </div>
-          </SettingRow>
-
-          <SettingRow
-            title="推送用量（usage）"
-            description="开启后在流式过程中向前端发送 usage 事件"
-          >
-            <Switch checked={usageEmit} onCheckedChange={(v) => onUsageEmitChange(!!v)} />
-          </SettingRow>
-
-          <SettingRow
-            title="仅透传厂商 usage"
-            description="关闭时会在结束前估算 completion/total"
-          >
-            <Switch checked={usageProviderOnly} onCheckedChange={(v) => onUsageProviderOnlyChange(!!v)} disabled={!usageEmit} />
           </SettingRow>
         </>
       }

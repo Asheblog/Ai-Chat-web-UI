@@ -9,6 +9,8 @@ export interface ModelReasoningControl {
   value: ModelReasoningEffort
   onChange: (value: ModelReasoningEffort) => void
   disabled?: boolean
+  /** 禁用原因：用于给入口补可访问说明（例如"深度思考已关闭"）。 */
+  disabledReason?: string
 }
 
 /** 同一面板内的两个视图：模型列表与强度选项。 */

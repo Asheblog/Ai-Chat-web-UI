@@ -225,6 +225,8 @@ export function SystemConnectionEditor({
             keysOpen={keysOpen}
             onToggleAdvanced={() => setAdvancedOpen((prev) => !prev)}
             onToggleKeys={() => setKeysOpen((prev) => !prev)}
+            authNeedsConfiguration={Boolean(editing?.authNeedsConfiguration)}
+            systemOAuthConfigured={Boolean(editing?.systemOAuthConfigured)}
           />
 
           <div className="flex flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:justify-between">
@@ -298,6 +300,8 @@ export function SystemConnectionEditor({
             keysOpen={keysOpen}
             onToggleAdvanced={() => setAdvancedOpen((prev) => !prev)}
             onToggleKeys={() => setKeysOpen((prev) => !prev)}
+            authNeedsConfiguration={Boolean(editing?.authNeedsConfiguration)}
+            systemOAuthConfigured={Boolean(editing?.systemOAuthConfigured)}
           />
 
           <CollapsibleEditorSection
@@ -406,6 +410,8 @@ function AdvancedSections({
   keysOpen,
   onToggleAdvanced,
   onToggleKeys,
+  authNeedsConfiguration,
+  systemOAuthConfigured,
 }: {
   form: ConnectionFormState
   setForm: Dispatch<SetStateAction<ConnectionFormState>>
@@ -421,13 +427,15 @@ function AdvancedSections({
   keysOpen: boolean
   onToggleAdvanced: () => void
   onToggleKeys: () => void
+  authNeedsConfiguration?: boolean
+  systemOAuthConfigured?: boolean
 }) {
   return (
     <>
       <CollapsibleEditorSection
         icon={<Settings2 className="h-4 w-4" />}
         title="高级设置"
-        summary="Prefix、Headers、连接类型、默认能力与标签"
+        summary="认证方式、Prefix、Headers、默认能力与标签"
         open={advancedOpen}
         onToggle={onToggleAdvanced}
       >
@@ -436,6 +444,8 @@ function AdvancedSections({
           setForm={setForm}
           capabilities={capabilities}
           onToggleCapability={onToggleCapability}
+          authNeedsConfiguration={authNeedsConfiguration}
+          systemOAuthConfigured={systemOAuthConfigured}
         />
       </CollapsibleEditorSection>
 

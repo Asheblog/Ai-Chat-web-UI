@@ -32,7 +32,12 @@ export function ModelSelector({
           <p className="shrink-0 truncate px-4 pb-2 text-xs leading-4 text-muted-foreground" title={state.selected?.name}>
             {state.selected?.name ?? '未选择模型'}
           </p>
-          <ModelSelectorEffortList value={reasoningControl.value} disabled={reasoningControl.disabled} onChange={state.selectEffort} />
+          <ModelSelectorEffortList
+            value={reasoningControl.value}
+            disabled={reasoningControl.disabled}
+            onChange={state.selectEffort}
+            availableEfforts={state.selected?.efforts}
+          />
         </div>
       ) : (
         <>
@@ -45,7 +50,12 @@ export function ModelSelector({
             />
           )}
           {reasoningControl && (
-            <ModelSelectorEffortFooter value={reasoningControl.value} disabled={reasoningControl.disabled} onOpen={state.showEffort} />
+            <ModelSelectorEffortFooter
+              value={reasoningControl.value}
+              disabled={reasoningControl.disabled}
+              disabledReason={reasoningControl.disabledReason}
+              onOpen={state.showEffort}
+            />
           )}
         </>
       )}

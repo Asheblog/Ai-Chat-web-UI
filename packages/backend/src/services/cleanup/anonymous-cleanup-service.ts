@@ -26,6 +26,12 @@ export class AnonymousCleanupService {
 
   constructor(private deps: AnonymousCleanupServiceDeps) {}
 
+  /**
+   * 清理过期匿名会话。
+   *
+   * 保留天数契约：0 表示永久保留（不清理），正数按天计算截止线。
+   * 当前活跃会话始终排除在清理范围外，避免把正在使用的匿名会话删掉。
+   */
   async cleanup(options: CleanupOptions = {}): Promise<void> {
     const now = Date.now()
     if (now - this.lastCleanupRunAt < CLEAN_INTERVAL_MS) {
@@ -37,37 +43,27 @@ export class AnonymousCleanupService {
       const quotaPolicy = await this.deps.getQuotaPolicy()
       const retentionDays = quotaPolicy.anonymousRetentionDays
 
+      if (!(retentionDays > 0)) {
+        return
+      }
+
       const activeSessionId = options.activeSessionId ?? null
 
-      let sessionIds: number[] = []
-
-      if (retentionDays <= 0) {
-        const sessions = await this.deps.prisma.chatSession.findMany({
-          where: {
-            anonymousKey: { not: null },
-            ...(activeSessionId ? { id: { not: activeSessionId } } : {}),
-          },
-          select: { id: true },
-          orderBy: { createdAt: 'asc' },
-          take: BATCH_LIMIT,
-        })
-        sessionIds = sessions.map((s) => s.id)
-      } else {
-        const cutoff = new Date(now - retentionDays * DAY_MS)
-        const sessions = await this.deps.prisma.chatSession.findMany({
-          where: {
-            anonymousKey: { not: null },
-            OR: [
-              { expiresAt: { lt: cutoff } },
-              { expiresAt: null, createdAt: { lt: cutoff } },
-            ],
-          },
-          select: { id: true },
-          orderBy: { expiresAt: 'asc' },
-          take: BATCH_LIMIT,
-        })
-        sessionIds = sessions.map((s) => s.id)
-      }
+      const cutoff = new Date(now - retentionDays * DAY_MS)
+      const sessions = await this.deps.prisma.chatSession.findMany({
+        where: {
+          anonymousKey: { not: null },
+          ...(activeSessionId ? { id: { not: activeSessionId } } : {}),
+          OR: [
+            { expiresAt: { lt: cutoff } },
+            { expiresAt: null, createdAt: { lt: cutoff } },
+          ],
+        },
+        select: { id: true },
+        orderBy: { expiresAt: 'asc' },
+        take: BATCH_LIMIT,
+      })
+      const sessionIds = sessions.map((s) => s.id)
 
       if (sessionIds.length === 0) {
         return

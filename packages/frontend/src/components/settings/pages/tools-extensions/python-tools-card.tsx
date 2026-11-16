@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Terminal } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { SettingRow } from "@/components/settings/components/setting-row"
 import { useToast } from "@/components/ui/use-toast"
 import { FeatureCard } from "@/components/settings/components/feature-card"
 import type { SystemSettings } from "@/types"
@@ -14,156 +15,102 @@ export interface PythonToolsCardProps {
   update: (payload: Partial<SystemSettings>) => Promise<void>
 }
 
-const pythonTimeoutRange = { min: 1000, max: 60000 }
-const pythonOutputRange = { min: 256, max: 20000 }
 const agentIterationRange = { min: 0, max: 20 }
 
 /**
- * Python 工具卡：主开关 + 超时/stdout 截断/代码长度 + 「更多参数」折叠里的
- * Agent 工具最大迭代次数。共 5 个 settings key。
+ * Python 工具卡：主开关 + Agent 工具循环上限。
  *
- * 动态 Skill Runtime 开关不在本卡：它由能力扩展页的 Skill 段页头唯一持有
- * （同一 settings key 只允许一个控制点）。
+ * 旧的超时 / stdout 截断 / 代码长度三个输入已删除——聊天侧 Python 执行统一走 workspace 沙箱，
+ * 实际约束来自 `WORKSPACE_RUN_TIMEOUT_MS` 与 `WORKSPACE_READ_MAX_CHARS`，改这三个旧键不产生任何效果。
+ *
+ * 动态 Skill Runtime 开关不在本卡：它由能力扩展页的 Skill 段页头唯一持有。
  */
 export function PythonToolsCard({ settings, update }: PythonToolsCardProps) {
   const { toast } = useToast()
   const [pythonEnabled, setPythonEnabled] = useState(false)
-  const [pythonTimeout, setPythonTimeout] = useState(8000)
-  const [pythonMaxOutput, setPythonMaxOutput] = useState(4000)
-  const [pythonMaxSource, setPythonMaxSource] = useState(4000)
   const [maxToolIterations, setMaxToolIterations] = useState(4)
+  const [saving, setSaving] = useState(false)
+
+  const savedEnabled = Boolean(settings.pythonToolEnable ?? false)
+  const savedIterations = Number(settings.agentMaxToolIterations ?? 4)
 
   useEffect(() => {
     setPythonEnabled(Boolean(settings.pythonToolEnable ?? false))
-    setPythonTimeout(Number(settings.pythonToolTimeoutMs ?? 8000))
-    setPythonMaxOutput(Number(settings.pythonToolMaxOutputChars ?? 4000))
-    setPythonMaxSource(Number(settings.pythonToolMaxSourceChars ?? 4000))
     setMaxToolIterations(Number(settings.agentMaxToolIterations ?? 4))
   }, [settings])
 
-  const pythonTimeoutValid =
-    pythonTimeout >= pythonTimeoutRange.min && pythonTimeout <= pythonTimeoutRange.max
-  const pythonMaxOutputValid =
-    pythonMaxOutput >= pythonOutputRange.min && pythonMaxOutput <= pythonOutputRange.max
-  const pythonMaxSourceValid =
-    pythonMaxSource >= pythonOutputRange.min && pythonMaxSource <= pythonOutputRange.max
-  const agentIterationValid =
+  const iterationValid =
     maxToolIterations >= agentIterationRange.min && maxToolIterations <= agentIterationRange.max
-  const defaultToolIterations = Number(settings.agentMaxToolIterations ?? 4)
 
-  const changed =
-    pythonEnabled !== Boolean(settings.pythonToolEnable ?? false) ||
-    pythonTimeout !== Number(settings.pythonToolTimeoutMs ?? 8000) ||
-    pythonMaxOutput !== Number(settings.pythonToolMaxOutputChars ?? 4000) ||
-    pythonMaxSource !== Number(settings.pythonToolMaxSourceChars ?? 4000) ||
-    maxToolIterations !== Number(settings.agentMaxToolIterations ?? 4)
-
-  const valid =
-    pythonTimeoutValid && pythonMaxOutputValid && pythonMaxSourceValid && agentIterationValid
+  const changed = pythonEnabled !== savedEnabled || maxToolIterations !== savedIterations
+  const valid = iterationValid
 
   const save = async () => {
-    if (!valid) return
+    if (!valid || saving) return
 
-    await update({
-      pythonToolEnable: pythonEnabled,
-      pythonToolTimeoutMs: Math.max(
-        pythonTimeoutRange.min,
-        Math.min(pythonTimeoutRange.max, Math.round(pythonTimeout)),
-      ),
-      pythonToolMaxOutputChars: Math.max(
-        pythonOutputRange.min,
-        Math.min(pythonOutputRange.max, Math.round(pythonMaxOutput)),
-      ),
-      pythonToolMaxSourceChars: Math.max(
-        pythonOutputRange.min,
-        Math.min(pythonOutputRange.max, Math.round(pythonMaxSource)),
-      ),
-      agentMaxToolIterations: Math.max(
-        agentIterationRange.min,
-        Math.min(agentIterationRange.max, Math.round(maxToolIterations)),
-      ),
-    })
-    toast({ title: "Python 工具设置已保存" })
+    setSaving(true)
+    try {
+      await update({
+        pythonToolEnable: pythonEnabled,
+        agentMaxToolIterations: Math.max(
+          agentIterationRange.min,
+          Math.min(agentIterationRange.max, Math.round(maxToolIterations)),
+        ),
+      })
+      toast({ title: "Python 工具设置已保存" })
+    } catch (error) {
+      toast({
+        title: "Python 工具设置保存失败",
+        description: error instanceof Error ? error.message : "请稍后重试",
+        variant: "destructive",
+      })
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
     <FeatureCard
       icon={Terminal}
       title="Python 工具"
-      description="允许 AI 在本地沙箱中执行 Python 代码"
+      description="允许 AI 在受管工作区沙箱中执行 Python 代码"
       cardKey="extensions:python-tools"
       enabled={pythonEnabled}
       onEnabledChange={setPythonEnabled}
       more={
-        <div className="space-y-3">
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium">Agent 工具最大迭代次数（0 表示无限制）</label>
-            <Input
-              type="text"
-              value={maxToolIterations}
-              onChange={(e) => setMaxToolIterations((prev) => parseNumericInput(e.target.value, prev))}
-              className={!agentIterationValid ? "border-destructive" : undefined}
-            />
-            <p className="text-xs text-muted-foreground">
-              当前默认值：{defaultToolIterations}；范围 {agentIterationRange.min}-{agentIterationRange.max}，0 表示允许模型无限次调用工具。
-            </p>
-          </div>
-        </div>
+        <SettingRow
+          title="Agent 工具循环上限（0 表示不限制）"
+          description={`一次回答里允许的连续工具调用轮数（${agentIterationRange.min}-${agentIterationRange.max}），对全部内置工具生效，不限于 Python。`}
+          htmlFor="agent-max-tool-iterations"
+        >
+          <Input
+            id="agent-max-tool-iterations"
+            type="text"
+            inputMode="numeric"
+            value={maxToolIterations}
+            onChange={(event) =>
+              setMaxToolIterations((prev) => parseNumericInput(event.target.value, prev))
+            }
+            className={iterationValid ? undefined : "border-destructive"}
+          />
+        </SettingRow>
       }
       footer={
         <div className="flex justify-end">
-          <Button onClick={save} disabled={!changed || !valid}>
-            保存 Python 工具设置
+          <Button onClick={save} disabled={!changed || !valid || saving}>
+            {saving ? "保存中..." : "保存 Python 工具设置"}
           </Button>
         </div>
       }
     >
-      <div className="space-y-3">
-        <p className="text-xs text-muted-foreground">
-          仅支持工具调用的连接可用。
+      <p className="text-[13px] leading-relaxed text-ink-tertiary">
+        {"仅支持工具调用的连接可用。Python 解释器由受管运行环境统一提供（/app/data/python-runtime/venv）；执行超时与输出长度由工作区层的 WORKSPACE_RUN_TIMEOUT_MS / WORKSPACE_READ_MAX_CHARS 控制，不在本页配置。"}
+      </p>
+      {maxToolIterations === 0 ? (
+        <p className="text-xs leading-5 text-destructive">
+          0 表示不限制循环轮数：模型可以持续调用工具直到自行结束，请确认上游有预算控制。
         </p>
-        <p className="text-xs text-muted-foreground">
-          Python 解释器由受管运行环境统一提供（/app/data/python-runtime/venv），不再支持在此处自定义命令参数。
-        </p>
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium">超时时间（毫秒）</label>
-            <Input
-              type="text"
-              value={pythonTimeout}
-              onChange={(e) => setPythonTimeout((prev) => parseNumericInput(e.target.value, prev))}
-              className={!pythonTimeoutValid ? "border-destructive" : undefined}
-            />
-            <p className="text-xs text-muted-foreground">
-              {pythonTimeoutRange.min} - {pythonTimeoutRange.max}，默认 8000。
-            </p>
-          </div>
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium">stdout 截断字符数</label>
-            <Input
-              type="text"
-              value={pythonMaxOutput}
-              onChange={(e) => setPythonMaxOutput((prev) => parseNumericInput(e.target.value, prev))}
-              className={!pythonMaxOutputValid ? "border-destructive" : undefined}
-            />
-            <p className="text-xs text-muted-foreground">
-              {pythonOutputRange.min} - {pythonOutputRange.max}，默认 4000。
-            </p>
-          </div>
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium">代码长度限制</label>
-            <Input
-              type="text"
-              value={pythonMaxSource}
-              onChange={(e) => setPythonMaxSource((prev) => parseNumericInput(e.target.value, prev))}
-              className={!pythonMaxSourceValid ? "border-destructive" : undefined}
-            />
-            <p className="text-xs text-muted-foreground">
-              {pythonOutputRange.min} - {pythonOutputRange.max}，默认 4000。
-            </p>
-          </div>
-        </div>
-      </div>
+      ) : null}
     </FeatureCard>
   )
 }

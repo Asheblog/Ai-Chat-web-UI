@@ -12,7 +12,6 @@ import {
   buildVariantSelections,
   createBody,
   createMeta,
-  enforceVariantLimitLocally,
   generateLocalStableKey,
   messageKey,
 } from '../utils'
@@ -172,22 +171,9 @@ export const createStreamMessageAction = (
     const renderCache = { ...state.messageRenderCache }
     delete renderCache[messageKey(assistantPlaceholder.id)]
 
-    let limitedMetas = metas
-    let removedVariantIds: Array<number | string> = []
-    if (parentMessageId != null) {
-      const result = enforceVariantLimitLocally(metas, parentMessageId)
-      limitedMetas = result.metas
-      removedVariantIds = result.removedIds
-    }
-    removedVariantIds.forEach((id) => {
-      const key = messageKey(id)
-      delete bodies[key]
-      delete renderCache[key]
-    })
-
     return {
-      messageMetas: limitedMetas,
-      assistantVariantSelections: buildVariantSelections(limitedMetas),
+      messageMetas: metas,
+      assistantVariantSelections: buildVariantSelections(metas),
       messageBodies: bodies,
       messageRenderCache: renderCache,
       messageImageCache: nextCache,

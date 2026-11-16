@@ -122,12 +122,12 @@ export function SystemModelAccessPage() {
                 {model.provider}
               </Badge>
             )}
-            {model.capabilitySource && (
+            {model.overrides?.access && (
               <Badge
                 variant="secondary"
                 className="text-[11px] font-normal bg-warning/10 text-warning"
               >
-                覆写:{model.capabilitySource}
+                访问覆写
               </Badge>
             )}
             {model.accessDecision === "deny" && (

@@ -337,4 +337,61 @@ describe('ChatComposerPanel — mobile attachment entry and bottom bar geometry'
     expect(toolsRow.className).toContain('shrink')
     expect(toolsRow.className).not.toMatch(/(^|\s)flex-1(\s|$)/)
   })
+
+describe('ChatComposerPanel — effort entry follows the deep-thinking toggle', () => {
+  beforeAll(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia === 'function') return
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: (query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }),
+    })
+    if (typeof globalThis.ResizeObserver === 'undefined') {
+      globalThis.ResizeObserver = class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      } as any
+    }
+  })
+
+  const openEffortEntry = async () => {
+    const combos = screen.getAllByRole('combobox', { name: '选择模型' })
+    fireEvent.click(combos[0])
+    return await screen.findByRole('button', { name: /思考强度/ })
+  }
+
+  it('disables the effort entry while deep thinking is off and explains why', async () => {
+    render(
+      <ChatComposerPanel
+        {...createProps({ thinkingEnabled: false, selectedModelId: null, onModelChange: vi.fn() } as any)}
+      />,
+    )
+    const entry = await openEffortEntry()
+    expect(entry).toBeDisabled()
+    expect(entry).toHaveAttribute('title', '深度思考已关闭')
+    fireEvent.click(entry)
+    expect(screen.queryByRole('list', { name: '思考强度选项' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the effort entry enabled while deep thinking is on', async () => {
+    render(
+      <ChatComposerPanel
+        {...createProps({ thinkingEnabled: true, selectedModelId: null, onModelChange: vi.fn() } as any)}
+      />,
+    )
+    const entry = await openEffortEntry()
+    expect(entry).toBeEnabled()
+    fireEvent.click(entry)
+    expect(await screen.findByRole('list', { name: '思考强度选项' })).toBeInTheDocument()
+  })
+})
 })

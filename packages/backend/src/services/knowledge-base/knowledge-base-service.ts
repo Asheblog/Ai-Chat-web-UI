@@ -8,6 +8,15 @@ import { getDocumentServices } from '../document-services-factory'
 import type { RAGResult } from '../document/rag-service'
 import type { EnhancedRAGService } from '../document/enhanced-rag-service'
 import type { DocumentContentResult } from '../document/document-service'
+import type { Actor } from '../../types'
+import {
+  evaluateKnowledgeBaseAccess,
+  knowledgeBaseActorContext,
+  knowledgeBasePolicyFromSettings,
+  KNOWLEDGE_BASE_POLICY_KEYS,
+  type KnowledgeBaseAccessDecision,
+  type KnowledgeBasePolicy,
+} from './knowledge-base-access'
 import { createLogger } from '../../utils/logger'
 
 const log = createLogger('KB')
@@ -50,6 +59,26 @@ export interface KnowledgeBaseListItem {
 
 export class KnowledgeBaseService {
   constructor(private prisma: PrismaClient) { }
+
+  /**
+   * 读取知识库功能与角色策略（一次查询三个键）。
+   * 判定本身在 knowledge-base-access 的纯函数里，这里只负责取数。
+   */
+  async loadPolicy(): Promise<KnowledgeBasePolicy> {
+    const rows = await this.prisma.systemSetting.findMany({
+      where: { key: { in: [...KNOWLEDGE_BASE_POLICY_KEYS] } },
+      select: { key: true, value: true },
+    })
+    const map: Record<string, string | null> = {}
+    for (const row of rows) map[row.key] = row.value
+    return knowledgeBasePolicyFromSettings(map)
+  }
+
+  /** 当前 actor 能否以用户身份使用知识库。 */
+  async evaluateAccess(actor: Actor): Promise<KnowledgeBaseAccessDecision> {
+    const policy = await this.loadPolicy()
+    return evaluateKnowledgeBaseAccess(policy, knowledgeBaseActorContext(actor))
+  }
 
   /**
    * 创建知识库
@@ -499,18 +528,16 @@ export class KnowledgeBaseService {
       knowledgeBaseAllowUsers: boolean
     }
   ): Promise<KnowledgeBaseListItem[]> {
-    // 检查功能是否启用
-    if (!settings.knowledgeBaseEnabled) {
-      return []
-    }
-
-    // 检查用户权限
-    if (isAnonymous && !settings.knowledgeBaseAllowAnonymous) {
-      return []
-    }
-    if (!isAnonymous && userId && !settings.knowledgeBaseAllowUsers) {
-      return []
-    }
+    // 与 API 面共用同一判定：功能总闸 + 角色开关
+    const decision = evaluateKnowledgeBaseAccess(
+      {
+        enabled: settings.knowledgeBaseEnabled,
+        allowAnonymous: settings.knowledgeBaseAllowAnonymous,
+        allowUsers: settings.knowledgeBaseAllowUsers,
+      },
+      { isAnonymous, isAdmin: false },
+    )
+    if (!decision.allowed) return []
 
     // 获取可用的知识库
     return this.list({

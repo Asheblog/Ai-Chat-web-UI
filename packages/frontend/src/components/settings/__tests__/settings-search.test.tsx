@@ -75,7 +75,7 @@ describe("SettingsSearch", () => {
     fireEvent.keyDown(input, { key: "Enter" })
     const selectEvents = getSelectEvents(dispatchSpy)
     expect(selectEvents).toHaveLength(1)
-    // 「模型」的第二个叶子命中项：模型管理（models）之后的「能力扩展」（extensions，keywords 含「模型上下文协议」）
+    // 「模型」的第二个叶子命中项：模型管理（models）之后的「工具与扩展」（extensions，keywords 含「模型上下文协议」）
     expect(selectEvents[0][0].detail.key).toBe("extensions")
   })
 
@@ -127,7 +127,7 @@ describe("SettingsSearch", () => {
     const input = screen.getByRole("textbox", { name: "搜索设置" })
 
     fireEvent.change(input, { target: { value: "模型管理" } })
-    expect(screen.getByText("模型与连接")).toBeInTheDocument()
+    expect(screen.getByText("连接与模型")).toBeInTheDocument()
   })
 
   test("shell：nested 模式 navTop 渲染在导航列表上方", () => {

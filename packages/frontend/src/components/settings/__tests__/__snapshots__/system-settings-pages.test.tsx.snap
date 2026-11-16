@@ -549,9 +549,9 @@ exports[`视图快照 > SystemModelsPage 渲染保持稳定 1`] = `
                     </div>
                   </th>
                   <th
-                    class="h-9 px-4 align-middle text-[11px] font-medium tracking-[0.04em] text-ink-tertiary [&:has([role=checkbox])]:pr-0 text-center w-[56px]"
+                    class="h-9 px-4 align-middle text-[11px] font-medium tracking-[0.04em] text-ink-tertiary [&:has([role=checkbox])]:pr-0 text-center w-[64px]"
                   >
-                    手动
+                    覆写
                   </th>
                   <th
                     class="h-9 px-4 align-middle text-[11px] font-medium tracking-[0.04em] text-ink-tertiary [&:has([role=checkbox])]:pr-0 text-center w-[64px]"

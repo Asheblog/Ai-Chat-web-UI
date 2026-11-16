@@ -4,7 +4,23 @@ import { deriveChannelName as deriveChannelNameShared } from '@aichat/shared/mod
 
 export const SUPPORTED_PROVIDERS = ['openai', 'openai_responses', 'anthropic', 'google_genai'] as const
 export type ProviderType = (typeof SUPPORTED_PROVIDERS)[number]
-export type AuthType = 'bearer' | 'none' | 'session' | 'system_oauth'
+export type AuthType = 'bearer' | 'none' | 'system_oauth'
+
+export const SUPPORTED_AUTH_TYPES: readonly AuthType[] = ['bearer', 'none', 'system_oauth']
+
+export const isSupportedAuthType = (value: unknown): value is AuthType =>
+  typeof value === 'string' && (SUPPORTED_AUTH_TYPES as readonly string[]).includes(value)
+
+/**
+ * 旧版连接允许写入 `session`（从未有鉴权头消费分支）。读取时统一归一为 `bearer`，
+ * 并由连接视图标记"需要重新配置"，避免把遗留值当成可用认证方式静默请求。
+ */
+export const normalizeAuthType = (value: unknown): AuthType => {
+  if (value === 'session') return 'bearer'
+  return isSupportedAuthType(value) ? value : 'bearer'
+}
+
+export const isLegacySessionAuth = (value: unknown): boolean => value === 'session'
 
 export function isSupportedProvider(provider: unknown): provider is ProviderType {
   return typeof provider === 'string' && SUPPORTED_PROVIDERS.some((value) => value === provider)
@@ -54,7 +70,6 @@ export interface ConnectionConfig {
   prefixId?: string
   tags?: Array<{ name: string }>
   modelIds?: string[]
-  connectionType?: 'external' | 'local'
   defaultCapabilities?: CapabilityFlags
 }
 
@@ -65,7 +80,6 @@ export interface CatalogItem {
   provider: ProviderType
   channelName: string
   connectionBaseUrl: string
-  connectionType: 'external' | 'local'
   tags: Array<{ name: string }>
   // 模型能力元数据：对齐 open-webui 的能力设计
   // 仅在聚合内存中计算与返回，不落库
@@ -73,28 +87,24 @@ export interface CatalogItem {
   capabilitySource?: CapabilitySource
 }
 
-// 公共工具：根据 tags 与 rawId 推导模型能力（标签优先，启发式其次）
-export function computeCapabilities(rawId: string, tags?: Array<{ name: string }>): CapabilityFlags {
+/**
+ * 按模型 ID 推导能力启发式（能力的最低置信层）。
+ * 连接标签不参与能力判定：连接上的能力只有"默认能力"一个入口，供应商声明优先于这里的推断。
+ */
+export function computeCapabilities(rawId: string): CapabilityFlags {
   const caps: CapabilityFlags = {}
-  const tnames = (tags || []).map((t) => (t?.name || '').toLowerCase())
-  const hasTag = (k: string) => tnames.includes(k)
-
-  if (hasTag('vision')) caps.vision = true
-  if (hasTag('image_generation')) caps.image_generation = true
 
   const id = (rawId || '').toLowerCase()
-  if (caps.vision !== true) {
-    const visionHints = [
-      'gpt-4o', 'gpt-4.1', 'gpt4o', 'o4', 'omni', 'vision', 'vl',
-      'phi-3', 'phi-3.5', 'phi-4', 'minicpm', 'qwen-vl', 'qwen2-vl', 'qwen2.5-vl',
-      'llava', 'llama-3.2', 'llama3.2', 'llama-vision', 'llama3-vision', 'moondream', 'bakllava', 'pixtral',
-      'deepseek-vl', 'kling-v', 'grok-vision', 'claude'
-    ]
-    if (visionHints.some((p) => id.includes(p))) caps.vision = true
-  }
+  const visionHints = [
+    'gpt-4o', 'gpt-4.1', 'gpt4o', 'o4', 'omni', 'vision', 'vl',
+    'phi-3', 'phi-3.5', 'phi-4', 'minicpm', 'qwen-vl', 'qwen2-vl', 'qwen2.5-vl',
+    'llava', 'llama-3.2', 'llama3.2', 'llama-vision', 'llama3-vision', 'moondream', 'bakllava', 'pixtral',
+    'deepseek-vl', 'kling-v', 'grok-vision', 'claude'
+  ]
+  if (visionHints.some((hint) => id.includes(hint))) caps.vision = true
 
   const imageGenHints = ['image-gen', 'image_generation', 'dall', 'kandinsky', 'sdxl', 'flux', 'kling', 'midjourney']
-  if (caps.image_generation !== true && imageGenHints.some((p) => id.includes(p))) {
+  if (imageGenHints.some((hint) => id.includes(hint))) {
     caps.image_generation = true
   }
 
@@ -281,7 +291,6 @@ const fetchOpenAIStyleModelList = async (
 export async function fetchModelsForConnection(cfg: ConnectionConfig): Promise<CatalogItem[]> {
   assertSupportedProvider(cfg.provider)
   if (!cfg.enable) return []
-  const connectionType = (cfg.connectionType || 'external') as 'external' | 'local'
   const tags = cfg.tags || []
   const prefix = cfg.prefixId || ''
   const baseUrl = cfg.baseUrl
@@ -289,7 +298,7 @@ export async function fetchModelsForConnection(cfg: ConnectionConfig): Promise<C
   const headers = await buildHeaders(cfg.provider, cfg.authType, cfg.apiKey, cfg.headers)
 
   const apply = (id: string, name?: string): CatalogItem => {
-    const inferred = computeCapabilities(id, tags)
+    const inferred = computeCapabilities(id)
     const hasInferred = hasDefinedCapability(inferred)
     return {
       id: prefix ? `${prefix}.${id}` : id,
@@ -298,7 +307,6 @@ export async function fetchModelsForConnection(cfg: ConnectionConfig): Promise<C
       provider: cfg.provider,
       channelName,
       connectionBaseUrl: baseUrl,
-      connectionType,
       tags,
       ...(hasInferred
         ? {

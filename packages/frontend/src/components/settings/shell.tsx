@@ -45,9 +45,10 @@ type NestedModeProps = {
 
 export type SettingsShellProps = BaseProps & (FlatModeProps | NestedModeProps)
 
-// 导航视觉：分组标签 11 Medium/0.5 字距 ink-tertiary；条目 32 高、圆角 8；
+// 导航视觉：分组行与叶子同级（13 Medium、ink-secondary）——6 组里既有可展开分组也有单叶子，
+// 两者是同一层选择，不能靠字号把分组画成更弱的区块标题。
 // 选中 = 白底 + 发丝线 + 左侧 2×14 信号条，hover 只跳一阶底色。
-const NAV_GROUP = "flex h-11 md:h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[11px] font-medium tracking-[0.5px] text-ink-tertiary transition-colors duration-[160ms] hover:text-foreground"
+const NAV_GROUP = "flex h-11 md:h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] font-medium text-ink-secondary transition-colors duration-[160ms] hover:bg-surface-hover hover:text-foreground aria-expanded:text-foreground"
 const NAV_SUB = "flex h-11 md:h-8 w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] text-ink-secondary transition-colors duration-[160ms] hover:bg-surface-hover hover:text-foreground"
 const NAV_LEAF = "flex h-11 md:h-8 w-full items-center gap-2 rounded-lg border px-2 text-left text-[13px] transition-colors duration-[160ms]"
 const NAV_LEAF_ACTIVE = "border-border bg-surface font-medium text-foreground"
@@ -125,7 +126,11 @@ function SettingsShellFlatImpl({
       className={className}
       nav={nav}
       showNavTitle={showNavTitle}
-      content={<SettingsContentColumn measureClassName="max-w-[752px]">{children}</SettingsContentColumn>}
+      content={
+        <SettingsContentColumn measureClassName="max-w-[752px]" resetKey={active}>
+          {children}
+        </SettingsContentColumn>
+      }
     />
   )
 }
@@ -291,6 +296,9 @@ function SettingsShellNestedImpl({
       content={
         <SettingsContentColumn
           measureClassName="max-w-[988px]"
+          resetKey={activeSub}
+          // 卡定位期间不要重置：否则 SystemLeafWrapper 刚滚到卡片，会被推回标题处
+          skipScrollReset={Boolean(flashKey)}
           dimmed={readOnly}
           notice={
             readOnly ? (

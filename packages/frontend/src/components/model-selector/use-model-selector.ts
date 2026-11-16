@@ -67,10 +67,18 @@ export function useModelSelector({
     if (!reasoningControl) setOpen(false)
   }, [onModelChange, reasoningControl, setOpen])
   const selectEffort = useCallback((value: ModelReasoningEffort) => {
+    if (reasoningControl?.disabled) return
     reasoningControl?.onChange(value)
     setView('models')
   }, [reasoningControl])
-  const showEffort = useCallback(() => setView('effort'), [])
+  // 入口被禁用（例如深度思考已关闭）时不进入强度视图；已停在强度视图时退回模型列表。
+  const showEffort = useCallback(() => {
+    if (reasoningControl?.disabled) return
+    setView('effort')
+  }, [reasoningControl?.disabled])
+  useEffect(() => {
+    if (reasoningControl?.disabled && view === 'effort') setView('models')
+  }, [reasoningControl?.disabled, view])
   const showModels = useCallback(() => setView('models'), [])
   const visibleModels = useMemo(() => filterModels(allModels, searchTerm), [allModels, searchTerm])
   const refresh = useCallback(() => {

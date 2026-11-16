@@ -19,7 +19,6 @@ const makeGroup = (overrides: Partial<SystemConnectionGroup> = {}): SystemConnec
   baseUrl: "https://api.openai.com/v1",
   authType: "bearer",
   tags: [{ name: "prod" }],
-  connectionType: "external",
   defaultCapabilities: {},
   apiKeys: [
     {

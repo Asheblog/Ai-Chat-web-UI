@@ -4,7 +4,7 @@ import { zValidator } from '@hono/zod-validator'
 import { actorMiddleware, requireUserActor, adminOnlyMiddleware } from '../middleware/auth'
 import type { ApiResponse } from '../types'
 import { THINKING_DIALECTS } from '@aichat/shared'
-import { SUPPORTED_PROVIDERS } from '../utils/providers'
+import { SUPPORTED_AUTH_TYPES, SUPPORTED_PROVIDERS, type AuthType } from '../utils/providers'
 import {
   ConnectionServiceError,
   type ConnectionService,
@@ -16,6 +16,14 @@ const capabilitySchema = z.object({
 })
 
 const thinkingDialectEnum = z.enum(THINKING_DIALECTS)
+
+const authTypeEnum = z.enum(SUPPORTED_AUTH_TYPES as unknown as [AuthType, ...AuthType[]])
+
+/**
+ * 旧导出包可能带已移除的 `session`：原样透传给服务层，落库为“待重新配置”的旧行。
+ * 不能在这里归一成 bearer，否则会丢掉待配置标记并把旧 Key 当 bearer Key 静默使用。
+ */
+const importAuthTypeEnum = z.union([authTypeEnum, z.literal('session')])
 
 const apiKeySchema = z.object({
   id: z.number().int().positive().optional(),
@@ -30,11 +38,10 @@ const connectionSchema = z.object({
   provider: z.enum(SUPPORTED_PROVIDERS),
   thinkingDialect: thinkingDialectEnum.optional(),
   baseUrl: z.string().url(),
-  authType: z.enum(['bearer', 'none', 'session', 'system_oauth']).optional().default('bearer'),
+  authType: authTypeEnum.optional().default('bearer'),
   headers: z.record(z.string(), z.string()).optional(),
   prefixId: z.string().optional(),
   tags: z.array(z.object({ name: z.string() })).optional(),
-  connectionType: z.enum(['external', 'local']).optional(),
   defaultCapabilities: capabilitySchema.partial().optional(),
   apiKeys: z.array(apiKeySchema).min(1),
 })
@@ -50,6 +57,7 @@ const importConnectionSchema = connectionSchema
   .omit({ displayName: true })
   .extend({
     displayName: z.string().trim().min(1).optional(),
+    authType: importAuthTypeEnum.optional().default('bearer'),
     apiKeys: z.array(importApiKeySchema).min(1),
     /** Legacy export packages only; mapped to thinkingDialect then discarded. */
     vendor: z.string().nullish(),

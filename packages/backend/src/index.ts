@@ -32,12 +32,17 @@ import { createMcpApi } from './api/mcp';
 import { createSecretVaultApi } from './api/secret-vault';
 import { createArtifactsApi } from './api/artifacts';
 import { createPromptTemplatesApi } from './api/prompt-templates';
+import { migrateSimplifiedSettings } from './services/settings/settings-migration';
+import { databaseReady } from './db';
 
 // 导入中间件
 import { errorHandler, notFoundHandler } from './middleware/error';
 
+await databaseReady;
 const container = createAppContainer();
 const appContext = container.context;
+// Settings upgrade completes before RAG/catalog initialization and request handling.
+await migrateSimplifiedSettings(appContext.prisma);
 setChatConfig(appContext.config);
 // 将容器装配的实例接入兼容 setter，避免 middleware/openai-compat 走 fallback 单例
 setAuthContextService(container.authContextService);
@@ -239,8 +244,8 @@ app.get('/api', (c) => {
       models: {
         'GET /api/catalog/models': '聚合模型列表（连接，含capabilities）',
         'POST /api/catalog/models/refresh': '刷新聚合模型缓存（管理员）',
-        'PUT /api/catalog/models/tags': '设置模型标签（管理员，覆盖）',
-        'DELETE /api/catalog/models/tags': '批量/全部清除模型覆写（管理员）',
+        'PUT /api/catalog/models/tags': '保存模型覆写：能力/生成参数/访问策略独立字段（管理员）',
+        'DELETE /api/catalog/models/tags': '按字段或整行清除模型覆写（管理员）',
         'GET /api/catalog/models/overrides': '导出所有覆写记录（管理员）',
       },
       connections: {

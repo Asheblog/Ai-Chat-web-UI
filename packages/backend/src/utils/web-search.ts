@@ -138,7 +138,6 @@ export interface WebSearchParallelOptions {
   deepseekNeedContent?: boolean
   timeoutMs?: number
   parallelMaxEngines?: number
-  mergeStrategy?: 'hybrid_score_v1' | string
   signal?: AbortSignal
 }
 

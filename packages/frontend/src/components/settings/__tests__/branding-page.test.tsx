@@ -111,26 +111,38 @@ afterEach(() => {
 })
 
 describe("BrandingPage", () => {
-  test("渲染页头 + 两卡标题（AI 头像/品牌定制）", () => {
+  test("渲染页头 + 两卡标题（AI 头像 / 品牌与站点）", () => {
     render(<BrandingPage />)
 
-    expect(screen.getByText("品牌与界面")).toBeInTheDocument()
-    expect(screen.getByText("AI 头像、品牌标识与站点信息")).toBeInTheDocument()
+    expect(screen.getByText("外观与站点")).toBeInTheDocument()
+    expect(screen.getByText("品牌名、AI 头像、站点地址与主题配色")).toBeInTheDocument()
     expect(screen.getByText("AI 头像")).toBeInTheDocument()
     expect(screen.getByText("设置全局生效的 AI 回复头像")).toBeInTheDocument()
-    expect(screen.getByText("品牌定制")).toBeInTheDocument()
-    expect(screen.getByText("自定义系统的品牌标识和外观")).toBeInTheDocument()
-    // 三行设置项 + Brand Theme 色板
-    expect(screen.getByText("文字 LOGO")).toBeInTheDocument()
-    expect(screen.getByText("全局系统提示词")).toBeInTheDocument()
+    expect(screen.getByText("品牌与站点")).toBeInTheDocument()
+    // 主层只留品牌名与站点地址
+    expect(screen.getByText("品牌名")).toBeInTheDocument()
     expect(screen.getByText("图片访问域名")).toBeInTheDocument()
-    expect(screen.getByText("主色")).toBeInTheDocument()
-    expect(screen.getByText("次要前景")).toBeInTheDocument()
+    // 全局系统提示词已迁到「连接与模型 → 会话默认配置」
+    expect(screen.queryByText("全局系统提示词")).not.toBeInTheDocument()
   })
 
-  test("品牌卡保存 payload 含文字与 Brand Theme 字段，siteBaseUrl 被 trim", async () => {
+  test("6 个主题颜色收进高级折叠区，默认不可见", async () => {
     render(<BrandingPage />)
-    const card = getCard("品牌定制")
+    const card = getCard("品牌与站点")
+
+    expect(within(card).queryByText("主色")).not.toBeInTheDocument()
+    expect(within(card).queryByText("次要前景")).not.toBeInTheDocument()
+
+    await userEvent.click(within(card).getByRole("button", { name: "主题配色" }))
+
+    expect(within(card).getByText("主色")).toBeInTheDocument()
+    expect(within(card).getByText("次要前景")).toBeInTheDocument()
+    expect(within(card).getByText(/部分颜色仅对浅色主题生效/)).toBeInTheDocument()
+  })
+
+  test("品牌卡保存 payload 只含品牌名/站点/主题色（不含系统提示词），siteBaseUrl 被 trim", async () => {
+    render(<BrandingPage />)
+    const card = getCard("品牌与站点")
 
     fireEvent.change(within(card).getByDisplayValue("AIChat"), { target: { value: "MyBrand" } })
     fireEvent.change(within(card).getByDisplayValue("https://chat.example.com"), {
@@ -145,7 +157,6 @@ describe("BrandingPage", () => {
     expect(Object.keys(payload).sort()).toEqual(
       [
         "brandText",
-        "chatSystemPrompt",
         "siteBaseUrl",
         "brandPrimary",
         "brandPrimaryForeground",
@@ -157,7 +168,6 @@ describe("BrandingPage", () => {
     )
     expect(payload).toEqual({
       brandText: "MyBrand",
-      chatSystemPrompt: "",
       siteBaseUrl: "https://chat.example.com",
       brandPrimary: "",
       brandPrimaryForeground: "",
@@ -168,9 +178,27 @@ describe("BrandingPage", () => {
     })
   })
 
+  test("保存失败 → toast 失败文案并保留当前输入，不再提示已保存", async () => {
+    updateSpy.mockRejectedValueOnce(new Error("权限不足"))
+    render(<BrandingPage />)
+    const card = getCard("品牌与站点")
+
+    fireEvent.change(within(card).getByDisplayValue("AIChat"), { target: { value: "MyBrand" } })
+    await userEvent.click(within(card).getByRole("button", { name: "保存品牌设置" }))
+
+    await waitFor(() => {
+      expect(toastSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "保存失败", description: "权限不足", variant: "destructive" }),
+      )
+    })
+    expect(toastSpy).not.toHaveBeenCalledWith(expect.objectContaining({ title: "已保存品牌设置" }))
+    expect(within(card).getByDisplayValue("MyBrand")).toBeInTheDocument()
+    expect(within(card).getByRole("button", { name: "保存品牌设置" })).toBeEnabled()
+  })
+
   test("dirty：修改后保存启用；还原原值后 disabled", async () => {
     render(<BrandingPage />)
-    const card = getCard("品牌定制")
+    const card = getCard("品牌与站点")
     const saveButton = within(card).getByRole("button", { name: "保存品牌设置" })
 
     expect(saveButton).toBeDisabled()
@@ -210,7 +238,7 @@ describe("BrandingPage", () => {
 
   test("刷新按钮 → refreshImageAttachments 被调", async () => {
     render(<BrandingPage />)
-    const card = getCard("品牌定制")
+    const card = getCard("品牌与站点")
 
     await userEvent.click(within(card).getByRole("button", { name: "刷新" }))
 
@@ -226,6 +254,17 @@ describe("BrandingPage", () => {
 
     expect(container.querySelector(".animate-pulse")).not.toBeNull()
     expect(screen.queryByRole("button", { name: "保存品牌设置" })).not.toBeInTheDocument()
-    expect(screen.queryByText("品牌定制")).not.toBeInTheDocument()
+    expect(screen.queryByText("品牌与站点")).not.toBeInTheDocument()
+  })
+
+  test("settings 读取失败 → 错误文案与重试按钮", () => {
+    mockSystemSettings(null, { isLoading: false, error: "获取系统设置失败" })
+    render(<BrandingPage />)
+
+    expect(screen.getByText("获取系统设置失败")).toBeInTheDocument()
+
+    refreshSpy.mockClear()
+    fireEvent.click(screen.getByRole("button", { name: "重试" }))
+    expect(refreshSpy).toHaveBeenCalledTimes(1)
   })
 })

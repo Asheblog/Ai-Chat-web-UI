@@ -8,7 +8,7 @@ const baseInput = {
   sysMap: {} as Record<string, string>,
   requestedSkills: { builtin: [], enabled: [] },
   hasKnowledgeBases: false,
-  webSearchConfig: { enabled: false, engines: [], engineOrder: [], apiKeys: {}, resultLimit: 4, domains: [] },
+  webSearchConfig: { enabled: false, engines: [], apiKeys: {}, resultLimit: 4, domains: [] },
   pythonToolConfig: { enabled: false, timeoutMs: 1000, maxOutputChars: 1000, maxSourceChars: 1000 },
   workspaceToolConfig: { enabled: false, listMaxEntries: 10, readMaxChars: 1000, gitCloneTimeoutMs: 1000 },
   urlReaderConfig: { enabled: false },

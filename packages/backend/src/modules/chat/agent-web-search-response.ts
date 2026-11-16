@@ -151,7 +151,6 @@ export type AgentResponseParams = {
   streamProgressPersistIntervalMs: number;
   traceRecorder: TaskTraceRecorder;
   idleTimeoutMs: number;
-  assistantReplyHistoryLimit: number;
   maxConcurrentStreams: number;
   concurrencyErrorMessage: string;
   ragService?: RAGService | null;
@@ -195,7 +194,6 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
     streamProgressPersistIntervalMs,
     traceRecorder,
     idleTimeoutMs,
-    assistantReplyHistoryLimit,
     maxConcurrentStreams,
     concurrencyErrorMessage,
     ragService,
@@ -1224,7 +1222,6 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
               assistantClientMessageId,
               fallbackClientMessageId: clientMessageId,
               parentMessageId: userMessageRecord?.id ?? null,
-              replyHistoryLimit: assistantReplyHistoryLimit,
               content: finalContent,
               streamReasoning: streamReasoningPayload,
               reasoning: shouldPersistReasoning ? reasoningText : null,

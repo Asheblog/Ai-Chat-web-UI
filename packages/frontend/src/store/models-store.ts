@@ -11,12 +11,20 @@ export type ModelItem = {
   channelName: string
   connectionBaseUrl: string
   connectionId: number
-  connectionType?: string
   modelType?: 'chat' | 'embedding' | 'both'
   tags?: Array<{ name: string }>
   capabilities?: { vision?: boolean; image_generation?: boolean }
   capabilitySource?: string
   overridden?: boolean
+  /** 覆写按字段归属：能力 / 生成参数 / 访问策略各自独立。 */
+  overrides?: {
+    capability: boolean
+    parameters: boolean
+    access: boolean
+    any: boolean
+  }
+  /** 该连接协议/方言可下发的思考强度；缺省表示按协议全量。 */
+  efforts?: string[]
   contextWindow?: number | null
   maxOutputTokens?: number | null
   temperature?: number | null

@@ -21,7 +21,7 @@ const dataFrames = (raw: string): any[] =>
 describe('convertChatCompletionsRequestToAnthropic', () => {
   it('converts system, messages, images, tools and thinking', () => {
     const body = convertChatCompletionsRequestToAnthropic({
-      model: 'claude-sonnet-4-5',
+      model: 'claude-opus-5-5',
       temperature: 1.4,
       max_tokens: 2000,
       stream: true,
@@ -67,13 +67,14 @@ describe('convertChatCompletionsRequestToAnthropic', () => {
       reasoning_effort: 'medium',
     })
 
-    expect(body.model).toBe('claude-sonnet-4-5')
+    expect(body.model).toBe('claude-opus-5-5')
     expect(body.system).toBe('S1\n\nS2')
     expect(body.stream).toBe(true)
     expect(body.temperature).toBe(1)
-    expect(body.max_tokens).toBeGreaterThan(4096)
+    expect(body.max_tokens).toBe(2000)
     expect(body.reasoning_effort).toBeUndefined()
-    expect(body.thinking).toEqual({ type: 'enabled', budget_tokens: 4096 })
+    expect(body.thinking).toBeUndefined()
+    expect(body.output_config).toEqual({ effort: 'medium' })
     expect(body.messages[0]).toEqual({
       role: 'user',
       content: [
@@ -112,14 +113,60 @@ describe('convertChatCompletionsRequestToAnthropic', () => {
     expect(body.tool_choice).toEqual({ type: 'auto' })
   })
 
-  it('keeps budget_tokens strictly below max_tokens', () => {
+  it('sends effort through output_config instead of the deprecated thinking budget', () => {
     const body = convertChatCompletionsRequestToAnthropic({
-      model: 'claude-sonnet-4-5',
+      model: 'claude-opus-5-5',
       max_tokens: 1024,
       messages: [{ role: 'user', content: 'hi' }],
       reasoning_effort: 'max',
     })
+    expect(body.max_tokens).toBe(1024)
+    expect(body.thinking).toBeUndefined()
+    expect(body.output_config).toEqual({ effort: 'max' })
+  })
+
+  it('keeps an explicitly requested thinking budget below max_tokens', () => {
+    const body = convertChatCompletionsRequestToAnthropic({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: 'hi' }],
+      thinking: { type: 'enabled', budget_tokens: 2048 },
+    })
     expect(body.max_tokens).toBeGreaterThan(body.thinking.budget_tokens)
+    expect(body.output_config).toBeUndefined()
+  })
+
+  it('never sends effort to a model outside the official support list', () => {
+    const legacy = convertChatCompletionsRequestToAnthropic({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: 'hi' }],
+      reasoning_effort: 'high',
+    })
+    expect(legacy.output_config).toBeUndefined()
+    expect(legacy.thinking).toBeUndefined()
+  })
+
+  it('drops a level the target model does not expose', () => {
+    const body = convertChatCompletionsRequestToAnthropic({
+      model: 'claude-opus-4-6',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: 'hi' }],
+      reasoning_effort: 'xhigh',
+    })
+    expect(body.output_config).toBeUndefined()
+    expect(body.thinking).toBeUndefined()
+  })
+
+  it('drops effort values Anthropic cannot express', () => {
+    const body = convertChatCompletionsRequestToAnthropic({
+      model: 'claude-opus-5-5',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: 'hi' }],
+      reasoning_effort: 'none',
+    })
+    expect(body.output_config).toBeUndefined()
+    expect(body.thinking).toBeUndefined()
   })
 
   it('maps http image urls to url image sources', () => {

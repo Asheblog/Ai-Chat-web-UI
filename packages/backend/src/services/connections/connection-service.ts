@@ -21,6 +21,8 @@ import {
 import {
   fetchModelsForConnection as defaultFetchModelsForConnection,
   isSupportedProvider,
+  isLegacySessionAuth,
+  normalizeAuthType,
   type CatalogItem,
   type ConnectionConfig,
   type AuthType,
@@ -67,7 +69,6 @@ export interface ConnectionServiceDeps {
     prefixId?: string
     tags?: Array<{ name: string }>
     modelIds?: string[]
-    connectionType?: 'external' | 'local'
     defaultCapabilities?: Record<string, unknown> | undefined
   }) => Promise<void>
   logger?: Pick<typeof console, 'warn' | 'error' | 'info'>
@@ -91,15 +92,24 @@ export interface ConnectionPayload {
   headers?: Record<string, string>
   prefixId?: string
   tags?: Array<{ name: string }>
-  connectionType?: 'external' | 'local'
   defaultCapabilities?: Record<string, unknown> | undefined
   apiKeys: ConnectionApiKeyPayload[]
 }
 
-/** 导入允许缺省 displayName（v1 由 seed 补齐）；legacy vendor 仅用于推断 thinkingDialect */
-export type ImportConnectionPayload = Omit<ConnectionPayload, 'displayName'> & {
+/**
+ * 导入允许缺省 displayName（v1 由 seed 补齐）；legacy vendor 仅用于推断 thinkingDialect。
+ * 旧导出包可能带 `authType: 'session'` 与已删除的 `connectionType`：前者原样落库为
+ * “待重新配置”的旧行（读取时标记 authNeedsConfiguration 并阻断请求），后者忽略。
+ */
+/** 写入路径接受旧版 `session`：服务层原样保留，由读取侧标记待配置。 */
+export type ConnectionWritePayload = Omit<ConnectionPayload, 'authType'> & {
+  authType?: AuthType | 'session'
+}
+
+export type ImportConnectionPayload = Omit<ConnectionPayload, 'displayName' | 'authType'> & {
   displayName?: string
   vendor?: string | null
+  authType?: AuthType | 'session'
 }
 
 export interface ConnectionApiKeyView {
@@ -121,9 +131,12 @@ export interface ConnectionGroupView {
   thinkingDialect: ThinkingDialect
   baseUrl: string
   authType: AuthType
+  /** 旧版 session 认证已移除：该值为 true 时必须重新选择认证方式并填写 Key。 */
+  authNeedsConfiguration: boolean
+  /** authType=system_oauth 时是否检测到共享环境变量令牌（只读状态）。 */
+  systemOAuthConfigured: boolean
   prefixId?: string | null
   tags: TagItem[]
-  connectionType: 'external' | 'local'
   defaultCapabilities: CapabilityFlags
   apiKeys: ConnectionApiKeyView[]
   createdAt: string
@@ -161,11 +174,11 @@ export interface ExportConnection {
   provider: ProviderType
   thinkingDialect: ThinkingDialect
   baseUrl: string
-  authType: AuthType
+  /** 旧版 session 行按原值导出，保证再次导入后仍标记为待配置。 */
+  authType: AuthType | 'session'
   headers?: Record<string, string>
   prefixId?: string
   tags: TagItem[]
-  connectionType: 'external' | 'local'
   defaultCapabilities: CapabilityFlags
   apiKeys: ExportConnectionApiKey[]
 }
@@ -320,18 +333,16 @@ const stringifySignature = (row: {
   headers: Record<string, string>
   prefixId?: string | null
   tags: TagItem[]
-  connectionType?: string | null
   defaultCapabilities: CapabilityFlags
 }) =>
   JSON.stringify({
     provider: row.provider,
     thinkingDialect: normalizeThinkingDialect(row.thinkingDialect),
     baseUrl: sanitizeBaseUrl(row.baseUrl),
-    authType: row.authType || 'bearer',
+    authType: normalizeAuthType(row.authType),
     headers: row.headers,
     prefixId: row.prefixId || null,
     tags: row.tags,
-    connectionType: (row.connectionType || 'external') as 'external' | 'local',
     defaultCapabilities: row.defaultCapabilities,
   })
 
@@ -364,7 +375,7 @@ const pickCredentialForCatalog = (
   const enabled = credentials.filter((item) => item.enable)
   const pool = enabled.length > 0 ? enabled : credentials
   if (pool.length === 0) return null
-  if ((group.authType as AuthType) === 'none') {
+  if (normalizeAuthType(group.authType) === 'none') {
     return pool[0] ?? null
   }
   return pool.find((item) => item.secretVaultId != null) ?? pool[0] ?? null
@@ -414,15 +425,20 @@ export class ConnectionService {
       .sort((a, b) => compareDatesDesc(a.updatedAt, b.updatedAt))
   }
 
-  async createSystemConnection(payload: ConnectionPayload): Promise<ConnectionGroupView> {
+  async createSystemConnection(payload: ConnectionWritePayload): Promise<ConnectionGroupView> {
     this.requireSupportedProvider(payload.provider)
     const displayName = this.requireDisplayName(payload.displayName)
     await this.assertSystemDisplayNameAvailable(displayName)
 
     const thinkingDialect = resolveThinkingDialectForCreate(payload)
-    const authType = payload.authType ?? 'bearer'
+    const authType = normalizeAuthType(payload.authType)
     const normalizedKeys = this.normalizeApiKeys(payload.apiKeys, authType)
-    const groupData = this.buildGroupCreateData({ ...payload, displayName, thinkingDialect })
+    const groupData = this.buildGroupCreateData({
+      ...payload,
+      displayName,
+      thinkingDialect,
+      authType: this.resolveStoredAuthType(payload.authType),
+    })
     const group = await this.repository.createSystemGroup(groupData)
 
     const createdCredentials: Connection[] = []
@@ -449,7 +465,7 @@ export class ConnectionService {
     return this.toGroupView(fresh)
   }
 
-  async updateSystemConnection(id: number, payload: ConnectionPayload): Promise<ConnectionGroupView> {
+  async updateSystemConnection(id: number, payload: ConnectionWritePayload): Promise<ConnectionGroupView> {
     this.requireSupportedProvider(payload.provider)
     const groupId = await this.resolveGroupId(id)
     const existing = await this.requireGroupById(groupId)
@@ -460,7 +476,7 @@ export class ConnectionService {
       payload.thinkingDialect !== undefined
         ? normalizeThinkingDialect(payload.thinkingDialect)
         : normalizeThinkingDialect(existing.thinkingDialect)
-    const authType = payload.authType ?? 'bearer'
+    const authType = normalizeAuthType(payload.authType)
     const normalizedKeys = this.normalizeApiKeys(payload.apiKeys, authType)
     const existingById = new Map(existing.credentials.map((row) => [row.id, row]))
     const seenIds = new Set<number>()
@@ -468,7 +484,12 @@ export class ConnectionService {
 
     await this.repository.updateSystemGroup(
       groupId,
-      this.buildGroupUpdateData({ ...payload, displayName, thinkingDialect }),
+      this.buildGroupUpdateData({
+        ...payload,
+        displayName,
+        thinkingDialect,
+        authType: this.resolveStoredAuthType(payload.authType),
+      }),
     )
 
     for (const key of normalizedKeys) {
@@ -527,7 +548,6 @@ export class ConnectionService {
       prefixId: normalizeOptionalString(payload.prefixId),
       tagsJson: serializeTags(payload.tags),
       defaultCapabilitiesJson: serializeDefaultCapabilities(payload.defaultCapabilities),
-      connectionType: payload.connectionType ?? 'external',
     }
 
     await this.refreshCatalogSafe(groupSnapshot, touched, 'update')
@@ -553,7 +573,7 @@ export class ConnectionService {
 
     for (const group of groups) {
       if (!isSupportedProvider(group.provider)) continue
-      const authType = (group.authType as AuthType) || 'bearer'
+      const authType = normalizeAuthType(group.authType)
       const headers = parseRecord(group.headersJson)
       const exportKeys: ExportConnectionApiKey[] = []
 
@@ -589,11 +609,10 @@ export class ConnectionService {
         provider: group.provider as ProviderType,
         thinkingDialect: normalizeThinkingDialect(group.thinkingDialect),
         baseUrl: sanitizeBaseUrl(group.baseUrl),
-        authType,
+        authType: isLegacySessionAuth(group.authType) ? 'session' : authType,
         ...(Object.keys(headers).length > 0 ? { headers } : {}),
         prefixId: group.prefixId ?? undefined,
         tags: parseTags(group.tagsJson),
-        connectionType: (group.connectionType || 'external') as 'external' | 'local',
         defaultCapabilities: parseDefaultCapabilities(group.defaultCapabilitiesJson),
         apiKeys: exportKeys,
       })
@@ -646,14 +665,14 @@ export class ConnectionService {
       const existing = signatureToGroup.get(signature)
 
       if (!existing) {
-        await this.createSystemConnection(withDisplayName as ConnectionPayload)
+        await this.createSystemConnection(withDisplayName as ConnectionWritePayload)
         createdGroups += 1
         addedKeys += connection.apiKeys.length
         signatureToGroup = this.buildSignatureGroupMap(await this.repository.listSystemGroups())
         continue
       }
 
-      const authType = (existing.authType as AuthType) || 'bearer'
+      const authType = normalizeAuthType(existing.authType)
       const existingPlaintextSet = new Set<string>()
 
       for (const row of existing.credentials) {
@@ -698,16 +717,16 @@ export class ConnectionService {
 
       if (keysToAdd.length === 0) continue
 
-      const mergePayload: ConnectionPayload = {
+      const mergePayload: ConnectionWritePayload = {
         displayName: existing.displayName,
         provider: existing.provider as ProviderType,
         thinkingDialect: normalizeThinkingDialect(existing.thinkingDialect),
         baseUrl: sanitizeBaseUrl(existing.baseUrl),
-        authType,
+        // 旧 session 行合并时保持原值：不能借导入把待配置的旧行静默升级成 bearer 并启用其 Key。
+        authType: this.resolveStoredAuthType(existing.authType),
         headers: parseRecord(existing.headersJson),
         prefixId: existing.prefixId ?? undefined,
         tags: parseTags(existing.tagsJson),
-        connectionType: (existing.connectionType || 'external') as 'external' | 'local',
         defaultCapabilities: parseDefaultCapabilities(existing.defaultCapabilitiesJson),
         apiKeys: [
           ...existing.credentials.map((row) => ({
@@ -750,7 +769,7 @@ export class ConnectionService {
       throw new ConnectionServiceError('verifyConnection dependency not provided', 500)
     }
 
-    const authType = payload.authType ?? 'bearer'
+    const authType = normalizeAuthType(payload.authType)
     const normalizedKeys = this.normalizeApiKeys(payload.apiKeys, authType)
     const existingById = await this.loadExistingCredentials(normalizedKeys)
 
@@ -795,7 +814,6 @@ export class ConnectionService {
             prefixId: payload.prefixId,
             tags: payload.tags,
             modelIds: key.modelIds,
-            connectionType: payload.connectionType,
             defaultCapabilities: normalizeCapabilityFlags(payload.defaultCapabilities),
           })
 
@@ -813,7 +831,6 @@ export class ConnectionService {
               prefixId: payload.prefixId,
               tags: payload.tags,
               modelIds: key.modelIds,
-              connectionType: payload.connectionType,
               defaultCapabilities: normalizeCapabilityFlags(payload.defaultCapabilities),
             })
           } catch (error) {
@@ -825,7 +842,6 @@ export class ConnectionService {
               provider: payload.provider,
               channelName: payload.provider,
               connectionBaseUrl: sanitizeBaseUrl(payload.baseUrl),
-              connectionType: (payload.connectionType || 'external') as 'external' | 'local',
               tags: normalizeTags(payload.tags),
             }))
           }
@@ -886,7 +902,7 @@ export class ConnectionService {
   private async ensureImportDisplayName(
     connection: ImportConnectionPayload,
     signatureToGroup: Map<string, ConnectionGroupWithCredentials>,
-  ): Promise<ConnectionPayload> {
+  ): Promise<ConnectionWritePayload> {
     const provided = normalizeOptionalString(connection.displayName)
     if (provided) {
       return { ...connection, displayName: provided }
@@ -934,7 +950,17 @@ export class ConnectionService {
     })
   }
 
-  private buildGroupCreateData(payload: ConnectionPayload): ConnectionGroupCreateData {
+  /**
+   * 存储用的认证方式：旧版 `session` 原样保留（读取侧据此标记待配置并阻断请求），
+   * 其余值归一为受支持的三种；传入的 Key 仍按归一后的方式写入 Vault/校验。
+   */
+  private resolveStoredAuthType(
+    value: string | null | undefined,
+  ): AuthType | 'session' {
+    return isLegacySessionAuth(value) ? 'session' : normalizeAuthType(value)
+  }
+
+  private buildGroupCreateData(payload: ConnectionWritePayload): ConnectionGroupCreateData {
     return {
       ownerUserId: null,
       displayName: payload.displayName.trim(),
@@ -945,16 +971,15 @@ export class ConnectionService {
       ),
       baseUrl: sanitizeBaseUrl(payload.baseUrl),
       enable: true,
-      authType: payload.authType ?? 'bearer',
+      authType: this.resolveStoredAuthType(payload.authType),
       headersJson: serializeRecord(payload.headers),
       prefixId: normalizeOptionalString(payload.prefixId),
       tagsJson: serializeTags(payload.tags),
       defaultCapabilitiesJson: serializeDefaultCapabilities(payload.defaultCapabilities),
-      connectionType: payload.connectionType ?? 'external',
     }
   }
 
-  private buildGroupUpdateData(payload: ConnectionPayload): ConnectionGroupUpdateData {
+  private buildGroupUpdateData(payload: ConnectionWritePayload): ConnectionGroupUpdateData {
     return {
       ownerUserId: null,
       displayName: payload.displayName.trim(),
@@ -962,12 +987,11 @@ export class ConnectionService {
       vendor: null,
       thinkingDialect: normalizeThinkingDialect(payload.thinkingDialect),
       baseUrl: sanitizeBaseUrl(payload.baseUrl),
-      authType: payload.authType ?? 'bearer',
+      authType: this.resolveStoredAuthType(payload.authType),
       headersJson: serializeRecord(payload.headers),
       prefixId: normalizeOptionalString(payload.prefixId),
       tagsJson: serializeTags(payload.tags),
       defaultCapabilitiesJson: serializeDefaultCapabilities(payload.defaultCapabilities),
-      connectionType: payload.connectionType ?? 'external',
     }
   }
 
@@ -1116,10 +1140,11 @@ export class ConnectionService {
       provider: group.provider as ProviderType,
       thinkingDialect: normalizeThinkingDialect(group.thinkingDialect),
       baseUrl: sanitizeBaseUrl(group.baseUrl),
-      authType: (group.authType as AuthType) || 'bearer',
+      authType: normalizeAuthType(group.authType),
+      authNeedsConfiguration: isLegacySessionAuth(group.authType),
+      systemOAuthConfigured: Boolean(process.env.SYSTEM_OAUTH_TOKEN),
       prefixId: group.prefixId ?? null,
       tags: parseTags(group.tagsJson),
-      connectionType: (group.connectionType || 'external') as 'external' | 'local',
       defaultCapabilities: parseDefaultCapabilities(group.defaultCapabilitiesJson),
       apiKeys: credentials.map((row) => {
         const hasKey = Boolean(row.secretVaultId)
@@ -1167,7 +1192,6 @@ export class ConnectionService {
           headers: parseRecord(group.headersJson),
           prefixId: group.prefixId,
           tags: parseTags(group.tagsJson),
-          connectionType: group.connectionType,
           defaultCapabilities: parseDefaultCapabilities(group.defaultCapabilitiesJson),
         }),
         group,
@@ -1183,11 +1207,10 @@ export class ConnectionService {
           ? normalizeThinkingDialect(payload.thinkingDialect)
           : resolveThinkingDialectForImport(payload as ImportConnectionPayload),
       baseUrl: payload.baseUrl,
-      authType: payload.authType ?? 'bearer',
+      authType: normalizeAuthType(payload.authType),
       headers: payload.headers ?? {},
       prefixId: payload.prefixId ?? null,
       tags: normalizeTags(payload.tags),
-      connectionType: payload.connectionType ?? 'external',
       defaultCapabilities: sortCapabilityFlags(normalizeCapabilityFlags(payload.defaultCapabilities)),
     })
   }

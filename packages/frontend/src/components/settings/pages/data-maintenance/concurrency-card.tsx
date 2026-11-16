@@ -31,9 +31,17 @@ export function ConcurrencyCard({ settings, update, refresh, isLoading }: Concur
   }, [settings.chatMaxConcurrentStreams])
 
   const handleUpdate = async (payload: Record<string, unknown>, message: string) => {
-    await update(payload as Partial<SystemSettings>)
-    await refresh()
-    toast({ title: message })
+    try {
+      await update(payload as Partial<SystemSettings>)
+      await refresh()
+      toast({ title: message })
+    } catch (error: any) {
+      toast({
+        title: "保存失败",
+        description: error?.message || "并发上限未保存，请重试",
+        variant: "destructive",
+      })
+    }
   }
 
   return (

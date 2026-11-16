@@ -5,6 +5,19 @@ import type { CapabilityEnvelope, CapabilityFlags } from '../../utils/capabiliti
 import type { Actor } from '../../types'
 import { isSupportedProvider, SUPPORTED_PROVIDERS, type ProviderType } from '../../utils/providers'
 import {
+  ALL_OVERRIDE_FIELDS,
+  clearModelOverrides,
+  isOverrideField,
+  parseModelMeta,
+  readModelContextWindow,
+  readModelMaxOutputTokens,
+  readModelOverrideState,
+  readModelTemperature,
+  setModelParameterOverride,
+  type ModelOverrideField,
+} from './model-override'
+import { resolveSupportedEfforts } from './model-generation-parameters'
+import {
   decideModelAccessForActor,
   getModelAccessDefaults as defaultGetModelAccessDefaults,
   parseAccessPolicyFromMeta,
@@ -20,7 +33,7 @@ type ConnectionGroupWithCredentials = ConnectionGroup & { credentials: Connectio
 type RefreshAllFn = () => Promise<unknown>
 type RefreshForGroupsFn = (groups: ConnectionGroupWithCredentials[]) => Promise<unknown>
 type RefreshByGroupIdFn = (connectionGroupId: number) => Promise<unknown>
-type ComputeCapabilitiesFn = (rawId: string, tags?: Array<{ name: string }>) => CapabilityFlags
+type ComputeCapabilitiesFn = (rawId: string) => CapabilityFlags
 type DeriveChannelNameFn = (provider: ProviderType, baseUrl?: string) => string
 type NormalizeCapabilityFlagsFn = (input?: Record<string, any> | null) => CapabilityFlags | undefined
 type SerializeCapabilityEnvelopeFn = (input?: CapabilityEnvelope | null) => string
@@ -31,67 +44,14 @@ type ResolveModelAccessPolicyFn = (params: {
   defaults: ModelAccessDefaults
 }) => { policy: ModelAccessPolicy | null; resolved: ModelAccessResolution }
 
-const parseMetaObject = (metaJson: string | null | undefined): Record<string, any> => {
-  if (!metaJson) return {}
-  try {
-    const parsed = JSON.parse(metaJson)
-    return parsed && typeof parsed === 'object' ? parsed : {}
-  } catch {
-    return {}
-  }
-}
+const extractContextWindow = (metaJson: string | null | undefined): number | null =>
+  readModelContextWindow(parseModelMeta(metaJson))
 
-const extractContextWindow = (metaJson: string | null | undefined): number | null => {
-  if (!metaJson) return null
-  try {
-    const parsed = JSON.parse(metaJson)
-    const raw = (parsed as any)?.context_window
-    if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
-      return Math.floor(raw)
-    }
-    const coerced = Number.parseInt(String(raw ?? ''), 10)
-    if (Number.isFinite(coerced) && coerced > 0) {
-      return Math.floor(coerced)
-    }
-  } catch {}
-  return null
-}
+const extractMaxOutputTokens = (metaJson: string | null | undefined): number | null =>
+  readModelMaxOutputTokens(parseModelMeta(metaJson))
 
-const extractMaxOutputTokens = (metaJson: string | null | undefined): number | null => {
-  if (!metaJson) return null
-  try {
-    const parsed = JSON.parse(metaJson)
-    const candidates = [
-      (parsed as any)?.custom_max_output_tokens,
-      (parsed as any)?.max_output_tokens,
-      (parsed as any)?.max_completion_tokens,
-      (parsed as any)?.completion_limit,
-    ]
-    for (const candidate of candidates) {
-      const num = typeof candidate === 'number' ? candidate : Number.parseInt(String(candidate ?? ''), 10)
-      if (Number.isFinite(num) && num > 0) {
-        return num
-      }
-    }
-  } catch {}
-  return null
-}
-
-const extractTemperature = (metaJson: string | null | undefined): number | null => {
-  if (!metaJson) return null
-  try {
-    const parsed = JSON.parse(metaJson)
-    const raw = (parsed as any)?.temperature
-    if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0) {
-      return raw
-    }
-    const coerced = Number.parseFloat(String(raw ?? ''))
-    if (Number.isFinite(coerced) && coerced >= 0) {
-      return coerced
-    }
-  } catch {}
-  return null
-}
+const extractTemperature = (metaJson: string | null | undefined): number | null =>
+  readModelTemperature(parseModelMeta(metaJson))
 
 const clampMaxOutputTokens = (value: number): number => {
   if (!Number.isFinite(value)) return 0
@@ -121,7 +81,6 @@ export interface SaveOverridePayload {
   /** Stable connection group id (API still names this connectionId). */
   connectionId: number
   rawId: string
-  tagsInput?: unknown
   capabilitiesInput?: unknown
   maxOutputTokens?: number | null
   contextWindow?: number | null
@@ -131,7 +90,8 @@ export interface SaveOverridePayload {
 
 export interface DeleteOverridesPayload {
   all: boolean
-  items?: Array<{ connectionId: number; rawId: string }>
+  /** fields 缺省或为空表示清除该模型的全部覆写（删除整行后重新探测）。 */
+  items?: Array<{ connectionId: number; rawId: string; fields?: ModelOverrideField[] }>
 }
 
 export interface ModelCatalogServiceDeps {
@@ -261,11 +221,12 @@ export class ModelCatalogService {
         const contextWindow = extractContextWindow(row.metaJson)
         const maxOutputTokens = extractMaxOutputTokens(row.metaJson)
         const temperature = extractTemperature(row.metaJson)
+        const overrideState = readModelOverrideState(row)
         const storedCaps = this.parseCapabilityEnvelope(row.capabilitiesJson)
         let capabilities = storedCaps?.flags
         let capabilitySource = storedCaps?.source ?? null
         if (!storedCaps || !hasDefinedCapability(capabilities)) {
-          const fallback = this.computeCapabilities(row.rawId, tags)
+          const fallback = this.computeCapabilities(row.rawId)
           if (hasDefinedCapability(fallback)) {
             capabilities = fallback
             capabilitySource = 'legacy'
@@ -287,12 +248,22 @@ export class ModelCatalogService {
           channelName: this.deriveChannelName(group.provider as any, group.baseUrl),
           connectionBaseUrl: group.baseUrl,
           connectionId: group.id,
-          connectionType: row.connectionType,
           modelType: row.modelType || 'chat',
           tags,
           capabilities,
           capabilitySource: capabilitySource || undefined,
-          overridden: row.manualOverride,
+          overridden: overrideState.any,
+          overrides: {
+            capability: overrideState.capabilities,
+            parameters: overrideState.parameters,
+            access: overrideState.access,
+            any: overrideState.any,
+          },
+          efforts: resolveSupportedEfforts({
+            provider: group.provider as ProviderType,
+            thinkingDialect: group.thinkingDialect,
+            rawModelId: row.rawId,
+          }),
           contextWindow,
           maxOutputTokens,
           temperature,
@@ -325,8 +296,6 @@ export class ModelCatalogService {
     }
     if (!isSupportedProvider(group.provider)) throw new ModelCatalogServiceError('Unsupported provider')
 
-    const hasTagsPayload = Array.isArray(payload.tagsInput)
-    const tags = hasTagsPayload ? this.normalizeTags(payload.tagsInput as any[]) : undefined
     const hasCapabilitiesPayload = payload.capabilitiesInput != null
     const capabilityFlags = hasCapabilitiesPayload
       ? this.normalizeCapabilityFlags(payload.capabilitiesInput as Record<string, any> | null | undefined)
@@ -342,54 +311,68 @@ export class ModelCatalogService {
     const existing = await this.prisma.modelCatalog.findFirst({
       where: { connectionGroupId, modelId },
     })
-    const metaPayload = parseMetaObject(existing?.metaJson)
+    const metaPayload = parseModelMeta(existing?.metaJson)
+
+    const parameterInput: {
+      maxOutputTokens?: number | null
+      contextWindow?: number | null
+      temperature?: number | null
+    } = {}
 
     if (Object.prototype.hasOwnProperty.call(payload, 'maxOutputTokens')) {
       if (payload.maxOutputTokens == null) {
-        delete metaPayload.custom_max_output_tokens
+        parameterInput.maxOutputTokens = null
       } else {
         const value = clampMaxOutputTokens(payload.maxOutputTokens)
         if (value <= 0) {
           throw new ModelCatalogServiceError('max_output_tokens must be positive')
         }
-        metaPayload.custom_max_output_tokens = value
+        parameterInput.maxOutputTokens = value
       }
     }
 
     if (Object.prototype.hasOwnProperty.call(payload, 'contextWindow')) {
       if (payload.contextWindow == null) {
-        delete metaPayload.context_window
+        parameterInput.contextWindow = null
       } else {
         const numeric = Number.parseInt(String(payload.contextWindow), 10)
         if (!Number.isFinite(numeric) || numeric <= 0) {
           throw new ModelCatalogServiceError('context_window must be positive')
         }
-        metaPayload.context_window = numeric
+        parameterInput.contextWindow = numeric
       }
     }
 
     if (Object.prototype.hasOwnProperty.call(payload, 'temperature')) {
       if (payload.temperature == null) {
-        delete metaPayload.temperature
+        parameterInput.temperature = null
       } else {
         const numeric = Number.parseFloat(String(payload.temperature))
         if (!Number.isFinite(numeric) || numeric < 0 || numeric > 2) {
           throw new ModelCatalogServiceError('temperature must be between 0 and 2')
         }
-        metaPayload.temperature = numeric
+        parameterInput.temperature = numeric
       }
     }
+
+    // 手写参数只写 custom_* 与 temperature，刷新写入的检测键不受影响。
+    const metaWithParameters = setModelParameterOverride(metaPayload, parameterInput)
 
     if (Object.prototype.hasOwnProperty.call(payload, 'accessPolicyInput')) {
       const normalized = this.normalizeAccessPolicyInput(payload.accessPolicyInput)
       if (normalized) {
-        metaPayload.access_policy = normalized
+        metaWithParameters.access_policy = normalized
       } else {
-        delete metaPayload.access_policy
+        delete metaWithParameters.access_policy
       }
     }
 
-    const metaJson = JSON.stringify(metaPayload)
+    const metaJson = JSON.stringify(metaWithParameters)
+    const overrideState = readModelOverrideState({
+      capabilitiesJson: capabilitiesJson ?? existing?.capabilitiesJson ?? null,
+      metaJson,
+      manualOverride: existing?.manualOverride ?? false,
+    })
 
     if (!existing) {
       await this.prisma.modelCatalog.create({
@@ -399,11 +382,12 @@ export class ModelCatalogService {
           rawId,
           name: rawId,
           provider: group.provider,
-          connectionType: (group.connectionType as any) || 'external',
-          tagsJson: JSON.stringify(tags || []),
+          // 旧列仅为兼容历史 schema 保留；连接类型已无运行时语义。
+          connectionType: 'external',
+          tagsJson: '[]',
           capabilitiesJson: capabilitiesJson || '{}',
           metaJson,
-          manualOverride: true,
+          manualOverride: overrideState.any,
           lastFetchedAt: now,
           expiresAt,
         },
@@ -411,12 +395,9 @@ export class ModelCatalogService {
     } else {
       const updateData: Prisma.ModelCatalogUpdateInput = {
         metaJson,
-        manualOverride: true,
+        manualOverride: overrideState.any,
         lastFetchedAt: now,
         expiresAt,
-      }
-      if (hasTagsPayload) {
-        updateData.tagsJson = JSON.stringify(tags || [])
       }
       if (capabilitiesJson) {
         updateData.capabilitiesJson = capabilitiesJson
@@ -442,6 +423,7 @@ export class ModelCatalogService {
       .map((item) => ({
         connectionId: Number(item.connectionId),
         rawId: String(item.rawId || ''),
+        fields: this.normalizeOverrideFields(item.fields),
       }))
       .filter((item) => Number.isFinite(item.connectionId) && item.connectionId > 0 && item.rawId)
     if (!normalized.length) {
@@ -456,18 +438,58 @@ export class ModelCatalogService {
     if (groups.length !== connectionGroupIds.length) throw new ModelCatalogServiceError('Connection not found', 404)
     if (groups.some((group) => !isSupportedProvider(group.provider))) throw new ModelCatalogServiceError('Unsupported provider')
     const prefixMap = new Map(groups.map((c) => [c.id, c.prefixId]))
-    const filters = normalized.map((item) => {
-      const prefix = prefixMap.get(item.connectionId) || ''
-      const modelId = prefix ? `${prefix}.${item.rawId}` : item.rawId
-      return { connectionGroupId: item.connectionId, modelId }
-    })
-    const result = await this.prisma.modelCatalog.deleteMany({
-      where: { OR: filters, manualOverride: true },
-    })
+    const modelIdOf = (connectionId: number, rawId: string) => {
+      const prefix = prefixMap.get(connectionId) || ''
+      return prefix ? `${prefix}.${rawId}` : rawId
+    }
+
+    let count = 0
+    const fullReset = normalized.filter((item) => item.fields.length === 0)
+    const scoped = normalized.filter((item) => item.fields.length > 0)
+
+    if (fullReset.length > 0) {
+      const filters = fullReset.map((item) => ({
+        connectionGroupId: item.connectionId,
+        modelId: modelIdOf(item.connectionId, item.rawId),
+      }))
+      const result = await this.prisma.modelCatalog.deleteMany({
+        where: { OR: filters, manualOverride: true },
+      })
+      count += result.count
+    }
+
+    for (const item of scoped) {
+      const modelId = modelIdOf(item.connectionId, item.rawId)
+      const row = await this.prisma.modelCatalog.findFirst({
+        where: { connectionGroupId: item.connectionId, modelId },
+      })
+      if (!row) continue
+      const cleared = clearModelOverrides(row, item.fields)
+      await this.prisma.modelCatalog.update({
+        where: { id: row.id },
+        data: {
+          capabilitiesJson: cleared.capabilitiesJson,
+          metaJson: cleared.metaJson,
+          manualOverride: cleared.state.any,
+        },
+      })
+      this.invalidateCompletionLimitCache(item.connectionId, item.rawId)
+      this.invalidateContextWindowCache(item.connectionId, item.rawId)
+      count += 1
+    }
+
     for (const id of connectionGroupIds) {
       await this.refreshByGroupId(id)
     }
-    return result.count
+    return count
+  }
+
+  private normalizeOverrideFields(input: unknown): ModelOverrideField[] {
+    if (!Array.isArray(input) || input.length === 0) return []
+    const fields = input.filter(isOverrideField)
+    if (!fields.length) return []
+    const unique = Array.from(new Set(fields))
+    return unique.length === ALL_OVERRIDE_FIELDS.length ? [] : unique
   }
 
   async exportOverrides() {
@@ -483,24 +505,17 @@ export class ModelCatalogService {
       },
     })
     return rows.map((row) => {
-      const tags = (() => {
-        try {
-          const parsed = JSON.parse(row.tagsJson || '[]')
-          return Array.isArray(parsed) ? parsed : []
-        } catch {
-          return []
-        }
-      })()
       const parsedCaps = this.parseCapabilityEnvelope(row.capabilitiesJson)
       return {
         connectionId: row.connectionGroupId,
         rawId: row.rawId,
         modelId: row.modelId,
-        tags,
         capabilities: parsedCaps?.flags || undefined,
         capabilitySource: parsedCaps?.source || null,
         accessPolicy: parseAccessPolicyFromMeta(row.metaJson) || undefined,
         temperature: extractTemperature(row.metaJson),
+        contextWindow: readModelContextWindow(parseModelMeta(row.metaJson)),
+        maxOutputTokens: extractMaxOutputTokens(row.metaJson),
       }
     })
   }
@@ -519,20 +534,4 @@ export class ModelCatalogService {
     return Object.keys(allowed).length ? allowed : null
   }
 
-  private normalizeTags(input: any[]): Array<{ name: string }> {
-    return input
-      .map((tag) => {
-        if (!tag) return null
-        if (typeof tag === 'string') {
-          const trimmed = tag.trim()
-          return trimmed ? { name: trimmed } : null
-        }
-        if (typeof tag === 'object' && typeof tag.name === 'string') {
-          const trimmed = tag.name.trim()
-          return trimmed ? { name: trimmed } : null
-        }
-        return null
-      })
-      .filter((tag): tag is { name: string } => Boolean(tag))
-  }
 }

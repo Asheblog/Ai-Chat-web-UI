@@ -1,0 +1,675 @@
+{
+  "baseline": "main bb376960",
+  "purpose": "设置审计覆盖核对；读代码定义，未读取部署值或凭据",
+  "fields": [
+    {
+      "field": "allowRegistration",
+      "storageKey": "registration_enabled",
+      "sourceLine": 2
+    },
+    {
+      "field": "anonymousDailyQuota",
+      "storageKey": "anonymous_daily_quota",
+      "sourceLine": 3
+    },
+    {
+      "field": "anonymousRetentionDays",
+      "storageKey": "anonymous_retention_days",
+      "sourceLine": 4
+    },
+    {
+      "field": "assistantAvatarUpload",
+      "storageKey": "assistant_avatar",
+      "sourceLine": 5
+    },
+    {
+      "field": "assistantAvatarUrl",
+      "storageKey": "assistant_avatar_url",
+      "sourceLine": 6
+    },
+    {
+      "field": "assistantReplyHistoryLimit",
+      "storageKey": "assistant_reply_history_limit",
+      "sourceLine": 7
+    },
+    {
+      "field": "battleAllowAnonymous",
+      "storageKey": "battle_allow_anonymous",
+      "sourceLine": 8
+    },
+    {
+      "field": "battleAllowUsers",
+      "storageKey": "battle_allow_users",
+      "sourceLine": 9
+    },
+    {
+      "field": "battleAnonymousDailyQuota",
+      "storageKey": "battle_anonymous_daily_quota",
+      "sourceLine": 10
+    },
+    {
+      "field": "battleRetentionDays",
+      "storageKey": "battle_retention_days",
+      "sourceLine": 11
+    },
+    {
+      "field": "battleUserDailyQuota",
+      "storageKey": "battle_user_daily_quota",
+      "sourceLine": 12
+    },
+    {
+      "field": "brandText",
+      "storageKey": "brand_text",
+      "sourceLine": 13
+    },
+    {
+      "field": "brandPrimary",
+      "storageKey": "brand_primary",
+      "sourceLine": 14
+    },
+    {
+      "field": "brandPrimaryForeground",
+      "storageKey": "brand_primary_foreground",
+      "sourceLine": 15
+    },
+    {
+      "field": "brandBackground",
+      "storageKey": "brand_background",
+      "sourceLine": 16
+    },
+    {
+      "field": "brandSurface",
+      "storageKey": "brand_surface",
+      "sourceLine": 17
+    },
+    {
+      "field": "brandForeground",
+      "storageKey": "brand_foreground",
+      "sourceLine": 18
+    },
+    {
+      "field": "brandMutedForeground",
+      "storageKey": "brand_muted_foreground",
+      "sourceLine": 19
+    },
+    {
+      "field": "chatImageRetentionDays",
+      "storageKey": "chat_image_retention_days",
+      "sourceLine": 20
+    },
+    {
+      "field": "chatDynamicSkillRuntimeEnabled",
+      "storageKey": "chat_dynamic_skill_runtime_enabled",
+      "sourceLine": 21
+    },
+    {
+      "field": "chatMaxConcurrentStreams",
+      "storageKey": "chat_max_concurrent_streams",
+      "sourceLine": 22
+    },
+    {
+      "field": "chatSystemPrompt",
+      "storageKey": "chat_system_prompt",
+      "sourceLine": 23
+    },
+    {
+      "field": "contextCompressionEnabled",
+      "storageKey": "context_compression_enabled",
+      "sourceLine": 24
+    },
+    {
+      "field": "contextCompressionTailMessages",
+      "storageKey": "context_compression_tail_messages",
+      "sourceLine": 25
+    },
+    {
+      "field": "contextCompressionThresholdRatio",
+      "storageKey": "context_compression_threshold_ratio",
+      "sourceLine": 26
+    },
+    {
+      "field": "defaultUserDailyQuota",
+      "storageKey": "default_user_daily_quota",
+      "sourceLine": 27
+    },
+    {
+      "field": "extensionInstallToolEnable",
+      "storageKey": "extension_install_tool_enable",
+      "sourceLine": 28
+    },
+    {
+      "field": "knowledgeBaseAllowAnonymous",
+      "storageKey": "knowledge_base_allow_anonymous",
+      "sourceLine": 29
+    },
+    {
+      "field": "knowledgeBaseAllowUsers",
+      "storageKey": "knowledge_base_allow_users",
+      "sourceLine": 30
+    },
+    {
+      "field": "knowledgeBaseEnabled",
+      "storageKey": "knowledge_base_enabled",
+      "sourceLine": 31
+    },
+    {
+      "field": "mcpGlobalEnabled",
+      "storageKey": "mcp_global_enabled",
+      "sourceLine": 32
+    },
+    {
+      "field": "modelAccessDefaultAnonymous",
+      "storageKey": "model_access_default_anonymous",
+      "sourceLine": 33
+    },
+    {
+      "field": "modelAccessDefaultUser",
+      "storageKey": "model_access_default_user",
+      "sourceLine": 34
+    },
+    {
+      "field": "openaiReasoningEffort",
+      "storageKey": "openai_reasoning_effort",
+      "sourceLine": 35
+    },
+    {
+      "field": "providerInitialGraceMs",
+      "storageKey": "provider_initial_grace_ms",
+      "sourceLine": 36
+    },
+    {
+      "field": "providerMaxIdleMs",
+      "storageKey": "provider_max_idle_ms",
+      "sourceLine": 37
+    },
+    {
+      "field": "providerReasoningIdleMs",
+      "storageKey": "provider_reasoning_idle_ms",
+      "sourceLine": 38
+    },
+    {
+      "field": "providerTimeoutMs",
+      "storageKey": "provider_timeout_ms",
+      "sourceLine": 39
+    },
+    {
+      "field": "pythonToolEnable",
+      "storageKey": "python_tool_enable",
+      "sourceLine": 40
+    },
+    {
+      "field": "pythonToolMaxOutputChars",
+      "storageKey": "python_tool_max_output_chars",
+      "sourceLine": 41
+    },
+    {
+      "field": "pythonToolMaxSourceChars",
+      "storageKey": "python_tool_max_source_chars",
+      "sourceLine": 42
+    },
+    {
+      "field": "pythonToolTimeoutMs",
+      "storageKey": "python_tool_timeout_ms",
+      "sourceLine": 43
+    },
+    {
+      "field": "ragChunkOverlap",
+      "storageKey": "rag_chunk_overlap",
+      "sourceLine": 44
+    },
+    {
+      "field": "ragChunkSize",
+      "storageKey": "rag_chunk_size",
+      "sourceLine": 45
+    },
+    {
+      "field": "ragEmbeddingBatchSize",
+      "storageKey": "rag_embedding_batch_size",
+      "sourceLine": 46
+    },
+    {
+      "field": "ragEmbeddingConcurrency",
+      "storageKey": "rag_embedding_concurrency",
+      "sourceLine": 47
+    },
+    {
+      "field": "ragEmbeddingConnectionId",
+      "storageKey": "rag_embedding_connection_id",
+      "sourceLine": 48
+    },
+    {
+      "field": "ragEmbeddingModelId",
+      "storageKey": "rag_embedding_model_id",
+      "sourceLine": 49
+    },
+    {
+      "field": "ragEnabled",
+      "storageKey": "rag_enabled",
+      "sourceLine": 50
+    },
+    {
+      "field": "ragMaxContextTokens",
+      "storageKey": "rag_max_context_tokens",
+      "sourceLine": 51
+    },
+    {
+      "field": "ragMaxFileSizeMb",
+      "storageKey": "rag_max_file_size_mb",
+      "sourceLine": 52
+    },
+    {
+      "field": "ragMaxPages",
+      "storageKey": "rag_max_pages",
+      "sourceLine": 53
+    },
+    {
+      "field": "ragRelevanceThreshold",
+      "storageKey": "rag_relevance_threshold",
+      "sourceLine": 54
+    },
+    {
+      "field": "ragRetentionDays",
+      "storageKey": "rag_retention_days",
+      "sourceLine": 55
+    },
+    {
+      "field": "ragTopK",
+      "storageKey": "rag_top_k",
+      "sourceLine": 56
+    },
+    {
+      "field": "reasoningCustomTags",
+      "storageKey": "reasoning_custom_tags",
+      "sourceLine": 57
+    },
+    {
+      "field": "reasoningEnabled",
+      "storageKey": "reasoning_enabled",
+      "sourceLine": 58
+    },
+    {
+      "field": "reasoningKeepaliveIntervalMs",
+      "storageKey": "reasoning_keepalive_interval_ms",
+      "sourceLine": 59
+    },
+    {
+      "field": "reasoningMaxOutputTokensDefault",
+      "storageKey": "reasoning_max_output_tokens_default",
+      "sourceLine": 60
+    },
+    {
+      "field": "reasoningSaveToDb",
+      "storageKey": "reasoning_save_to_db",
+      "sourceLine": 61
+    },
+    {
+      "field": "reasoningTagsMode",
+      "storageKey": "reasoning_tags_mode",
+      "sourceLine": 62
+    },
+    {
+      "field": "siteBaseUrl",
+      "storageKey": "site_base_url",
+      "sourceLine": 63
+    },
+    {
+      "field": "sseHeartbeatIntervalMs",
+      "storageKey": "sse_heartbeat_interval_ms",
+      "sourceLine": 64
+    },
+    {
+      "field": "streamDeltaChunkSize",
+      "storageKey": "stream_delta_chunk_size",
+      "sourceLine": 65
+    },
+    {
+      "field": "streamDeltaFlushIntervalMs",
+      "storageKey": "stream_delta_flush_interval_ms",
+      "sourceLine": 66
+    },
+    {
+      "field": "streamKeepaliveIntervalMs",
+      "storageKey": "stream_keepalive_interval_ms",
+      "sourceLine": 67
+    },
+    {
+      "field": "streamReasoningFlushIntervalMs",
+      "storageKey": "stream_reasoning_flush_interval_ms",
+      "sourceLine": 68
+    },
+    {
+      "field": "taskTraceAdminOnly",
+      "storageKey": "task_trace_admin_only",
+      "sourceLine": 69
+    },
+    {
+      "field": "taskTraceDefaultOn",
+      "storageKey": "task_trace_default_on",
+      "sourceLine": 70
+    },
+    {
+      "field": "taskTraceEnabled",
+      "storageKey": "task_trace_enabled",
+      "sourceLine": 71
+    },
+    {
+      "field": "taskTraceEnv",
+      "storageKey": "task_trace_env",
+      "sourceLine": 72
+    },
+    {
+      "field": "taskTraceIdleTimeoutMs",
+      "storageKey": "task_trace_idle_timeout_ms",
+      "sourceLine": 73
+    },
+    {
+      "field": "taskTraceMaxEvents",
+      "storageKey": "task_trace_max_events",
+      "sourceLine": 74
+    },
+    {
+      "field": "taskTraceRetentionDays",
+      "storageKey": "task_trace_retention_days",
+      "sourceLine": 75
+    },
+    {
+      "field": "temperatureDefault",
+      "storageKey": "temperature_default",
+      "sourceLine": 76
+    },
+    {
+      "field": "titleSummaryConnectionId",
+      "storageKey": "title_summary_connection_id",
+      "sourceLine": 77
+    },
+    {
+      "field": "titleSummaryEnabled",
+      "storageKey": "title_summary_enabled",
+      "sourceLine": 78
+    },
+    {
+      "field": "titleSummaryMaxLength",
+      "storageKey": "title_summary_max_length",
+      "sourceLine": 79
+    },
+    {
+      "field": "titleSummaryModelId",
+      "storageKey": "title_summary_model_id",
+      "sourceLine": 80
+    },
+    {
+      "field": "titleSummaryModelSource",
+      "storageKey": "title_summary_model_source",
+      "sourceLine": 81
+    },
+    {
+      "field": "usageEmit",
+      "storageKey": "usage_emit",
+      "sourceLine": 82
+    },
+    {
+      "field": "usageProviderOnly",
+      "storageKey": "usage_provider_only",
+      "sourceLine": 83
+    },
+    {
+      "field": "webSearchAgentEnable",
+      "storageKey": "web_search_agent_enable",
+      "sourceLine": 84
+    },
+    {
+      "field": "webSearchApiKeyBrave",
+      "storageKey": "web_search_api_key_brave",
+      "sourceLine": 85
+    },
+    {
+      "field": "webSearchApiKeyMetaso",
+      "storageKey": "web_search_api_key_metaso",
+      "sourceLine": 86
+    },
+    {
+      "field": "webSearchApiKeyExa",
+      "storageKey": "web_search_api_key_exa",
+      "sourceLine": 87
+    },
+    {
+      "field": "webSearchApiKeyTavily",
+      "storageKey": "web_search_api_key_tavily",
+      "sourceLine": 88
+    },
+    {
+      "field": "webSearchApiKeyDeepseek",
+      "storageKey": "web_search_api_key_deepseek",
+      "sourceLine": 89
+    },
+    {
+      "field": "webSearchDeepseekFetchEnable",
+      "storageKey": "web_search_deepseek_fetch_enable",
+      "sourceLine": 90
+    },
+    {
+      "field": "webSearchAutoBilingual",
+      "storageKey": "web_search_auto_bilingual",
+      "sourceLine": 91
+    },
+    {
+      "field": "webSearchAutoBilingualMode",
+      "storageKey": "web_search_auto_bilingual_mode",
+      "sourceLine": 92
+    },
+    {
+      "field": "webSearchAutoReadParallelism",
+      "storageKey": "web_search_auto_read_parallelism",
+      "sourceLine": 93
+    },
+    {
+      "field": "webSearchAutoReadBatchTimeoutMs",
+      "storageKey": "web_search_auto_read_batch_timeout_ms",
+      "sourceLine": 94
+    },
+    {
+      "field": "webSearchDomainFilter",
+      "storageKey": "web_search_domain_filter",
+      "sourceLine": 95
+    },
+    {
+      "field": "webSearchEnabledEngines",
+      "storageKey": "web_search_enabled_engines",
+      "sourceLine": 96
+    },
+    {
+      "field": "webSearchEngineOrder",
+      "storageKey": "web_search_engine_order",
+      "sourceLine": 97
+    },
+    {
+      "field": "webSearchHasApiKey",
+      "storageKey": "web_search_has_api_key",
+      "sourceLine": 98
+    },
+    {
+      "field": "webSearchHasApiKeyBrave",
+      "storageKey": "web_search_has_api_key_brave",
+      "sourceLine": 99
+    },
+    {
+      "field": "webSearchHasApiKeyMetaso",
+      "storageKey": "web_search_has_api_key_metaso",
+      "sourceLine": 100
+    },
+    {
+      "field": "webSearchHasApiKeyExa",
+      "storageKey": "web_search_has_api_key_exa",
+      "sourceLine": 101
+    },
+    {
+      "field": "webSearchHasApiKeyTavily",
+      "storageKey": "web_search_has_api_key_tavily",
+      "sourceLine": 102
+    },
+    {
+      "field": "webSearchHasApiKeyDeepseek",
+      "storageKey": "web_search_has_api_key_deepseek",
+      "sourceLine": 103
+    },
+    {
+      "field": "webSearchIncludeRaw",
+      "storageKey": "web_search_include_raw",
+      "sourceLine": 104
+    },
+    {
+      "field": "webSearchIncludeSummary",
+      "storageKey": "web_search_include_summary",
+      "sourceLine": 105
+    },
+    {
+      "field": "webSearchParallelMaxEngines",
+      "storageKey": "web_search_parallel_max_engines",
+      "sourceLine": 106
+    },
+    {
+      "field": "webSearchParallelMaxQueriesPerCall",
+      "storageKey": "web_search_parallel_max_queries_per_call",
+      "sourceLine": 107
+    },
+    {
+      "field": "webSearchParallelMergeStrategy",
+      "storageKey": "web_search_parallel_merge_strategy",
+      "sourceLine": 108
+    },
+    {
+      "field": "webSearchParallelTimeoutMs",
+      "storageKey": "web_search_parallel_timeout_ms",
+      "sourceLine": 109
+    },
+    {
+      "field": "webSearchResultLimit",
+      "storageKey": "web_search_result_limit",
+      "sourceLine": 110
+    },
+    {
+      "field": "webSearchScope",
+      "storageKey": "web_search_scope",
+      "sourceLine": 111
+    },
+    {
+      "field": "agentMaxToolIterations",
+      "storageKey": "agent_max_tool_iterations",
+      "sourceLine": 112
+    }
+  ],
+  "typeFields": [
+    "allowRegistration",
+    "brandText",
+    "brandPrimary",
+    "brandPrimaryForeground",
+    "brandBackground",
+    "brandSurface",
+    "brandForeground",
+    "brandMutedForeground",
+    "assistantAvatarUpload",
+    "assistantAvatarRemove",
+    "sseHeartbeatIntervalMs",
+    "providerMaxIdleMs",
+    "providerTimeoutMs",
+    "providerInitialGraceMs",
+    "providerReasoningIdleMs",
+    "reasoningKeepaliveIntervalMs",
+    "usageEmit",
+    "usageProviderOnly",
+    "contextCompressionEnabled",
+    "contextCompressionThresholdRatio",
+    "contextCompressionTailMessages",
+    "reasoningEnabled",
+    "reasoningSaveToDb",
+    "reasoningTagsMode",
+    "reasoningCustomTags",
+    "streamDeltaChunkSize",
+    "streamDeltaFlushIntervalMs",
+    "streamReasoningFlushIntervalMs",
+    "streamKeepaliveIntervalMs",
+    "openaiReasoningEffort",
+    "reasoningMaxOutputTokensDefault",
+    "temperatureDefault",
+    "chatImageRetentionDays",
+    "assistantReplyHistoryLimit",
+    "siteBaseUrl",
+    "anonymousRetentionDays",
+    "anonymousDailyQuota",
+    "defaultUserDailyQuota",
+    "battleAllowAnonymous",
+    "battleAllowUsers",
+    "battleAnonymousDailyQuota",
+    "battleUserDailyQuota",
+    "battleRetentionDays",
+    "modelAccessDefaultAnonymous",
+    "modelAccessDefaultUser",
+    "webSearchAgentEnable",
+    "webSearchEnabledEngines",
+    "webSearchEngineOrder",
+    "webSearchResultLimit",
+    "webSearchDomainFilter",
+    "webSearchHasApiKey",
+    "webSearchHasApiKeyTavily",
+    "webSearchHasApiKeyBrave",
+    "webSearchHasApiKeyMetaso",
+    "webSearchHasApiKeyExa",
+    "webSearchHasApiKeyDeepseek",
+    "webSearchApiKeyDeepseek",
+    "webSearchDeepseekFetchEnable",
+    "webSearchApiKeyExa",
+    "webSearchScope",
+    "webSearchIncludeSummary",
+    "webSearchIncludeRaw",
+    "webSearchParallelMaxEngines",
+    "webSearchParallelMaxQueriesPerCall",
+    "webSearchParallelTimeoutMs",
+    "webSearchParallelMergeStrategy",
+    "webSearchAutoBilingual",
+    "webSearchAutoBilingualMode",
+    "webSearchAutoReadParallelism",
+    "webSearchAutoReadBatchTimeoutMs",
+    "pythonToolEnable",
+    "chatDynamicSkillRuntimeEnabled",
+    "pythonToolTimeoutMs",
+    "pythonToolMaxOutputChars",
+    "pythonToolMaxSourceChars",
+    "agentMaxToolIterations",
+    "mcpGlobalEnabled",
+    "extensionInstallToolEnable",
+    "assistantAvatarUrl",
+    "chatSystemPrompt",
+    "webSearchApiKeyTavily",
+    "webSearchApiKeyBrave",
+    "webSearchApiKeyMetaso",
+    "taskTraceEnabled",
+    "taskTraceDefaultOn",
+    "taskTraceAdminOnly",
+    "taskTraceEnv",
+    "taskTraceRetentionDays",
+    "taskTraceMaxEvents",
+    "taskTraceIdleTimeoutMs",
+    "chatMaxConcurrentStreams",
+    "titleSummaryEnabled",
+    "titleSummaryMaxLength",
+    "titleSummaryModelSource",
+    "titleSummaryConnectionId",
+    "titleSummaryModelId",
+    "ragEnabled",
+    "ragEmbeddingConnectionId",
+    "ragEmbeddingModelId",
+    "ragEmbeddingBatchSize",
+    "ragEmbeddingConcurrency",
+    "ragTopK",
+    "ragRelevanceThreshold",
+    "ragMaxContextTokens",
+    "ragChunkSize",
+    "ragChunkOverlap",
+    "ragMaxFileSizeMb",
+    "ragMaxPages",
+    "ragRetentionDays",
+    "knowledgeBaseEnabled",
+    "knowledgeBaseAllowAnonymous",
+    "knowledgeBaseAllowUsers"
+  ]
+}

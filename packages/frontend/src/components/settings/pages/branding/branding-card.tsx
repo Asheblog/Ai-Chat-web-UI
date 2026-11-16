@@ -1,11 +1,10 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { Type } from "lucide-react"
 import { isValidBrandHex } from "@aichat/shared"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/use-toast"
 import { useAuthStore } from "@/store/auth-store"
 import { refreshImageAttachments } from "@/features/settings/api"
@@ -35,7 +34,7 @@ const BRAND_COLOR_FIELDS: Array<{
   {
     key: "brandPrimary",
     title: "主色",
-    description: "按钮、链接与强调色；留空使用 Claude 默认暖橙",
+    description: "按钮、链接与强调色；留空使用默认暖橙",
     previewFallback: "#C96A3A",
   },
   {
@@ -76,8 +75,11 @@ const readBrandColor = (settings: SystemSettings, key: BrandColorField) =>
   (settings[key] || "").trim().toUpperCase()
 
 /**
- * 品牌定制卡：文字 LOGO / 系统提示词 / 图片域名 + Brand Theme 六色覆盖，
- * draft/fieldChanged 模式；空字符串表示恢复默认主题色。
+ * 品牌与站点卡：主层只有网站名称与公开访问地址；
+ * 6 个主题色 Token 收进「主题配色」折叠区——它们属于设计系统覆盖，不是日常配置，
+ * 而且部分颜色只对浅色主题生效，混在名称旁边会让人以为改了就整体换肤。
+ *
+ * 保存失败必须可见：store 抛错 → toast 失败并保留草稿，只有成功才提示已保存。
  */
 export function BrandingCard({ settings, update }: BrandingCardProps) {
   const { toast } = useToast()
@@ -85,11 +87,9 @@ export function BrandingCard({ settings, update }: BrandingCardProps) {
     actorState: state.actorState,
     user: state.user,
   }))
-  const isAdmin = actorState === 'authenticated' && user?.role === 'ADMIN'
+  const isAdmin = actorState === "authenticated" && user?.role === "ADMIN"
   const [brandTextDraft, setBrandTextDraft] = useState("")
-  const [, setIsIMEComposing] = useState(false)
-  const [chatSystemPromptDraft, setChatSystemPromptDraft] = useState('')
-  const [siteBaseDraft, setSiteBaseDraft] = useState('')
+  const [siteBaseDraft, setSiteBaseDraft] = useState("")
   const [colorDrafts, setColorDrafts] = useState<Record<BrandColorField, string>>({
     brandPrimary: "",
     brandPrimaryForeground: "",
@@ -100,10 +100,9 @@ export function BrandingCard({ settings, update }: BrandingCardProps) {
   })
   const [saving, setSaving] = useState(false)
 
-  const resetDrafts = useCallback(() => {
-    setBrandTextDraft(settings.brandText || '')
-    setChatSystemPromptDraft(settings.chatSystemPrompt || '')
-    setSiteBaseDraft(settings.siteBaseUrl || '')
+  useEffect(() => {
+    setBrandTextDraft(settings.brandText || "")
+    setSiteBaseDraft(settings.siteBaseUrl || "")
     setColorDrafts({
       brandPrimary: readBrandColor(settings, "brandPrimary"),
       brandPrimaryForeground: readBrandColor(settings, "brandPrimaryForeground"),
@@ -114,32 +113,23 @@ export function BrandingCard({ settings, update }: BrandingCardProps) {
     })
   }, [settings])
 
-  useEffect(() => {
-    resetDrafts()
-  }, [resetDrafts])
-
-  const normalizedInitials = {
-    brandText: settings.brandText || '',
-    chatSystemPrompt: settings.chatSystemPrompt || '',
-    siteBaseUrl: (settings.siteBaseUrl || '').trim(),
-    colors: {
-      brandPrimary: readBrandColor(settings, "brandPrimary"),
-      brandPrimaryForeground: readBrandColor(settings, "brandPrimaryForeground"),
-      brandBackground: readBrandColor(settings, "brandBackground"),
-      brandSurface: readBrandColor(settings, "brandSurface"),
-      brandForeground: readBrandColor(settings, "brandForeground"),
-      brandMutedForeground: readBrandColor(settings, "brandMutedForeground"),
-    },
+  const initialSiteBase = (settings.siteBaseUrl || "").trim()
+  const initialColors: Record<BrandColorField, string> = {
+    brandPrimary: readBrandColor(settings, "brandPrimary"),
+    brandPrimaryForeground: readBrandColor(settings, "brandPrimaryForeground"),
+    brandBackground: readBrandColor(settings, "brandBackground"),
+    brandSurface: readBrandColor(settings, "brandSurface"),
+    brandForeground: readBrandColor(settings, "brandForeground"),
+    brandMutedForeground: readBrandColor(settings, "brandMutedForeground"),
   }
 
   const colorsChanged = BRAND_COLOR_FIELDS.some(
-    ({ key }) => normalizeHexDraft(colorDrafts[key]) !== normalizedInitials.colors[key],
+    ({ key }) => normalizeHexDraft(colorDrafts[key]) !== initialColors[key],
   )
 
   const fieldChanged =
-    brandTextDraft !== normalizedInitials.brandText ||
-    chatSystemPromptDraft !== normalizedInitials.chatSystemPrompt ||
-    siteBaseDraft.trim() !== normalizedInitials.siteBaseUrl ||
+    brandTextDraft !== (settings.brandText || '') ||
+    siteBaseDraft.trim() !== initialSiteBase ||
     colorsChanged
 
   const setColorDraft = (key: BrandColorField, value: string) => {
@@ -163,7 +153,6 @@ export function BrandingCard({ settings, update }: BrandingCardProps) {
     try {
       const payload: Partial<SystemSettings> = {
         brandText: brandTextDraft,
-        chatSystemPrompt: chatSystemPromptDraft,
         siteBaseUrl: siteBaseDraft.trim(),
       }
       for (const { key } of BRAND_COLOR_FIELDS) {
@@ -172,6 +161,12 @@ export function BrandingCard({ settings, update }: BrandingCardProps) {
       }
       await update(payload)
       toast({ title: '已保存品牌设置' })
+    } catch (error: any) {
+      toast({
+        title: '保存失败',
+        description: error?.response?.data?.error || error?.message || '品牌设置未能保存',
+        variant: 'destructive',
+      })
     } finally {
       setSaving(false)
     }
@@ -194,9 +189,60 @@ export function BrandingCard({ settings, update }: BrandingCardProps) {
   return (
     <FeatureCard
       icon={Type}
-      title="品牌定制"
-      description="自定义系统的品牌标识和外观"
+      title="品牌与站点"
+      description="站点名称、公开访问地址与主题配色"
       cardKey="branding:branding"
+      moreLabel="主题配色"
+      more={
+        <>
+          <p className="text-[13px] leading-relaxed text-muted-foreground">
+            留空恢复默认色；部分颜色仅对浅色主题生效，深色主题沿用自身对比度规则。
+          </p>
+          {BRAND_COLOR_FIELDS.map(({ key, title, description, previewFallback }) => {
+            const draft = colorDrafts[key]
+            const normalized = normalizeHexDraft(draft)
+            const pickerValue = isValidBrandHex(normalized) ? normalized : previewFallback
+            return (
+              <SettingRow key={key} title={title} description={description} htmlFor={key}>
+                {(descriptionId) => (
+                  <div className="flex w-full flex-wrap items-center justify-end gap-2">
+                    <Input
+                      aria-describedby={descriptionId}
+                      id={`${key}-picker`}
+                      type="color"
+                      aria-label={`${title}色板`}
+                      value={pickerValue}
+                      onChange={(e) => setColorDraft(key, e.target.value.toUpperCase())}
+                      className="h-10 w-14 cursor-pointer p-1"
+                      disabled={!isAdmin}
+                    />
+                    <Input
+                      id={key}
+                      type="text"
+                      value={draft}
+                      onChange={(e) => setColorDraft(key, e.target.value)}
+                      placeholder="#RRGGBB"
+                      spellCheck={false}
+                      className="min-w-0 flex-1 font-mono sm:w-[140px] sm:flex-none"
+                      disabled={!isAdmin}
+                      aria-label={`${title}十六进制`}
+                      aria-describedby={descriptionId}
+                    />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setColorDraft(key, "")}
+                      disabled={!isAdmin || !draft}
+                    >
+                      恢复默认
+                    </Button>
+                  </div>
+                )}
+              </SettingRow>
+            )
+          })}
+        </>
+      }
       footer={
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
           <Button onClick={handleSave} disabled={!fieldChanged || !isAdmin || saving}>
@@ -205,126 +251,50 @@ export function BrandingCard({ settings, update }: BrandingCardProps) {
         </div>
       }
     >
-      <div>
-        <SettingRow
-          title="文字 LOGO"
-          htmlFor="brandText"
-          description="显示在页面顶部的品牌名称，最多 40 个字符"
-          align="start"
-        >
-          {(descriptionId) => (
-            <div className="flex w-full flex-wrap items-center justify-end gap-2">
-              <Input aria-describedby={descriptionId}
-                id="brandText"
-                maxLength={40}
-                value={brandTextDraft}
-                placeholder="例如：AIChat 或公司名"
-                onChange={(e) => setBrandTextDraft(e.target.value)}
-                onCompositionStart={() => setIsIMEComposing(true)}
-                onCompositionEnd={() => setIsIMEComposing(false)}
-                className="w-full sm:w-[320px]"
-                disabled={!isAdmin}
-              />
-            </div>
-          )}
-        </SettingRow>
+      <SettingRow
+        title="品牌名"
+        htmlFor="brandText"
+        description="显示在页面顶部的站点名称，最多 40 个字符"
+      >
+        {(descriptionId) => (
+          <Input
+            aria-describedby={descriptionId}
+            id="brandText"
+            maxLength={40}
+            value={brandTextDraft}
+            placeholder="例如：AIChat 或公司名"
+            onChange={(e) => setBrandTextDraft(e.target.value)}
+            className="w-full sm:w-[320px]"
+            disabled={!isAdmin}
+          />
+        )}
+      </SettingRow>
 
-        <SettingRow
-          title="全局系统提示词"
-          htmlFor="chatSystemPrompt"
-          layout="stacked"
-          description="留空则不注入；会话未设置时自动继承（默认上限 12000 字符，可通过后端环境变量调整）"
-          align="start"
-        >
-          {(descriptionId) => (
-            <div className="w-full space-y-2">
-              <Textarea
-                id="chatSystemPrompt"
-                aria-describedby={`${descriptionId} prompt-precedence`}
-                value={chatSystemPromptDraft}
-                onChange={(e) => setChatSystemPromptDraft(e.target.value)}
-                placeholder="例如：你是一位专业助教，请使用简洁、结构化的回答。"
-                rows={4}
-                disabled={!isAdmin}
-              />
-              <p id="prompt-precedence" className="text-[13px] leading-relaxed text-muted-foreground">
-                {'生效顺序：会话 > 个人 > 全局；支持使用 {day time}（将替换为服务器当前时间）。三层均为空时默认提示词为“今天日期是{day time}”。'}
-              </p>
-            </div>
-          )}
-        </SettingRow>
-
-        <SettingRow
-          title="图片访问域名"
-          htmlFor="chatImageDomain"
-          layout="stacked"
-          description="用户上传图片的公开访问地址前缀（需包含协议）"
-          align="start"
-        >
-          {(descriptionId) => (
-            <div className="flex w-full flex-wrap items-center justify-end gap-2">
-              <Input aria-describedby={descriptionId}
-                id="chatImageDomain"
-                type="text"
-                value={siteBaseDraft}
-                onChange={(e) => setSiteBaseDraft(e.target.value)}
-                placeholder="例如：https://chat.example.com"
-                className="min-w-0 flex-1"
-                disabled={!isAdmin}
-              />
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={handleRefreshImageAttachments}
-                disabled={!isAdmin}
-              >刷新</Button>
-            </div>
-          )}
-        </SettingRow>
-
-        {BRAND_COLOR_FIELDS.map(({ key, title, description, previewFallback }) => {
-          const draft = colorDrafts[key]
-          const normalized = normalizeHexDraft(draft)
-          const pickerValue = isValidBrandHex(normalized) ? normalized : previewFallback
-          return (
-            <SettingRow key={key} title={title} description={description} htmlFor={key}>
-              {(descriptionId) => (
-                <div className="flex w-full flex-wrap items-center justify-end gap-2">
-                  <Input aria-describedby={descriptionId}
-                    id={`${key}-picker`}
-                    type="color"
-                    aria-label={`${title}色板`}
-                    value={pickerValue}
-                    onChange={(e) => setColorDraft(key, e.target.value.toUpperCase())}
-                    className="h-10 w-14 cursor-pointer p-1"
-                    disabled={!isAdmin}
-                  />
-                  <Input
-                    id={key}
-                    type="text"
-                    value={draft}
-                    onChange={(e) => setColorDraft(key, e.target.value)}
-                    placeholder="#RRGGBB"
-                    spellCheck={false}
-                    className="min-w-0 flex-1 font-mono sm:w-[140px] sm:flex-none"
-                    disabled={!isAdmin}
-                    aria-label={`${title}十六进制`}
-                    aria-describedby={descriptionId}
-                  />
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setColorDraft(key, "")}
-                    disabled={!isAdmin || !draft}
-                  >
-                    恢复默认
-                  </Button>
-                </div>
-              )}
-            </SettingRow>
-          )
-        })}
-      </div>
+      <SettingRow
+        title="图片访问域名"
+        htmlFor="chatImageDomain"
+        layout="stacked"
+        description="用户上传图片的公开访问地址前缀（需包含协议）"
+        align="start"
+      >
+        {(descriptionId) => (
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
+            <Input
+              aria-describedby={descriptionId}
+              id="chatImageDomain"
+              type="text"
+              value={siteBaseDraft}
+              onChange={(e) => setSiteBaseDraft(e.target.value)}
+              placeholder="例如：https://chat.example.com"
+              className="min-w-0 flex-1"
+              disabled={!isAdmin}
+            />
+            <Button size="sm" variant="secondary" onClick={handleRefreshImageAttachments} disabled={!isAdmin}>
+              刷新
+            </Button>
+          </div>
+        )}
+      </SettingRow>
     </FeatureCard>
   )
 }
