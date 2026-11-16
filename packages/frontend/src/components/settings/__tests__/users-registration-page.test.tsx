@@ -190,8 +190,8 @@ describe("UsersRegistrationPage", () => {
     // 注册策略 FeatureCard
     expect(screen.getByText("用户注册")).toBeInTheDocument()
     expect(screen.getByText("控制新用户的注册和访客访问")).toBeInTheDocument()
-    // 分区二标题 + 内嵌 SystemUsersPage 自带页头 → 至少 2 处
-    expect(screen.getAllByText("用户管理").length).toBeGreaterThanOrEqual(2)
+    // 用户管理只保留分区标题，避免嵌套页头重复。
+    expect(screen.getAllByText("用户管理")).toHaveLength(1)
     // 三行设置项
     expect(screen.getByText("开放用户注册")).toBeInTheDocument()
     expect(screen.getByText("匿名访客每日额度")).toBeInTheDocument()
@@ -246,6 +246,15 @@ describe("UsersRegistrationPage", () => {
     await waitFor(() => {
       expect(syncAnonymousQuotaMock).toHaveBeenCalledWith({ resetUsed: true })
     })
+  })
+
+  test("用户列表失败时提供重试，不同时呈现空数据", async () => {
+    const state = mockSystemUsers({ error: "用户列表加载失败", rows: [], sortedRows: [] })
+    render(<UsersRegistrationPage />)
+    expect(screen.getByRole("alert")).toHaveTextContent("用户列表加载失败")
+    expect(screen.queryByText("暂无用户数据")).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole("button", { name: "重试加载用户" }))
+    expect(state.refresh).toHaveBeenCalledTimes(1)
   })
 
   test("用户管理区渲染 mock 用户数据行", () => {

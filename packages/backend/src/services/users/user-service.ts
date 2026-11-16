@@ -27,18 +27,35 @@ const basicUserSelect = {
   rejectionReason: true,
 } as const
 
+// 只在本表内可数的关系走 Prisma _count；用户连接数需要跨 connectionGroups -> credentials
+// 两层统计（见 UserService.loadUserConnectionCounts），不能交给 User 的 _count。
 const userWithCountsSelect = {
   ...basicUserSelect,
   _count: {
     select: {
       chatSessions: true,
-      connections: true,
     },
   },
 } as const
 
 type BasicUser = Prisma.UserGetPayload<{ select: typeof basicUserSelect }>
-type UserWithCounts = Prisma.UserGetPayload<{ select: typeof userWithCountsSelect }>
+type UserWithSessionCounts = Prisma.UserGetPayload<{ select: typeof userWithCountsSelect }>
+
+/**
+ * 管理端用户列表/详情的计数口径。
+ *
+ * connections 是「连接凭据」数量（connections 表行数，即该用户连接组下的 API Key 条数），
+ * 不是「连接组」数量，两者不得互相顶替
+ * （见 GLOSSARY「Connection Group / Connection Credential」、ADR-0034）。
+ */
+export interface UserCounts {
+  chatSessions: number
+  connections: number
+}
+
+export type UserWithCounts = Omit<UserWithSessionCounts, '_count'> & {
+  _count: UserCounts
+}
 
 export type ListStatus = 'PENDING' | 'ACTIVE' | 'DISABLED'
 
@@ -146,7 +163,7 @@ export class UserService {
     ])
 
     return {
-      users,
+      users: await this.attachCounts(users),
       pagination: {
         page,
         limit,
@@ -164,7 +181,8 @@ export class UserService {
     if (!user) {
       throw new UserServiceError('User not found', 404)
     }
-    return user
+    const [withCounts] = await this.attachCounts([user])
+    return withCounts
   }
 
   async getUserQuota(id: number): Promise<{ user: { id: number; username: string; role: 'ADMIN' | 'USER' }; quota: UsageQuotaSnapshot }> {
@@ -409,6 +427,44 @@ export class UserService {
       user: targetUser,
       quota: snapshot,
     }
+  }
+
+  /**
+   * 批量统计用户的连接凭据数：一次 connectionGroup 查询取回所有用户的组及其
+   * 组内 credentials 计数再按 owner 累加，避免按用户 N+1 次 count。
+   *
+   * 只数 connections 表行（凭据），不把连接组数量当连接数量。
+   */
+  private async loadUserConnectionCounts(userIds: number[]): Promise<Map<number, number>> {
+    const counts = new Map<number, number>()
+    if (userIds.length === 0) return counts
+
+    const groups = await this.prisma.connectionGroup.findMany({
+      where: { ownerUserId: { in: userIds } },
+      select: {
+        ownerUserId: true,
+        _count: { select: { credentials: true } },
+      },
+    })
+
+    for (const group of groups) {
+      // ownerUserId 为 null 的是系统级连接组，不属于任何用户
+      if (group.ownerUserId === null) continue
+      counts.set(group.ownerUserId, (counts.get(group.ownerUserId) ?? 0) + group._count.credentials)
+    }
+
+    return counts
+  }
+
+  private async attachCounts(users: UserWithSessionCounts[]): Promise<UserWithCounts[]> {
+    const connectionCounts = await this.loadUserConnectionCounts(users.map((user) => user.id))
+    return users.map((user) => ({
+      ...user,
+      _count: {
+        chatSessions: user._count.chatSessions,
+        connections: connectionCounts.get(user.id) ?? 0,
+      },
+    }))
   }
 
   private normalizePagination(page: number, limit: number) {

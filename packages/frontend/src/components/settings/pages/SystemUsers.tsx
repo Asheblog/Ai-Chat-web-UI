@@ -1,5 +1,5 @@
 "use client"
-import { Users } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { useSystemUsers } from "@/components/settings/system-users/use-system-users"
 import { UserSearchPanel } from "@/components/settings/system-users/user-search-panel"
 import { UserBulkActionsBar } from "@/components/settings/system-users/user-bulk-actions-bar"
@@ -67,17 +67,7 @@ export function SystemUsersPage() {
 
   return (
     <div className="space-y-4">
-      <section className="v2-panel p-4 sm:p-5">
-        <div className="mb-4 flex items-start gap-3 border-b border-border pb-4">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface-subtle text-ink-tertiary">
-            <Users className="h-5 w-5" />
-          </span>
-          <div>
-            <h2 className="v2-section-title">用户管理</h2>
-            <p className="v2-muted-line mt-1">管理系统用户、审批注册、调整权限和额度。</p>
-          </div>
-        </div>
-
+      <section aria-label="筛选用户">
         <UserSearchPanel
           searchDraft={searchDraft}
           setSearchDraft={setSearchDraft}
@@ -92,8 +82,11 @@ export function SystemUsersPage() {
       </section>
 
       {error && (
-        <div className="text-sm text-destructive px-4 py-3 bg-destructive/10 rounded border border-destructive/20">
-          {error}
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <p>{error}</p>
+          <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
+            重试加载用户
+          </Button>
         </div>
       )}
 
@@ -108,7 +101,7 @@ export function SystemUsersPage() {
 
       <div className="space-y-3">
         <h2 className="v2-section-title">用户列表</h2>
-        <UserTable
+        {(!error || loading || rows.length > 0) && <UserTable
           loading={loading}
           rows={rows}
           sortedRows={sortedRows}
@@ -130,7 +123,7 @@ export function SystemUsersPage() {
           sortField={sortField}
           sortOrder={sortOrder}
           toggleSort={toggleSort}
-        />
+        />}
       </div>
 
       <UserQuotaDialog
