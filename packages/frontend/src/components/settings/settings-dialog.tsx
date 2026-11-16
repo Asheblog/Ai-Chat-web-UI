@@ -343,6 +343,7 @@ export function SettingsDialog({ open, onOpenChange, defaultTab = "personal" }: 
         ) : (
           <SettingsShell
             mode="nested"
+            rootLayout="sections"
             title="设置"
             tree={filteredTree}
             activeMain={activeMain}

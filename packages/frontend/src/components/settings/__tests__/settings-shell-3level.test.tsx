@@ -60,6 +60,46 @@ afterEach(() => {
 })
 
 describe("SettingsShell 3 级嵌套导航", () => {
+  test("分区与目录分层，所有折叠箭头位于行尾的固定列", async () => {
+    render(
+      <SettingsShell mode="nested" rootLayout="sections" tree={threeLevelTree} activeMain="system" activeSub="overview"
+        onChangeMain={vi.fn()} onChangeSub={vi.fn()}>
+        <div>content</div>
+      </SettingsShell>
+    )
+    const section = screen.getByRole("button", { name: "系统设置" })
+    const directory = await screen.findByRole("button", { name: "配置中心" })
+    expect(section).toHaveAttribute("data-nav-section")
+    expect(screen.getByRole("heading", { name: "系统设置", level: 3 })).toContainElement(section)
+    expect(directory).not.toHaveAttribute("data-nav-section")
+    for (const button of [section, directory]) {
+      expect(button.lastElementChild).toHaveAttribute("data-nav-chevron")
+      expect(button.querySelector("[data-nav-chevron]")).toHaveClass("w-3.5", "shrink-0")
+    }
+    const leaf = screen.getByRole("button", { name: "概览" })
+    expect(leaf.parentElement).toHaveClass("border-l")
+    expect(leaf.querySelector("[data-nav-chevron]")).toBeNull()
+    expect(findIconSpan(leaf)).toBeNull()
+    expect(findIconSpan(directory)).not.toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "个人设置" }))
+    // 无图标的个人子项也保留同宽图标列，不退回一级分区标题的位置。
+    expect(findIconSpan(screen.getByRole("button", { name: "关于" }))).not.toBeNull()
+  })
+
+  test("独立页从目录开始，不套用分区样式，子项统一无图标", async () => {
+    render(
+      <SettingsShell mode="nested" tree={threeLevelTree[1].children!} activeMain="configuration-center" activeSub="overview"
+        onChangeMain={vi.fn()} onChangeSub={vi.fn()}>
+        <div>content</div>
+      </SettingsShell>
+    )
+    const directory = screen.getByRole("button", { name: "配置中心" })
+    expect(directory).not.toHaveAttribute("data-nav-section")
+    expect(findIconSpan(directory)).not.toBeNull()
+    expect(findIconSpan(await screen.findByRole("button", { name: "概览" }))).toBeNull()
+    expect(findIconSpan(screen.getByRole("button", { name: "连接管理" }))).toBeNull()
+  })
+
   test("渲染顶级主类（个人设置、系统设置）", () => {
     render(
       <SettingsShell
