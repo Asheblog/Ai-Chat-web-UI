@@ -87,7 +87,8 @@ export function useTextareaAutoResize(
       for (const property of SHARED_MIRROR_PROPERTIES) {
         mirror.style[property] = computed[property]
       }
-      mirror.style.width = `${el.clientWidth || parseFloat(computed.width) || 0}px`
+      // Measure at the scrollbar-free width, so a shorter draft can leave overflow.
+      if (!computed.width.endsWith('px')) mirror.style.width = `${el.offsetWidth}px`
 
       const contentHeight = nextValue.length === 0 ? minHeight : mirror.scrollHeight
       const nextHeight = Math.max(minHeight, Math.min(contentHeight, maxHeight))
@@ -116,17 +117,17 @@ export function useTextareaAutoResize(
     const onResize = () => scheduleResize()
     window.addEventListener('resize', onResize)
     const el = textareaRef.current
-    let lastWidth = el?.clientWidth ?? 0
+    let lastWidth = el?.offsetWidth ?? 0
     const observer =
       typeof ResizeObserver !== 'undefined' && el
         ? new ResizeObserver(() => {
-            const width = el.clientWidth
+            const width = el.offsetWidth
             if (width === lastWidth) return
             lastWidth = width
             scheduleResize()
           })
         : null
-    observer?.observe(el!)
+    observer?.observe(el!, { box: 'border-box' })
     return () => {
       window.removeEventListener('resize', onResize)
       observer?.disconnect()

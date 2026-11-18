@@ -196,8 +196,7 @@ export function DesktopComposer({
               disabled={textareaDisabled}
               className={cn(
                 COMPOSER_TEXTAREA_BASE_CLASS,
-                'min-h-[64px] max-h-[200px] w-full lg:min-h-[68px]',
-                showExpand && 'pr-12',
+                'min-h-[64px] max-h-[200px] w-full lg:min-h-[68px] pr-12',
               )}
               rows={1}
             />
