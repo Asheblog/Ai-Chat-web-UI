@@ -83,6 +83,20 @@ export const resolveEffortForModel = (
   return null
 }
 
+/** Keep selectable levels separate from the values forwarded by the chat adapter. */
+export const describeModelEffort = (context: EffortContext) => {
+  const efforts = resolveSupportedEfforts(context)
+  const appliedEfforts: Partial<Record<EffortValue, EffortValue>> = {}
+  // The current Gemini chat adapter does not serialize a thinking level.
+  if (context.provider !== 'google_genai') {
+    for (const value of OPENAI_EFFORTS) {
+      const applied = resolveEffortForModel(context, value)
+      if (applied) appliedEfforts[value] = applied
+    }
+  }
+  return { efforts, appliedEfforts }
+}
+
 /**
  * 思考模式下不发送采样温度：DeepSeek 文档明确 thinking 模式忽略 temperature（不报错也不生效）。
  * 其余协议没有可引用的"思考模式禁止 temperature"证据，保持发送。

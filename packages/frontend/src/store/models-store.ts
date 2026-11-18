@@ -25,6 +25,8 @@ export type ModelItem = {
   }
   /** 该连接协议/方言可下发的思考强度；缺省表示按协议全量。 */
   efforts?: string[]
+  /** Requested level to level forwarded by the chat adapter. */
+  appliedEfforts?: Partial<Record<string, string>>
   contextWindow?: number | null
   maxOutputTokens?: number | null
   temperature?: number | null

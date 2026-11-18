@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { Check, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { ModelReasoningEffort } from './model-selector-types'
+import type { ModelItem } from '@/store/models-store'
+import type { ModelReasoningControl, ModelReasoningEffort } from './model-selector-types'
 
 interface ModelReasoningEffortOption {
   value: ModelReasoningEffort
@@ -19,8 +20,30 @@ export const MODEL_REASONING_EFFORT_OPTIONS: readonly ModelReasoningEffortOption
   { value: 'max', label: 'Max' },
 ]
 
-export const formatModelReasoningEffortLabel = (value: ModelReasoningEffort): string =>
-  MODEL_REASONING_EFFORT_OPTIONS.find(option => option.value === value)?.label ?? '默认'
+const EXTRA_EFFORT_LABELS = { off: '已关闭', none: 'None', minimal: 'Minimal' } as const
+
+export type DisplayedReasoningEffort = ModelReasoningEffort | keyof typeof EXTRA_EFFORT_LABELS
+
+export const formatModelReasoningEffortLabel = (value: DisplayedReasoningEffort): string =>
+  MODEL_REASONING_EFFORT_OPTIONS.find(option => option.value === value)?.label ??
+  EXTRA_EFFORT_LABELS[value as keyof typeof EXTRA_EFFORT_LABELS] ?? '默认'
+
+export function getDisplayedReasoningEffort(
+  control: ModelReasoningControl,
+  systemEffort: string | undefined,
+  model: ModelItem | undefined,
+): DisplayedReasoningEffort {
+  if (control.disabled) return 'off'
+  const requested = (control.value === 'unset' ? systemEffort : control.value)?.trim().toLowerCase()
+  if (!requested || requested === 'unset') return 'unset'
+  const applied = model?.appliedEfforts
+    ? model.appliedEfforts[requested]
+    : !model?.efforts || model.efforts.includes(requested) ? requested : undefined
+  if (MODEL_REASONING_EFFORT_OPTIONS.some(option => option.value === applied)) {
+    return applied as ModelReasoningEffort
+  }
+  return applied === 'none' || applied === 'minimal' ? applied : 'unset'
+}
 
 /**
  * 按模型可下发的强度裁剪选项：默认项始终保留；当前值即使不被支持也保留，避免界面丢失用户已有状态。
@@ -38,7 +61,7 @@ export const filterEffortOptions = (
 }
 
 interface ModelSelectorEffortFooterProps {
-  value: ModelReasoningEffort
+  value: DisplayedReasoningEffort
   disabled?: boolean
   disabledReason?: string
   onOpen: () => void

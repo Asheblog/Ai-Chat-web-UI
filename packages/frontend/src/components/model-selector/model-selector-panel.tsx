@@ -1,9 +1,10 @@
 "use client"
 
 import type { ModelSelectorProps } from './model-selector-types'
+import { useSettingsStore } from '@/store/settings-store'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
-import { ModelSelectorEffortFooter, ModelSelectorEffortList } from './model-selector-effort'
+import { getDisplayedReasoningEffort, ModelSelectorEffortFooter, ModelSelectorEffortList } from './model-selector-effort'
 import { ModelSelectorList } from './model-selector-list'
 import { ModelSelectorSearchControls } from './model-selector-search-controls'
 import { ModelSelectorTrigger } from './model-selector-trigger'
@@ -16,6 +17,10 @@ export function ModelSelector({
   dropdownDirection = 'auto', reasoningControl, open, onOpenChange, defaultView, formatTriggerName,
 }: ModelSelectorProps) {
   const state = useModelSelector({ selectedModelId, onModelChange, reasoningControl, open, onOpenChange, defaultView })
+  const systemEffort = useSettingsStore(settings => reasoningControl
+    ? settings.reasoningEffortFallback ?? settings.systemSettings?.openaiReasoningEffort
+    : undefined)
+  const displayedEffort = reasoningControl && getDisplayedReasoningEffort(reasoningControl, systemEffort, state.selected)
   const forceBottomDropdown = dropdownDirection === 'bottom'
   const combined = Boolean(reasoningControl)
   const showList = !(state.error && state.allModels.length === 0 && !state.loading)
@@ -51,7 +56,7 @@ export function ModelSelector({
           )}
           {reasoningControl && (
             <ModelSelectorEffortFooter
-              value={reasoningControl.value}
+              value={displayedEffort ?? 'unset'}
               disabled={reasoningControl.disabled}
               disabledReason={reasoningControl.disabledReason}
               onOpen={state.showEffort}
@@ -64,7 +69,7 @@ export function ModelSelector({
   const trigger = (
     <ModelSelectorTrigger
       ref={state.triggerRef} open={state.open} selected={state.selected} disabled={disabled}
-      className={className} displayVariant={variant} selectorSize={size} effort={reasoningControl?.value}
+      className={className} displayVariant={variant} selectorSize={size} effort={displayedEffort}
       formatTriggerName={formatTriggerName}
     />
   )

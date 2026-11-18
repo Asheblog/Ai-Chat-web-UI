@@ -16,6 +16,7 @@ type SystemSettingsUpdatePayload = Partial<SystemSettings> & {
 }
 
 interface SettingsStore extends SettingsState {
+  reasoningEffortFallback?: string
   fetchSystemSettings: () => Promise<void>
   updateSystemSettings: (settings: SystemSettingsUpdatePayload) => Promise<void>
   fetchPublicBranding: () => Promise<boolean>
@@ -116,6 +117,7 @@ export const useSettingsStore = create<SettingsStore>()(
               const normalizedBrand = normalizeBrandText(merged.brandText)
               set((state) => ({
                 systemSettings: merged,
+                reasoningEffortFallback: response.reasoningEffortFallback,
                 publicBrandText: normalizedBrand ?? state.publicBrandText,
                 publicBrandTheme: themeFromSystemSettings(merged),
                 isLoading: false,
@@ -143,6 +145,7 @@ export const useSettingsStore = create<SettingsStore>()(
 
           set((state) => ({
             systemSettings: updatedSettings,
+            reasoningEffortFallback: response.reasoningEffortFallback,
             publicBrandText: normalizedBrand ?? state.publicBrandText,
             publicBrandTheme: themeFromSystemSettings(updatedSettings),
             isLoading: false,

@@ -4,8 +4,7 @@ import type { ModelItem } from '@/store/models-store'
 import { cn } from '@/lib/utils'
 import { formatModelOptionLabel } from '@/lib/model-display'
 import { formatModelSelectorSource } from './model-selector-utils'
-import { formatModelReasoningEffortLabel } from './model-selector-effort'
-import type { ModelReasoningEffort } from './model-selector-types'
+import { formatModelReasoningEffortLabel, type DisplayedReasoningEffort } from './model-selector-effort'
 import { Button } from '@/components/ui/button'
 
 interface ModelSelectorTriggerProps extends Omit<React.ComponentPropsWithoutRef<typeof Button>, 'variant' | 'children'> {
@@ -13,7 +12,7 @@ interface ModelSelectorTriggerProps extends Omit<React.ComponentPropsWithoutRef<
   selected?: ModelItem
   displayVariant: 'default' | 'inline'
   selectorSize: 'sm' | 'md' | 'lg'
-  effort?: ModelReasoningEffort
+  effort?: DisplayedReasoningEffort
   /** 只影响可见文本；完整名称仍在 title、列表与可访问描述里。 */
   formatTriggerName?: (name: string) => string
 }

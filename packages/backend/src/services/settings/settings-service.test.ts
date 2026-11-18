@@ -94,6 +94,16 @@ describe('SettingsService', () => {
     })
   })
 
+  it('exposes the effort fallback to signed-in users without changing their composer defaults', async () => {
+    const { service, prisma } = buildService()
+    prisma.systemSetting.findMany.mockResolvedValueOnce([
+      { key: 'openai_reasoning_effort', value: 'max' },
+    ])
+    const settings = await service.getSystemSettings({ ...adminActor, role: 'USER' })
+    expect(settings).toMatchObject({ reasoning_effort_fallback: 'max' })
+    expect(settings).not.toHaveProperty('openai_reasoning_effort')
+  })
+
   it('returns the same effective defaults as the chat runtime and exposes installation policy', async () => {
     const { service, prisma } = buildService()
     prisma.systemSetting.findMany.mockResolvedValueOnce([])

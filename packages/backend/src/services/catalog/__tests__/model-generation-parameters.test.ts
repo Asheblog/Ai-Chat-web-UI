@@ -1,4 +1,5 @@
 import {
+  describeModelEffort,
   resolveEffortForModel,
   resolveSupportedEfforts,
   shouldSendTemperature,
@@ -41,6 +42,17 @@ describe('resolveEffortForModel', () => {
     expect(resolveEffortForModel({ provider: 'anthropic', rawModelId: 'claude-opus-5-5' }, 'none')).toBeNull()
     expect(resolveEffortForModel({ provider: 'google_genai' }, 'none')).toBeNull()
     expect(resolveEffortForModel({ provider: 'openai' }, 'ultra')).toBeNull()
+  })
+})
+
+it('exposes protocol conversions for the model picker separately from selectable levels', () => {
+  expect(describeModelEffort({ provider: 'openai', thinkingDialect: 'deepseek_compat' })).toEqual({
+    efforts: ['low', 'high', 'max'],
+    appliedEfforts: { minimal: 'low', low: 'low', medium: 'high', high: 'high', xhigh: 'high', max: 'max' },
+  })
+  expect(describeModelEffort({ provider: 'google_genai' })).toEqual({
+    efforts: ['minimal', 'low', 'medium', 'high', 'xhigh'],
+    appliedEfforts: {},
   })
 })
 

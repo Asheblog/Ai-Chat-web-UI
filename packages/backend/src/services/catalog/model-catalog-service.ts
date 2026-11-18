@@ -16,7 +16,7 @@ import {
   setModelParameterOverride,
   type ModelOverrideField,
 } from './model-override'
-import { resolveSupportedEfforts } from './model-generation-parameters'
+import { describeModelEffort } from './model-generation-parameters'
 import {
   decideModelAccessForActor,
   getModelAccessDefaults as defaultGetModelAccessDefaults,
@@ -259,7 +259,7 @@ export class ModelCatalogService {
             access: overrideState.access,
             any: overrideState.any,
           },
-          efforts: resolveSupportedEfforts({
+          ...describeModelEffort({
             provider: group.provider as ProviderType,
             thinkingDialect: group.thinkingDialect,
             rawModelId: row.rawId,

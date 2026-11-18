@@ -523,6 +523,7 @@ export class SettingsService {
         context_compression_enabled: formatted.context_compression_enabled,
         context_compression_threshold_ratio: formatted.context_compression_threshold_ratio,
         context_compression_tail_messages: formatted.context_compression_tail_messages,
+        reasoning_effort_fallback: formatted.openai_reasoning_effort,
         chat_max_concurrent_streams: formatted.chat_max_concurrent_streams,
         // 标题总结设置（所有用户可见）
         title_summary_enabled: formatted.title_summary_enabled,

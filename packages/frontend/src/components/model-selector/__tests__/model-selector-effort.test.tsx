@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { parseSystemSettingsPayload } from '@aichat/shared/settings-codec'
 import userEvent from '@testing-library/user-event'
 import { MODEL_REASONING_EFFORTS, ModelSelector } from '@/components/model-selector'
 import { MODEL_REASONING_EFFORT_OPTIONS, filterEffortOptions } from '@/components/model-selector/model-selector-effort'
 import { modelKeyFor } from '@/store/model-preference-store'
 import { useModelsStore, type ModelItem } from '@/store/models-store'
+import { useSettingsStore } from '@/store/settings-store'
 import {
   duplicate, efforts, effortOption, longName, prepareSelectorTest, primary, viewport, type Effort,
 } from './model-selector-fixtures'
@@ -40,7 +42,7 @@ async function openCombined(props: CombinedHarnessProps = {}) {
 }
 
 beforeEach(prepareSelectorTest)
-afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); useSettingsStore.setState({ systemSettings: null, reasoningEffortFallback: undefined }) })
 
 describe('ModelSelector combined model and reasoning effort', () => {
   it('echoes the chosen model and its effort in one trigger', () => {
@@ -55,6 +57,43 @@ describe('ModelSelector combined model and reasoning effort', () => {
     render(<CombinedHarness initialEffort="unset" />)
     const trigger = screen.getByRole('combobox', { name: '选择模型' })
     expect(trigger).toHaveTextContent('默认')
+    expect(trigger).not.toHaveTextContent('Max')
+  })
+
+  it('displays the inherited effort without selecting it as a conversation override', async () => {
+    useSettingsStore.setState({ systemSettings: parseSystemSettingsPayload({ openai_reasoning_effort: 'max' }) })
+    const onEffortChange = vi.fn()
+    const { user } = await openCombined({ onEffortChange })
+    const trigger = screen.getByRole('combobox', { name: '选择模型' })
+    expect(trigger).toHaveTextContent('Max')
+    expect(trigger).not.toHaveTextContent('默认')
+    const footer = screen.getByRole('button', { name: '思考强度，当前 Max' })
+    await user.click(footer)
+    const list = screen.getByRole('list', { name: '思考强度选项' })
+    expect(within(list).getByRole('button', { name: /^默认/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(list).getByRole('button', { name: 'Max' })).toHaveAttribute('aria-pressed', 'false')
+    expect(onEffortChange).not.toHaveBeenCalled()
+    act(() => useSettingsStore.setState({ systemSettings: parseSystemSettingsPayload({ openai_reasoning_effort: 'high' }) }))
+    expect(trigger).toHaveTextContent('High')
+    await user.click(within(list).getByRole('button', { name: 'Max' }))
+    expect(trigger).toHaveTextContent('Max')
+    expect(onEffortChange).toHaveBeenCalledExactlyOnceWith('max')
+  })
+
+  it.each([
+    { fallback: 'xhigh', appliedEfforts: { xhigh: 'high' }, label: 'High' },
+    { fallback: 'max', appliedEfforts: {}, label: '默认' },
+  ])('shows $label for a signed-in user when the fallback is $fallback', ({ fallback, appliedEfforts, label }) => {
+    useModelsStore.setState({ models: [{ ...primary, efforts: ['low', 'high', 'max'], appliedEfforts }] })
+    useSettingsStore.setState({ reasoningEffortFallback: fallback })
+    render(<CombinedHarness />)
+    expect(screen.getByRole('combobox', { name: '选择模型' })).toHaveTextContent(label)
+  })
+
+  it('does not display a pending preference as an effective level when thinking is off', () => {
+    render(<CombinedHarness initialEffort="max" effortDisabled />)
+    const trigger = screen.getByRole('combobox', { name: '选择模型' })
+    expect(trigger).toHaveTextContent('已关闭')
     expect(trigger).not.toHaveTextContent('Max')
   })
 

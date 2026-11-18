@@ -24,6 +24,7 @@ export const getSystemSettings = async () => {
   const raw = settingsRes.data.data || {}
   return {
     data: parseSystemSettingsPayload(raw),
+    reasoningEffortFallback: typeof raw.reasoning_effort_fallback === 'string' ? raw.reasoning_effort_fallback : undefined,
   }
 }
 
