@@ -64,8 +64,8 @@ function DualHarness({ value, active }: { value: string; active: 'mobile' | 'des
   )
 }
 
-const setClientWidth = (element: HTMLElement, width: number) => {
-  Object.defineProperty(element, 'clientWidth', { configurable: true, value: width })
+const setLayoutWidth = (element: HTMLElement, width: number) => {
+  Object.defineProperty(element, 'offsetWidth', { configurable: true, value: width })
 }
 
 describe('useTextareaAutoResize', () => {
@@ -86,7 +86,7 @@ describe('useTextareaAutoResize', () => {
   it('measures through an offscreen mirror and keeps empty input at the computed minimum', async () => {
     const { getByTestId } = render(<Harness value="" />)
     const textarea = getByTestId('composer-textarea') as HTMLTextAreaElement
-    setClientWidth(textarea, 120)
+    setLayoutWidth(textarea, 120)
 
     await waitFor(() => expect(document.querySelector('[data-composer-textarea-mirror="true"]')).not.toBeNull())
     await waitFor(() => expect(textarea.style.height).toBe('40px'))
@@ -95,7 +95,7 @@ describe('useTextareaAutoResize', () => {
   it('grows, shrinks and caps overflow without rewriting unchanged heights', async () => {
     const { getByTestId, rerender } = render(<Harness value={'第一行\n第二行'} />)
     const textarea = getByTestId('composer-textarea') as HTMLTextAreaElement
-    setClientWidth(textarea, 120)
+    setLayoutWidth(textarea, 120)
 
     await waitFor(() => expect(textarea.style.height).toBe('40px'))
 
@@ -111,10 +111,31 @@ describe('useTextareaAutoResize', () => {
     expect(getByTestId('show-expand')).toHaveTextContent('true')
   })
 
+  it('returns to the same height when a draft fits without its previous scrollbar', async () => {
+    const draft = 'abcdefghijklmnop'
+    const { getByTestId, rerender } = render(<Harness value={draft} maxHeight={60} />)
+    const textarea = getByTestId('composer-textarea') as HTMLTextAreaElement
+    Object.defineProperty(textarea, 'offsetWidth', { configurable: true, value: 190 })
+    Object.defineProperty(textarea, 'clientWidth', {
+      configurable: true,
+      get: () => getByTestId('show-expand').textContent === 'true' ? 175 : 190,
+    })
+
+    await waitFor(() => expect(textarea.style.height).toBe('40px'))
+
+    rerender(<Harness value={draft.repeat(2)} maxHeight={60} />)
+    await waitFor(() => expect(getByTestId('show-expand')).toHaveTextContent('true'))
+    expect(textarea.style.height).toBe('60px')
+
+    rerender(<Harness value={draft} maxHeight={60} />)
+    await waitFor(() => expect(textarea.style.height).toBe('40px'))
+    expect(getByTestId('show-expand')).toHaveTextContent('false')
+  })
+
   it('coalesces value changes into one measurement and remeasures after width changes', async () => {
     const { getByTestId, rerender } = render(<Harness value="a" />)
     const textarea = getByTestId('composer-textarea') as HTMLTextAreaElement
-    setClientWidth(textarea, 120)
+    setLayoutWidth(textarea, 120)
     await waitFor(() => expect(textarea.style.height).toBe('40px'))
 
     const mirror = document.querySelector('[data-composer-textarea-mirror="true"]') as HTMLElement
@@ -135,7 +156,7 @@ describe('useTextareaAutoResize', () => {
     rerender(<Harness value="abcd" />)
     await waitFor(() => expect(measureCount).toBe(1))
 
-    setClientWidth(textarea, 200)
+    setLayoutWidth(textarea, 200)
     act(() => {
       window.dispatchEvent(new Event('resize'))
     })
@@ -153,7 +174,7 @@ describe('useTextareaAutoResize', () => {
   it('keeps the mirror intact across Chinese IME composition and paste bursts', async () => {
     const { getByTestId, rerender } = render(<Harness value="" />)
     const textarea = getByTestId('composer-textarea') as HTMLTextAreaElement
-    setClientWidth(textarea, 120)
+    setLayoutWidth(textarea, 120)
     await waitFor(() => expect(textarea.style.height).toBe('40px'))
 
     rerender(<Harness value="ni" />)
@@ -187,13 +208,13 @@ describe('useTextareaAutoResize', () => {
 
     const { getByTestId } = render(<Harness value={'abcdefghijklmnop'} />)
     const textarea = getByTestId('composer-textarea') as HTMLTextAreaElement
-    setClientWidth(textarea, 120)
+    setLayoutWidth(textarea, 120)
     await waitFor(() => expect(textarea.style.height).toBe('80px'))
 
     const observer = observers.find((entry) => entry.targets.includes(textarea))
     expect(observer).toBeTruthy()
 
-    setClientWidth(textarea, 200)
+    setLayoutWidth(textarea, 200)
     act(() => {
       observer!.callback()
     })
@@ -222,11 +243,11 @@ describe('useTextareaAutoResize', () => {
 
     const { getByTestId, unmount } = render(<Harness value={'abcdefghijklmnop'} />)
     const textarea = getByTestId('composer-textarea') as HTMLTextAreaElement
-    setClientWidth(textarea, 120)
+    setLayoutWidth(textarea, 120)
     await waitFor(() => expect(textarea.style.height).toBe('80px'))
     expect(listeners.size).toBe(1)
 
-    setClientWidth(textarea, 200)
+    setLayoutWidth(textarea, 200)
     act(() => {
       listeners.forEach((listener) => listener())
     })
@@ -242,8 +263,8 @@ describe('useTextareaAutoResize', () => {
     const { getByTestId, rerender } = render(<DualHarness value={value} active="mobile" />)
     const mobile = getByTestId('mobile-textarea') as HTMLTextAreaElement
     const desktop = getByTestId('desktop-textarea') as HTMLTextAreaElement
-    setClientWidth(mobile, 120)
-    setClientWidth(desktop, 120)
+    setLayoutWidth(mobile, 120)
+    setLayoutWidth(desktop, 120)
 
     await waitFor(() => expect(mobile.style.height).toBe('80px'))
     expect(desktop.style.height).toBe('')

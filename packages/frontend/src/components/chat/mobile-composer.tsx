@@ -194,8 +194,7 @@ export function MobileComposer({
             onCompositionEnd={onCompositionEnd}
             className={cn(
               COMPOSER_TEXTAREA_BASE_CLASS,
-              'min-h-[64px] max-h-[220px] w-full px-0 py-0',
-              showExpand && 'pr-11',
+              'min-h-[64px] max-h-[220px] w-full px-0 py-0 pr-11',
             )}
             rows={1}
             disabled={isStreaming}
