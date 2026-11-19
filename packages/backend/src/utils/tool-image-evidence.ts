@@ -1,4 +1,4 @@
-/** Visual evidence from a read_url result, never a user attachment. */
+/** Visual evidence from a web tool result, never a user attachment. */
 export interface ToolImageEvidence {
   kind: 'page' | 'resource'
   images: Array<{ sourceUrl: string; title: string; imageUrl: string; dataUrl: string; alt?: string }>
