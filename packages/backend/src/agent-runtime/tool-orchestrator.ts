@@ -137,6 +137,7 @@ export interface ToolOrchestratorParams {
     iteration: number
     messages: any[]
   }) => MaybePromise<boolean>
+  onOptionalImageRetry?: (details: { iteration: number; removedMessageCount: number }) => MaybePromise<void>
   includeReasoningInToolMessage?: boolean
   emptyContentErrorMessage?: string
 }
@@ -160,6 +161,9 @@ export async function runToolOrchestration(
   const budgetBehavior: ToolBudgetExhaustedBehavior =
     params.onBudgetExhausted === 'finish' ? 'finish' : 'error'
   const workingMessages = params.initialMessages.map((msg) => ({ ...msg }))
+  // Track only tool-provided image content, including when context guards copy message wrappers.
+  const optionalImageContents = new WeakSet<unknown[]>()
+  let optionalImageRetryUsed = false
   const maxToolRounds = normalizeMaxToolRounds(params.maxIterations)
   let toolSchema: ToolSchema = resolveToolSchema({
     provider,
@@ -223,7 +227,22 @@ export async function runToolOrchestration(
       onUsage: params.onUsage,
       onStreamChunk: params.onStreamChunk,
       onFirstResponseEvent: params.onFirstResponseEvent,
-      onTurnError: params.onTurnError,
+      onTurnError: async (turn) => {
+        if (!optionalImageRetryUsed && isUpstreamImageRejection(turn.error)) {
+          const retainedMessages = turn.messages.filter(
+            (msg) => !optionalImageContents.has(msg.content),
+          )
+          const removedMessageCount = turn.messages.length - retainedMessages.length
+          if (removedMessageCount > 0) {
+            params.checkAbort?.()
+            optionalImageRetryUsed = true
+            turn.messages.splice(0, turn.messages.length, ...retainedMessages)
+            await params.onOptionalImageRetry?.({ iteration: turn.iteration, removedMessageCount })
+            return true
+          }
+        }
+        return (await params.onTurnError?.(turn)) ?? false
+      },
       checkAbort: params.checkAbort,
     })
     toolSchema = turn.schema
@@ -308,7 +327,6 @@ export async function runToolOrchestration(
             name: result.value.toolName,
             content: result.value.message.content,
           })
-          appendFollowupMessages(workingMessages, result.value.followupMessages)
         } else if (toolSchema === 'text') {
           workingMessages.push(
             buildTextToolResultMessage({
@@ -316,10 +334,23 @@ export async function runToolOrchestration(
               content: result.value.message.content,
             }),
           )
-          appendTextSchemaFollowupMessages(workingMessages, result.value.followupMessages)
         } else {
           workingMessages.push(result.value.message)
-          appendFollowupMessages(workingMessages, result.value.followupMessages)
+        }
+        const { followupMessages, optionalPageImageFollowups } = result.value
+        if (optionalPageImageFollowups && optionalImageRetryUsed) continue
+        if (toolSchema === 'text') {
+          appendTextSchemaFollowupMessages(workingMessages, followupMessages)
+        } else {
+          if (optionalPageImageFollowups) {
+            for (const message of followupMessages ?? []) {
+              const content = message?.content
+              if (Array.isArray(content) && content.some((part) => part?.type === 'image_url')) {
+                optionalImageContents.add(content)
+              }
+            }
+          }
+          appendFollowupMessages(workingMessages, followupMessages)
         }
         continue
       }
@@ -1103,6 +1134,12 @@ function resolveFallbackSchema(params: {
     return 'text'
   }
   return null
+}
+
+function isUpstreamImageRejection(error: unknown): boolean {
+  return error instanceof Error && 'status' in error && error.status === 400 &&
+    /\bbusiness code 11135\b/i.test(error.message) &&
+    /\bcould not process an image\b/i.test(error.message)
 }
 
 function buildProviderRequestError(response: Response, rawText: string): Error {

@@ -67,6 +67,8 @@ export interface ToolHandlerResult {
     content: string
   }
   followupMessages?: any[]
+  /** 网页正文之外的配图消息；保留工具结果时可整体省略。 */
+  optionalPageImageFollowups?: boolean
   /**
    * 非空时工具编排器立即结束当前回复，不再请求下一轮。
    * 用于深度研究计划审批的取消/过期/计划缺失终态。

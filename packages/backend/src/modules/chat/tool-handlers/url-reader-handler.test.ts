@@ -64,6 +64,7 @@ describe('UrlReaderToolHandler', () => {
       context,
     )
 
+    expect(result.optionalPageImageFollowups).toBe(true)
     expect(result.followupMessages).toHaveLength(1)
     expect(result.followupMessages?.[0]).toMatchObject({
       role: 'user',
@@ -87,7 +88,7 @@ describe('UrlReaderToolHandler', () => {
     )
   })
 
-  it('does not attach followup when model lacks vision support', async () => {
+  it.each([false, true])('retains direct image URLs as image resources (vision: %s)', async (vision: boolean) => {
     jest.spyOn(urlReaderModule, 'readUrlContent').mockResolvedValue({
       title: '',
       url: 'https://example.com/image.png',
@@ -104,16 +105,25 @@ describe('UrlReaderToolHandler', () => {
       ],
     })
 
+    mockedReadRemoteImages.mockResolvedValue([
+      { url: 'https://example.com/image.png', mime: 'image/png', data: 'ZmFrZQ==' },
+    ])
     const handler = new UrlReaderToolHandler({ enabled: true })
-    const context = createContext({ modelCapabilities: { vision: false } })
+    const context = createContext({ modelCapabilities: { vision } })
     const result = await handler.handle(
       { id: 'call_2', function: { name: 'read_url', arguments: '{}' } },
       { url: 'https://example.com/image.png' },
       context,
     )
 
-    expect(result.followupMessages).toBeUndefined()
-    expect(mockedReadRemoteImages).not.toHaveBeenCalled()
+    if (vision) {
+      expect(result.followupMessages).toHaveLength(1)
+      expect(result.optionalPageImageFollowups).toBe(false)
+      expect(mockedReadRemoteImages).toHaveBeenCalledTimes(1)
+    } else {
+      expect(result.followupMessages).toBeUndefined()
+      expect(mockedReadRemoteImages).not.toHaveBeenCalled()
+    }
     expect(result.message.content).toContain('## 图片资源')
   })
 
