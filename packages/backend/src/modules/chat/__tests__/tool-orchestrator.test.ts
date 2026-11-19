@@ -1,4 +1,12 @@
 import { runToolOrchestration } from '../../../agent-runtime/tool-orchestrator'
+import { convertChatCompletionsMessagesToResponsesInput } from '../../../utils/openai-responses'
+
+function imageRejectionResponse(): Response {
+  return Response.json({ error: {
+    message: 'Upstream provider: invalid_request (business code 11135): The upstream could not process an image. Replace the image and start a new conversation before retrying.',
+    type: 'invalid_request_error',
+  } }, { status: 400 })
+}
 
 const buildNonStreamResponseLike = (content: string, usage?: Record<string, unknown>) =>
   ({
@@ -418,6 +426,159 @@ describe('tool-orchestrator', () => {
     expect(result.status).toBe('completed')
     expect(result.content).toBe('Hello World')
     expect(deltas).toEqual(['Hello', ' ', 'World'])
+  })
+
+  it.each([false, true])('retries the same Responses turn without optional page images (user upload: %s)', async (withUpload) => {
+    const userImage = 'data:image/png;base64,dXBsb2Fk'
+    const question = 'How does it compare with a shared gateway?'
+    const initialMessages = [
+      { role: 'user', content: 'What is the local gateway?' },
+      { role: 'assistant', content: 'It routes requests to model providers.' },
+      { role: 'user', content: withUpload ? [
+        { type: 'text', text: question },
+        { type: 'image_url', image_url: { url: userImage } },
+      ] : question },
+    ]
+    const articleImage = 'data:image/png;base64,YXJ0aWNsZQ=='
+    const laterImage = 'data:image/png;base64,bGF0ZXI='
+    const articleBody = 'https://example.com/article\nThe shared gateway manages a shared pool of upstream accounts.'
+    const onOptionalImageRetry = jest.fn()
+    const toolNames = ['web_search', 'read_url']
+    const executedTool = jest.fn(async (name: string, call: { id?: string }) => ({
+      toolCallId: call.id!,
+      toolName: name,
+      message: {
+        role: 'tool' as const,
+        tool_call_id: call.id,
+        name,
+        content: name === 'read_url' ? articleBody : 'Search results',
+      },
+      ...(name === 'read_url' ? {
+        optionalPageImageFollowups: true,
+        followupMessages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Page illustration' },
+            { type: 'image_url', image_url: { url: call.id === 'call_read_3' ? laterImage : articleImage } },
+          ],
+        }],
+      } : {}),
+    }))
+    const toolCall = (name: string, id: string, index = 0) => ({
+      type: 'response.output_item.done',
+      output_index: index,
+      item: { type: 'function_call', call_id: id, name, arguments: '{}' },
+    })
+    const requests: Array<{ iteration: number; input: unknown[] }> = []
+    const result = await runToolOrchestration({
+      provider: 'openai_responses',
+      initialMessages,
+      toolDefinitions: toolNames.map((name) => ({
+        type: 'function',
+        function: { name, description: name, parameters: {} },
+      })),
+      allowedToolNames: new Set(toolNames),
+      maxIterations: 3,
+      stream: true,
+      onOptionalImageRetry,
+      requestTurn: async ({ iteration, messages }) => {
+        // The context guard can replace message wrappers without changing their image content.
+        if (iteration === 2) messages.splice(0, messages.length, ...messages.map((message) => ({ ...message })))
+        const input = convertChatCompletionsMessagesToResponsesInput(messages)
+        requests.push({ iteration, input })
+        if (iteration === 0) return buildSseStreamResponse([toolCall('web_search', 'call_search')])
+        if (iteration === 1) return buildSseStreamResponse([
+          toolCall('read_url', 'call_read_1'), toolCall('read_url', 'call_read_2', 1),
+        ])
+        if (iteration === 2) {
+          if (JSON.stringify(input).includes(articleImage)) return imageRejectionResponse()
+          return buildSseStreamResponse([toolCall('read_url', 'call_read_3')])
+        }
+        return buildSseStreamResponse([{ type: 'response.output_text.delta', delta: 'They serve different users.' }])
+      },
+      handleToolCall: executedTool,
+    })
+
+    expect(result).toMatchObject({ status: 'completed', content: 'They serve different users.' })
+    expect(executedTool.mock.calls.map(([, call]) => call.id)).toEqual([
+      'call_search', 'call_read_1', 'call_read_2', 'call_read_3',
+    ])
+    expect(requests.map(({ iteration }) => iteration)).toEqual([0, 1, 2, 2, 3])
+    expect(onOptionalImageRetry).toHaveBeenCalledTimes(1)
+    expect(onOptionalImageRetry).toHaveBeenCalledWith({ iteration: 2, removedMessageCount: 2 })
+    expect(requests[0].input).toEqual(convertChatCompletionsMessagesToResponsesInput(initialMessages))
+    expect(JSON.stringify(requests[2].input)).toContain(articleImage)
+    expect(requests[3].input).toEqual(requests[2].input.filter(
+      (item) => !JSON.stringify(item).includes(articleImage),
+    ))
+    expect(requests[3].input).toEqual(expect.arrayContaining([
+      ...requests[0].input,
+      { type: 'function_call', call_id: 'call_read_1', name: 'read_url', arguments: '{}' },
+      { type: 'function_call_output', call_id: 'call_read_1', output: articleBody },
+      { type: 'function_call', call_id: 'call_read_2', name: 'read_url', arguments: '{}' },
+      { type: 'function_call_output', call_id: 'call_read_2', output: articleBody },
+    ]))
+    expect(requests[4].input).toEqual([
+      ...requests[3].input,
+      { type: 'function_call', call_id: 'call_read_3', name: 'read_url', arguments: '{}' },
+      { type: 'function_call_output', call_id: 'call_read_3', output: articleBody },
+    ])
+  })
+
+  it.each([
+    { name: 'an unrelated 400', unrelated: true, requests: 2 },
+    { name: 'a repeated 11135 rejection', unrelated: false, requests: 3 },
+  ])('propagates $name without another image retry', async ({ unrelated, requests }) => {
+    const requestTurn = jest.fn(async ({ iteration }: { iteration: number }) => {
+      if (iteration === 0) {
+        return buildSseStreamResponse([{
+          type: 'response.output_item.done',
+          item: { type: 'function_call', call_id: 'call_read', name: 'read_url', arguments: '{}' },
+        }])
+      }
+      return unrelated
+        ? Response.json({ error: { message: 'Another invalid request' } }, { status: 400 })
+        : imageRejectionResponse()
+    })
+    await expect(runToolOrchestration({
+      provider: 'openai_responses',
+      initialMessages: [{ role: 'user', content: 'Read this article.' }],
+      toolDefinitions: [{
+        type: 'function',
+        function: { name: 'read_url', description: 'Read an article', parameters: {} },
+      }],
+      allowedToolNames: new Set(['read_url']),
+      maxIterations: 1,
+      stream: true,
+      requestTurn,
+      handleToolCall: async () => ({
+        toolCallId: 'call_read',
+        toolName: 'read_url',
+        message: { role: 'tool', tool_call_id: 'call_read', name: 'read_url', content: 'Article text' },
+        optionalPageImageFollowups: true,
+        followupMessages: [{ role: 'user', content: [
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,YXJ0aWNsZQ==' } },
+        ] }],
+      }),
+    })).rejects.toMatchObject({ status: 400, message: expect.stringContaining(unrelated ? 'Another invalid request' : '11135') })
+    expect(requestTurn).toHaveBeenCalledTimes(requests)
+  })
+
+  it('keeps a 11135 rejection when the only image was uploaded by the user', async () => {
+    const requestTurn = jest.fn(async () => imageRejectionResponse())
+    await expect(runToolOrchestration({
+      provider: 'openai_responses',
+      initialMessages: [{ role: 'user', content: [
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,dXBsb2Fk' } },
+      ] }],
+      toolDefinitions: [],
+      allowedToolNames: new Set(),
+      maxIterations: 0,
+      stream: true,
+      requestTurn,
+      handleToolCall: async () => null,
+    })).rejects.toMatchObject({ status: 400, message: expect.stringContaining('11135') })
+    expect(requestTurn).toHaveBeenCalledTimes(1)
   })
 
   it('appends tool followup messages into next tool turn context', async () => {

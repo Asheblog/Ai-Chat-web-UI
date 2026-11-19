@@ -688,8 +688,17 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           ...extraHeaders,
         };
 
+        const providerInput = provider === 'openai_responses' ? body.input : body.messages;
+        const imagePartCount = Array.isArray(providerInput)
+          ? providerInput.reduce((count, message) => count + (Array.isArray(message?.content)
+              ? message.content.filter((part: { type?: string } | null) =>
+                  part?.type === 'input_image' || part?.type === 'image_url' || part?.type === 'image',
+                ).length
+              : 0), 0)
+          : 0;
         traceRecorder.log('agent:provider_request', {
           provider,
+          imagePartCount,
           model: session.modelRawId,
           url,
           headerKeys: Object.keys(headers || {}),
@@ -926,6 +935,9 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                 setStreamController(null);
               },
             };
+          },
+          onOptionalImageRetry: (details) => {
+            traceRecorder.log('agent:optional_image_retry', details);
           },
           onTurnError: async ({ error, iteration, messages }) => {
             const missingToolCallId = extractMissingFunctionCallOutputId(error);

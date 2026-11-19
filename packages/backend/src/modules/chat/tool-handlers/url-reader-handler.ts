@@ -290,7 +290,10 @@ export class UrlReaderToolHandler implements IToolHandler {
           name: 'read_url',
           content: formatted,
         },
-        ...(followupMessages ? { followupMessages } : {}),
+        ...(followupMessages ? {
+          followupMessages,
+          optionalPageImageFollowups: (result.resourceType ?? 'page') === 'page',
+        } : {}),
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'URL read failed'
