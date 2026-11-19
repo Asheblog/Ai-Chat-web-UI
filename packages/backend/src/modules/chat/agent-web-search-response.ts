@@ -689,12 +689,16 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         };
 
         const providerInput = provider === 'openai_responses' ? body.input : body.messages;
+        const countImages = (blocks: unknown): number => Array.isArray(blocks)
+          ? blocks.reduce((count, part) => {
+              if (part?.type === 'input_image' || part?.type === 'image_url' || part?.type === 'image') return count + 1;
+              return count + (part?.type === 'tool_result' ? countImages(part.content) : 0);
+            }, 0)
+          : 0;
         const imagePartCount = Array.isArray(providerInput)
-          ? providerInput.reduce((count, message) => count + (Array.isArray(message?.content)
-              ? message.content.filter((part: { type?: string } | null) =>
-                  part?.type === 'input_image' || part?.type === 'image_url' || part?.type === 'image',
-                ).length
-              : 0), 0)
+          ? providerInput.reduce((count, item) => count + countImages(
+              item?.type === 'function_call_output' ? item.output : item?.content,
+            ), 0)
           : 0;
         traceRecorder.log('agent:provider_request', {
           provider,

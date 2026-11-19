@@ -1,3 +1,5 @@
+import { buildToolImageEvidenceParts } from './tool-image-evidence'
+
 export type ResponsesStreamEventExtraction =
   | {
       kind: 'delta'
@@ -98,10 +100,13 @@ export function convertChatCompletionsMessagesToResponsesInput(messages: any[]):
     if (msg.role === 'tool' || role === 'user' && msg.tool_call_id) {
       const callId = msg.tool_call_id
       if (typeof callId === 'string' && callId) {
+        const text = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content ?? '')
         input.push({
           type: 'function_call_output',
           call_id: callId,
-          output: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content ?? ''),
+          output: msg.role === 'tool' && msg.imageEvidence
+            ? toInputParts(buildToolImageEvidenceParts(text, msg.imageEvidence))
+            : text,
         })
       }
       continue

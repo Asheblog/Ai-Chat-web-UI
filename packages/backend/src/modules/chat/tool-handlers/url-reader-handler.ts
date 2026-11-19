@@ -10,6 +10,7 @@ import {
   checkIfLikelySPA,
 } from '../../../utils/url-reader'
 import { readRemoteImages } from '../../../utils/remote-image-reader'
+import type { ToolImageEvidence } from '../../../utils/tool-image-evidence'
 import type {
   IToolHandler,
   ToolCall,
@@ -68,70 +69,24 @@ export class UrlReaderToolHandler implements IToolHandler {
     return toolName === this.toolName
   }
 
-  private canAttachVisionImages(context: ToolCallContext): boolean {
-    const provider = (context.provider || '').toLowerCase()
-    const visionEnabled = context.modelCapabilities?.vision === true
-    return (
-      visionEnabled &&
-      (provider === 'openai' || provider === 'openai_responses' || provider === 'anthropic')
-    )
-  }
-
-  private shouldAttachMultipleImages(result: Awaited<ReturnType<typeof readUrlContent>>): boolean {
-    if (result.resourceType === 'image') return false
-    const images = Array.isArray(result.images) ? result.images : []
-    return images.length > 1 && !result.leadImageUrl
-  }
-
-  private async buildVisionFollowupMessages(
+  private async downloadImages(
     result: Awaited<ReturnType<typeof readUrlContent>>,
     context: ToolCallContext,
-  ): Promise<any[] | undefined> {
-    if (!this.canAttachVisionImages(context)) return undefined
-    const images = Array.isArray(result.images) ? result.images : []
-    if (images.length === 0) return undefined
+  ) {
+    const provider = (context.provider || '').toLowerCase()
+    const direct = result.resourceType === 'image'
+    const supportsToolImages = provider === 'openai_responses' || provider === 'anthropic'
+    if (context.modelCapabilities?.vision !== true || !supportsToolImages) return []
+    if (!direct && result.resourceType && result.resourceType !== 'page') return []
 
-    const candidates = (() => {
-      if (result.resourceType === 'image') {
-        return images.slice(0, 1)
-      }
-      const preferred: typeof images = []
-      if (result.leadImageUrl) {
-        const lead = images.find((item) => item.url === result.leadImageUrl)
-        if (lead) preferred.push(lead)
-      }
-      for (const image of images) {
-        if (preferred.some((item) => item.url === image.url)) continue
-        preferred.push(image)
-      }
-      return preferred.slice(0, this.shouldAttachMultipleImages(result) ? 3 : 1)
-    })()
-
-    const downloaded = await readRemoteImages(candidates, {
+    const images = result.images ?? []
+    if (images.length === 0) return []
+    const lead = images.find((image) => image.url === result.leadImageUrl)
+    const candidates = lead ? [lead] : images.slice(0, direct || result.leadImageUrl ? 1 : 3)
+    return readRemoteImages(candidates, {
       timeoutMs: Math.max(4000, this.config.timeout ?? 12000),
-      maxCount: result.resourceType === 'image' ? 1 : candidates.length,
+      maxCount: candidates.length,
     })
-    if (downloaded.length === 0) return undefined
-
-    const introText =
-      result.resourceType === 'image'
-        ? `以下图片来自用户提供的图片 URL：${result.url}。请直接结合图片内容回答。`
-        : `以下图片来自刚读取的网页 ${result.url}，请结合网页正文和图片内容回答。`
-
-    return [
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: introText },
-          ...downloaded.map((item) => ({
-            type: 'image_url',
-            image_url: {
-              url: `data:${item.mime};base64,${item.data}`,
-            },
-          })),
-        ],
-      },
-    ]
   }
 
   async handle(
@@ -231,7 +186,17 @@ export class UrlReaderToolHandler implements IToolHandler {
         }
       }
 
-      const followupMessages = await this.buildVisionFollowupMessages(result, context)
+      const downloaded = await this.downloadImages(result, context)
+      const imageEvidence: ToolImageEvidence | undefined = downloaded.length > 0 ? {
+        kind: result.resourceType === 'image' ? 'resource' : 'page',
+        sourceUrl: result.finalUrl || result.url,
+        title: result.title,
+        images: downloaded.map((item) => ({
+          imageUrl: item.requestedUrl,
+          dataUrl: `data:${item.mime};base64,${item.data}`,
+          alt: item.alt,
+        })),
+      } : undefined
       context.sendToolEvent({
         id: callId,
         tool: 'read_url',
@@ -275,7 +240,7 @@ export class UrlReaderToolHandler implements IToolHandler {
           contentLength: result.contentLength,
           leadImageUrl: result.leadImageUrl,
           images: result.images,
-          visionFollowupAttached: Boolean(followupMessages?.length),
+          ...(imageEvidence ? { toolImageEvidenceCount: imageEvidence.images.length } : {}),
         },
       })
 
@@ -289,11 +254,8 @@ export class UrlReaderToolHandler implements IToolHandler {
           tool_call_id: toolCall.id,
           name: 'read_url',
           content: formatted,
+          ...(imageEvidence ? { imageEvidence } : {}),
         },
-        ...(followupMessages ? {
-          followupMessages,
-          optionalPageImageFollowups: (result.resourceType ?? 'page') === 'page',
-        } : {}),
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'URL read failed'

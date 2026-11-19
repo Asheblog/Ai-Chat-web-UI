@@ -440,6 +440,8 @@ describe('tool-orchestrator', () => {
       ] : question },
     ]
     const articleImage = 'data:image/png;base64,YXJ0aWNsZQ=='
+    const secondImage = 'data:image/png;base64,c2Vjb25k'
+    const directImage = 'data:image/png;base64,ZGlyZWN0'
     const laterImage = 'data:image/png;base64,bGF0ZXI='
     const articleBody = 'https://example.com/article\nThe shared gateway manages a shared pool of upstream accounts.'
     const onOptionalImageRetry = jest.fn()
@@ -452,17 +454,18 @@ describe('tool-orchestrator', () => {
         tool_call_id: call.id,
         name,
         content: name === 'read_url' ? articleBody : 'Search results',
+        ...(name === 'read_url' ? { imageEvidence: {
+          kind: call.id === 'call_direct' ? 'resource' as const : 'page' as const,
+          sourceUrl: 'https://example.com/' + call.id,
+          title: 'News ' + call.id,
+          images: [{
+            imageUrl: 'https://cdn.example.com/' + call.id + '.png',
+            dataUrl: call.id === 'call_direct' ? directImage
+              : call.id === 'call_read_3' ? laterImage
+                : call.id === 'call_read_2' ? secondImage : articleImage,
+          }],
+        } } : {}),
       },
-      ...(name === 'read_url' ? {
-        optionalPageImageFollowups: true,
-        followupMessages: [{
-          role: 'user',
-          content: [
-            { type: 'text', text: 'Page illustration' },
-            { type: 'image_url', image_url: { url: call.id === 'call_read_3' ? laterImage : articleImage } },
-          ],
-        }],
-      } : {}),
     }))
     const toolCall = (name: string, id: string, index = 0) => ({
       type: 'response.output_item.done',
@@ -489,6 +492,7 @@ describe('tool-orchestrator', () => {
         if (iteration === 0) return buildSseStreamResponse([toolCall('web_search', 'call_search')])
         if (iteration === 1) return buildSseStreamResponse([
           toolCall('read_url', 'call_read_1'), toolCall('read_url', 'call_read_2', 1),
+          toolCall('read_url', 'call_direct', 2),
         ])
         if (iteration === 2) {
           if (JSON.stringify(input).includes(articleImage)) return imageRejectionResponse()
@@ -501,16 +505,29 @@ describe('tool-orchestrator', () => {
 
     expect(result).toMatchObject({ status: 'completed', content: 'They serve different users.' })
     expect(executedTool.mock.calls.map(([, call]) => call.id)).toEqual([
-      'call_search', 'call_read_1', 'call_read_2', 'call_read_3',
+      'call_search', 'call_read_1', 'call_read_2', 'call_direct', 'call_read_3',
     ])
     expect(requests.map(({ iteration }) => iteration)).toEqual([0, 1, 2, 2, 3])
     expect(onOptionalImageRetry).toHaveBeenCalledTimes(1)
-    expect(onOptionalImageRetry).toHaveBeenCalledWith({ iteration: 2, removedMessageCount: 2 })
+    expect(onOptionalImageRetry).toHaveBeenCalledWith({ iteration: 2, affectedToolResults: 2 })
     expect(requests[0].input).toEqual(convertChatCompletionsMessagesToResponsesInput(initialMessages))
-    expect(JSON.stringify(requests[2].input)).toContain(articleImage)
-    expect(requests[3].input).toEqual(requests[2].input.filter(
-      (item) => !JSON.stringify(item).includes(articleImage),
-    ))
+    expect(requests[2].input.filter((item: any) => item.role === 'user')).toEqual(
+      requests[0].input.filter((item: any) => item.role === 'user'),
+    )
+    for (const [callId, dataUrl] of [['call_read_1', articleImage], ['call_read_2', secondImage]]) {
+      expect(requests[2].input).toContainEqual({
+        type: 'function_call_output', call_id: callId, output: [
+          { type: 'input_text', text: articleBody },
+          { type: 'input_text', text: expect.stringContaining('https://example.com/' + callId) },
+          { type: 'input_image', detail: 'auto', image_url: dataUrl },
+        ],
+      })
+      expect(JSON.stringify(requests[3].input)).not.toContain(dataUrl)
+    }
+    const isDirectImageResult = (item: any) => item.call_id === 'call_direct' && item.type === 'function_call_output'
+    const directResult = requests[2].input.find(isDirectImageResult)
+    expect(JSON.stringify(directResult)).toContain(directImage)
+    expect(requests[3].input.find(isDirectImageResult)).toEqual(directResult)
     expect(requests[3].input).toEqual(expect.arrayContaining([
       ...requests[0].input,
       { type: 'function_call', call_id: 'call_read_1', name: 'read_url', arguments: '{}' },
@@ -554,11 +571,13 @@ describe('tool-orchestrator', () => {
       handleToolCall: async () => ({
         toolCallId: 'call_read',
         toolName: 'read_url',
-        message: { role: 'tool', tool_call_id: 'call_read', name: 'read_url', content: 'Article text' },
-        optionalPageImageFollowups: true,
-        followupMessages: [{ role: 'user', content: [
-          { type: 'image_url', image_url: { url: 'data:image/png;base64,YXJ0aWNsZQ==' } },
-        ] }],
+        message: {
+          role: 'tool', tool_call_id: 'call_read', name: 'read_url', content: 'Article text',
+          imageEvidence: {
+            kind: 'page', sourceUrl: 'https://example.com/article', title: 'News',
+            images: [{ imageUrl: 'https://example.com/news.png', dataUrl: 'data:image/png;base64,YXJ0aWNsZQ==' }],
+          },
+        },
       }),
     })).rejects.toMatchObject({ status: 400, message: expect.stringContaining(unrelated ? 'Another invalid request' : '11135') })
     expect(requestTurn).toHaveBeenCalledTimes(requests)

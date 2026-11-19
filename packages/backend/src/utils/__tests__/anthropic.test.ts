@@ -113,6 +113,39 @@ describe('convertChatCompletionsRequestToAnthropic', () => {
     expect(body.tool_choice).toEqual({ type: 'auto' })
   })
 
+  it('nests webpage images inside the matching tool result, not beside user content', () => {
+    const sourceUrl = 'https://example.com/story'
+    const imageUrl = 'https://example.com/picture.png'
+    const body = convertChatCompletionsRequestToAnthropic({
+      messages: [
+        { role: 'user', content: 'Read this story.' },
+        {
+          role: 'assistant',
+          tool_calls: [{ id: 'call_story', function: { name: 'read_url', arguments: '{}' } }],
+        },
+        {
+          role: 'tool', tool_call_id: 'call_story', content: 'Article text',
+          imageEvidence: {
+            kind: 'page', sourceUrl, title: 'A news story',
+            images: [{ imageUrl, dataUrl: 'data:image/png;base64,YQ==' }],
+          },
+        },
+      ],
+    })
+
+    expect(body.messages).toHaveLength(3)
+    expect(body.messages[2]).toEqual({
+      role: 'user',
+      content: [{
+        type: 'tool_result', tool_use_id: 'call_story', content: [
+          { type: 'text', text: 'Article text' },
+          { type: 'text', text: expect.stringContaining('标题：A news story\n网页来源：' + sourceUrl + '\n图片地址：' + imageUrl) },
+          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'YQ==' } },
+        ],
+      }],
+    })
+  })
+
   it('sends effort through output_config instead of the deprecated thinking budget', () => {
     const body = convertChatCompletionsRequestToAnthropic({
       model: 'claude-opus-5-5',

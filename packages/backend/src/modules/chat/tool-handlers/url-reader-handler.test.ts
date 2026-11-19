@@ -31,7 +31,7 @@ describe('UrlReaderToolHandler', () => {
     mockedReadRemoteImages.mockReset()
   })
 
-  it('attaches multimodal followup when model supports vision', async () => {
+  it('keeps article images in the read_url result instead of inventing a user message for Chat Completions', async () => {
     jest.spyOn(urlReaderModule, 'readUrlContent').mockResolvedValue({
       title: '测试页面',
       url: 'https://example.com/article',
@@ -64,67 +64,85 @@ describe('UrlReaderToolHandler', () => {
       context,
     )
 
-    expect(result.optionalPageImageFollowups).toBe(true)
-    expect(result.followupMessages).toHaveLength(1)
-    expect(result.followupMessages?.[0]).toMatchObject({
-      role: 'user',
-      content: [
-        { type: 'text' },
-        {
-          type: 'image_url',
-          image_url: {
-            url: 'data:image/png;base64,ZmFrZQ==',
-          },
-        },
-      ],
-    })
+    expect(result.followupMessages).toBeUndefined()
+    expect(mockedReadRemoteImages).not.toHaveBeenCalled()
+    expect(result.message.content).toContain('测试页面')
+    expect(result.message.content).toContain('https://example.com/article')
+    expect(result.message.content).toContain('https://cdn.example.com/lead.png')
     expect(context.sendToolEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         details: expect.objectContaining({
           leadImageUrl: 'https://cdn.example.com/lead.png',
-          visionFollowupAttached: true,
         }),
       }),
     )
   })
 
-  it.each([false, true])('retains direct image URLs as image resources (vision: %s)', async (vision: boolean) => {
+  it('returns downloaded article images as optional evidence attached to their tool call', async () => {
+    const article = 'https://example.com/redirect'
+    const finalUrl = 'https://example.com/news'
+    const firstImage = 'https://cdn.example.com/first.png'
+    const secondImage = 'https://cdn.example.com/picture.png?variant=2'
     jest.spyOn(urlReaderModule, 'readUrlContent').mockResolvedValue({
-      title: '',
-      url: 'https://example.com/image.png',
-      content: '',
-      textContent: '',
-      resourceType: 'image',
-      contentType: 'image/png',
-      leadImageUrl: 'https://example.com/image.png',
-      images: [
-        {
-          url: 'https://example.com/image.png',
-          source: 'direct',
-        },
-      ],
+      title: '本地新闻', url: article, finalUrl, content: '', textContent: '新闻正文',
+      resourceType: 'page',
+      images: [{ url: firstImage, source: 'article' }, { url: secondImage, alt: '活动现场', source: 'article' }],
     })
-
+    // The first candidate failed to download; the remaining bytes still belong to the second URL.
     mockedReadRemoteImages.mockResolvedValue([
-      { url: 'https://example.com/image.png', mime: 'image/png', data: 'ZmFrZQ==' },
+      { url: 'https://cdn.example.com/picture.png?variant=2', requestedUrl: secondImage, mime: 'image/png', data: 'cGljdHVyZQ==', alt: '活动现场' },
     ])
-    const handler = new UrlReaderToolHandler({ enabled: true })
-    const context = createContext({ modelCapabilities: { vision } })
-    const result = await handler.handle(
-      { id: 'call_2', function: { name: 'read_url', arguments: '{}' } },
-      { url: 'https://example.com/image.png' },
-      context,
+
+    const result = await new UrlReaderToolHandler({ enabled: true }).handle(
+      { id: 'call_news', function: { name: 'read_url' } }, { url: article },
+      createContext({ provider: 'openai_responses' }),
     )
 
-    if (vision) {
-      expect(result.followupMessages).toHaveLength(1)
-      expect(result.optionalPageImageFollowups).toBe(false)
+    expect(result.followupMessages).toBeUndefined()
+    expect(result.message).toMatchObject({
+      role: 'tool', tool_call_id: 'call_news', imageEvidence: {
+        kind: 'page', sourceUrl: finalUrl, title: '本地新闻',
+        images: [{ imageUrl: secondImage, dataUrl: 'data:image/png;base64,cGljdHVyZQ==', alt: '活动现场' }],
+      },
+    })
+    expect(result.message.content).toContain(firstImage)
+    expect(result.message.content).toContain(secondImage)
+  })
+
+  it.each([
+    { provider: 'openai', vision: true, attached: false },
+    { provider: 'openai_responses', vision: false, attached: false },
+    { provider: 'openai_responses', vision: true, attached: true },
+    { provider: 'anthropic', vision: true, attached: true },
+  ])('keeps direct images as tool resources ($provider, vision: $vision)', async ({ provider, vision, attached }) => {
+    const url = 'https://example.com/image.png'
+    jest.spyOn(urlReaderModule, 'readUrlContent').mockResolvedValue({
+      title: '', url, content: '', textContent: '', resourceType: 'image',
+      contentType: 'image/png', leadImageUrl: url, images: [{ url, source: 'direct' }],
+    })
+    mockedReadRemoteImages.mockResolvedValue([
+      { url, requestedUrl: url, mime: 'image/png', data: 'ZmFrZQ==' },
+    ])
+
+    const handler = new UrlReaderToolHandler({ enabled: true })
+    const context = createContext({ provider, modelCapabilities: { vision } })
+    const result = await handler.handle(
+      { id: 'call_2', function: { name: 'read_url', arguments: '{}' } }, { url }, context,
+    )
+
+    expect(result.followupMessages).toBeUndefined()
+    if (attached) {
+      expect(result.message).toMatchObject({ imageEvidence: {
+        kind: 'resource', sourceUrl: url,
+        images: [{ imageUrl: url, dataUrl: 'data:image/png;base64,ZmFrZQ==' }],
+      } })
       expect(mockedReadRemoteImages).toHaveBeenCalledTimes(1)
     } else {
-      expect(result.followupMessages).toBeUndefined()
+      expect(result.message).not.toHaveProperty('imageEvidence')
       expect(mockedReadRemoteImages).not.toHaveBeenCalled()
     }
     expect(result.message.content).toContain('## 图片资源')
+    expect(result.message.content).toContain(url)
   })
 
   it('forwards DeepSeek fallback config and the request signal to the reader', async () => {

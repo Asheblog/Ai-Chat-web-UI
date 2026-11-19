@@ -576,6 +576,9 @@ const buildSummaryForModel = (
   const lines: string[] = []
 
   lines.push('自动网页读取证据（按搜索结果顺序）：')
+  if (autoReadEvidence.some((item) => item.images?.length)) {
+    lines.push('各条目下的图片证据是该网页对应的候选图，不是用户上传；仅凭链接不能确认是正文配图。')
+  }
   for (const item of autoReadEvidence) {
     if (item.evidenceKind === 'none') {
       const status = `${item.errorCode || 'UNKNOWN'}${typeof item.httpStatus === 'number' ? ` (HTTP ${item.httpStatus})` : ''}`

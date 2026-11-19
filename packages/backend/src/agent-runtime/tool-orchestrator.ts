@@ -137,7 +137,7 @@ export interface ToolOrchestratorParams {
     iteration: number
     messages: any[]
   }) => MaybePromise<boolean>
-  onOptionalImageRetry?: (details: { iteration: number; removedMessageCount: number }) => MaybePromise<void>
+  onOptionalImageRetry?: (details: { iteration: number; affectedToolResults: number }) => MaybePromise<void>
   includeReasoningInToolMessage?: boolean
   emptyContentErrorMessage?: string
 }
@@ -161,8 +161,7 @@ export async function runToolOrchestration(
   const budgetBehavior: ToolBudgetExhaustedBehavior =
     params.onBudgetExhausted === 'finish' ? 'finish' : 'error'
   const workingMessages = params.initialMessages.map((msg) => ({ ...msg }))
-  // Track only tool-provided image content, including when context guards copy message wrappers.
-  const optionalImageContents = new WeakSet<unknown[]>()
+  const supportsToolImages = provider === 'openai_responses' || provider === 'anthropic'
   let optionalImageRetryUsed = false
   const maxToolRounds = normalizeMaxToolRounds(params.maxIterations)
   let toolSchema: ToolSchema = resolveToolSchema({
@@ -228,16 +227,13 @@ export async function runToolOrchestration(
       onStreamChunk: params.onStreamChunk,
       onFirstResponseEvent: params.onFirstResponseEvent,
       onTurnError: async (turn) => {
-        if (!optionalImageRetryUsed && isUpstreamImageRejection(turn.error)) {
-          const retainedMessages = turn.messages.filter(
-            (msg) => !optionalImageContents.has(msg.content),
-          )
-          const removedMessageCount = turn.messages.length - retainedMessages.length
-          if (removedMessageCount > 0) {
+        if (supportsToolImages && turn.schema === 'tools' && !optionalImageRetryUsed && isUpstreamImageRejection(turn.error)) {
+          const affected = turn.messages.filter((msg) => msg.role === 'tool' && msg.imageEvidence?.kind === 'page')
+          if (affected.length > 0) {
             params.checkAbort?.()
             optionalImageRetryUsed = true
-            turn.messages.splice(0, turn.messages.length, ...retainedMessages)
-            await params.onOptionalImageRetry?.({ iteration: turn.iteration, removedMessageCount })
+            for (const message of affected) delete message.imageEvidence
+            await params.onOptionalImageRetry?.({ iteration: turn.iteration, affectedToolResults: affected.length })
             return true
           }
         }
@@ -335,21 +331,16 @@ export async function runToolOrchestration(
             }),
           )
         } else {
-          workingMessages.push(result.value.message)
+          const message = result.value.message
+          if (!supportsToolImages || (optionalImageRetryUsed && message.imageEvidence?.kind === 'page')) {
+            delete message.imageEvidence
+          }
+          workingMessages.push(message)
         }
-        const { followupMessages, optionalPageImageFollowups } = result.value
-        if (optionalPageImageFollowups && optionalImageRetryUsed) continue
+        const { followupMessages } = result.value
         if (toolSchema === 'text') {
           appendTextSchemaFollowupMessages(workingMessages, followupMessages)
         } else {
-          if (optionalPageImageFollowups) {
-            for (const message of followupMessages ?? []) {
-              const content = message?.content
-              if (Array.isArray(content) && content.some((part) => part?.type === 'image_url')) {
-                optionalImageContents.add(content)
-              }
-            }
-          }
           appendFollowupMessages(workingMessages, followupMessages)
         }
         continue
