@@ -807,13 +807,14 @@ function ChatComposerPanelComponent({
         </p>
       ) : null}
 
-      <div
-        data-composer-footer="true"
-        className="mt-1 flex items-center justify-between gap-3 px-1 text-[12px] leading-4 text-ink-tertiary"
-      >
-        <span className="min-w-0 truncate">{quotaMessage ?? ''}</span>
-        <span className="hidden shrink-0 md:block">Enter 发送 · Shift + Enter 换行</span>
-      </div>
+      {quotaMessage ? (
+        <div
+          data-composer-footer="true"
+          className="mt-1 truncate px-1 text-[12px] leading-4 text-ink-tertiary"
+        >
+          {quotaMessage}
+        </div>
+      ) : null}
     </div>
   )
 }

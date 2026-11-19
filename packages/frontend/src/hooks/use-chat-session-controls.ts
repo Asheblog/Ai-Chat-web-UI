@@ -47,7 +47,6 @@ export function useChatSessionControls({
     return Math.max(0, quotaRemaining ?? 0)
   }, [quota, quotaRemaining])
 
-  // 输入提示只提示写消息；额度与 Enter/Shift+Enter 提示都在框外呈现。
   const basePlaceholder = useMemo(() => {
     return currentSession ? '继续输入' : '输入消息'
   }, [currentSession])

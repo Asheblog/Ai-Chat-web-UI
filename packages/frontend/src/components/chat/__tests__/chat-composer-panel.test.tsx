@@ -283,12 +283,17 @@ describe('ChatComposerPanel — attachment retry and quota placement', () => {
     expect(quota.closest('[data-composer-footer]')).not.toBeNull()
   })
 
-  it('offers the desktop keyboard hint beside the quota line only', () => {
-    render(<ChatComposerPanel {...createProps({ quotaMessage: '今日剩余 198 条' })} />)
+  it('shows the quota without a keyboard hint and hides the footer when no quota is shown', () => {
+    const { container, rerender } = render(
+      <ChatComposerPanel {...createProps({ quotaMessage: '今日剩余 198 条' })} />,
+    )
 
-    const hint = screen.getByText('Enter 发送 · Shift + Enter 换行')
-    expect(hint.className).toContain('hidden')
-    expect(hint.className).toContain('md:block')
+    expect(screen.getByText('今日剩余 198 条')).toBeInTheDocument()
+    expect(screen.queryByText('Enter 发送 · Shift + Enter 换行')).not.toBeInTheDocument()
+
+    rerender(<ChatComposerPanel {...createProps({ quotaMessage: undefined })} />)
+
+    expect(container.querySelector('[data-composer-footer]')).not.toBeInTheDocument()
   })
 })
 describe('ChatComposerPanel — mobile attachment entry and bottom bar geometry', () => {
