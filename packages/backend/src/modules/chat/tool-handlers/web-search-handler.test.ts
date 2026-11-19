@@ -161,6 +161,44 @@ describe('WebSearchToolHandler DeepSeek integration', () => {
     expect(payload.summary).toContain('图片证据: https://cdn.example.com/lead.png')
   })
 
+  it('keeps visual evidence for two auto-read articles under the search tool call', async () => {
+    const stories = ['a', 'b'].map((id) => ({
+      title: '新闻 ' + id,
+      url: 'https://example.com/news/' + id,
+      finalUrl: 'https://example.com/article/' + id,
+      imageUrl: 'https://cdn.example.com/' + id + '.png',
+      data: Buffer.from(id).toString('base64'),
+    }))
+    jest.spyOn(require('../../../utils/url-reader'), 'readUrlContent').mockImplementation(async (url: unknown) => {
+      const story = stories.find((item) => item.url === url)!
+      return {
+        ...story, content: '', textContent: '新闻正文', resourceType: 'page', fallbackUsed: 'none',
+        leadImageUrl: story.imageUrl, images: [{ url: story.imageUrl, source: 'meta' }],
+      }
+    })
+    global.fetch = jest.fn(async () => new Response(JSON.stringify({
+      results: stories.map(({ title, url }) => ({ title, url, snippet: 'short' })),
+    }), { headers: { 'content-type': 'application/json' } })) as typeof fetch
+    const download = jest.spyOn(require('../../../utils/remote-image-reader'), 'readRemoteImages')
+      .mockResolvedValue([...stories].reverse().map(({ imageUrl, data }) => ({
+        requestedUrl: imageUrl, mime: 'image/png', data,
+      })))
+
+    const result = await new WebSearchToolHandler(createConfig({ autoReadTopK: 2 }) as any).handle(
+      { id: 'call_news', function: { name: 'web_search', arguments: '{}' } },
+      { query: '带图新闻' },
+      { ...createContext(), provider: 'openai_responses', modelCapabilities: { vision: true } } as any,
+    )
+
+    expect(download).toHaveBeenCalledTimes(1)
+    expect(result.followupMessages).toBeUndefined()
+    expect(result.message).toMatchObject({ role: 'tool', tool_call_id: 'call_news', imageEvidence: {
+      kind: 'page', images: stories.map(({ title, finalUrl, imageUrl, data }) => ({
+        title, sourceUrl: finalUrl, imageUrl, dataUrl: 'data:image/png;base64,' + data,
+      })),
+    } })
+  })
+
   it('falls back to the matching hit image url when the page itself yields no images', async () => {
     const urlReaderModule = require('../../../utils/url-reader')
     jest.spyOn(urlReaderModule, 'readUrlContent').mockResolvedValue({

@@ -13,6 +13,7 @@ import {
   toNumber,
 } from './anthropic-shared'
 import { resolveAnthropicEffort } from './anthropic-effort'
+import { buildToolImageEvidenceParts, type ToolImageEvidence } from './tool-image-evidence'
 
 const ANTHROPIC_DEFAULT_MAX_TOKENS = 4096
 
@@ -39,6 +40,7 @@ type ChatMessage = {
     function?: { name?: string; arguments?: string | Record<string, unknown> }
   }>
   tool_call_id?: string
+  imageEvidence?: ToolImageEvidence
   thinking_blocks?: Array<Record<string, unknown>>
 }
 
@@ -221,11 +223,14 @@ export function convertChatCompletionsRequestToAnthropic(requestBody: any): any 
     if (role === 'tool') {
       const toolUseId = typeof message.tool_call_id === 'string' ? message.tool_call_id : ''
       if (!toolUseId) continue
+      const text = toToolResultContent(message.content)
       pushMessage('user', [
         {
           type: 'tool_result',
           tool_use_id: toolUseId,
-          content: toToolResultContent(message.content),
+          content: message.imageEvidence
+            ? toAnthropicContent(buildToolImageEvidenceParts(text, message.imageEvidence))
+            : text,
         },
       ])
       continue
