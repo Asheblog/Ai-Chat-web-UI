@@ -15,6 +15,7 @@ export interface RemoteImageReadOptions {
   maxCount?: number
   limits?: ChatImageLimitConfig
   fetchImpl?: typeof fetch
+  signal?: AbortSignal
 }
 
 export interface RemoteImageReadResult {
@@ -75,6 +76,7 @@ export async function readRemoteImages(
   const downloaded: RemoteImageReadResult[] = []
 
   for (const candidate of uniqueCandidates) {
+    if (options.signal?.aborted) break
     let normalizedUrl = ''
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(new Error('remote image timeout')), timeoutMs)
@@ -82,7 +84,7 @@ export async function readRemoteImages(
       normalizedUrl = validatePublicHttpUrl(candidate.url)
       const response = await fetchWithValidatedRedirects(normalizedUrl, {
         method: 'GET',
-        signal: controller.signal,
+        signal: options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal,
         headers: {
           Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*;q=0.8,*/*;q=0.5',
         },

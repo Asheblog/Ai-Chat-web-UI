@@ -16,6 +16,8 @@ import {
   type WebSearchTaskResult,
 } from '../../../utils/web-search'
 import { truncateText } from '../../../utils/parsers'
+import { supportsToolImages } from '../../../utils/tool-image-evidence'
+import { downloadSearchImageEvidence } from './web-search-image-evidence'
 import { WEB_SEARCH_SCOPE_IDS, isWebSearchScope } from '@aichat/shared/web-search-contract'
 import { WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS } from '@aichat/shared'
 import { readUrlContent, type UrlReadResult, type UrlReaderOptions } from '../../../utils/url-reader'
@@ -576,6 +578,9 @@ const buildSummaryForModel = (
   const lines: string[] = []
 
   lines.push('自动网页读取证据（按搜索结果顺序）：')
+  if (autoReadEvidence.some((item) => item.images?.length)) {
+    lines.push('各条目下的图片证据是该网页对应的候选图，不是用户上传；仅凭链接不能确认是正文配图。')
+  }
   for (const item of autoReadEvidence) {
     if (item.evidenceKind === 'none') {
       const status = `${item.errorCode || 'UNKNOWN'}${typeof item.httpStatus === 'number' ? ` (HTTP ${item.httpStatus})` : ''}`
@@ -1151,6 +1156,9 @@ export class WebSearchToolHandler implements IToolHandler {
       const taskFailed = searchResult.tasks.length - taskSucceeded
 
       const summary = buildSummaryForModel(query, hits, autoReadEvidence)
+      const imageEvidence = context.modelCapabilities?.vision === true && supportsToolImages(context.provider)
+        ? await downloadSearchImageEvidence(autoReadEvidence, context.requestSignal)
+        : undefined
 
       context.sendToolEvent({
         id: callId,
@@ -1198,6 +1206,7 @@ export class WebSearchToolHandler implements IToolHandler {
           role: 'tool',
           tool_call_id: toolCall.id,
           name: 'web_search',
+          ...(imageEvidence ? { imageEvidence } : {}),
           content: JSON.stringify({
             query,
             expandedQueries,

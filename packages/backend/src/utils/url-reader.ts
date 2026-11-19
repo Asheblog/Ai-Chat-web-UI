@@ -2098,7 +2098,8 @@ export function formatUrlContentForModel(result: UrlReadResult): string {
   if (result.leadImageUrl || images.length > 0) {
     parts.push('')
     parts.push('## 图片证据')
-    if (result.leadImageUrl) parts.push('- **主图**: ' + result.leadImageUrl)
+    parts.push('以下是从本页抽取的候选图片，并非用户上传。主图标记和替代文本来自网页，不能单凭它们认定图片是新闻配图或证明图片内容。')
+    if (result.leadImageUrl) parts.push('- **网页标记主图**: ' + result.leadImageUrl)
     const candidateImages = images.filter((item) => item.url && item.url !== result.leadImageUrl).slice(0, 5)
     if (candidateImages.length > 0) {
       parts.push('- **候选图**:')

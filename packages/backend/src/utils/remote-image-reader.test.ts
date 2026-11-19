@@ -59,6 +59,25 @@ describe('readRemoteImages', () => {
     expect(result[0]?.url).toBe('https://cdn.example.com/news.png')
   })
 
+  it('aborts the active image download without starting subsequent candidates', async () => {
+    const controller = new AbortController()
+    let activeSignal: AbortSignal | null | undefined
+    const fetchImpl = jest.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      activeSignal = init?.signal
+      controller.abort()
+      throw activeSignal?.reason
+    }) as typeof fetch
+
+    const result = await readRemoteImages([
+      { url: 'https://cdn.example.com/first.png' },
+      { url: 'https://cdn.example.com/second.png' },
+    ], { fetchImpl, signal: controller.signal })
+
+    expect(result).toEqual([])
+    expect(activeSignal).toHaveProperty('aborted', true)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
   it('skips invalid or non-image responses', async () => {
     const fetchImpl = jest.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
