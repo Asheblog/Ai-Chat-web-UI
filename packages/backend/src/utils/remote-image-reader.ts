@@ -1,4 +1,5 @@
 import { DEFAULT_CHAT_IMAGE_LIMITS, type ChatImageLimitConfig } from '@aichat/shared/image-limits'
+import { combineAbortSignals } from './abort-signal'
 import { validateChatImages } from './chat-images'
 import { fetchWithValidatedRedirects, validatePublicHttpUrl } from './url-reader'
 
@@ -80,11 +81,12 @@ export async function readRemoteImages(
     let normalizedUrl = ''
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(new Error('remote image timeout')), timeoutMs)
+    const combined = combineAbortSignals(options.signal, controller.signal)
     try {
       normalizedUrl = validatePublicHttpUrl(candidate.url)
       const response = await fetchWithValidatedRedirects(normalizedUrl, {
         method: 'GET',
-        signal: options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal,
+        signal: combined.signal,
         headers: {
           Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*;q=0.8,*/*;q=0.5',
         },
@@ -129,6 +131,7 @@ export async function readRemoteImages(
     } catch {
       continue
     } finally {
+      combined.cleanup()
       clearTimeout(timer)
     }
   }

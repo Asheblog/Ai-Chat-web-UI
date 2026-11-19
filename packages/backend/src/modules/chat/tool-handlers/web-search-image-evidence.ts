@@ -1,3 +1,4 @@
+import { combineAbortSignals } from '../../../utils/abort-signal'
 import { readRemoteImages } from '../../../utils/remote-image-reader'
 import type { ToolImageEvidence } from '../../../utils/tool-image-evidence'
 import type { AutoReadItem } from './web-search-auto-read'
@@ -16,12 +17,11 @@ export async function downloadSearchImageEvidence(
   }).slice(0, MAX_IMAGES)
   if (candidates.length === 0 || requestSignal?.aborted) return undefined
 
-  const deadline = AbortSignal.timeout(IMAGE_BUDGET_MS)
-  const signal = requestSignal ? AbortSignal.any([requestSignal, deadline]) : deadline
+  const combined = combineAbortSignals(requestSignal, AbortSignal.timeout(IMAGE_BUDGET_MS))
   const downloaded = await readRemoteImages(candidates.map(({ imageUrl }) => ({ url: imageUrl })), {
     maxCount: MAX_IMAGES,
-    signal,
-  })
+    signal: combined.signal,
+  }).finally(combined.cleanup)
   const byUrl = new Map(downloaded.map((image) => [image.requestedUrl, image]))
   const images = candidates.flatMap((source) => {
     const image = byUrl.get(source.imageUrl)
