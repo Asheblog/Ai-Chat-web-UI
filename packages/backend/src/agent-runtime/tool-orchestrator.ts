@@ -2,6 +2,7 @@ import {
   extractReasoningFromResponsesResponse,
   extractTextFromResponsesResponse,
 } from '../utils/openai-responses'
+import { supportsToolImages } from '../utils/tool-image-evidence'
 import type {
   ToolCall,
   ToolDefinition,
@@ -161,7 +162,7 @@ export async function runToolOrchestration(
   const budgetBehavior: ToolBudgetExhaustedBehavior =
     params.onBudgetExhausted === 'finish' ? 'finish' : 'error'
   const workingMessages = params.initialMessages.map((msg) => ({ ...msg }))
-  const supportsToolImages = provider === 'openai_responses' || provider === 'anthropic'
+  const canSendToolImages = supportsToolImages(provider)
   let optionalImageRetryUsed = false
   const maxToolRounds = normalizeMaxToolRounds(params.maxIterations)
   let toolSchema: ToolSchema = resolveToolSchema({
@@ -227,7 +228,7 @@ export async function runToolOrchestration(
       onStreamChunk: params.onStreamChunk,
       onFirstResponseEvent: params.onFirstResponseEvent,
       onTurnError: async (turn) => {
-        if (supportsToolImages && turn.schema === 'tools' && !optionalImageRetryUsed && isUpstreamImageRejection(turn.error)) {
+        if (canSendToolImages && turn.schema === 'tools' && !optionalImageRetryUsed && isUpstreamImageRejection(turn.error)) {
           const affected = turn.messages.filter((msg) => msg.role === 'tool' && msg.imageEvidence?.kind === 'page')
           if (affected.length > 0) {
             params.checkAbort?.()
@@ -332,7 +333,7 @@ export async function runToolOrchestration(
           )
         } else {
           const message = result.value.message
-          if (!supportsToolImages || (optionalImageRetryUsed && message.imageEvidence?.kind === 'page')) {
+          if (!canSendToolImages || (optionalImageRetryUsed && message.imageEvidence?.kind === 'page')) {
             delete message.imageEvidence
           }
           workingMessages.push(message)
@@ -1128,9 +1129,12 @@ function resolveFallbackSchema(params: {
 }
 
 function isUpstreamImageRejection(error: unknown): boolean {
-  return error instanceof Error && 'status' in error && error.status === 400 &&
-    /\bbusiness code 11135\b/i.test(error.message) &&
-    /\bcould not process an image\b/i.test(error.message)
+  if (!(error instanceof Error) || !('status' in error)) return false
+  const { message, status } = error
+  if (status !== 400 && status !== 422) return false
+  return /\bcould not process an image\b/i.test(message) ||
+    (/\bfunction_call_output\b|\binput\[\d+\]\.output\b/i.test(message) &&
+      /\b(?:must be|expected|valid) (?:a )?string\b/i.test(message))
 }
 
 function buildProviderRequestError(response: Response, rawText: string): Error {

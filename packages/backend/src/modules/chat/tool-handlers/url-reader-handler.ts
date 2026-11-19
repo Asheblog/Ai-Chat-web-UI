@@ -10,7 +10,7 @@ import {
   checkIfLikelySPA,
 } from '../../../utils/url-reader'
 import { readRemoteImages } from '../../../utils/remote-image-reader'
-import type { ToolImageEvidence } from '../../../utils/tool-image-evidence'
+import { supportsToolImages, type ToolImageEvidence } from '../../../utils/tool-image-evidence'
 import type {
   IToolHandler,
   ToolCall,
@@ -73,10 +73,8 @@ export class UrlReaderToolHandler implements IToolHandler {
     result: Awaited<ReturnType<typeof readUrlContent>>,
     context: ToolCallContext,
   ) {
-    const provider = (context.provider || '').toLowerCase()
     const direct = result.resourceType === 'image'
-    const supportsToolImages = provider === 'openai_responses' || provider === 'anthropic'
-    if (context.modelCapabilities?.vision !== true || !supportsToolImages) return []
+    if (context.modelCapabilities?.vision !== true || !supportsToolImages(context.provider)) return []
     if (!direct && result.resourceType && result.resourceType !== 'page') return []
 
     const images = result.images ?? []
@@ -86,6 +84,7 @@ export class UrlReaderToolHandler implements IToolHandler {
     return readRemoteImages(candidates, {
       timeoutMs: Math.max(4000, this.config.timeout ?? 12000),
       maxCount: candidates.length,
+      signal: context.requestSignal,
     })
   }
 
@@ -189,9 +188,9 @@ export class UrlReaderToolHandler implements IToolHandler {
       const downloaded = await this.downloadImages(result, context)
       const imageEvidence: ToolImageEvidence | undefined = downloaded.length > 0 ? {
         kind: result.resourceType === 'image' ? 'resource' : 'page',
-        sourceUrl: result.finalUrl || result.url,
-        title: result.title,
         images: downloaded.map((item) => ({
+          sourceUrl: result.finalUrl || result.url,
+          title: result.title,
           imageUrl: item.requestedUrl,
           dataUrl: `data:${item.mime};base64,${item.data}`,
           alt: item.alt,

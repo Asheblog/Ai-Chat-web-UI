@@ -126,8 +126,8 @@ describe('convertChatCompletionsRequestToAnthropic', () => {
         {
           role: 'tool', tool_call_id: 'call_story', content: 'Article text',
           imageEvidence: {
-            kind: 'page', sourceUrl, title: 'A news story',
-            images: [{ imageUrl, dataUrl: 'data:image/png;base64,YQ==' }],
+            kind: 'page',
+            images: [{ sourceUrl, title: 'A news story', imageUrl, dataUrl: 'data:image/png;base64,YQ==' }],
           },
         },
       ],
@@ -139,7 +139,7 @@ describe('convertChatCompletionsRequestToAnthropic', () => {
       content: [{
         type: 'tool_result', tool_use_id: 'call_story', content: [
           { type: 'text', text: 'Article text' },
-          { type: 'text', text: expect.stringContaining('标题：A news story\n网页来源：' + sourceUrl + '\n图片地址：' + imageUrl) },
+          { type: 'text', text: expect.stringContaining('标题：A news story\n来源 URL：' + sourceUrl + '\n图片地址：' + imageUrl) },
           { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'YQ==' } },
         ],
       }],

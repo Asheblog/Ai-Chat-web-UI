@@ -428,7 +428,11 @@ describe('tool-orchestrator', () => {
     expect(deltas).toEqual(['Hello', ' ', 'World'])
   })
 
-  it.each([false, true])('retries the same Responses turn without optional page images (user upload: %s)', async (withUpload) => {
+  it.each([
+    { withUpload: false, stringOnly: false },
+    { withUpload: true, stringOnly: false },
+    { withUpload: true, stringOnly: true },
+  ])('retries optional page images (user upload: $withUpload; string-only gateway: $stringOnly)', async ({ withUpload, stringOnly }) => {
     const userImage = 'data:image/png;base64,dXBsb2Fk'
     const question = 'How does it compare with a shared gateway?'
     const initialMessages = [
@@ -456,9 +460,9 @@ describe('tool-orchestrator', () => {
         content: name === 'read_url' ? articleBody : 'Search results',
         ...(name === 'read_url' ? { imageEvidence: {
           kind: call.id === 'call_direct' ? 'resource' as const : 'page' as const,
-          sourceUrl: 'https://example.com/' + call.id,
-          title: 'News ' + call.id,
           images: [{
+            sourceUrl: 'https://example.com/' + call.id,
+            title: 'News ' + call.id,
             imageUrl: 'https://cdn.example.com/' + call.id + '.png',
             dataUrl: call.id === 'call_direct' ? directImage
               : call.id === 'call_read_3' ? laterImage
@@ -492,10 +496,14 @@ describe('tool-orchestrator', () => {
         if (iteration === 0) return buildSseStreamResponse([toolCall('web_search', 'call_search')])
         if (iteration === 1) return buildSseStreamResponse([
           toolCall('read_url', 'call_read_1'), toolCall('read_url', 'call_read_2', 1),
-          toolCall('read_url', 'call_direct', 2),
+          ...(stringOnly ? [] : [toolCall('read_url', 'call_direct', 2)]),
         ])
         if (iteration === 2) {
-          if (JSON.stringify(input).includes(articleImage)) return imageRejectionResponse()
+          if (JSON.stringify(input).includes(articleImage)) {
+            return stringOnly
+              ? new Response(JSON.stringify({ error: { param: 'input[4].output', message: 'function_call_output.output must be a string' } }), { status: 422 })
+              : imageRejectionResponse()
+          }
           return buildSseStreamResponse([toolCall('read_url', 'call_read_3')])
         }
         return buildSseStreamResponse([{ type: 'response.output_text.delta', delta: 'They serve different users.' }])
@@ -505,7 +513,7 @@ describe('tool-orchestrator', () => {
 
     expect(result).toMatchObject({ status: 'completed', content: 'They serve different users.' })
     expect(executedTool.mock.calls.map(([, call]) => call.id)).toEqual([
-      'call_search', 'call_read_1', 'call_read_2', 'call_direct', 'call_read_3',
+      'call_search', 'call_read_1', 'call_read_2', ...(stringOnly ? [] : ['call_direct']), 'call_read_3',
     ])
     expect(requests.map(({ iteration }) => iteration)).toEqual([0, 1, 2, 2, 3])
     expect(onOptionalImageRetry).toHaveBeenCalledTimes(1)
@@ -526,8 +534,12 @@ describe('tool-orchestrator', () => {
     }
     const isDirectImageResult = (item: any) => item.call_id === 'call_direct' && item.type === 'function_call_output'
     const directResult = requests[2].input.find(isDirectImageResult)
-    expect(JSON.stringify(directResult)).toContain(directImage)
-    expect(requests[3].input.find(isDirectImageResult)).toEqual(directResult)
+    if (stringOnly) {
+      expect(directResult).toBeUndefined()
+    } else {
+      expect(JSON.stringify(directResult)).toContain(directImage)
+      expect(requests[3].input.find(isDirectImageResult)).toEqual(directResult)
+    }
     expect(requests[3].input).toEqual(expect.arrayContaining([
       ...requests[0].input,
       { type: 'function_call', call_id: 'call_read_1', name: 'read_url', arguments: '{}' },
@@ -574,8 +586,8 @@ describe('tool-orchestrator', () => {
         message: {
           role: 'tool', tool_call_id: 'call_read', name: 'read_url', content: 'Article text',
           imageEvidence: {
-            kind: 'page', sourceUrl: 'https://example.com/article', title: 'News',
-            images: [{ imageUrl: 'https://example.com/news.png', dataUrl: 'data:image/png;base64,YXJ0aWNsZQ==' }],
+            kind: 'page',
+            images: [{ sourceUrl: 'https://example.com/article', title: 'News', imageUrl: 'https://example.com/news.png', dataUrl: 'data:image/png;base64,YXJ0aWNsZQ==' }],
           },
         },
       }),

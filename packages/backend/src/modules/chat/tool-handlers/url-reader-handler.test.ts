@@ -101,8 +101,8 @@ describe('UrlReaderToolHandler', () => {
     expect(result.followupMessages).toBeUndefined()
     expect(result.message).toMatchObject({
       role: 'tool', tool_call_id: 'call_news', imageEvidence: {
-        kind: 'page', sourceUrl: finalUrl, title: '本地新闻',
-        images: [{ imageUrl: secondImage, dataUrl: 'data:image/png;base64,cGljdHVyZQ==', alt: '活动现场' }],
+        kind: 'page',
+        images: [{ sourceUrl: finalUrl, title: '本地新闻', imageUrl: secondImage, dataUrl: 'data:image/png;base64,cGljdHVyZQ==', alt: '活动现场' }],
       },
     })
     expect(result.message.content).toContain(firstImage)
@@ -133,8 +133,8 @@ describe('UrlReaderToolHandler', () => {
     expect(result.followupMessages).toBeUndefined()
     if (attached) {
       expect(result.message).toMatchObject({ imageEvidence: {
-        kind: 'resource', sourceUrl: url,
-        images: [{ imageUrl: url, dataUrl: 'data:image/png;base64,ZmFrZQ==' }],
+        kind: 'resource',
+        images: [{ sourceUrl: url, imageUrl: url, dataUrl: 'data:image/png;base64,ZmFrZQ==' }],
       } })
       expect(mockedReadRemoteImages).toHaveBeenCalledTimes(1)
     } else {
