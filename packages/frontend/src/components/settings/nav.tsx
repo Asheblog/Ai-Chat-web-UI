@@ -1,6 +1,6 @@
-import { ReactNode } from "react"
+import type { ReactNode } from "react"
+import { Info, PackageCheck, Share2, ShieldCheck, User, type LucideIcon } from "lucide-react"
 import { systemSettingsTree } from "./system-settings-registry"
-import type { LucideIcon } from "lucide-react"
 
 export type SettingsNavItem = {
   key: string
@@ -45,11 +45,11 @@ export const settingsNav: SettingsNavItem[] = [
     key: 'personal',
     label: '个人设置',
     children: [
-      { key: 'personal.preferences', label: '偏好设置', requiresAuth: true },
-      { key: 'personal.skills', label: '个人 Skills', requiresAuth: true },
-      { key: 'personal.shares', label: '分享管理', requiresAuth: true },
-      { key: 'personal.security', label: '账号安全', requiresAuth: true },
-      { key: 'personal.about', label: '关于' },
+      { key: 'personal.preferences', label: '偏好设置', icon: iconNode(User), requiresAuth: true },
+      { key: 'personal.skills', label: '个人 Skills', icon: iconNode(PackageCheck), requiresAuth: true },
+      { key: 'personal.shares', label: '分享管理', icon: iconNode(Share2), requiresAuth: true },
+      { key: 'personal.security', label: '账号安全', icon: iconNode(ShieldCheck), requiresAuth: true },
+      { key: 'personal.about', label: '关于', icon: iconNode(Info) },
     ],
   },
   {
