@@ -1,5 +1,5 @@
 import React from "react"
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react"
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest"
 import { SettingsDialog } from "../settings-dialog"
 
@@ -60,6 +60,22 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
+})
+
+describe("SettingsDialog 个人设置导航", () => {
+  test("登录后五个个人设置菜单项都显示装饰图标", () => {
+    render(<SettingsDialog open onOpenChange={vi.fn()} />)
+
+    const nav = within(screen.getByRole("navigation", { name: "设置导航" }))
+    const labels = ["偏好设置", "个人 Skills", "分享管理", "账号安全", "关于"]
+    const icons = labels.map((name) => {
+      const item = nav.getByRole("button", { name, exact: true })
+      const icon = item.querySelector('[aria-hidden="true"] svg')
+      expect(icon, name).toBeInTheDocument()
+      return icon?.innerHTML
+    })
+    expect(new Set(icons).size).toBe(labels.length)
+  })
 })
 
 describe("SettingsDialog 搜索接入", () => {
