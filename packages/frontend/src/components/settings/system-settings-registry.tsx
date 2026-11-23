@@ -4,6 +4,7 @@ import dynamic from "next/dynamic"
 import type { ComponentType, ReactNode } from "react"
 import { peekFlash } from "./settings-flash-bus"
 import { SystemLeafWrapper } from "./system-leaf-wrapper"
+import { createSettingsModule } from "./components/settings-module"
 import { getExtensionSection, extensionLeafForSection } from "./extensions-navigation"
 import type { ExtensionSection } from "./pages/extensions/extensions-sections"
 
@@ -30,9 +31,9 @@ const SystemConnectionsPage = dynamic(
   () => import("@/components/settings/pages/SystemConnections").then((m) => m.SystemConnectionsPage),
   { loading: pageLoading },
 )
-const SystemSkillAuditsPage = dynamic(
-  () => import("@/components/settings/pages/SystemSkillAudits").then((m) => m.SystemSkillAuditsPage),
-  { loading: pageLoading },
+const SystemSkillAuditsPage = createSettingsModule(
+  () => import("./pages/SystemSkillAudits").then((m) => m.SystemSkillAuditsPage),
+  "日志与审计",
 )
 const SearchKnowledgePage = dynamic(
   () => import("@/components/settings/pages/search-knowledge/SearchKnowledgePage").then((m) => m.SearchKnowledgePage),

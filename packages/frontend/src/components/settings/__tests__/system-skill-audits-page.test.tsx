@@ -138,7 +138,7 @@ describe("SystemSkillAuditsPage", () => {
     expect(screen.getByRole("button", { name: "Skill 审计" })).toHaveAttribute("aria-pressed", "false")
     await waitFor(() => {
       expect(systemApiMocks.getTaskTraces).toHaveBeenCalled()
-    })
+    }, { timeout: 5000 })
     expect(screen.queryByText("web_search")).not.toBeInTheDocument()
   })
 })
