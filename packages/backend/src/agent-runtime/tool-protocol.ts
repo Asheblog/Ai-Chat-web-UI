@@ -342,9 +342,10 @@ export function buildUnsupportedToolResult(toolCallId: string | undefined, toolN
  * 台账摘要与配对 tool 结果共用，避免两处口径漂移。
  */
 export function buildSkippedToolSummary(reason: string): string {
-  return reason === 'budget_exhausted'
-    ? '工具预算已用尽，未执行该调用'
-    : '已停止后续工具，未执行'
+  if (reason === 'budget_exhausted') return '工具预算已用尽，未执行该调用'
+  // 来源提前用尽不是预算耗尽，也不是用户点了停止
+  if (reason === 'tool_chain_exhausted') return '检索来源已用尽，未执行该调用'
+  return '已停止后续工具，未执行'
 }
 
 /**

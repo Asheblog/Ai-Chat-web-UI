@@ -396,6 +396,10 @@ const CRITICAL_EVENT_TYPES = new Set([
   'stream.first_chunk_timeout',
   'stream.keepalive_timeout',
   'agent:stopped_without_answer',
+  'agent:first_visible_content',
+  'agent:provider_usage',
+  'agent:answer_outcome',
+  'agent:retrieval_chain_ended',
   'agent:concurrency_denied',
   'agent:tool_context_guard',
   'agent:tool_context_guard_retry',
@@ -460,6 +464,13 @@ export const classifyTraceEventTier = (
   if (eventType.startsWith('sse:')) return 'noise'
   if (NOISE_EVENT_TYPES.has(eventType)) return 'noise'
   if (CRITICAL_EVENT_TYPES.has(eventType)) return 'critical'
+  if (eventType === 'tool:event') {
+    const retrieval = asTraceRecord(payload?.retrievalOutcome)
+    const status = retrieval?.status
+    if (status === 'failed' || status === 'timeout' || status === 'cancelled' || status === 'partial') {
+      return 'critical'
+    }
+  }
   if (hasPayloadFailure(payload)) return 'critical'
   return 'normal'
 }
@@ -800,6 +811,44 @@ const summarizeAttempts = (attempts: unknown): Record<string, unknown> | undefin
   return { count: attempts.length, kept }
 }
 
+function asTraceRecord(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+}
+
+const pickTraceScalars = (record: Record<string, unknown> | undefined, keys: readonly string[]) => {
+  const summary: Record<string, string | number | boolean | null> = {}
+  for (const key of keys) {
+    const value = record?.[key]
+    if (typeof value === 'string') summary[key] = truncateString(value, 80)
+    if (typeof value === 'number' || typeof value === 'boolean' || value === null) summary[key] = value
+  }
+  return summary
+}
+
+const summarizeRetrievalOutcome = (summary: Record<string, unknown>, value: unknown) => {
+  const outcome = asTraceRecord(value)
+  if (typeof outcome?.status !== 'string' || typeof outcome.reason !== 'string') return
+  const search = asTraceRecord(outcome.search)
+  const read = asTraceRecord(outcome.autoRead)
+  const cancellation = asTraceRecord(outcome.cancellation)
+  summary.retrievalOutcome = {
+    ...pickTraceScalars(outcome, ['status', 'reason', 'retryable', 'retryAfterMs', 'degraded']),
+    ...pickTraceScalars(search, ['attempted', 'succeeded', 'failed', 'empty', 'timedOut', 'skippedBackoff', 'exhaustion']),
+    ...(typeof read?.state === 'string' ? { autoReadState: truncateString(read.state, 80) } : {}),
+    ...(cancellation?.source === 'request' ? { cancellationSource: 'request' } : {}),
+  }
+  if (Array.isArray(outcome.engines)) {
+    summary.searchEngines = outcome.engines.slice(0, 10).flatMap((item: unknown) => {
+      const engine = asTraceRecord(item)
+      if (typeof engine?.engine !== 'string' || typeof engine.state !== 'string') return []
+      return [pickTraceScalars(engine, ['engine', 'state', 'failureKind', 'errorCode', 'httpStatus', 'retryAfterMs'])]
+    })
+    if (outcome.engines.length > 10) summary.searchEngineTaskCount = outcome.engines.length
+  }
+}
+
 /**
  * 工具调用摘要：只挑白名单字段。
  * 不透传 details / argumentsText / headers，避免把凭据或整段参数写进追踪。
@@ -853,6 +902,7 @@ const summarizeToolCallPayload = (payload: any, summary: Record<string, unknown>
   if (Array.isArray(payload.hits)) summary.hits = payload.hits.length
   const attempts = summarizeAttempts(pick('attempts'))
   if (attempts) summary.attempts = attempts
+  if (tool === 'web_search') summarizeRetrievalOutcome(summary, details?.retrievalOutcome)
   return summary
 }
 

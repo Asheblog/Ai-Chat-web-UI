@@ -3,7 +3,7 @@ jest.mock('../../../db', () => ({ prisma: {} }))
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { TaskTraceRecorder } from '../../task-trace'
+import { summarizeSsePayload, TaskTraceRecorder } from '../../task-trace'
 
 interface RecorderHarness {
   recorder: TaskTraceRecorder
@@ -84,6 +84,67 @@ describe('TaskTraceRecorder retention', () => {
     expect(last.payload.omitted.noise).toBe(150)
 
     await rm(harness.dir, { recursive: true, force: true })
+  })
+
+  it('keeps answer milestones after streaming and ordinary event budgets are exhausted', async () => {
+    const harness = await createHarness({ maxEvents: 2, maxNormalEvents: 2 })
+    const milestones = [
+      ['agent:provider_usage', { iteration: 0, usage: { input_tokens: 120, output_tokens: 30 } }],
+      ['agent:first_visible_content', { length: 12 }],
+      ['agent:retrieval_chain_ended', { cause: 'sources_cooling_down', iteration: 1 }],
+      ['agent:answer_outcome', { finalAnswerGenerated: false, stopReason: 'content_filter' }],
+    ] as const
+    try {
+      for (let i = 0; i < 6; i += 1) {
+        harness.recorder.log('sse:dispatch', { type: 'reasoning', length: 5 })
+        harness.recorder.log('tool:event', { stage: 'result' })
+      }
+      for (const [type, payload] of milestones) harness.recorder.log(type, payload)
+      await harness.recorder.finalize('completed')
+
+      const lines = await harness.readLines()
+      expect(lines.filter(({ eventType }) => eventType === 'trace_overflow').map(({ payload }) => payload.tier))
+        .toEqual(['noise', 'normal'])
+      for (const [type, payload] of milestones) {
+        expect(lines.filter(({ eventType }) => eventType === type)).toEqual([
+          expect.objectContaining({ payload }),
+        ])
+      }
+    } finally {
+      await rm(harness.dir, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps bounded retrieval diagnostics after the ordinary event budget is exhausted', async () => {
+    const harness = await createHarness({ maxEvents: 2, maxNormalEvents: 1 })
+    try {
+      harness.recorder.log('request:init', { sessionId: 1 })
+      harness.recorder.log('tool:event', summarizeSsePayload({
+        type: 'tool_call', tool: 'web_search', stage: 'result', id: 'search-1',
+        details: {
+          retrievalOutcome: {
+            status: 'cancelled', reason: 'request_cancelled', retryable: false,
+            search: { skippedBackoff: 1, exhaustion: 'none' },
+            autoRead: { state: 'cancelled' },
+            cancellation: { requested: true, source: 'request' },
+            engines: [{ engine: 'tavily', state: 'cancelled', failureKind: 'cancelled', responseBody: 'PRIVATE' }],
+          },
+        },
+      }))
+      await harness.recorder.finalize('completed')
+      const lines = await harness.readLines()
+      expect(lines.find(({ eventType }) => eventType === 'tool:event')?.payload).toMatchObject({
+        callId: 'search-1',
+        retrievalOutcome: {
+          status: 'cancelled', reason: 'request_cancelled', retryable: false,
+          skippedBackoff: 1, exhaustion: 'none', autoReadState: 'cancelled', cancellationSource: 'request',
+        },
+        searchEngines: [{ engine: 'tavily', state: 'cancelled', failureKind: 'cancelled' }],
+      })
+      expect(JSON.stringify(lines)).not.toContain('PRIVATE')
+    } finally {
+      await rm(harness.dir, { recursive: true, force: true })
+    }
   })
 
   it('reports a persisted event count that matches the file content', async () => {

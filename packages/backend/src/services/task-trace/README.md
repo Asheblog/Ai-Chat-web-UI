@@ -29,6 +29,8 @@
 - 首次超限写入一条 `trace_overflow`：`{ tier: 'noise' | 'normal' | 'critical', limit }`，每层最多一条。
 - 关键事件与噪声分开记账，所以「2000 条 SSE 分片之后工具错误与结束事件仍可查询」是结构保证，
   不是调大总上限的运气。
+- 网页搜索编排将 `agent:provider_usage`（每次模型请求的用量）、`agent:first_visible_content`（首个可见正文分片的时刻）、`agent:answer_outcome`（最终答复交付结果）写到 `critical` 层。`agent:retrieval_chain_ended` 记录提前结束检索的原因，也归 `critical` 层。这些事件不保存正文；正文增量仍归 `noise`。关键预算若也耗尽，仍以关键层的丢弃计数为准。
+- 网页检索的失败、超时、取消和部分成功也归 `critical`。摘要中的 `retrievalOutcome` 和 `searchEngines` 只保留有界状态字段；成功和无命中沿用普通预算。
 - 单个事件负载仍按 `sanitizePayload` 截断（字符串 500、数组 10、对象条目 20、深度 3）。
 
 ## metadata.__trace

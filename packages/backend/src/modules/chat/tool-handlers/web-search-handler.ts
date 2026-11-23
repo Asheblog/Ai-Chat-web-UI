@@ -6,7 +6,6 @@ import { randomUUID } from 'node:crypto'
 import {
   runWebSearchParallel,
   mergeWebSearchParallelResults,
-  formatHitsForModel,
   normalizeSearchUrl,
   type WebSearchHit,
   type WebSearchQueryLanguage,
@@ -18,6 +17,33 @@ import {
 import { truncateText } from '../../../utils/parsers'
 import { supportsToolImages } from '../../../utils/tool-image-evidence'
 import { downloadSearchImageEvidence } from './web-search-image-evidence'
+import {
+  DEFAULT_MODEL_SUMMARY_CHARS,
+  buildSummaryForModel,
+  slimEvidenceForModel,
+  slimHitsForModel,
+  slimTaskResultsForModel,
+} from './web-search-model-output'
+import { buildEngineBackoffKey, getEngineBackoff } from './web-search-backoff'
+import {
+  buildSearchEvidenceTaskKey,
+  recordReadEvidence,
+  recordSearchEvidence,
+} from './web-search-evidence-store'
+import { parseWebSearchRequestArgs } from './web-search-request'
+import {
+  buildEvidenceSummary,
+  buildRetrievalOutcome,
+  buildTerminalOutcome,
+  mapReadFailureReason,
+  type EvidenceSummaryFailure,
+  type RetrievalAutoReadReport,
+  type RetrievalEvidenceCounts,
+  type RetrievalOutcome,
+  type RetrievalRestriction,
+  type RetrievalTimeRangeReport,
+  type SkippedEngineReport,
+} from './web-search-outcome'
 import { WEB_SEARCH_SCOPE_IDS, isWebSearchScope } from '@aichat/shared/web-search-contract'
 import { WEB_SEARCH_AUTO_READ_BATCH_TIMEOUT_MS } from '@aichat/shared'
 import { readUrlContent, type UrlReadResult, type UrlReaderOptions } from '../../../utils/url-reader'
@@ -43,15 +69,7 @@ const DEFAULT_AUTO_READ_TOP_K = 2
 const DEFAULT_AUTO_READ_TIMEOUT_MS = 18000
 const DEFAULT_AUTO_READ_MAX_CONTENT_LENGTH = 24000
 const DEFAULT_AUTO_READ_PARALLELISM = 2
-const DEFAULT_MODEL_EVIDENCE_CHARS = 2200
-const DEFAULT_MODEL_RESULT_HITS = 5
-const DEFAULT_MODEL_TASK_RESULTS = 6
-const DEFAULT_MODEL_SNIPPET_CHARS = 360
-const DEFAULT_MODEL_SUMMARY_CHARS = 3200
-// 与自动阅读的候选上限一致：模型最多看到 4 条阅读证据，不额外隐藏失败项
-const DEFAULT_MODEL_EVIDENCE_ITEMS = 4
-const DEFAULT_MODEL_EVIDENCE_ITEM_CHARS = 900
-const MAX_MODEL_EVIDENCE_IMAGES = 4
+
 const DEFAULT_PARALLEL_MAX_ENGINES = 5
 const DEFAULT_PARALLEL_MAX_QUERIES = 2
 const DEFAULT_PARALLEL_TIMEOUT_MS = 12000
@@ -560,117 +578,7 @@ const collectReadImageUrls = (
     ),
   )
 
-const buildSummaryForModel = (
-  query: string,
-  hits: WebSearchHit[],
-  autoReadEvidence: AutoReadItem[],
-): string => {
-  const base = formatHitsForModel(query, hits)
-  if (autoReadEvidence.length === 0) {
-    return `${base}\n\n注：本轮未读取网页正文，仅基于搜索摘要。`
-  }
 
-  const bodyItems = autoReadEvidence.filter(
-    (item) => item.evidenceKind === 'article' || item.evidenceKind === 'structured',
-  )
-  const summaryItems = autoReadEvidence.filter((item) => item.evidenceKind === 'summary')
-  const failedItems = autoReadEvidence.filter((item) => item.evidenceKind === 'none')
-  const lines: string[] = []
-
-  lines.push('自动网页读取证据（按搜索结果顺序）：')
-  if (autoReadEvidence.some((item) => item.images?.length)) {
-    lines.push('各条目下的图片证据是该网页对应的候选图，不是用户上传；仅凭链接不能确认是正文配图。')
-  }
-  for (const item of autoReadEvidence) {
-    if (item.evidenceKind === 'none') {
-      const status = `${item.errorCode || 'UNKNOWN'}${typeof item.httpStatus === 'number' ? ` (HTTP ${item.httpStatus})` : ''}`
-      lines.push(`${item.rank}. 读取失败：${item.url} | ${status}，无可用回退正文`)
-      continue
-    }
-    if (item.evidenceKind === 'summary') {
-      const sourceSuffix = item.contentSource ? ` | 来源: ${item.contentSource}` : ''
-      const failSuffix = item.errorCode ? ` | 原文读取失败: ${item.errorCode}` : ''
-      lines.push(`${item.rank}. 仅取得摘要（不计为正文）：${item.url}${sourceSuffix}${failSuffix}`)
-      if (item.content) {
-        lines.push(`   摘要：${truncateText(item.content, 600)}`)
-      }
-      if (item.images?.length) {
-        lines.push(`   图片证据: ${item.images.slice(0, MAX_MODEL_EVIDENCE_IMAGES).map((img) => img.url).join(' | ')}`)
-      }
-      continue
-    }
-    const title = item.title || item.url
-    const kindSuffix = item.evidenceKind === 'structured' ? '（结构化内容）' : ''
-    const extractionSuffix = item.fallbackUsed === 'crawler' ? '（爬虫回退）' : ''
-    const reuseSuffix =
-      item.fallbackUsed === 'search_content'
-        ? `（搜索正文复用${item.contentSource ? ` · ${item.contentSource}` : ''}）`
-        : ''
-    const truncationSuffix = item.truncated
-      ? item.fallbackUsed === 'search_content'
-        ? '（提供方正文本已截断，非完整正文）'
-        : '（正文已截断，非完整正文）'
-      : ''
-    lines.push(`${item.rank}. ${title}${kindSuffix}${extractionSuffix}${reuseSuffix}${truncationSuffix}`)
-    lines.push(`   URL: ${item.url}`)
-    if (item.excerpt) {
-      lines.push(`   摘要: ${truncateText(item.excerpt, 360)}`)
-    }
-    if (item.content) {
-      lines.push(`   正文摘录: ${truncateText(item.content, DEFAULT_MODEL_EVIDENCE_CHARS)}`)
-    }
-    if (item.images?.length) {
-      lines.push(`   图片证据: ${item.images.slice(0, MAX_MODEL_EVIDENCE_IMAGES).map((img) => img.url).join(' | ')}`)
-    }
-  }
-
-  return `${base}\n\n${lines.join('\n')}\n\n统计：有效正文 ${bodyItems.length} 条，仅摘要 ${summaryItems.length} 条，失败 ${failedItems.length} 条。`
-}
-
-const slimHitsForModel = (hits: Array<{ title: string; url: string; snippet?: string; content?: string; imageUrl?: string; thumbnailUrl?: string; engine?: string; rank?: number; sourceEngines?: string[] }>) =>
-  hits.slice(0, DEFAULT_MODEL_RESULT_HITS).map((hit) => ({
-    title: hit.title,
-    url: hit.url,
-    snippet: truncateText(hit.snippet || hit.content || '', DEFAULT_MODEL_SNIPPET_CHARS),
-    imageUrl: hit.imageUrl,
-    thumbnailUrl: hit.thumbnailUrl,
-    engine: hit.engine,
-    rank: hit.rank,
-    sourceEngines: Array.isArray(hit.sourceEngines) ? hit.sourceEngines.slice(0, 3) : undefined,
-  }))
-
-const slimTaskResultsForModel = (tasks: Array<{ task: { engine: string; query: string; queryLanguage: string }; status: 'success' | 'error'; hits: unknown[]; error?: string }>) =>
-  tasks.slice(0, DEFAULT_MODEL_TASK_RESULTS).map((item) => ({
-    engine: item.task.engine,
-    query: item.task.query,
-    queryLanguage: item.task.queryLanguage,
-    status: item.status,
-    hitsCount: Array.isArray(item.hits) ? item.hits.length : 0,
-    error: item.error,
-  }))
-
-const slimEvidenceForModel = (items: AutoReadItem[]) =>
-  items.slice(0, DEFAULT_MODEL_EVIDENCE_ITEMS).map((item) => ({
-    url: item.url,
-    title: item.title,
-    evidenceKind: item.evidenceKind,
-    contentSource: item.contentSource,
-    excerpt: item.excerpt ? truncateText(item.excerpt, DEFAULT_MODEL_SNIPPET_CHARS) : undefined,
-    content: item.content ? truncateText(item.content, DEFAULT_MODEL_EVIDENCE_ITEM_CHARS) : undefined,
-    images: Array.isArray(item.images) ? item.images.slice(0, MAX_MODEL_EVIDENCE_IMAGES) : undefined,
-    siteName: item.siteName,
-    byline: item.byline,
-    wordCount: item.wordCount,
-    truncated: item.truncated,
-    fetchedAt: item.fetchedAt,
-    archivedAt: item.archivedAt,
-    error: item.error,
-    errorCode: item.errorCode,
-    httpStatus: item.httpStatus,
-    fallbackUsed: item.fallbackUsed,
-    skippedReason: item.skippedReason,
-    rank: item.rank,
-  }))
 
 export class WebSearchToolHandler implements IToolHandler {
   readonly toolName = 'web_search'
@@ -698,6 +606,23 @@ export class WebSearchToolHandler implements IToolHandler {
               type: 'string',
               enum: [...WEB_SEARCH_SCOPE_IDS],
               description: 'Optional search scope/type. Use "image" only when the research needs news/evidence images; the backend will run image-capable engines and return their raw image urls.',
+            },
+            domains: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Optional source restriction for news or specified outlets, e.g. ["reuters.com", "bloomberg.com"]. It narrows the configured whitelist and never widens it.',
+            },
+            time_range: {
+              type: 'object',
+              properties: {
+                start: { type: 'string', description: 'Earliest publication date, YYYY-MM-DD.' },
+                end: { type: 'string', description: 'Latest publication date, YYYY-MM-DD.' },
+              },
+              description: 'Optional publication window for news or time-sensitive questions. Inverted or unparseable ranges are rejected instead of being silently reversed.',
+            },
+            include_images: {
+              type: 'boolean',
+              description: 'Set true only when binary page images are needed as evidence. Image urls are always listed; leaving this false avoids image downloads.',
             },
           },
           required: ['query'],
@@ -748,11 +673,232 @@ export class WebSearchToolHandler implements IToolHandler {
     // 自动阅读需要正文时，向支持正文的引擎请求既有正文能力；不新增服务、不改条数与长度上限
     const autoReadNeedContent = autoReadEnabledForSearch && autoReadTopK > 0
     const expandedQueries = buildBilingualQueries(query, this.config)
+    const requestParse = parseWebSearchRequestArgs({
+      args,
+      configDomains: this.config.domains,
+    })
+    const requestAborted = () => Boolean(context.requestSignal?.aborted)
+    const buildTerminalEvidence = (
+      outcome: RetrievalOutcome,
+      restriction: RetrievalRestriction = { restricted: false, requested: [], effective: [] },
+    ) =>
+      buildEvidenceSummary({
+        source: 'search',
+        queries: [],
+        hits: 0,
+        evidence: outcome.evidence,
+        engines: [],
+        failures: [],
+        truncated: 0,
+        restriction,
+        timeRange: null,
+      })
+
+    if (!requestParse.ok) {
+      const outcome = buildTerminalOutcome({ status: 'failed', reason: 'invalid_request' })
+      context.sendToolEvent({
+        id: callId,
+        tool: 'web_search',
+        stage: 'error',
+        query,
+        error: requestParse.message,
+        details: { errorCode: requestParse.errorCode, groupId: callId, retrievalOutcome: outcome },
+      })
+      return {
+        toolCallId: callId,
+        toolName: this.toolName,
+        message: {
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          name: 'web_search',
+          content: JSON.stringify({
+            query,
+            error: requestParse.message,
+            errorCode: requestParse.errorCode,
+            retrievalOutcome: outcome,
+            evidenceSummary: buildTerminalEvidence(outcome),
+          }),
+        },
+      }
+    }
+
+    const requestPlan = requestParse.plan
+
+    /**
+     * 取消终态只有一条路：构造结论、发布父 result 事件、返回不含 error 的结果。
+     * 任何取消支路都走这里，避免个别分支只返回内容却不发事件。
+     */
+    const publishCancelledResult = (skippedEngines?: SkippedEngineReport[]): ToolHandlerResult => {
+      const outcome = buildTerminalOutcome({
+        status: 'cancelled',
+        reason: 'request_cancelled',
+        restriction: requestPlan.restriction,
+        cancelled: true,
+        ...(skippedEngines ? { skippedEngines } : {}),
+      })
+      const evidenceSummary = buildTerminalEvidence(outcome, requestPlan.restriction)
+      context.sendToolEvent({
+        id: callId,
+        tool: 'web_search',
+        stage: 'result',
+        query,
+        hits: [],
+        summary: '检索已取消',
+        details: { groupId: callId, cancelled: true, retrievalOutcome: outcome, evidenceSummary },
+      })
+      return {
+        toolCallId: callId,
+        toolName: this.toolName,
+        message: {
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          name: 'web_search',
+          content: JSON.stringify({
+            query,
+            hits: [],
+            summary: `本次检索已取消（${query}）。`,
+            retrievalOutcome: outcome,
+            evidenceSummary,
+          }),
+        },
+      }
+    }
+
+    if (requestPlan.conflict) {
+      // 指定来源全部落在部署白名单之外：不放宽白名单，也不换别家媒体替代
+      const outcome = buildTerminalOutcome({
+        status: 'empty',
+        reason: 'domains_outside_whitelist',
+        restriction: requestPlan.restriction,
+      })
+      context.sendToolEvent({
+        id: callId,
+        tool: 'web_search',
+        stage: 'result',
+        query,
+        hits: [],
+        summary: '指定来源不在可用来源范围内',
+        details: { groupId: callId, retrievalOutcome: outcome },
+      })
+      return {
+        toolCallId: callId,
+        toolName: this.toolName,
+        message: {
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          name: 'web_search',
+          content: JSON.stringify({
+            query,
+            hits: [],
+            summary: `限定来源检索：${query}。请求来源不在部署允许的来源范围内。`,
+            retrievalOutcome: outcome,
+            evidenceSummary: buildTerminalEvidence(outcome, requestPlan.restriction),
+          }),
+        },
+      }
+    }
+    // 取消优先于一切：不再探测退避、不再升级、不再读取网页
+    if (requestAborted()) return publishCancelledResult()
+
     const activeEngines = pickActiveEngines(this.config, effectiveScope)
+    const backoff = getEngineBackoff()
+    const backoffKeyOf = (engine: string) =>
+      buildEngineBackoffKey({
+        engine,
+        apiKey: this.config.apiKeys?.[engine],
+        endpoint: this.config.endpoint,
+        connectionId: context.connectionId,
+      })
+    const recordEngineOutcomes = (results: WebSearchTaskResult[]) => {
+      // 取消是调用方行为：不记账，避免把取消当成上游故障
+      if (requestAborted()) return
+      for (const result of results) {
+        const key = backoffKeyOf(result.task.engine)
+        if (result.status === 'success') {
+          backoff.recordSuccess(key)
+          probesHeld.delete(key)
+          continue
+        }
+        backoff.recordFailure(key, result.failureKind || 'upstream_error', {
+          retryAfterMs: result.retryAfterMs,
+        })
+        probesHeld.delete(key)
+      }
+    }
+    const releaseRemainingProbes = () => {
+      for (const key of probesHeld) backoff.releaseProbe(key)
+      probesHeld.clear()
+    }
+    const skippedEngines: SkippedEngineReport[] = []
+    const probesHeld = new Set<string>()
+    const availableEngines: string[] = []
+    for (const engine of activeEngines) {
+      const key = backoffKeyOf(engine)
+      const inspection = backoff.inspect(key)
+      if (inspection.blocked) {
+        skippedEngines.push({ engine, retryAfterMs: inspection.retryAfterMs })
+        continue
+      }
+      if (inspection.probe) {
+        if (!backoff.acquireProbe(key)) {
+          skippedEngines.push({ engine, retryAfterMs: inspection.retryAfterMs })
+          continue
+        }
+        probesHeld.add(key)
+      }
+      availableEngines.push(engine)
+    }
+    // 全部冷却时允许一次探测（单飞）：不整轮硬失败，也不允许并发绕过退避
+    let exhaustionState: 'all_cooling_down' | null = null
+    if (availableEngines.length === 0 && activeEngines.length > 0) {
+      if (requestAborted()) return publishCancelledResult(skippedEngines)
+      const probeCandidate = activeEngines[0]
+      const probeKey = backoffKeyOf(probeCandidate)
+      if (!backoff.acquireProbe(probeKey, { allowCooling: true })) {
+        const outcome = buildTerminalOutcome({
+          status: 'failed',
+          reason: 'all_sources_cooling_down',
+          restriction: requestPlan.restriction,
+          skippedEngines,
+          exhaustedOverride: 'all_cooling_down',
+        })
+        context.sendToolEvent({
+          id: callId,
+          tool: 'web_search',
+          stage: 'error',
+          query,
+          error: 'All search engines are cooling down after repeated failures',
+          details: { groupId: callId, retrievalOutcome: outcome },
+        })
+        return {
+          toolCallId: callId,
+          toolName: this.toolName,
+          message: {
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            name: 'web_search',
+            content: JSON.stringify({
+              query,
+              error: 'All search engines are cooling down after repeated failures',
+              errorCode: 'ALL_COOLING_DOWN',
+              hits: [],
+              retrievalOutcome: outcome,
+              evidenceSummary: buildTerminalEvidence(outcome, requestPlan.restriction),
+            }),
+          },
+        }
+      }
+      probesHeld.add(probeKey)
+      exhaustionState = 'all_cooling_down'
+      availableEngines.push(probeCandidate)
+      const skippedIndex = skippedEngines.findIndex((item) => item.engine === probeCandidate)
+      if (skippedIndex >= 0) skippedEngines.splice(skippedIndex, 1)
+    }
+
     const routingPlan = buildLanguageAwareSearchPlan({
       originalQuery: query,
       expandedQueries,
-      activeEngines,
+      activeEngines: availableEngines,
       engineOrder: this.config.engines || [],
       minSources: this.config.minSources,
       conflictEscalation: this.config.conflictEscalation,
@@ -768,16 +914,26 @@ export class WebSearchToolHandler implements IToolHandler {
         requestedLimit: modelRequestedLimit,
         appliedLimit,
         groupId: callId,
-        engineCount: activeEngines.length,
+        engineCount: availableEngines.length,
+        skippedBackoff: skippedEngines.length,
         queryCount: expandedQueries.length,
         requiredSources: routingPlan.requiredSources,
         highRisk: routingPlan.highRisk,
         scope: effectiveScope,
+        restricted: requestPlan.restriction.restricted,
+        restrictedTo: requestPlan.restriction.effective,
+        timeRange: requestPlan.timeRange || null,
+        includeImages: requestPlan.includeImages,
       },
     })
 
     if (activeEngines.length === 0) {
       const message = 'No search engines with valid API keys are configured'
+      const outcome = buildTerminalOutcome({
+        status: 'failed',
+        reason: 'no_active_engine',
+        restriction: requestPlan.restriction,
+      })
       return {
         toolCallId: callId,
         toolName: this.toolName,
@@ -785,7 +941,13 @@ export class WebSearchToolHandler implements IToolHandler {
           role: 'tool',
           tool_call_id: toolCall.id,
           name: 'web_search',
-          content: JSON.stringify({ query, error: message, errorCode: 'NO_ACTIVE_ENGINE' }),
+          content: JSON.stringify({
+            query,
+            error: message,
+            errorCode: 'NO_ACTIVE_ENGINE',
+            retrievalOutcome: outcome,
+            evidenceSummary: buildTerminalEvidence(outcome, requestPlan.restriction),
+          }),
         },
       }
     }
@@ -889,15 +1051,16 @@ export class WebSearchToolHandler implements IToolHandler {
         1000,
         120000,
       )
+      const searchDomains = requestPlan.restriction.effective
       let searchResult = await runWebSearchParallel({
-        engines: activeEngines,
+        engines: availableEngines,
         engineOrder: this.config.engines,
         apiKeys: this.config.apiKeys || {},
         queries: expandedQueries,
         queryPlans: routingPlan.queryPlans,
         originalQuery: query,
         limit: appliedLimit,
-        domains: this.config.domains,
+        domains: searchDomains,
         endpoint: this.config.endpoint,
         scope: effectiveScope,
         includeSummary: this.config.includeSummary,
@@ -907,14 +1070,16 @@ export class WebSearchToolHandler implements IToolHandler {
         deepseekNeedContent: autoReadNeedContent,
         timeoutMs: parallelTimeoutMs,
         parallelMaxEngines: this.config.parallelMaxEngines,
+        timeRange: requestPlan.timeRange,
         signal: context.requestSignal,
       })
       emitSearchTaskResultEvents(searchResult.tasks, 'initial')
+      recordEngineOutcomes(searchResult.tasks)
 
       let executedSearchTaskCount = plannedSearchTaskCount
       let escalationInfo: {
         triggered: boolean
-        reason: SearchEscalationReason | null
+        reason: string | null
         engine?: string
         overlapRatio: number
         successfulEngineCount: number
@@ -931,13 +1096,37 @@ export class WebSearchToolHandler implements IToolHandler {
         overlapRatio: escalationDecision.overlapRatio,
         successfulEngineCount: escalationDecision.successfulEngineCount,
       }
-      if (escalationDecision.escalate) {
-        const escalationEngine = routingPlan.fallbackEngines[0]
+      // 取消优先：已取消的请求不再发起升级往返
+      if (escalationDecision.escalate && !requestAborted()) {
+        const triedEngines = new Set(searchResult.tasks.map((item) => item.task.engine))
+        // 初始轮零成功且已配置 Exa 时优先走 Exa 兜底，避免整轮只剩失败
+        const preferExa =
+          escalationDecision.successfulEngineCount === 0 &&
+          activeEngines.includes('exa') &&
+          !triedEngines.has('exa')
+        const candidates = preferExa
+          ? ['exa', ...routingPlan.fallbackEngines.filter((item) => item !== 'exa')]
+          : routingPlan.fallbackEngines
+        let escalationEngine = ''
+        let escalationReason: string = escalationDecision.reason || 'insufficient_sources'
+        for (const engine of candidates) {
+          if (!availableEngines.includes(engine) || triedEngines.has(engine)) continue
+          const key = backoffKeyOf(engine)
+          const inspection = backoff.inspect(key)
+          if (inspection.blocked) continue
+          if (inspection.probe) {
+            if (!backoff.acquireProbe(key)) continue
+            probesHeld.add(key)
+          }
+          escalationEngine = engine
+          if (preferExa && engine === 'exa') escalationReason = 'exa_fallback'
+          break
+        }
         const escalationPlans = buildEscalationQueryPlans(routingPlan, escalationEngine)
         if (escalationEngine && escalationPlans.length > 0) {
           emitSearchTaskStartEvents(escalationPlans, 'escalation')
           const escalationResult = await runWebSearchParallel({
-            engines: activeEngines,
+            engines: [escalationEngine],
             engineOrder: this.config.engines,
             apiKeys: this.config.apiKeys || {},
             queries: escalationPlans.map((item) => ({
@@ -947,7 +1136,7 @@ export class WebSearchToolHandler implements IToolHandler {
             queryPlans: escalationPlans,
             originalQuery: query,
             limit: appliedLimit,
-            domains: this.config.domains,
+            domains: searchDomains,
             endpoint: this.config.endpoint,
             scope: effectiveScope,
             includeSummary: this.config.includeSummary,
@@ -956,9 +1145,11 @@ export class WebSearchToolHandler implements IToolHandler {
             deepseekNeedContent: autoReadNeedContent,
             timeoutMs: parallelTimeoutMs,
             parallelMaxEngines: this.config.parallelMaxEngines,
+            timeRange: requestPlan.timeRange,
             signal: context.requestSignal,
           })
           emitSearchTaskResultEvents(escalationResult.tasks, 'escalation')
+          recordEngineOutcomes(escalationResult.tasks)
           searchResult = mergeWebSearchParallelResults(
             [searchResult, escalationResult],
             appliedLimit,
@@ -968,13 +1159,16 @@ export class WebSearchToolHandler implements IToolHandler {
           escalationInfo = {
             ...escalationInfo,
             triggered: true,
-            reason: escalationDecision.reason,
+            reason: escalationReason,
             engine: escalationEngine,
           }
         }
       }
 
       const hits = searchResult.hits
+      const evidenceTaskKey = buildSearchEvidenceTaskKey(context)
+      // 同任务正文复用：先登记搜索正文，自动阅读取得正文后再补充登记，来源各自保留真实提供方
+      recordSearchEvidence(evidenceTaskKey, hits)
       const autoReadEnabled = autoReadEnabledForSearch
       const autoReadParallelism = clampPositiveInt(
         this.config.autoReadParallelism,
@@ -1039,7 +1233,23 @@ export class WebSearchToolHandler implements IToolHandler {
         })
       }
 
-      const autoReadBatch = await runSearchAutoReadBatch({
+      const emptyAutoReadBatch = {
+        items: [] as AutoReadItem[],
+        articleCount: 0,
+        structuredCount: 0,
+        summaryCount: 0,
+        failedCount: 0,
+        candidatesExamined: 0,
+        candidateCount: autoReadCandidates.length,
+        duplicateUrls: [] as string[],
+        deadlineExceeded: false,
+        cancelled: requestAborted(),
+        batchTimeoutMs: autoReadBatchTimeoutMs,
+        batchElapsedMs: 0,
+      }
+      // 取消优先：已取消的请求不再发起自动阅读批次
+      const autoReadBatch = !requestAborted()
+        ? await runSearchAutoReadBatch({
         candidates: autoReadCandidates,
         perUrlTimeoutMs: autoReadTimeoutMs,
         batchTimeoutMs: autoReadBatchTimeoutMs,
@@ -1069,6 +1279,7 @@ export class WebSearchToolHandler implements IToolHandler {
           return { ...readResult, fallbackUsed: normalizeReadFallbackUsed(readResult.fallbackUsed) }
         },
       })
+        : emptyAutoReadBatch
 
       const autoReadEvidence: AutoReadItem[] = []
       for (const item of autoReadBatch.items) {
@@ -1082,7 +1293,13 @@ export class WebSearchToolHandler implements IToolHandler {
           { leadImageUrl: item.leadImageUrl, images: item.images },
           [hit?.imageUrl],
         ).map((url) => ({ url }))
-        const enriched: AutoReadItem = images.length > 0 ? { ...item, images } : item
+        const enriched: AutoReadItem = {
+          ...item,
+          ...(images.length > 0 ? { images } : {}),
+          // 发布方与发布时间只取引擎声明字段，缺失就留空
+          ...(item.publishedDate || !hit?.publishedDate ? {} : { publishedDate: hit.publishedDate }),
+          ...(item.siteName || !hit?.siteName ? {} : { siteName: hit.siteName }),
+        }
         autoReadEvidence.push(enriched)
 
         const details: ToolLogDetails = {
@@ -1100,22 +1317,23 @@ export class WebSearchToolHandler implements IToolHandler {
         }
         const readCallId = readCallIdOf(enriched.rank)
         if (enriched.evidenceKind === 'summary' || enriched.evidenceKind === 'none') {
+          const cancelledRead = enriched.skippedReason === 'cancelled'
           context.sendToolEvent({
             id: readCallId,
             tool: 'read_url',
-            stage: 'error',
+            stage: cancelledRead ? 'result' : 'error',
             query: enriched.url,
             summary:
               enriched.evidenceKind === 'summary'
                 ? '网页读取失败，已回退到搜索摘要（不计为正文）'
                 : enriched.skippedReason === 'batch_deadline'
                   ? '批次总时限已用完，未读取该网页'
-                  : enriched.skippedReason === 'cancelled'
+                  : cancelledRead
                     ? '网页读取已取消'
                     : '网页读取失败且无可用摘要回退',
             url: enriched.url,
-            error: enriched.error,
-            details,
+            ...(cancelledRead ? {} : { error: enriched.error }),
+            details: { ...details, cancelled: cancelledRead },
           })
           continue
         }
@@ -1150,15 +1368,95 @@ export class WebSearchToolHandler implements IToolHandler {
         })
       }
 
+      // 自动阅读取得的正文也登记给同任务 read_url，来源保留真实读取引擎
+      recordReadEvidence(evidenceTaskKey, autoReadEvidence)
+
       // 有效正文只算 article / structured；摘要单独计数，不冒充正文
       const autoReadBodyCount = autoReadBatch.articleCount + autoReadBatch.structuredCount
       const taskSucceeded = searchResult.tasks.filter((item) => item.status === 'success').length
       const taskFailed = searchResult.tasks.length - taskSucceeded
 
-      const summary = buildSummaryForModel(query, hits, autoReadEvidence)
-      const imageEvidence = context.modelCapabilities?.vision === true && supportsToolImages(context.provider)
-        ? await downloadSearchImageEvidence(autoReadEvidence, context.requestSignal)
-        : undefined
+      const aborted = requestAborted()
+      const autoReadState: RetrievalAutoReadReport['state'] = !autoReadActive
+        ? 'off'
+        : aborted || autoReadBatch.cancelled
+          ? 'cancelled'
+          : autoReadBatch.deadlineExceeded
+            ? 'deadline'
+            : autoReadBatch.summaryCount > 0 || autoReadBatch.failedCount > 0
+              ? 'partial'
+              : 'ok'
+      const autoReadReport: RetrievalAutoReadReport = {
+        state: autoReadState,
+        requested: autoReadBatch.candidateCount,
+        candidatesExamined: autoReadBatch.candidatesExamined,
+        bodies: autoReadBodyCount,
+        summaryOnly: autoReadBatch.summaryCount,
+        failed: autoReadBatch.failedCount,
+        skipped: autoReadEvidence.filter((item) => Boolean(item.skippedReason)).length,
+      }
+      const evidenceCounts: RetrievalEvidenceCounts = {
+        article: autoReadBatch.articleCount,
+        structured: autoReadBatch.structuredCount,
+        summary: autoReadBatch.summaryCount,
+        none: autoReadBatch.failedCount,
+      }
+      // 未取得正文的 URL 收口成固定原因枚举，供父结果按枚举统计未核实来源
+      const readFailures: EvidenceSummaryFailure[] = autoReadEvidence
+        .filter(
+          (item) =>
+            !item.skippedReason &&
+            item.evidenceKind !== 'article' &&
+            item.evidenceKind !== 'structured',
+        )
+        .map((item) => ({ url: item.url, reason: mapReadFailureReason(item.errorCode) }))
+      const truncatedCount = autoReadEvidence.filter((item) => item.truncated).length
+      const timeRangeReport: RetrievalTimeRangeReport | null = requestPlan.timeRange
+        ? {
+            start: requestPlan.timeRange.start ?? null,
+            end: requestPlan.timeRange.end ?? null,
+            verified: hits.filter((hit) => hit.timeRangeStatus === 'in_range').length,
+            undated: hits.filter((hit) => hit.timeRangeStatus === 'undated').length,
+          }
+        : null
+      const retrievalOutcome = buildRetrievalOutcome({
+        taskResults: searchResult.tasks,
+        attempted: searchResult.tasks.length,
+        skippedEngines,
+        autoRead: autoReadReport,
+        evidence: evidenceCounts,
+        cancelled: aborted,
+        totalHits: hits.length,
+        restriction: requestPlan.restriction,
+        timeRange: timeRangeReport,
+        exhaustedOverride: exhaustionState ?? undefined,
+        escalation: {
+          triggered: escalationInfo.triggered,
+          ...(escalationInfo.engine ? { engine: escalationInfo.engine } : {}),
+          reason: escalationInfo.reason,
+        },
+      })
+      const evidenceSummary = buildEvidenceSummary({
+        source: 'search',
+        queries: expandedQueries.map((item) => item.query),
+        hits: hits.length,
+        evidence: evidenceCounts,
+        engines: Array.from(new Set(searchResult.tasks.map((item) => item.task.engine))),
+        failures: readFailures,
+        truncated: truncatedCount,
+        restriction: requestPlan.restriction,
+        timeRange: timeRangeReport,
+      })
+
+      const summary = buildSummaryForModel({ query, hits, autoReadEvidence, outcome: retrievalOutcome })
+      // 二进制网页配图只在显式请求时回传；正文里的图片链接始终保留，URL 不受影响
+      const imageEvidence =
+        requestPlan.includeImages &&
+        context.modelCapabilities?.vision === true &&
+        supportsToolImages(context.provider)
+          ? await downloadSearchImageEvidence(autoReadEvidence, context.requestSignal)
+          : undefined
+      releaseRemainingProbes()
 
       context.sendToolEvent({
         id: callId,
@@ -1167,14 +1465,20 @@ export class WebSearchToolHandler implements IToolHandler {
         query,
         hits,
         summary:
-          autoReadBatch.candidateCount > 0
-            ? `搜索完成，取得正文 ${autoReadBodyCount} 条（候选 ${autoReadBatch.candidatesExamined}/${autoReadBatch.candidateCount}，仅摘要 ${autoReadBatch.summaryCount}）`
-            : `搜索完成，共 ${hits.length} 条结果`,
+          retrievalOutcome.status === 'cancelled'
+            ? '检索已取消'
+            : retrievalOutcome.status === 'failed' || retrievalOutcome.status === 'timeout'
+              ? `搜索失败：${retrievalOutcome.reason}`
+              : autoReadBatch.candidateCount > 0
+                ? `搜索完成，取得正文 ${autoReadBodyCount} 条（候选 ${autoReadBatch.candidatesExamined}/${autoReadBatch.candidateCount}，仅摘要 ${autoReadBatch.summaryCount}）`
+                : `搜索完成，共 ${hits.length} 条结果`,
         details: {
+          retrievalOutcome,
+          evidenceSummary,
           requestedLimit: modelRequestedLimit,
           appliedLimit,
           groupId: callId,
-          engineCount: activeEngines.length,
+          engineCount: availableEngines.length,
           queryCount: expandedQueries.length,
           searchTaskTotal: searchResult.tasks.length,
           searchTaskSucceeded: taskSucceeded,
@@ -1210,8 +1514,19 @@ export class WebSearchToolHandler implements IToolHandler {
           content: JSON.stringify({
             query,
             expandedQueries,
-            engines: activeEngines,
+            engines: availableEngines,
             scope: effectiveScope,
+            request: {
+              scope: effectiveScope,
+              domains: requestPlan.restriction.requested,
+              effectiveDomains: requestPlan.restriction.effective,
+              restricted: requestPlan.restriction.restricted,
+              domainConflict: requestPlan.conflict,
+              timeRange: requestPlan.timeRange ?? null,
+              includeImages: requestPlan.includeImages,
+            },
+            retrievalOutcome,
+            evidenceSummary,
             hits: slimHitsForModel(hits),
             taskResults: slimTaskResultsForModel(searchResult.tasks),
             summary: truncateText(summary, DEFAULT_MODEL_SUMMARY_CHARS),
@@ -1251,18 +1566,30 @@ export class WebSearchToolHandler implements IToolHandler {
         },
       }
     } catch (searchError: unknown) {
+      releaseRemainingProbes()
       const message = searchError instanceof Error ? searchError.message : 'Web search failed'
       const errorCode = classifyWebSearchErrorCode(message)
+      // 取消不包装成工具错误：整轮按取消收尾，不写 error 状态
+      if (requestAborted()) return publishCancelledResult()
+      const outcome = buildTerminalOutcome({
+        status: 'failed',
+        reason: 'all_sources_failed',
+        restriction: requestPlan.restriction,
+        retryable: errorCode !== 'HTTP_403' && errorCode !== 'HTTP_404',
+      })
       context.sendToolEvent({
         id: callId,
         tool: 'web_search',
         stage: 'error',
         query,
+        summary: '搜索失败',
         error: message,
         details: {
           errorCode,
           fallbackUsed: 'none',
           groupId: callId,
+          cancelled: false,
+          retrievalOutcome: outcome,
         },
       })
       return {
@@ -1272,7 +1599,13 @@ export class WebSearchToolHandler implements IToolHandler {
           role: 'tool',
           tool_call_id: toolCall.id,
           name: 'web_search',
-          content: JSON.stringify({ query, error: message, errorCode }),
+          content: JSON.stringify({
+            query,
+            error: message,
+            errorCode,
+            retrievalOutcome: outcome,
+            evidenceSummary: buildTerminalEvidence(outcome, requestPlan.restriction),
+          }),
         },
       }
     }

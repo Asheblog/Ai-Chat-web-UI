@@ -77,14 +77,16 @@
 
 - **Web Search（联网搜索）**：通过外部搜索引擎（tavily、brave、exa、metaso、deepseek）检索网页；在各引擎能力范围内默认请求/解析结果配图（Tavily `include_images`、Exa `contents.extras.imageLinks`、Brave `thumbnail`、Metaso `imageUrl`/`thumbnail`）；支持可选 `scope`（含 `image`）：Metaso 走图片域、Brave 调用独立图片搜索 API；Tavily 在 `scope=image` 时开启 `include_image_descriptions` 并把响应顶层 `images`（query 相关图）合成为图片 hit；Exa 在 `scope=image` 时加大 `imageLinks` 并把页面代表图/页内图展平成图片 hit；`scope=image` 时跳过自动读正文，hit 配图按原始 URL 随工具结果回传模型；CoT/工具卡对 `scope=image` 展示为「图片检索」并标注「范围: 图片」
 - **Provider Conformance（引擎接口对齐）**：五个引擎的适配层按各自官方文档构造请求、映射响应。Tavily 用 Bearer 鉴权，支持 `include_raw_content`（markdown 正文）、`chunks_per_source`、`published_date`；Brave 关闭 `text_decorations`、启用 `extra_snippets`，图片结果取 `properties.url` 作原图；Metaso 只发送搜索接口字段，项目 `paper` 映射官方 `scholar`，`includeRawContent` 仅网页范围生效；Exa 支持 `contents.text` 与 `contents.summary`；DeepSeek 支持 `ori_question` 并映射 `date`/`site_name`/`authority`。统一范围词汇为 `@aichat/shared/web-search-contract` 的 `WEB_SEARCH_SCOPE_IDS`。域名白名单优先用引擎原生参数，Brave 用 `site:` 操作符，Metaso 在适配层本地过滤。失败只暴露状态码与 Retry-After，不回显上游响应体（可能含 API Key）。
-- **Read URL（网页读取）**：抓取并解析指定 URL 的正文内容，抽取网页候选图，并在工具结果中保留原始图片 URL。主模型和调用协议支持时，另发可选网页配图。
-- **Optional Page Images（可选网页配图）**：网页读取工具结果中有来源的候选图片，属于该网页而非用户附件。每张视觉图片与原文标题、页面 URL 和图片 URL 一起发送；优先一张网页标记的主图，无主图时最多三张候选图。支持图片型工具结果的视觉模型收到图片内容，其余模型收到原图链接；读页正文和来源不因省略视觉图片而改变。
-- **Auto Read（自动读取）**：搜索完成后自动收集结果网页正文，可复用搜索引擎返回的有效正文或读取网页。在 UI 中归入所属搜索合并组；对已取得正文的条目保留原图链接。支持图片型工具结果时，每条新闻最多附一张图片内容，并保留其来源
+- **Read URL（网页读取）**：抓取并解析指定 URL 的正文内容，抽取网页候选图，并在工具结果中保留原始图片 URL。默认只随正文传图片链接；用户需要视觉证据且模型和调用协议支持时，可附图片内容。
+- **Optional Page Images（可选网页配图）**：网页读取工具结果中有来源的候选图片，属于该网页而非用户附件。每张视觉图片与原文标题、页面 URL 和图片 URL 一起发送；优先一张网页标记的主图，无主图时最多三张候选图。仅显式请求且模型支持图片型工具结果时随附图片内容，原图链接始终保留；读页正文和来源不因省略视觉图片而改变。
+- **Auto Read（自动读取）**：搜索完成后自动收集结果网页正文，可复用搜索引擎返回的有效正文或读取网页。在 UI 中归入所属搜索合并组；对已取得正文的条目保留原图链接。显式请求并且支持图片型工具结果时，每条取得正文的结果最多附一张图，并保留来源。
 - **Web Evidence Image（联网证据图）**：网页里抽取到的候选图（来源：搜索 hit 配图、图片域搜索结果与读页抽取图），以原始 URL 随工具结果回传并保留在工具卡展示；支持图片型工具结果时可一并传递图片内容，不进入 Rich Payload / 答案区；深度研究报告的正文配图由模型自行从这些 URL 中挑选并交给 `export_pdf` 内嵌
 - **Evidence Stack Layout（上文下图）**：已下线。助手正文不再展示联网证据图；AI 生图与附件图仍可用侧栏并排
 - **Illustrated Research Report（图文研究报告）**：深度研究最终 Markdown 可在正文嵌入证据图；`export_pdf` 可选 `images` 参数仅下载模型声明的公网图片 URL，内嵌为 `data:` URL 写入 HTML/PDF（figure/figcaption），禁止 PDF 渲染时任意外联远程图
 - **Playwright-managed Chromium（托管 Chromium）**：`export_pdf` 与可选的 URL Reader 浏览器回退使用与 `playwright-core` 版本匹配的 Chromium（镜像内 `PLAYWRIGHT_BROWSERS_PATH`）；不默认依赖发行版 apt `/usr/bin/chromium`（容器中常因 CDP 不兼容而启动失败）；仅在显式配置非系统路径或 Playwright 浏览器缺失时回退系统 Chrome/Chromium
-- **搜索批次**：同一轮搜索任务下发起的搜索调用集合，在工具区块内合并展示
+- **搜索批次**：同一轮搜索任务下发起的搜索调用集合，在工具区块内合并展示。
+- **Retrieval Outcome（检索结果）**：单次联网搜索的父结果，区分有结果、部分成功、成功无命中、失败、超时和取消。可用正文、结构化结果和摘要分别标记，不把失败当作无命中。
+- **Answer Outcome（答复交付结果）**：记录是否生成了用户可见的有效答复，与流是否正常结束分开。优先采用模型提供方的结构化终态；仅凭固定短提示识别的疑似拦截不归因于具体组件。
 - **并行搜索**：多个搜索引擎同时查询，属于同一批次
 - **语言路由**：并行数量上限先按管理员引擎顺序筛选，再按查询语言选择首批来源。默认中文路由为 Metaso、DeepSeek、Tavily、Brave、Exa；英文优先 Tavily、Brave、Exa，随后 DeepSeek、Metaso。Skill 的显式语言路由覆盖默认排序，剩余引擎按需参与补充搜索。
 

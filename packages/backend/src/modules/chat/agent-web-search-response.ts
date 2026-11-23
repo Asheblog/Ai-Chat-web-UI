@@ -14,6 +14,7 @@ import type { UsageQuotaSnapshot } from '../../types';
 import type { ExtensionInstallServiceLike } from '../extensions/types';
 import { summarizeSsePayload } from '../../utils/task-trace';
 import type { TaskTraceRecorder, TaskTraceStatus } from '../../utils/task-trace';
+import { createToolWallTimer } from './agent-tool-wall-time';
 import { ToolLogManager } from './tool-log-manager';
 import { persistAssistantFinalResponse, upsertAssistantMessageByClientId } from './assistant-message-service';
 import {
@@ -64,6 +65,24 @@ import {
   runToolOrchestration,
   type ToolOrchestrationStopReason,
 } from '../../agent-runtime/tool-orchestrator';
+import {
+  buildAnswerOutcomeTracePayload,
+  type AnswerOutcome,
+} from '../../agent-runtime/answer-outcome';
+import {
+  addUsageNumbers,
+  readUsageNumbers,
+  type UsageNumbers,
+} from '../../agent-runtime/usage-numbers';
+import {
+  createRetrievalEvidenceTally,
+  evaluateRetrievalChain,
+  isReadEvidenceRetained,
+  parseRetrievalOutcome,
+  recordWebSearchOutcome,
+  tallyHasRetainedEvidence,
+  type RetrievalEvidenceTally,
+} from '../../agent-runtime/retrieval-outcome';
 import { guardToolLoopMessages } from './services/tool-loop-context-guard';
 import {
   extractMissingFunctionCallOutputId,
@@ -85,9 +104,19 @@ import { createSkillRegistry } from '../skills/skill-registry';
 import type { RequestedSkillsPayload } from '../skills/types';
 import type { McpService } from '../../services/mcp/mcp-service';
 import type { ResolvedConnection } from '../../repositories/model-resolver-repository';
-/** 本次运行的收尾结果；只有停止工具 / 预算收尾才存在 */
+/**
+ * 本次运行的收尾结果。
+ * - 停止工具 / 预算收尾：带 stopReason
+ * - 上游未交付（内容过滤 / 拒答 / 已知固定话术）：只带 finalAnswerGenerated=false，不冒充取消或成功
+ */
+/**
+ * 本次运行的收尾结果：随工具日志信封落库（runResult），并驱动 SSE 的终态字段。
+ *
+ * stopReason 只接受对外原因 stop_tools / budget_exhausted（前端按它们出终态文案）。
+ * 内部收尾（例如来源提前用尽）不进这里，只体现在追踪事件 agent:retrieval_chain_ended。
+ */
 type PersistedRunResult = {
-  stopReason: ToolOrchestrationStopReason;
+  stopReason?: ToolOrchestrationStopReason;
   finalAnswerGenerated: boolean;
 };
 
@@ -750,6 +779,117 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       let contextLengthRetryCount = 0;
       let missingToolCallRetryCount = 0;
 
+      // 逐轮用量快照：同一轮的多份 usage 只保留最后一份，绝不重复相加
+      type UsageRoundSnapshot = {
+        iteration: number;
+        attempt: number;
+        toolsEnabled: boolean;
+        numbers: UsageNumbers;
+      };
+      const usageRounds = new Map<string, UsageRoundSnapshot>();
+      const usageRoundOrder: string[] = [];
+      let usageRoundsEmitted = 0;
+      let firstVisibleContent: {
+        elapsedMs: number;
+        length: number;
+        iteration: number;
+        toolsEnabled: boolean;
+      } | null = null;
+      let currentTurnContext = { iteration: 0, toolsEnabled: true };
+      const toolWallTimer = createToolWallTimer();
+      const retrievalTally: RetrievalEvidenceTally = createRetrievalEvidenceTally();
+      let otherToolEvidenceCount = 0;
+
+      const emitUsageRound = (key: string) => {
+        const snapshot = usageRounds.get(key);
+        if (!snapshot) return;
+        traceRecorder.log('agent:provider_usage', {
+          iteration: snapshot.iteration,
+          attempt: snapshot.attempt,
+          toolsEnabled: snapshot.toolsEnabled,
+          prompt: snapshot.numbers.prompt,
+          completion: snapshot.numbers.completion,
+          total: snapshot.numbers.total,
+          cacheHitTokens: snapshot.numbers.cacheHit,
+          cacheMissTokens: snapshot.numbers.cacheMiss,
+          source: 'provider',
+        });
+      };
+
+      /** 把一个已结算的轮次顺序写出；重复调用只补未写出的部分 */
+      const flushUsageRounds = () => {
+        while (usageRoundsEmitted < usageRoundOrder.length) {
+          emitUsageRound(usageRoundOrder[usageRoundsEmitted]);
+          usageRoundsEmitted += 1;
+        }
+      };
+
+      const usageTotals = (): UsageNumbers | null => {
+        let totals: UsageNumbers | null = null;
+        for (const key of usageRoundOrder) {
+          const snapshot = usageRounds.get(key);
+          if (!snapshot) continue;
+          totals = addUsageNumbers(totals, snapshot.numbers);
+        }
+        return totals;
+      };
+
+      const hasRetainedEvidence = () =>
+        tallyHasRetainedEvidence(retrievalTally) || otherToolEvidenceCount > 0;
+
+      const readToolContent = (result: any): string | null => {
+        const content = result?.message?.content;
+        if (typeof content === 'string') return content;
+        if (content && typeof content === 'object') {
+          try {
+            return JSON.stringify(content);
+          } catch {
+            return null;
+          }
+        }
+        return null;
+      };
+
+      /** 工具结果只用于判断「是否留有可用证据」，不改写任何内容 */
+      const noteToolEvidence = (toolName: string, result: any, iteration?: number) => {
+        const content = readToolContent(result);
+        if (!content || !content.trim()) return;
+        // 检索侧结果（web_search，以及 read_url 的失败/取消）都带 retrievalOutcome：
+        // 按工具轮归组结算，read_url 失败不会被误算成拿到证据。
+        if (parseRetrievalOutcome(content)) {
+          recordWebSearchOutcome(retrievalTally, content, iteration);
+          return;
+        }
+        // read_url 成功：正文 + 「## 检索摘要」尾块，只按计数判定
+        if (isReadEvidenceRetained(content)) {
+          otherToolEvidenceCount += 1;
+          return;
+        }
+        if (toolName === 'read_url') return;
+        const trimmed = content.trim();
+        if (trimmed.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (parsed && typeof parsed === 'object' && 'error' in parsed) return;
+          } catch {
+            // 非 JSON 正文按原文证据处理
+          }
+        }
+        otherToolEvidenceCount += 1;
+      };
+
+      /**
+       * 非流式 provider 不逐个 delta 推送正文：终态 turn 的正文要补进已产出内容，
+       * 否则未交付的原结果会凭空消失。流式路径已有正文时不做重复追加。
+       */
+      const ensureTerminalContentVisible = (content: string) => {
+        if (!content) return;
+        if (aiResponseContent === content) return;
+        if (aiResponseContent.trim().length > 0) return;
+        aiResponseContent = content;
+        safeEnqueue({ type: 'content', content });
+      };
+
       const handleResearchPlanTermination = async (
         code: 'research_plan_cancelled' | 'research_plan_expired',
       ): Promise<void> => {
@@ -766,11 +906,13 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
       };
 
       /**
-       * 停止工具 / 预算收尾后没有正文：保留已产出的内容与终态，
-       * 明确反馈「未生成最终回答」，绝不伪造模型回答，也不写 error 状态。
+       * 未交付终态：停止工具 / 预算收尾 / 上游未交付。
+       * 保留已产出的内容与终态，明确反馈「未生成最终回答」，
+       * 绝不伪造模型回答，也不写 error 状态或取消状态。
        */
       const finishWithoutFinalAnswer = async (
         runResult: PersistedRunResult | null,
+        answerOutcome?: AnswerOutcome | null,
       ): Promise<void> => {
         const partialContent = aiResponseContent;
         await persistAssistantProgress({
@@ -778,15 +920,25 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           status: 'done',
           runResult: runResult ?? undefined,
         });
+        flushUsageRounds();
         safeEnqueue({
           type: 'complete',
           content: partialContent,
-          ...(runResult ? { stopReason: runResult.stopReason } : {}),
+          ...(runResult?.stopReason ? { stopReason: runResult.stopReason } : {}),
           finalAnswerGenerated: false,
         });
         traceStatus = 'completed';
         traceMetadataExtras.stopReason = runResult?.stopReason ?? null;
         traceMetadataExtras.finalAnswerGenerated = false;
+        if (answerOutcome) {
+          traceRecorder.log('agent:answer_outcome', {
+            ...buildAnswerOutcomeTracePayload(answerOutcome),
+            finalAnswerGenerated: false,
+            stopReason: runResult?.stopReason ?? null,
+            retrievalRounds: retrievalTally.rounds,
+            retrievalEvidenceRounds: retrievalTally.evidenceRounds,
+          });
+        }
         traceRecorder.log('agent:stopped_without_answer', {
           sessionId,
           stopReason: runResult?.stopReason ?? null,
@@ -876,6 +1028,27 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           emptyContentErrorMessage: 'Model finished without producing a final answer',
           // 停止工具 / 预算耗尽后最多一轮无工具收尾，让模型基于已有结果作答
           onBudgetExhausted: 'finish',
+          // 没有留存检索证据时不再花一轮收尾：预算收尾只服务「有证据可答」的情况
+          hasRetainedEvidence,
+          // 纯检索链明确用尽（来源冷却 / 无可用引擎 / 连续全失败）：不再重复派发检索
+          shouldEndToolChain: ({ toolNames }) => {
+            const cause = evaluateRetrievalChain(
+              retrievalTally,
+              currentTurnContext.iteration,
+              toolNames,
+            );
+            if (!cause) return null;
+            traceRecorder.log('agent:retrieval_chain_ended', {
+              cause,
+              iteration: currentTurnContext.iteration,
+              retrievalRounds: retrievalTally.rounds,
+              retrievalEvidenceRounds: retrievalTally.evidenceRounds,
+              consecutiveNoProgressRounds: retrievalTally.consecutiveNoProgressRounds,
+              lastStatus: retrievalTally.lastStatus,
+              lastReason: retrievalTally.lastReason,
+            });
+            return { cause };
+          },
           shouldStopTools: () => shouldStopTools(streamMeta),
           checkAbort: () => {
             if (checkCancelled()) {
@@ -900,6 +1073,16 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           },
           onContentDelta: async (delta) => {
             aiResponseContent += delta;
+            if (!firstVisibleContent && delta.length > 0) {
+              // 只记时间与长度，不记正文
+              firstVisibleContent = {
+                elapsedMs: Date.now() - startedAt,
+                length: delta.length,
+                iteration: currentTurnContext.iteration,
+                toolsEnabled: currentTurnContext.toolsEnabled,
+              };
+              traceRecorder.log('agent:first_visible_content', firstVisibleContent);
+            }
             safeEnqueue({ type: 'content', content: delta });
             await persistAssistantProgress();
           },
@@ -910,11 +1093,28 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
             emitReasoning(delta, { kind: 'model', stage: 'stream' });
             await persistAssistantProgress();
           },
-          onUsage: (usage) => {
+          onUsage: (usage, context) => {
             providerUsageSeen = true;
             safeEnqueue({ type: 'usage', usage });
+            const numbers = readUsageNumbers(usage);
+            // provider 未返回用量：不写事件、不计入累计（与显式 0 区分）
+            if (!numbers) return;
+            const key = `${context.iteration}:${context.attempt}`;
+            const isNewRound = !usageRounds.has(key);
+            if (isNewRound) {
+              // 新轮开始即结算上一轮，保证每轮只写一条事件
+              flushUsageRounds();
+              usageRoundOrder.push(key);
+            }
+            usageRounds.set(key, {
+              iteration: context.iteration,
+              attempt: context.attempt,
+              toolsEnabled: context.toolsEnabled,
+              numbers,
+            });
           },
           requestTurn: async ({ schema, messages, iteration, toolsEnabled }) => {
+            currentTurnContext = { iteration, toolsEnabled };
             const guardResult = await guardToolLoopMessages({
               messages,
               contextLimit,
@@ -1017,7 +1217,8 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                   : buildBlockedResearchToolResult(toolCall, toolName, message);
               }
             }
-            return toolRegistry.handleToolCall(
+            const finishTiming = toolWallTimer.start();
+            const toolResult = await toolRegistry.handleToolCall(
               toolName,
               toolCall,
               args,
@@ -1035,7 +1236,10 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
                 sendToolEvent,
                 sendStreamEvent,
               },
-            );
+            ).finally(finishTiming);
+            // 只清点证据，不改写工具结果
+            noteToolEvidence(toolName, toolResult, typeof iteration === 'number' ? iteration : 0);
+            return toolResult;
           },
           onUnsupportedTool: (toolName, toolCallId) => {
             sendUnsupportedToolError(toolName || 'unknown', toolCallId, sendToolEvent);
@@ -1080,15 +1284,36 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           throw new Error(`工具调用次数已达上限（${iterationLabel}），未生成最终答案`);
         }
 
-        const runResult: PersistedRunResult | null = orchestration.stopReason
-          ? {
-              stopReason: orchestration.stopReason,
-              finalAnswerGenerated: orchestration.finalAnswerGenerated,
-            }
-          : null;
+        // 停止/预算收尾带 stopReason；上游未交付只带 finalAnswerGenerated=false
+        const runResult: PersistedRunResult | null =
+          orchestration.stopReason != null || orchestration.finalAnswerGenerated === false
+            ? {
+                ...(orchestration.stopReason != null
+                  ? { stopReason: orchestration.stopReason }
+                  : {}),
+                finalAnswerGenerated: orchestration.finalAnswerGenerated,
+              }
+            : null;
+
+        // 取消优先于任何终态判定：客户端已取消时不得把这次运行记成交付或未交付
+        if (checkCancelled()) {
+          await persistAssistantProgress({ force: true, status: 'cancelled' });
+          log.debug('Agent stream cancelled by client', {
+            sessionId,
+            streamKey,
+          });
+          return;
+        }
 
         if (orchestration.status === 'stopped_without_answer') {
           await finishWithoutFinalAnswer(runResult);
+          return;
+        }
+
+        if (orchestration.status === 'answer_not_delivered') {
+          // 上游只给了一句非空提示：保留原文，按未交付收尾（不重试、不换模型、不改写）
+          ensureTerminalContentVisible(orchestration.content);
+          await finishWithoutFinalAnswer(runResult, orchestration.answerOutcome);
           return;
         }
 
@@ -1107,15 +1332,6 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           );
         }
         finalUsageSnapshot = orchestration.usage;
-
-        if (checkCancelled()) {
-          await persistAssistantProgress({ force: true, status: 'cancelled' });
-          log.debug('Agent stream cancelled by client', {
-            sessionId,
-            streamKey,
-          });
-          return;
-        }
 
         if (!finalContent) {
           throw new Error('AI provider did not return a response');
@@ -1143,22 +1359,9 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           });
           completionTokensFallback = 0;
         }
-        const toUsageNumbers = (usage: any) => {
-          const prompt =
-            Number(
-              usage?.prompt_tokens ?? usage?.input_tokens ?? 0
-            ) || 0;
-          const completion =
-            Number(usage?.completion_tokens ?? usage?.output_tokens ?? 0) ||
-            0;
-          const total =
-            Number(usage?.total_tokens ?? (prompt + completion)) || prompt + completion;
-          const cacheHit = Number(usage?.prompt_cache_hit_tokens ?? 0) || 0;
-          const cacheMiss = Number(usage?.prompt_cache_miss_tokens ?? 0) || 0;
-          return { prompt, completion, total, cacheHit, cacheMiss };
-        };
+        // 末轮用量沿用既有口径：provider 值有效就用 provider，否则本地 fallback
         const providerUsageNumbers =
-          providerUsageSeen && finalUsageSnapshot ? toUsageNumbers(finalUsageSnapshot) : null;
+          providerUsageSeen && finalUsageSnapshot ? readUsageNumbers(finalUsageSnapshot) : null;
         const providerUsageValid =
           providerUsageNumbers != null &&
           (providerUsageNumbers.prompt > 0 ||
@@ -1187,13 +1390,24 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           type: 'complete',
           content: finalContent,
           usage: finalUsagePayload,
-          ...(runResult ? { stopReason: runResult.stopReason } : {}),
+          ...(runResult?.stopReason ? { stopReason: runResult.stopReason } : {}),
           ...(runResult ? { finalAnswerGenerated: runResult.finalAnswerGenerated } : {}),
         });
         traceMetadataExtras.stopReason = runResult?.stopReason ?? null;
         traceMetadataExtras.finalAnswerGenerated = runResult?.finalAnswerGenerated ?? true;
         traceMetadataExtras.finalUsage = finalUsagePayload;
         traceMetadataExtras.providerUsageSource = providerUsageValid ? 'provider' : 'fallback';
+        traceMetadataExtras.providerUsageLastRound = providerUsageValid ? providerUsageNumbers : null;
+
+        if (orchestration.answerOutcome) {
+          traceRecorder.log('agent:answer_outcome', {
+            ...buildAnswerOutcomeTracePayload(orchestration.answerOutcome),
+            finalAnswerGenerated: true,
+            stopReason: runResult?.stopReason ?? null,
+            retrievalRounds: retrievalTally.rounds,
+            retrievalEvidenceRounds: retrievalTally.evidenceRounds,
+          });
+        }
 
         const completedAt = Date.now();
         const streamMetrics = computeStreamMetrics({
@@ -1382,6 +1596,15 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
         }
         setStreamController(null);
         releaseStreamMetaHandle();
+        // 最后一轮的用量事件在这里结算；逐轮累计只进追踪元数据，不参与计费
+        try {
+          flushUsageRounds();
+        } catch { }
+        traceMetadataExtras.providerUsageRounds = usageRounds.size;
+        traceMetadataExtras.providerUsageTotals = usageTotals();
+        traceMetadataExtras.toolWallTimeMs = toolWallTimer.elapsedMs();
+        traceMetadataExtras.retrievalRounds = retrievalTally.rounds;
+        traceMetadataExtras.retrievalEvidenceRounds = retrievalTally.evidenceRounds;
         const toolLogSummary = toolLogManager.getSummary(50);
         const finalMetadata = {
           ...traceMetadataExtras,

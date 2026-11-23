@@ -10,6 +10,11 @@ import type {
   ToolHandlerTermination,
 } from './tool-handler-types'
 import {
+  classifyAnswerOutcome,
+  type AnswerOutcome,
+  type ProviderAnswerSignal,
+} from './answer-outcome'
+import {
   type LegacyFunctionCall,
   type ToolSchema,
   appendLegacyFunctionCallDelta,
@@ -55,10 +60,24 @@ type ParsedToolTurn = {
   toolCalls: ToolCall[]
   usage: Record<string, any> | null
   thinkingBlocks?: Array<Record<string, any>>
+  /** provider 在本轮给出的结构化结束信号：用于区分「答复已交付」与「只有一句非空提示」 */
+  providerSignal: ProviderAnswerSignal
 }
 
-/** 本次运行被提前收尾的原因 */
+/**
+ * 对外的收尾原因：只包含会进入 runResult / SSE 共享契约的两个值。
+ * 前端按它们出终态文案，因此不得把内部原因混进来。
+ */
 export type ToolOrchestrationStopReason = 'stop_tools' | 'budget_exhausted'
+
+/**
+ * 内部收尾判别：只用于「已宣告但不会执行」的调用文案与配对消息
+ * （例如来源提前用尽）。它不影响 runResult / SSE 的 stopReason。
+ */
+export type ToolCloseoutReason = 'tool_chain_exhausted'
+
+/** skip / 收尾轮可接受的判别：对外原因 + 内部原因 */
+export type ToolSkipReason = ToolOrchestrationStopReason | ToolCloseoutReason
 
 /** 工具轮次预算耗尽时的行为 */
 export type ToolBudgetExhaustedBehavior = 'error' | 'finish'
@@ -72,6 +91,8 @@ type ToolOrchestrationBaseResult = {
   stopReason: ToolOrchestrationStopReason | null
   /** 是否已产出最终回答；false 时调用方不得伪造回答 */
   finalAnswerGenerated: boolean
+  /** 决定本次终态的那个 turn 的交付判定；无正文终态为 null */
+  answerOutcome: AnswerOutcome | null
 }
 
 export type ToolOrchestrationResult =
@@ -85,12 +106,28 @@ export type ToolOrchestrationResult =
       content: string
     })
   | (ToolOrchestrationBaseResult & {
+      /**
+       * 有正文但不算交付：provider 结构化原因（内容过滤 / 拒答 / 失败）
+       * 或命中已知固定话术。正文原样保留，由调用方按「未生成最终回答」收尾。
+       */
+      status: 'answer_not_delivered'
+      content: string
+      answerOutcome: AnswerOutcome
+    })
+  | (ToolOrchestrationBaseResult & {
       status: 'max_iterations'
     })
   | (ToolOrchestrationBaseResult & {
       status: 'terminated'
       termination: ToolHandlerTermination
     })
+
+/** 一次 provider 请求的身份：轮次 + 本轮第几次真实请求（schema 回退/重试都会递增） */
+export type ToolTurnUsageContext = {
+  iteration: number
+  attempt: number
+  toolsEnabled: boolean
+}
 
 export interface ToolOrchestratorParams {
   provider?: string
@@ -119,17 +156,32 @@ export interface ToolOrchestratorParams {
    * 'finish'：走一轮无工具收尾，让模型基于已有工具结果作答。
    */
   onBudgetExhausted?: ToolBudgetExhaustedBehavior
+  /**
+   * 是否已经有可用工具证据（例如检索真的拿到了结果）。
+   * 预算收尾只在有证据时值得再花一次无工具请求；没证据就直接按预算收尾。
+   */
+  hasRetainedEvidence?: () => boolean
+  /**
+   * 每轮工具结算后轮询：纯检索链是否已经明确用尽
+   * （来源全部冷却 / 无可用引擎 / 连续全失败）。
+   * 带本轮工具名：混合工具轮由调用方判定，不得因为一条检索结果掐断其它链路。
+   * 返回非空原因时不再派发后续检索轮次：有证据最多一次无工具收尾，没证据直接收尾。
+   */
+  shouldEndToolChain?: (context: { toolNames: string[] }) => { cause: string } | null
   /** 收尾时不会执行的 tool_calls：调用方据此补 stage=result / status=aborted 记录 */
   onToolCallSkipped?: (params: {
     toolCall: ToolCall
     toolName: string
-    reason: ToolOrchestrationStopReason
+    reason: ToolSkipReason
   }) => MaybePromise<void>
   onSchemaFallback?: (schema: ToolSchema) => MaybePromise<void>
   onUnsupportedTool?: (toolName: string, toolCallId: string | undefined) => MaybePromise<void>
   onContentDelta?: (delta: string) => MaybePromise<void>
   onReasoningDelta?: (delta: string) => MaybePromise<void>
-  onUsage?: (usage: Record<string, any>) => MaybePromise<void>
+  onUsage?: (
+    usage: Record<string, any>,
+    context: ToolTurnUsageContext,
+  ) => MaybePromise<void>
   onStreamChunk?: () => MaybePromise<void>
   onFirstResponseEvent?: () => MaybePromise<void>
   onTurnError?: (params: {
@@ -174,10 +226,18 @@ export async function runToolOrchestration(
   let toolRoundsUsed = 0
   let stopReason: ToolOrchestrationStopReason | null = null
 
+  /** 收尾轮 / 最终轮的交付判定：结构化原因优先，已知固定话术只归类 */
+  const classifyTurnDelivery = (turn: ParsedToolTurn): AnswerOutcome =>
+    classifyAnswerOutcome({
+      content: turn.content || '',
+      signal: turn.providerSignal,
+    })
+
   const finishResult = (
     extra:
-      | { status: 'completed'; content: string }
+      | { status: 'completed'; content: string; outcome?: AnswerOutcome | null }
       | { status: 'stopped_without_answer'; content: string }
+      | { status: 'answer_not_delivered'; content: string; outcome: AnswerOutcome }
       | { status: 'max_iterations' }
       | { status: 'terminated'; termination: ToolHandlerTermination },
   ): ToolOrchestrationResult => {
@@ -188,12 +248,27 @@ export async function runToolOrchestration(
       toolSchema,
       stopReason,
       finalAnswerGenerated: false,
+      answerOutcome: null,
     }
     if (extra.status === 'completed') {
-      return { ...base, status: 'completed', content: extra.content, finalAnswerGenerated: true }
+      return {
+        ...base,
+        status: 'completed',
+        content: extra.content,
+        finalAnswerGenerated: true,
+        answerOutcome: extra.outcome ?? null,
+      }
     }
     if (extra.status === 'stopped_without_answer') {
       return { ...base, status: 'stopped_without_answer', content: extra.content }
+    }
+    if (extra.status === 'answer_not_delivered') {
+      return {
+        ...base,
+        status: 'answer_not_delivered',
+        content: extra.content,
+        answerOutcome: extra.outcome,
+      }
     }
     if (extra.status === 'terminated') {
       return { ...base, status: 'terminated', termination: extra.termination }
@@ -300,6 +375,7 @@ export async function runToolOrchestration(
 
   /** 执行本轮全部工具：在途工具不被中止，结果按原顺序补成配对消息 */
   const runToolRound = async (toolCalls: ToolCall[], iteration: number) => {
+    params.checkAbort?.()
     const settled = await Promise.allSettled(
       toolCalls.map((toolCall) => {
         const toolName = toolCall?.function?.name || ''
@@ -369,7 +445,7 @@ export async function runToolOrchestration(
   /** 未执行的 tool_calls：补配对占位结果，并通知调用方补 stage=result / status=aborted */
   const skipToolCalls = async (
     toolCalls: ToolCall[],
-    reason: ToolOrchestrationStopReason,
+    reason: ToolSkipReason,
   ) => {
     const abortedMessages = buildAbortedToolResultMessages({
       schema: toolSchema,
@@ -394,10 +470,13 @@ export async function runToolOrchestration(
    * 收尾轮若仍返回 tool_calls，只标未执行、补配对消息，不再请求。
    */
   const finishWithClosingTurn = async (
-    reason: ToolOrchestrationStopReason,
+    reason: ToolSkipReason,
     iteration: number,
   ): Promise<ToolOrchestrationResult> => {
-    stopReason = reason
+    // 只有对外原因才记录终态：内部原因（来源提前用尽）不算预算或停止
+    if (reason !== 'tool_chain_exhausted') {
+      stopReason = reason
+    }
     // 真正取消优先：cancel 抛错立即退出，不进入收尾
     params.checkAbort?.()
     const turn = await requestTurnWithFallback(iteration, false)
@@ -410,10 +489,20 @@ export async function runToolOrchestration(
       )
       await skipToolCalls(turn.parsed.toolCalls, reason)
     }
-    if (!turn.parsed.content.trim()) {
-      return finishResult({ status: 'stopped_without_answer', content: '' })
+    const outcome = classifyTurnDelivery(turn.parsed)
+    if (!outcome.delivered) {
+      // 没有正文：既有语义保持不变（收尾轮空响应不伪造回答）
+      if (outcome.reason === 'empty_content') {
+        return finishResult({ status: 'stopped_without_answer', content: '' })
+      }
+      // 有正文但未交付：原样保留，交调用方按未生成最终回答收尾
+      return finishResult({
+        status: 'answer_not_delivered',
+        content: turn.parsed.content,
+        outcome,
+      })
     }
-    return finishResult({ status: 'completed', content: turn.parsed.content })
+    return finishResult({ status: 'completed', content: turn.parsed.content, outcome })
   }
 
   for (let iteration = 0; ; iteration += 1) {
@@ -428,15 +517,27 @@ export async function runToolOrchestration(
 
     if (parsed.toolCalls.length === 0) {
       const finalContent = parsed.content || ''
-      if (!finalContent.trim()) {
+      const outcome = classifyTurnDelivery(parsed)
+      if (outcome.delivered) {
+        // 这一轮已经把最终回答交出来了：停止请求若在此间到达也不改判本次运行结果，
+        // 否则"没被打断的作答"会被标成 stop_tools。
+        return finishResult({ status: 'completed', content: finalContent, outcome })
+      }
+      if (outcome.reason === 'empty_content') {
         throw new Error(
           params.emptyContentErrorMessage || 'Model finished without producing a final answer',
         )
       }
-      // 这一轮已经把最终回答交出来了：停止请求若在此间到达也不改判本次运行结果，
-      // 否则"没被打断的作答"会被标成 stop_tools。
-      return finishResult({ status: 'completed', content: finalContent })
+      // 非空但未交付：不重试、不换模型、不改写提示，只把原始正文交给调用方
+      return finishResult({
+        status: 'answer_not_delivered',
+        content: finalContent,
+        outcome,
+      })
     }
+
+    // 真取消优先于「停止工具」：取消后不再派发任何新工具，也不再请求模型
+    params.checkAbort?.()
 
     if (stopToolsRequested()) {
       // 停止请求在本轮生成期间到达：这一轮工具不再派发，只标未执行后收尾
@@ -460,6 +561,11 @@ export async function runToolOrchestration(
           parsed.thinkingBlocks,
         )
         await skipToolCalls(parsed.toolCalls, 'budget_exhausted')
+        // 没有留存证据时，收尾轮只会重新编一遍：直接按预算收尾，最多一轮留给有证据的情况
+        if (params.hasRetainedEvidence && params.hasRetainedEvidence() !== true) {
+          stopReason = 'budget_exhausted'
+          return finishResult({ status: 'stopped_without_answer', content: '' })
+        }
         return await finishWithClosingTurn('budget_exhausted', iteration)
       }
       stopReason = 'budget_exhausted'
@@ -478,6 +584,19 @@ export async function runToolOrchestration(
       return finishResult({ status: 'terminated', termination })
     }
     toolRoundsUsed += 1
+
+    // 真取消优先：链耗尽判定之后同样不允许再发请求
+    params.checkAbort?.()
+
+    const roundToolNames = parsed.toolCalls.map((toolCall) => toolCall?.function?.name || '')
+    const chainEnd = params.shouldEndToolChain?.({ toolNames: roundToolNames }) ?? null
+    if (chainEnd) {
+      // 来源提前用尽：不写共享 stopReason（前端把它当"工具预算耗尽"），原因走独立追踪
+      if (params.hasRetainedEvidence && params.hasRetainedEvidence() !== true) {
+        return finishResult({ status: 'stopped_without_answer', content: '' })
+      }
+      return await finishWithClosingTurn('tool_chain_exhausted', iteration)
+    }
   }
 }
 
@@ -615,7 +734,10 @@ async function executeTurnWithFallback(params: {
   onSchemaFallback?: (schema: ToolSchema) => MaybePromise<void>
   onContentDelta?: (delta: string) => MaybePromise<void>
   onReasoningDelta?: (delta: string) => MaybePromise<void>
-  onUsage?: (usage: Record<string, any>) => MaybePromise<void>
+  onUsage?: (
+    usage: Record<string, any>,
+    context: ToolTurnUsageContext,
+  ) => MaybePromise<void>
   onStreamChunk?: () => MaybePromise<void>
   onFirstResponseEvent?: () => MaybePromise<void>
   onTurnError?: (params: {
@@ -627,8 +749,11 @@ async function executeTurnWithFallback(params: {
   checkAbort?: () => void
 }): Promise<{ schema: ToolSchema; parsed: ParsedToolTurn }> {
   let activeSchema = params.schema
+  // 每轮内的真实请求序号：schema 回退与错误重试都会 +1
+  let attempt = 0
   while (true) {
     try {
+      attempt += 1
       const turnResult = await params.requestTurn({
         schema: activeSchema,
         messages: params.messages,
@@ -646,7 +771,14 @@ async function executeTurnWithFallback(params: {
           allowedToolNames: params.allowedToolNames,
           onContentDelta: params.onContentDelta,
           onReasoningDelta: params.onReasoningDelta,
-          onUsage: params.onUsage,
+          onUsage: params.onUsage
+            ? (usage: Record<string, any>) =>
+                params.onUsage?.(usage, {
+                  iteration: params.iteration,
+                  attempt,
+                  toolsEnabled: params.toolsEnabled,
+                })
+            : undefined,
           onStreamChunk: params.onStreamChunk,
           onFirstResponseEvent: params.onFirstResponseEvent,
           checkAbort: params.checkAbort,
@@ -748,6 +880,10 @@ async function parseStreamingTurn(params: {
   let messageToolCalls: ToolCall[] = []
   let thinkingBlocks: Array<Record<string, any>> = []
   let legacyFunctionCall: LegacyFunctionCall | null = null
+  let finishReason: string | null = null
+  let responseStatus: string | null = null
+  let incompleteReason: string | null = null
+  let refusalText = ''
 
   const emitContentDelta = async (delta: string) => {
     if (!delta || !params.onContentDelta) return
@@ -795,6 +931,13 @@ async function parseStreamingTurn(params: {
       if (outputToolCalls.length > 0) {
         messageToolCalls = outputToolCalls
       }
+      const responsesSignal = readResponsesStatusSignal(parsed)
+      responseStatus = responsesSignal.responseStatus
+      incompleteReason = responsesSignal.incompleteReason
+      const responsesRefusal = readResponsesRefusalText(parsed)
+      if (responsesRefusal) {
+        refusalText = responsesRefusal
+      }
       await emitUsage(parsed?.usage)
       return
     }
@@ -811,6 +954,14 @@ async function parseStreamingTurn(params: {
     const nextToolCalls = extractToolCallsFromMessage(message)
     if (nextToolCalls.length > 0) {
       messageToolCalls = nextToolCalls
+    }
+    const nonSseFinishReason = readChatFinishReason(parsed)
+    if (nonSseFinishReason) {
+      finishReason = nonSseFinishReason
+    }
+    const nonSseRefusal = readChatRefusalText(parsed)
+    if (nonSseRefusal) {
+      refusalText = nonSseRefusal
     }
     await emitUsage(parsed?.usage)
   }
@@ -871,11 +1022,27 @@ async function parseStreamingTurn(params: {
               reasoning += parsed.delta
               await emitReasoningDelta(parsed.delta)
             } else if (
+              parsed.type === 'response.refusal.delta' &&
+              typeof parsed.delta === 'string' &&
+              parsed.delta
+            ) {
+              // 拒答文本不进正文：只用于交付判定
+              refusalText += parsed.delta
+            } else if (
               parsed.type === 'response.completed' ||
               parsed.type === 'response.failed' ||
               parsed.type === 'response.incomplete'
             ) {
               doneSeen = true
+              const completionSignal = readResponsesStatusSignal(parsed.response)
+              responseStatus =
+                completionSignal.responseStatus ??
+                parsed.type.replace('response.', '')
+              incompleteReason = completionSignal.incompleteReason
+              const completionRefusal = readResponsesRefusalText(parsed.response)
+              if (completionRefusal) {
+                refusalText = completionRefusal
+              }
               await emitUsage(parsed.response?.usage)
             }
             appendResponsesToolCallEvent(toolCallBuffers.responses, parsed)
@@ -900,6 +1067,12 @@ async function parseStreamingTurn(params: {
             await emitReasoningDelta(reasoningDelta)
           }
           const choice = parsed?.choices?.[0]
+          if (typeof choice?.finish_reason === 'string' && choice.finish_reason) {
+            finishReason = choice.finish_reason
+          }
+          if (typeof choice?.message?.refusal === 'string' && choice.message.refusal.trim()) {
+            refusalText = choice.message.refusal
+          }
           const delta = choice?.delta || {}
           if (Array.isArray(delta.tool_calls)) {
             for (const toolDelta of delta.tool_calls) {
@@ -960,6 +1133,12 @@ async function parseStreamingTurn(params: {
     toolCalls,
     usage: usageSnapshot,
     ...(thinkingBlocks.length > 0 ? { thinkingBlocks } : {}),
+    providerSignal: {
+      finishReason,
+      responseStatus,
+      incompleteReason,
+      refusalText: refusalText.trim() ? refusalText : null,
+    },
   }
 }
 
@@ -1009,12 +1188,23 @@ async function parseNonStreamingTurn(params: {
   const messageContent =
     params.schema === 'text' && toolCalls.length > 0 ? rawContent : cleanedContent
 
+  const providerSignal: ProviderAnswerSignal = Array.isArray(parsed?.output)
+    ? {
+        ...readResponsesStatusSignal(parsed),
+        refusalText: readResponsesRefusalText(parsed),
+      }
+    : {
+        finishReason: readChatFinishReason(parsed),
+        refusalText: readChatRefusalText(parsed),
+      }
+
   return {
     content: messageContent,
     reasoning: rawReasoning,
     toolCalls,
     usage: parsed?.usage ?? null,
     ...(thinkingBlocks.length > 0 ? { thinkingBlocks } : {}),
+    providerSignal,
   }
 }
 
@@ -1152,6 +1342,48 @@ function buildProviderRequestError(response: Response, rawText: string): Error {
     requestError.payload = payload
   }
   return requestError
+}
+
+/** Chat Completions：choices[0].finish_reason */
+function readChatFinishReason(payload: any): string | null {
+  const finishReason = payload?.choices?.[0]?.finish_reason
+  return typeof finishReason === 'string' && finishReason.trim() ? finishReason : null
+}
+
+/** Chat Completions：choices[0].message.refusal（provider 明确拒答） */
+function readChatRefusalText(payload: any): string | null {
+  const refusal = payload?.choices?.[0]?.message?.refusal
+  return typeof refusal === 'string' && refusal.trim() ? refusal : null
+}
+
+/** Responses API：output[] 里的 refusal 内容块 */
+function readResponsesRefusalText(payload: any): string | null {
+  const output = Array.isArray(payload?.output) ? payload.output : []
+  const parts: string[] = []
+  for (const item of output) {
+    if (!item || typeof item !== 'object' || item.type !== 'message') continue
+    const content = Array.isArray(item.content) ? item.content : []
+    for (const part of content) {
+      if (part?.type === 'refusal' && typeof part.refusal === 'string' && part.refusal.trim()) {
+        parts.push(part.refusal.trim())
+      }
+    }
+  }
+  return parts.length > 0 ? parts.join('\n') : null
+}
+
+/** Responses API：response.status / response.incomplete_details.reason */
+function readResponsesStatusSignal(payload: any): {
+  responseStatus: string | null
+  incompleteReason: string | null
+} {
+  const status = payload?.status
+  const incompleteReason = payload?.incomplete_details?.reason
+  return {
+    responseStatus: typeof status === 'string' && status.trim() ? status : null,
+    incompleteReason:
+      typeof incompleteReason === 'string' && incompleteReason.trim() ? incompleteReason : null,
+  }
 }
 
 function extractMessageReasoning(message: any, payload?: any): string {
