@@ -120,6 +120,8 @@ export interface AutoReadItem {
   siteName?: string
   byline?: string
   wordCount?: number
+  /** 引擎声明的发布/更新时间；取不到就留空，不用摘要日期顶替。 */
+  publishedDate?: string
   images?: Array<{ url: string }>
   leadImageUrl?: string
   /** 实际提供 content 的一方：搜索提供方名或读取引擎名。 */

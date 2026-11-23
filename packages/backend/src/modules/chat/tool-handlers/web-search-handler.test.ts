@@ -161,7 +161,7 @@ describe('WebSearchToolHandler DeepSeek integration', () => {
     expect(payload.summary).toContain('图片证据: https://cdn.example.com/lead.png')
   })
 
-  it('keeps visual evidence for two auto-read articles under the search tool call', async () => {
+  it('returns two auto-read news images only when the caller explicitly asks for images', async () => {
     const stories = ['a', 'b'].map((id) => ({
       title: '新闻 ' + id,
       url: 'https://example.com/news/' + id,
@@ -186,7 +186,7 @@ describe('WebSearchToolHandler DeepSeek integration', () => {
 
     const result = await new WebSearchToolHandler(createConfig({ autoReadTopK: 2 }) as any).handle(
       { id: 'call_news', function: { name: 'web_search', arguments: '{}' } },
-      { query: '带图新闻' },
+      { query: '带图新闻', include_images: true },
       { ...createContext(), provider: 'openai_responses', modelCapabilities: { vision: true } } as any,
     )
 

@@ -66,3 +66,39 @@ export const buildToolHandlerResult = (toolCallId: string, toolName = 'python_ru
     content,
   },
 })
+
+/** 带 provider 结构化结束信号的 Chat Completions turn */
+export const buildNonStreamFinishResponseLike = (
+  content: string,
+  finishReason: string | null,
+  usage?: Record<string, unknown>,
+) =>
+  ({
+    ok: true,
+    status: 200,
+    text: async () =>
+      JSON.stringify({
+        choices: [{ message: { content }, finish_reason: finishReason }],
+        usage: usage ?? { total_tokens: 1 },
+      }),
+  }) as any
+
+/** Responses API turn：status / incomplete_details / refusal 内容块 */
+export const buildResponsesTurnResponseLike = (payload: {
+  output: any[]
+  status?: string
+  incompleteReason?: string | null
+}) =>
+  ({
+    ok: true,
+    status: 200,
+    text: async () =>
+      JSON.stringify({
+        status: payload.status ?? 'completed',
+        ...(payload.incompleteReason
+          ? { incomplete_details: { reason: payload.incompleteReason } }
+          : {}),
+        output: payload.output,
+        usage: { input_tokens: 10, output_tokens: 2 },
+      }),
+  }) as any

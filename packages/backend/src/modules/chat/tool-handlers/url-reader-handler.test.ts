@@ -7,6 +7,7 @@ declare const jest: any
 import { UrlReaderToolHandler } from './url-reader-handler'
 import * as urlReaderModule from '../../../utils/url-reader'
 import { readRemoteImages } from '../../../utils/remote-image-reader'
+import { buildSearchEvidenceTaskKey, clearSearchEvidenceStore, recordSearchEvidence } from './web-search-evidence-store'
 import type { ToolCallContext } from '../../../agent-runtime/tool-handler-types'
 
 const mockedReadRemoteImages = readRemoteImages as any
@@ -26,6 +27,10 @@ const createContext = (override: Partial<ToolCallContext> = {}): ToolCallContext
 })
 
 describe('UrlReaderToolHandler', () => {
+  beforeEach(() => {
+    clearSearchEvidenceStore()
+  })
+
   afterEach(() => {
     jest.restoreAllMocks()
     mockedReadRemoteImages.mockReset()
@@ -78,7 +83,7 @@ describe('UrlReaderToolHandler', () => {
     )
   })
 
-  it('returns downloaded article images as optional evidence attached to their tool call', async () => {
+  it('downloads article images only when include_images is explicitly requested', async () => {
     const article = 'https://example.com/redirect'
     const finalUrl = 'https://example.com/news'
     const firstImage = 'https://cdn.example.com/first.png'
@@ -94,7 +99,7 @@ describe('UrlReaderToolHandler', () => {
     ])
 
     const result = await new UrlReaderToolHandler({ enabled: true }).handle(
-      { id: 'call_news', function: { name: 'read_url' } }, { url: article },
+      { id: 'call_news', function: { name: 'read_url' } }, { url: article, include_images: true },
       createContext({ provider: 'openai_responses' }),
     )
 
@@ -241,7 +246,7 @@ describe('UrlReaderToolHandler', () => {
     expect(content).not.toContain('## 图片证据')
     expect(content).not.toContain('\n\n\n')
     expect(content).toContain('## 正文内容')
-    expect(content.endsWith('只有正文，没有任何配图。')).toBe(true)
+    expect(content).toContain('只有正文，没有任何配图。')
   })
   it('defaults to current content and passes an explicit history request to the reader', async () => {
     const readSpy = jest.spyOn(urlReaderModule, 'readUrlContent').mockResolvedValue({

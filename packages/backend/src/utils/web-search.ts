@@ -1,6 +1,6 @@
 import { BackendLogger as log } from './logger'
 import { WEB_SEARCH_ENGINE_IDS, type WebSearchEngine } from '@aichat/shared/web-search-contract'
-import { runDeepSeekSearch } from './deepseek-tools'
+import { DeepSeekToolError, runDeepSeekSearch } from './deepseek-tools'
 import { combineAbortSignals } from './abort-signal'
 
 export type WebSearchQueryLanguage = 'zh' | 'en' | 'unknown'
@@ -47,6 +47,11 @@ export interface WebSearchHit {
   /** 实际提供 content 的提供方，与 sourceEngines 没有必然关系。 */
   contentSource?: string
   contentMetadata?: WebSearchContentMetadata
+  /**
+   * 时间窗核验状态。in_range 表示引擎声明的发布/更新日期落在请求窗口内；
+   * undated 表示没有可解析日期，保留但不代表已确认在窗口内。
+   */
+  timeRangeStatus?: 'in_range' | 'undated'
 }
 
 /**
@@ -92,6 +97,8 @@ export interface WebSearchOptions {
   deepseekNeedContent?: boolean
   /** 触发检索的用户原始问题，供支持 ori_question 的引擎理解意图（DeepSeek）。 */
   oriQuestion?: string
+  /** 可选的发布时间窗，只有引擎文档字段支持的才下发。 */
+  timeRange?: WebSearchTimeRange
   signal?: AbortSignal
 }
 
@@ -112,11 +119,39 @@ export interface WebSearchParallelTask {
   taskIndex: number
 }
 
+/**
+ * 任务级失败种类：把「上游没交付」「超时」「被取消」「没凭据」分开，
+ * 供父结果生成可机读结论，而不是让调用方解析错误文案。
+ */
+export type WebSearchTaskFailureKind =
+  | 'upstream_error'
+  | 'rate_limited'
+  | 'timeout'
+  | 'cancelled'
+  | 'network'
+  | 'no_credential'
+  | 'unsupported'
+  | 'invalid_response'
+
 export interface WebSearchTaskResult {
   task: WebSearchParallelTask
   status: 'success' | 'error'
   hits: WebSearchHit[]
   error?: string
+  failureKind?: WebSearchTaskFailureKind
+  errorCode?: string
+  httpStatus?: number
+  /** 上游 Retry-After 的毫秒数；只做提示，不推断账户或配额成因。 */
+  retryAfterMs?: number
+  durationMs?: number
+  /** 本次请求是否把时间窗下发给该引擎；undefined 表示没有请求时间窗。 */
+  timeRangeApplied?: boolean
+}
+
+/** 时间窗请求；日期为 YYYY-MM-DD，单边也允许。 */
+export interface WebSearchTimeRange {
+  start?: string
+  end?: string
 }
 
 export interface WebSearchParallelOptions {
@@ -138,6 +173,7 @@ export interface WebSearchParallelOptions {
   deepseekNeedContent?: boolean
   timeoutMs?: number
   parallelMaxEngines?: number
+  timeRange?: WebSearchTimeRange
   signal?: AbortSignal
 }
 
@@ -269,13 +305,54 @@ const pickThumbnailUrl = (item: any): string | undefined =>
   )
 
 /**
- * 失败错误：只保留状态码与 Retry-After 提示，不回显上游响应体。
+ * 引擎失败错误：只保留状态码与 Retry-After 提示，不回显上游响应体。
  * 上游错误体可能原样包含 API Key（各引擎都会出现），已有测试把「不泄露上游正文」定为契约。
  */
-const buildHttpError = (label: string, response: Response): Error => {
+export class WebSearchEngineError extends Error {
+  readonly failureKind: WebSearchTaskFailureKind
+  readonly errorCode?: string
+  readonly httpStatus?: number
+  readonly retryAfterMs?: number
+
+  constructor(
+    message: string,
+    init: {
+      failureKind: WebSearchTaskFailureKind
+      errorCode?: string
+      httpStatus?: number
+      retryAfterMs?: number
+    },
+  ) {
+    super(message)
+    this.name = 'WebSearchEngineError'
+    this.failureKind = init.failureKind
+    this.errorCode = init.errorCode
+    this.httpStatus = init.httpStatus
+    this.retryAfterMs = init.retryAfterMs
+  }
+}
+
+/** Retry-After 既可能是秒数也可能是 HTTP 日期；无法解析就不猜。 */
+export const parseRetryAfterMs = (value: string | null): number | undefined => {
+  if (!value) return undefined
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  if (/^\d+$/.test(trimmed)) return Number(trimmed) * 1000
+  const parsed = Date.parse(trimmed)
+  if (Number.isNaN(parsed)) return undefined
+  return Math.max(0, parsed - Date.now())
+}
+
+const buildHttpError = (label: string, response: Response): WebSearchEngineError => {
   const retryAfter = response.headers.get('retry-after')
+  const retryAfterMs = parseRetryAfterMs(retryAfter)
   const retryHint = retryAfter ? ` (retry after ${retryAfter}s)` : ''
-  return new Error(`${label} failed: ${response.status}${retryHint}`)
+  return new WebSearchEngineError(`${label} failed: ${response.status}${retryHint}`, {
+    failureKind: response.status === 429 ? 'rate_limited' : 'upstream_error',
+    errorCode: `HTTP_${response.status}`,
+    httpStatus: response.status,
+    retryAfterMs,
+  })
 }
 
 /** 把用户填写的域名/URL 归一成主机名，供白名单匹配与站点操作符复用。 */
@@ -292,6 +369,9 @@ const normalizeDomainHost = (value: string): string => {
   }
   return normalized.split('/')[0]?.split(':')[0]?.replace(/^\.+|\.+$/g, '') || ''
 }
+
+/** 公开的主机名归一化入口：工具参数与配置白名单共用同一套规则。 */
+export const normalizeSearchDomainHost = (value: string): string => normalizeDomainHost(value)
 
 const normalizeDomainHosts = (domains?: string[]): string[] =>
   Array.from(new Set(normalizeDomains(domains).map(normalizeDomainHost).filter(Boolean)))
@@ -310,6 +390,85 @@ const filterHitsByDomains = (hits: WebSearchHit[], domains: string[]): WebSearch
       return false
     }
   })
+}
+
+const ISO_DATE_PREFIX_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * 归一成 YYYY-MM-DD（UTC）。无法解析返回 null，由调用方决定是 invalid_request 还是忽略。
+ * 不在这里自动反转或放宽窗口。
+ */
+export const normalizeTimeRangeDate = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const dateOnly = trimmed.slice(0, 10)
+  if (ISO_DATE_PREFIX_RE.test(dateOnly)) {
+    const parsed = Date.parse(`${dateOnly}T00:00:00.000Z`)
+    if (Number.isNaN(parsed)) return null
+    // 2026-02-31 这类会被 Date.parse 规范化的日期必须拒绝，不能悄悄改成 03-03
+    return new Date(parsed).toISOString().slice(0, 10) === dateOnly ? dateOnly : null
+  }
+  const parsed = Date.parse(trimmed)
+  if (Number.isNaN(parsed)) return null
+  return new Date(parsed).toISOString().slice(0, 10)
+}
+
+export const normalizeTimeRange = (timeRange?: WebSearchTimeRange): WebSearchTimeRange | undefined => {
+  if (!timeRange) return undefined
+  const start = normalizeTimeRangeDate(timeRange.start)
+  const end = normalizeTimeRangeDate(timeRange.end)
+  if (!start && !end) return undefined
+  return {
+    ...(start ? { start } : {}),
+    ...(end ? { end } : {}),
+  }
+}
+
+/**
+ * 只有文档支持时间参数的引擎才下发：Tavily / Exa 支持单边，Brave 只支持双边区间，
+ * Metaso / DeepSeek 没有文档参数，返回 false 并由本地日期过滤兜底。
+ */
+export const applyTimeRangeToEngineRequest = (
+  engine: string,
+  timeRange?: WebSearchTimeRange,
+): boolean => {
+  if (!timeRange) return false
+  const hasAny = Boolean(timeRange.start || timeRange.end)
+  const hasBoth = Boolean(timeRange.start && timeRange.end)
+  switch (normalizeEngine(engine)) {
+    case 'tavily':
+    case 'exa':
+      return hasAny
+    case 'brave':
+      return hasBoth
+    default:
+      return false
+  }
+}
+
+/**
+ * 本地时间窗核验：能解析日期的命中才可能判定 in_range，越界丢弃；
+ * 没有可解析日期的命中保留为 undated，表示未核实而不是已确认。
+ */
+export const applyTimeRangeToHits = (
+  hits: WebSearchHit[],
+  timeRange: WebSearchTimeRange,
+): WebSearchHit[] => {
+  const startMs = timeRange.start ? Date.parse(`${timeRange.start}T00:00:00.000Z`) : null
+  const endMs = timeRange.end ? Date.parse(`${timeRange.end}T23:59:59.999Z`) : null
+  const filtered: WebSearchHit[] = []
+  for (const hit of hits) {
+    const parsed = hit.publishedDate ? Date.parse(hit.publishedDate) : Number.NaN
+    if (Number.isNaN(parsed)) {
+      filtered.push({ ...hit, timeRangeStatus: 'undated' })
+      continue
+    }
+    if (startMs !== null && parsed < startMs) continue
+    if (endMs !== null && parsed > endMs) continue
+    filtered.push({ ...hit, timeRangeStatus: 'in_range' })
+  }
+  return filtered
 }
 
 /** Brave 官方支持 site: 与 OR 操作符（大写），用它表达域名白名单。 */
@@ -447,6 +606,9 @@ const runTavilySearch = async (query: string, opts: WebSearchOptions): Promise<W
   if (domains.length > 0) {
     payload.include_domains = domains
   }
+  // 官方 start_date/end_date：单边也允许；没有请求时间窗时不写这两个字段
+  if (opts.timeRange?.start) payload.start_date = opts.timeRange.start
+  if (opts.timeRange?.end) payload.end_date = opts.timeRange.end
 
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -533,14 +695,19 @@ const runBraveSearch = async (query: string, opts: WebSearchOptions): Promise<We
   }
   const domains = normalizeDomainHosts(opts.domains)
   const siteFilter = buildBraveSiteFilter(domains)
-  const endpoint = buildUrlWithParams(opts.endpoint || BRAVE_WEB_SEARCH_ENDPOINT, {
+  const endpointParams: Record<string, string> = {
     q: siteFilter ? `${query} (${siteFilter})` : query,
     count: String(clampLimit(opts.limit)),
     // 官方默认 true 会在 description 里插入高亮标记字符，模型读到的是噪音
     text_decorations: 'false',
     // 每条结果再给 5 段备选摘录，用作 snippet 之外的正文线索
     extra_snippets: 'true',
-  })
+  }
+  // 官方 freshness 只接受 pd/pw/pm/py 或 YYYY-MM-DDtoYYYY-MM-DD：单边时间窗不下发
+  if (opts.timeRange?.start && opts.timeRange?.end) {
+    endpointParams.freshness = `${opts.timeRange.start}to${opts.timeRange.end}`
+  }
+  const endpoint = buildUrlWithParams(opts.endpoint || BRAVE_WEB_SEARCH_ENDPOINT, endpointParams)
   const response = await fetch(endpoint, {
     method: 'GET',
     headers: {
@@ -745,6 +912,9 @@ const runExaSearch = async (query: string, opts: WebSearchOptions): Promise<WebS
   if (domains.length > 0) {
     payload.includeDomains = domains
   }
+  // 官方 startPublishedDate/endPublishedDate 需要 ISO 8601
+  if (opts.timeRange?.start) payload.startPublishedDate = `${opts.timeRange.start}T00:00:00.000Z`
+  if (opts.timeRange?.end) payload.endPublishedDate = `${opts.timeRange.end}T23:59:59.999Z`
 
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -979,6 +1149,45 @@ const mergeHits = (
   }))
 }
 
+/**
+ * 把异常收敛成任务级失败种类。取消与超时由运行器自己掌握，
+ * 优先级高于错误文本推断；错误文本只做兜底，不据此猜测账户或配额成因。
+ */
+const classifyTaskFailure = (
+  error: unknown,
+  flags: { timedOut: boolean; cancelled: boolean },
+): Pick<WebSearchTaskResult, 'failureKind' | 'errorCode' | 'httpStatus' | 'retryAfterMs'> => {
+  if (flags.cancelled) return { failureKind: 'cancelled', errorCode: 'CANCELLED' }
+  if (flags.timedOut) return { failureKind: 'timeout', errorCode: 'TIMEOUT' }
+  if (error instanceof WebSearchEngineError) {
+    return {
+      failureKind: error.failureKind,
+      errorCode: error.errorCode,
+      httpStatus: error.httpStatus,
+      retryAfterMs: error.retryAfterMs,
+    }
+  }
+  if (error instanceof DeepSeekToolError) {
+    if (error.code === 'MISSING_API_KEY') return { failureKind: 'no_credential', errorCode: error.code }
+    if (error.code === 'CANCELLED') return { failureKind: 'cancelled', errorCode: error.code }
+    if (error.code === 'TIMEOUT') return { failureKind: 'timeout', errorCode: error.code }
+    if (error.code === 'UNSUPPORTED_SCOPE') return { failureKind: 'unsupported', errorCode: error.code }
+    if (error.code === 'INVALID_RESPONSE' || error.code === 'EMPTY_CONTENT') {
+      return { failureKind: 'invalid_response', errorCode: error.code }
+    }
+    if (typeof error.status === 'number') {
+      return {
+        failureKind: error.status === 429 ? 'rate_limited' : 'upstream_error',
+        errorCode: error.code,
+        httpStatus: error.status,
+      }
+    }
+    return { failureKind: 'upstream_error', errorCode: error.code }
+  }
+  if (error instanceof TypeError) return { failureKind: 'network', errorCode: 'FETCH_FAILED' }
+  return { failureKind: 'upstream_error', errorCode: 'SEARCH_ERROR' }
+}
+
 export const runWebSearchParallel = async (
   opts: WebSearchParallelOptions,
 ): Promise<WebSearchParallelResult> => {
@@ -1071,22 +1280,36 @@ export const runWebSearchParallel = async (
   }
 
   const timeoutMs = Math.max(1000, opts.timeoutMs || DEFAULT_PARALLEL_TIMEOUT_MS)
+  const timeRange = normalizeTimeRange(opts.timeRange)
 
   const taskResults = await Promise.all(
     tasks.map(async (task): Promise<WebSearchTaskResult> => {
       const apiKey = (opts.apiKeys?.[task.engine] || '').trim()
+      const timeRangeApplied = timeRange
+        ? applyTimeRangeToEngineRequest(task.engine, timeRange)
+        : undefined
+      const withTimeRange = (result: WebSearchTaskResult): WebSearchTaskResult =>
+        timeRangeApplied === undefined ? result : { ...result, timeRangeApplied }
+
       if (!apiKey) {
-        return {
+        return withTimeRange({
           task,
           status: 'error',
           hits: [],
           error: `API key for ${task.engine} is not configured`,
-        }
+          failureKind: 'no_credential',
+          errorCode: 'NO_CREDENTIAL',
+        })
       }
 
       const abortController = new AbortController()
-      const timeoutId = setTimeout(() => abortController.abort(), timeoutMs)
+      let timedOut = false
+      const timeoutId = setTimeout(() => {
+        timedOut = true
+        abortController.abort()
+      }, timeoutMs)
       const combinedSignal = combineAbortSignals(abortController.signal, opts.signal)
+      const startedAt = Date.now()
       try {
         const hits = await runWebSearch(task.query, {
           engine: task.engine,
@@ -1100,6 +1323,7 @@ export const runWebSearchParallel = async (
           autoReadNeedContent: opts.autoReadNeedContent,
           deepseekNeedContent: opts.deepseekNeedContent,
           oriQuestion: opts.originalQuery,
+          timeRange,
           signal: combinedSignal.signal,
         })
 
@@ -1112,20 +1336,28 @@ export const runWebSearchParallel = async (
             queryLanguage: task.queryLanguage,
             rank: idx + 1,
           }))
+        // 引擎没有时间参数时靠本地日期核验；没有可解析日期的命中标记 undated 而不是丢弃
+        const scopedHits = timeRange ? applyTimeRangeToHits(normalizedHits, timeRange) : normalizedHits
 
-        return {
+        return withTimeRange({
           task,
           status: 'success',
-          hits: normalizedHits,
-        }
+          hits: scopedHits,
+          durationMs: Date.now() - startedAt,
+        })
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Unknown search error'
-        return {
+        return withTimeRange({
           task,
           status: 'error',
           hits: [],
           error: message,
-        }
+          durationMs: Date.now() - startedAt,
+          ...classifyTaskFailure(error, {
+            timedOut,
+            cancelled: Boolean(opts.signal?.aborted),
+          }),
+        })
       } finally {
         clearTimeout(timeoutId)
         combinedSignal.cleanup()
