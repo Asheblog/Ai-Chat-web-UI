@@ -69,7 +69,7 @@ describe("SettingsDialog 个人设置导航", () => {
     const nav = within(screen.getByRole("navigation", { name: "设置导航" }))
     const labels = ["偏好设置", "个人 Skills", "分享管理", "账号安全", "关于"]
     const icons = labels.map((name) => {
-      const item = nav.getByRole("button", { name, exact: true })
+      const item = nav.getByRole("button", { name })
       const icon = item.querySelector('[aria-hidden="true"] svg')
       expect(icon, name).toBeInTheDocument()
       return icon?.innerHTML
