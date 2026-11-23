@@ -12,9 +12,17 @@ import { FileText, ShieldCheck, TerminalSquare } from 'lucide-react'
 import { listSkillAudits, listSkillCatalog } from '@/features/skills/api'
 import { formatDateTime } from '@/features/settings/shared'
 import type { SkillCatalogItem, SkillExecutionAuditItem } from '@/types'
-import { TaskTraceConsole } from '@/components/task-trace/TaskTraceConsole'
-import { SystemLogsPage } from '@/components/settings/pages/SystemLogsPage'
+import { createSettingsModule } from '@/components/settings/components/settings-module'
 import { SettingsTabs, type SettingsTabDef } from '@/components/settings/components/settings-tabs'
+
+const TaskTraceConsole = createSettingsModule(
+  () => import('@/components/task-trace/TaskTraceConsole').then((m) => m.TaskTraceConsole),
+  '任务追踪',
+)
+const SystemLogsPage = createSettingsModule(
+  () => import('./SystemLogsPage').then((m) => m.SystemLogsPage),
+  '运行日志',
+)
 
 const APPROVAL_OPTIONS = [
   { value: 'all', label: '全部审批状态' },
