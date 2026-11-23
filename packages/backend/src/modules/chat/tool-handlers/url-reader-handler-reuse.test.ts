@@ -10,6 +10,7 @@ import {
   buildSearchEvidenceTaskKey,
   clearSearchEvidenceStore,
   lookupSearchEvidence,
+  recordReadEvidence,
   recordSearchEvidence,
 } from './web-search-evidence-store'
 import type { ToolCallContext } from '../../../agent-runtime/tool-handler-types'
@@ -88,7 +89,12 @@ describe('read_url 同任务正文复用与机读摘要', () => {
     const events = (context.sendToolEvent as any).mock.calls.map(([payload]: any[]) => payload)
     const resultEvent = events.find((payload: any) => payload.stage === 'result')
     expect(resultEvent.summary).toContain('复用')
-    expect(resultEvent.details).toMatchObject({ reusedFrom: 'search_content', contentSource: 'provider' })
+    expect(resultEvent.details).toMatchObject({
+      reusedFrom: 'search_content',
+      contentSource: 'provider',
+      // 共享枚举只声明 provider；真实提供方单独带出，不写回正文
+      contentProvider: 'tavily',
+    })
 
     const content = String(result.message.content)
     expect(content).toContain('复用搜索正文')
@@ -109,6 +115,33 @@ describe('read_url 同任务正文复用与机读摘要', () => {
 
     expect(readSpy).toHaveBeenCalledWith(
       'https://example.com/article',
+      expect.not.objectContaining({ providedContent: expect.anything() }),
+    )
+  })
+
+  it('does not reuse structured bodies, which would otherwise be downgraded to article', async () => {
+    recordReadEvidence(buildSearchEvidenceTaskKey({ sessionId: 1, messageId: 10 }), [
+      {
+        url: 'https://example.com/table',
+        content: '{"rows":[[1,2]]}',
+        evidenceKind: 'structured',
+        contentSource: 'tavily',
+      },
+    ])
+    const readSpy = jest.spyOn(urlReaderModule, 'readUrlContent').mockResolvedValue(
+      page({ url: 'https://example.com/table' }),
+    )
+
+    await new UrlReaderToolHandler({ enabled: true }).handle(
+      { id: 'structured_case', function: { name: 'read_url' } },
+      { url: 'https://example.com/table' },
+      createContext({ modelCapabilities: { vision: false } }),
+    )
+
+    expect(lookupSearchEvidence(buildSearchEvidenceTaskKey({ sessionId: 1, messageId: 10 }), 'https://example.com/table'))
+      .toMatchObject({ contentKind: 'structured' })
+    expect(readSpy).toHaveBeenCalledWith(
+      'https://example.com/table',
       expect.not.objectContaining({ providedContent: expect.anything() }),
     )
   })

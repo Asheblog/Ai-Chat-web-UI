@@ -65,14 +65,19 @@ type ParsedToolTurn = {
 }
 
 /**
- * 本次运行被提前收尾的原因。
- * tool_chain_exhausted 只用于「已宣告但不会执行」的调用文案与配对消息：
- * 它不是全局预算，不写进 runResult / SSE（前端把 budget_exhausted 显示为预算收尾）。
+ * 对外的收尾原因：只包含会进入 runResult / SSE 共享契约的两个值。
+ * 前端按它们出终态文案，因此不得把内部原因混进来。
  */
-export type ToolOrchestrationStopReason =
-  | 'stop_tools'
-  | 'budget_exhausted'
-  | 'tool_chain_exhausted'
+export type ToolOrchestrationStopReason = 'stop_tools' | 'budget_exhausted'
+
+/**
+ * 内部收尾判别：只用于「已宣告但不会执行」的调用文案与配对消息
+ * （例如来源提前用尽）。它不影响 runResult / SSE 的 stopReason。
+ */
+export type ToolCloseoutReason = 'tool_chain_exhausted'
+
+/** skip / 收尾轮可接受的判别：对外原因 + 内部原因 */
+export type ToolSkipReason = ToolOrchestrationStopReason | ToolCloseoutReason
 
 /** 工具轮次预算耗尽时的行为 */
 export type ToolBudgetExhaustedBehavior = 'error' | 'finish'
@@ -167,7 +172,7 @@ export interface ToolOrchestratorParams {
   onToolCallSkipped?: (params: {
     toolCall: ToolCall
     toolName: string
-    reason: ToolOrchestrationStopReason
+    reason: ToolSkipReason
   }) => MaybePromise<void>
   onSchemaFallback?: (schema: ToolSchema) => MaybePromise<void>
   onUnsupportedTool?: (toolName: string, toolCallId: string | undefined) => MaybePromise<void>
@@ -440,7 +445,7 @@ export async function runToolOrchestration(
   /** 未执行的 tool_calls：补配对占位结果，并通知调用方补 stage=result / status=aborted */
   const skipToolCalls = async (
     toolCalls: ToolCall[],
-    reason: ToolOrchestrationStopReason,
+    reason: ToolSkipReason,
   ) => {
     const abortedMessages = buildAbortedToolResultMessages({
       schema: toolSchema,
@@ -465,12 +470,11 @@ export async function runToolOrchestration(
    * 收尾轮若仍返回 tool_calls，只标未执行、补配对消息，不再请求。
    */
   const finishWithClosingTurn = async (
-    reason: ToolOrchestrationStopReason,
+    reason: ToolSkipReason,
     iteration: number,
-    options?: { recordStopReason?: boolean },
   ): Promise<ToolOrchestrationResult> => {
-    // 来源提前用尽等内部原因不写 stopReason：终态仍是正常完成/未交付，不是预算或停止
-    if (options?.recordStopReason !== false) {
+    // 只有对外原因才记录终态：内部原因（来源提前用尽）不算预算或停止
+    if (reason !== 'tool_chain_exhausted') {
       stopReason = reason
     }
     // 真正取消优先：cancel 抛错立即退出，不进入收尾
@@ -591,9 +595,7 @@ export async function runToolOrchestration(
       if (params.hasRetainedEvidence && params.hasRetainedEvidence() !== true) {
         return finishResult({ status: 'stopped_without_answer', content: '' })
       }
-      return await finishWithClosingTurn('tool_chain_exhausted', iteration, {
-        recordStopReason: false,
-      })
+      return await finishWithClosingTurn('tool_chain_exhausted', iteration)
     }
   }
 }

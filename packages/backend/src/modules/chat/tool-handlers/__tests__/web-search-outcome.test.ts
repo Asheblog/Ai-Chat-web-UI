@@ -5,6 +5,8 @@ jest.mock('../../../../utils/remote-image-reader', () => ({
 import { WebSearchToolHandler } from '../web-search-handler'
 import { EngineBackoffRegistry, resetWebSearchBackoff } from '../web-search-backoff'
 import { clearSearchEvidenceStore } from '../web-search-evidence-store'
+import { mapReadFailureKind, mapReadFailureProjection } from '../web-search-outcome'
+import { RETRYABLE_WEB_SEARCH_FAILURE_KINDS } from '../../../../utils/web-search'
 
 const urlReaderModule = require('../../../../utils/url-reader')
 const imageReaderModule = require('../../../../utils/remote-image-reader')
@@ -345,15 +347,45 @@ describe('web_search retrievalOutcome', () => {
     global.fetch = probeFetch as any
     const controller = new AbortController()
     controller.abort()
+    const context = createContext({ requestSignal: controller.signal })
     const { payload } = await runSearch(
       new WebSearchToolHandler(config as any),
       { query: 'q' },
-      createContext({ requestSignal: controller.signal }),
+      context,
       'call_cancelled_probe',
     )
 
     expect(probeFetch).not.toHaveBeenCalled()
     expect(payload.retrievalOutcome.status).toBe('cancelled')
+    // 全部冷却的取消支路也必须发布父 result 事件，否则前端只会看到「开始」没有结论
+    const events = (context.sendToolEvent as any).mock.calls.map(([event]: any[]) => event)
+    const resultEvents = events.filter((event: any) => event.stage === 'result')
+    expect(resultEvents).toHaveLength(1)
+    expect(resultEvents[0]).toMatchObject({ stage: 'result', details: { cancelled: true } })
+    expect(resultEvents[0].details.retrievalOutcome.status).toBe('cancelled')
+    expect(resultEvents[0].details.evidenceSummary).toMatchObject({ source: 'search', read: 0 })
+    expect(payload.error).toBeUndefined()
+  })
+
+  test('进入引擎前取消也只发布一条父 result 事件，不发起任何请求', async () => {
+    const fetchMock = jest.fn()
+    global.fetch = fetchMock as any
+    const controller = new AbortController()
+    controller.abort()
+    const context = createContext({ requestSignal: controller.signal })
+
+    const { payload } = await runSearch(
+      new WebSearchToolHandler(createConfig() as any),
+      { query: 'q' },
+      context,
+      'call_cancelled_early',
+    )
+
+    const events = (context.sendToolEvent as any).mock.calls.map(([event]: any[]) => event)
+    expect(events.filter((event: any) => event.stage === 'result')).toHaveLength(1)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(payload.retrievalOutcome.status).toBe('cancelled')
+    expect(payload.error).toBeUndefined()
   })
 
   test('初始轮零命中且已配置 Exa 时升级到 Exa 兜底', async () => {
@@ -444,5 +476,87 @@ describe('EngineBackoffRegistry', () => {
     expect(registry.inspect('b').blocked).toBe(true)
     expect(registry.inspect('c').blocked).toBe(true)
     expect(registry.size()).toBe(2)
+  })
+})
+
+describe('失败投影的单一事实源', () => {
+  test('可重试种类只有一处定义，取消/缺凭据/不支持/无效响应都不计入', () => {
+    expect(Array.from(RETRYABLE_WEB_SEARCH_FAILURE_KINDS).sort()).toEqual([
+      'network',
+      'rate_limited',
+      'timeout',
+      'upstream_error',
+    ])
+  })
+
+  test('读取失败的两套投影来自同一张表，实质分歧保留', () => {
+    // 实质分歧：同一错误码在 failureKind 与 reason 上取值不同，合并时不能压平
+    expect(mapReadFailureProjection('HTTP_403')).toEqual({
+      failureKind: 'upstream_error',
+      reason: 'blocked',
+    })
+    expect(mapReadFailureProjection('EMPTY_CONTENT')).toEqual({
+      failureKind: 'invalid_response',
+      reason: 'empty',
+    })
+    expect(mapReadFailureProjection('BODY_TOO_LARGE')).toEqual({
+      failureKind: 'upstream_error',
+      reason: 'too_large',
+    })
+    expect(mapReadFailureProjection('TIMEOUT')).toEqual({ failureKind: 'timeout', reason: 'timeout' })
+    expect(mapReadFailureProjection('FETCH_FAILED')).toEqual({ failureKind: 'network', reason: 'network' })
+    expect(mapReadFailureKind('CANCELLED')).toBe('cancelled')
+    expect(mapReadFailureProjection(undefined)).toEqual({
+      failureKind: 'upstream_error',
+      reason: 'unknown',
+    })
+  })
+})
+
+describe('半开探测锁的释放', () => {
+  test('已取得半开锁后遇到不可重试失败：不推进冷却但释放锁，随后仍能探测', () => {
+    let now = 0
+    const registry = new EngineBackoffRegistry({
+      now: () => now,
+      threshold: 2,
+      baseMs: 1000,
+      factor: 2,
+      maxMs: 8000,
+      minProbeIntervalMs: 0,
+    })
+    const key = 'engine|credential'
+    registry.recordFailure(key, 'upstream_error')
+    now += 1
+    registry.recordFailure(key, 'upstream_error')
+    const coolingBefore = registry.inspect(key)
+    expect(coolingBefore.blocked).toBe(true)
+
+    // 冷却期内的一次受控探测先把锁拿在手上
+    expect(registry.acquireProbe(key, { allowCooling: true })).toBe(true)
+    // 探测结果是不可重试失败：冷却不推进，但锁必须释放
+    registry.recordFailure(key, 'unsupported')
+    expect(registry.inspect(key)).toEqual(coolingBefore)
+    expect(registry.acquireProbe(key, { allowCooling: true })).toBe(true)
+  })
+
+  test('取消同样不推进冷却，并释放已取得的探测锁', () => {
+    let now = 0
+    const registry = new EngineBackoffRegistry({
+      now: () => now,
+      threshold: 2,
+      baseMs: 1000,
+      factor: 2,
+      maxMs: 8000,
+      minProbeIntervalMs: 0,
+    })
+    const key = 'engine|credential'
+    registry.recordFailure(key, 'rate_limited')
+    now += 1
+    registry.recordFailure(key, 'rate_limited')
+    expect(registry.acquireProbe(key, { allowCooling: true })).toBe(true)
+
+    registry.recordFailure(key, 'cancelled')
+    expect(registry.inspect(key)).toMatchObject({ blocked: true })
+    expect(registry.acquireProbe(key, { allowCooling: true })).toBe(true)
   })
 })

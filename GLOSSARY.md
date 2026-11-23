@@ -86,6 +86,7 @@
 - **Playwright-managed Chromium（托管 Chromium）**：`export_pdf` 与可选的 URL Reader 浏览器回退使用与 `playwright-core` 版本匹配的 Chromium（镜像内 `PLAYWRIGHT_BROWSERS_PATH`）；不默认依赖发行版 apt `/usr/bin/chromium`（容器中常因 CDP 不兼容而启动失败）；仅在显式配置非系统路径或 Playwright 浏览器缺失时回退系统 Chrome/Chromium
 - **搜索批次**：同一轮搜索任务下发起的搜索调用集合，在工具区块内合并展示。
 - **Retrieval Outcome（检索结果）**：单次联网搜索的父结果，区分有结果、部分成功、成功无命中、失败、超时和取消。可用正文、结构化结果和摘要分别标记，不把失败当作无命中。
+- **Answer Outcome（答复交付结果）**：记录是否生成了用户可见的有效答复，与流是否正常结束分开。优先采用模型提供方的结构化终态；仅凭固定短提示识别的疑似拦截不归因于具体组件。
 - **并行搜索**：多个搜索引擎同时查询，属于同一批次
 - **语言路由**：并行数量上限先按管理员引擎顺序筛选，再按查询语言选择首批来源。默认中文路由为 Metaso、DeepSeek、Tavily、Brave、Exa；英文优先 Tavily、Brave、Exa，随后 DeepSeek、Metaso。Skill 的显式语言路由覆盖默认排序，剩余引擎按需参与补充搜索。
 

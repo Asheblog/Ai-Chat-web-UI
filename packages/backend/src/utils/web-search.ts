@@ -133,6 +133,17 @@ export type WebSearchTaskFailureKind =
   | 'unsupported'
   | 'invalid_response'
 
+/**
+ * 上游失败里「换一次可能成功」的种类：退避记账与父结果 retryable 投影共用这一处，
+ * 调用点不要再各自维护一份集合。
+ */
+export const RETRYABLE_WEB_SEARCH_FAILURE_KINDS: ReadonlySet<WebSearchTaskFailureKind> = new Set([
+  'upstream_error',
+  'rate_limited',
+  'network',
+  'timeout',
+])
+
 export interface WebSearchTaskResult {
   task: WebSearchParallelTask
   status: 'success' | 'error'

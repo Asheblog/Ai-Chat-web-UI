@@ -18,14 +18,14 @@ import {
 } from '../../../utils/url-reader'
 import { readRemoteImages } from '../../../utils/remote-image-reader'
 import { supportsToolImages, type ToolImageEvidence } from '../../../utils/tool-image-evidence'
-import type { WebSearchTaskFailureKind, WebSearchTaskResult } from '../../../utils/web-search'
 import { buildSearchEvidenceTaskKey, lookupSearchEvidence } from './web-search-evidence-store'
 import {
   buildEvidenceSummary,
-  buildRetrievalOutcome,
+  mapReadFailureKind,
   mapReadFailureReason,
   type EvidenceSummary,
   type ReadFailureReason,
+  type RetrievalEngineState,
   type RetrievalOutcome,
 } from './web-search-outcome'
 import type {
@@ -60,62 +60,86 @@ const READ_STATUS_REASON: Record<UrlReadStatus, RetrievalOutcome['reason']> = {
   cancelled: 'request_cancelled',
 }
 
-/** 读取错误码 → 与搜索共用的失败种类，让父结果只有一个解析器。 */
-const readFailureKind = (errorCode?: string | null): WebSearchTaskFailureKind => {
-  switch ((errorCode || '').toUpperCase()) {
-    case 'TIMEOUT':
-      return 'timeout'
-    case 'CANCELLED':
-      return 'cancelled'
-    case 'UNSUPPORTED_CONTENT_TYPE':
-    case 'BROWSER_UNAVAILABLE':
-    case 'BROWSER_BUSY':
-    case 'INVALID_URL':
-    case 'DISALLOWED_URL':
-      return 'unsupported'
-    case 'EMPTY_CONTENT':
-    case 'PARSE_EMPTY':
-      return 'invalid_response'
-    case 'FETCH_FAILED':
-      return 'network'
-    default:
-      return 'upstream_error'
-  }
+const READ_ENGINE_STATE: Record<UrlReadStatus, RetrievalEngineState> = {
+  success: 'ok',
+  empty: 'ok',
+  failed: 'error',
+  timeout: 'timed_out',
+  cancelled: 'cancelled',
 }
 
 /**
- * 读取结果也产出同一个 retrievalOutcome 形状：合成一条读取任务，
- * 父结果按 status/reason/engines 判断，不需要看正文措辞。
+ * 读取结果给出与搜索同形状的 retrievalOutcome，但不伪造搜索任务或自动阅读批次：
+ * search 计数全 0（本次没有搜索任务），autoRead 记为关闭（没有自动阅读），
+ * evidence 只记这一次读取的真实正文条数，engines 只描述实际使用的读取引擎。
  */
 const buildReadOutcome = (input: {
   url: string
   engine?: string
   status: UrlReadStatus
-  failureKind?: WebSearchTaskFailureKind
+  body: boolean
+  contentKind?: string
+  failureKind?: RetrievalOutcome['engines'][number]['failureKind']
   errorCode?: string
   httpStatus?: number
 }): RetrievalOutcome => {
   const engine = input.engine || 'native'
-  const task: WebSearchTaskResult = {
-    task: { engine, query: input.url, queryLanguage: 'unknown', queryIndex: 0, taskIndex: 0 },
-    status: input.status === 'success' || input.status === 'empty' ? 'success' : 'error',
-    hits: [],
-    ...(input.failureKind ? { failureKind: input.failureKind } : {}),
-    ...(input.errorCode ? { errorCode: input.errorCode } : {}),
-    ...(typeof input.httpStatus === 'number' ? { httpStatus: input.httpStatus } : {}),
+  const isStructured = input.contentKind === 'structured'
+  const isSummary = input.contentKind === 'summary'
+  const evidence = {
+    article: input.body && !isStructured && !isSummary ? 1 : 0,
+    structured: input.body && isStructured ? 1 : 0,
+    summary: input.body && isSummary ? 1 : 0,
+    none: input.body ? 0 : 1,
   }
-  return buildRetrievalOutcome({
-    taskResults: [task],
-    attempted: 1,
-    skippedEngines: [],
-    autoRead: { state: 'off', requested: 0, candidatesExamined: 0, bodies: 0, summaryOnly: 0, failed: 0, skipped: 0 },
-    evidence: { article: 0, structured: 0, summary: 0, none: 0 },
-    cancelled: input.status === 'cancelled',
-    totalHits: input.status === 'success' ? 1 : 0,
-    restriction: { restricted: false, requested: [], effective: [] },
+  const failureKind = input.failureKind
+  const retryable =
+    input.status === 'timeout' ||
+    (input.status === 'failed' && Boolean(failureKind === 'upstream_error' || failureKind === 'network' || failureKind === 'rate_limited'))
+  return {
+    status: input.status,
+    reason: READ_STATUS_REASON[input.status],
+    retryable,
+    retryAfterMs: null,
+    degraded: input.status !== 'success',
+    cancellation: {
+      requested: input.status === 'cancelled',
+      source: input.status === 'cancelled' ? 'request' : null,
+    },
+    search: {
+      attempted: 0,
+      succeeded: 0,
+      failed: 0,
+      empty: 0,
+      timedOut: 0,
+      cancelled: 0,
+      skippedBackoff: 0,
+      failureKinds: {},
+      exhaustion: 'none',
+    },
+    autoRead: {
+      state: 'off',
+      requested: 0,
+      candidatesExamined: 0,
+      bodies: 0,
+      summaryOnly: 0,
+      failed: 0,
+      skipped: 0,
+    },
+    evidence,
+    engines: [
+      {
+        engine,
+        state: READ_ENGINE_STATE[input.status],
+        ...(failureKind ? { failureKind } : {}),
+        ...(input.errorCode ? { errorCode: input.errorCode } : {}),
+        ...(typeof input.httpStatus === 'number' ? { httpStatus: input.httpStatus } : {}),
+      },
+    ],
     timeRange: null,
-    override: { status: input.status, reason: READ_STATUS_REASON[input.status] },
-  })
+    restriction: { restricted: false, requested: [], effective: [] },
+    escalation: { triggered: false, reason: null },
+  }
 }
 
 const buildReadEvidenceSummary = (input: {
@@ -131,15 +155,6 @@ const buildReadEvidenceSummary = (input: {
     source: input.source,
     queries: [],
     hits: input.body ? 1 : 0,
-    autoRead: {
-      state: input.body ? 'ok' : 'off',
-      requested: 1,
-      candidatesExamined: 1,
-      bodies: input.body ? 1 : 0,
-      summaryOnly: input.contentKind === 'summary' ? 1 : 0,
-      failed: input.body ? 0 : 1,
-      skipped: 0,
-    },
     evidence: {
       article: input.body && input.contentKind !== 'structured' && input.contentKind !== 'summary' ? 1 : 0,
       structured: input.body && input.contentKind === 'structured' ? 1 : 0,
@@ -277,7 +292,13 @@ export class UrlReaderToolHandler implements IToolHandler {
 
     // 取消优先：已取消的请求不再发起新的读取
     if (context.requestSignal?.aborted) {
-      const outcome = buildReadOutcome({ url, status: 'cancelled', failureKind: 'cancelled', errorCode: 'CANCELLED' })
+      const outcome = buildReadOutcome({
+        url,
+        status: 'cancelled',
+        body: false,
+        failureKind: 'cancelled',
+        errorCode: 'CANCELLED',
+      })
       const evidenceSummary = buildReadEvidenceSummary({
         url,
         body: false,
@@ -307,8 +328,11 @@ export class UrlReaderToolHandler implements IToolHandler {
 
     // 同任务正文复用：只复用同一 session+message 内搜索取得的、未被提供方截断的 article 正文。
     // 历史用途与 fresh=true 一律直读原站，保持既有时效与历史契约。
+    // 结构化正文没有对应的复用种类（ProvidedContent.kind 只有 article/summary/snippet），
+    // 按 article 复用会把种类降级掉，因此只复用 article。
     const taskKey = buildSearchEvidenceTaskKey(context)
-    const cached = purpose === 'current' && !fresh ? lookupSearchEvidence(taskKey, url) : undefined
+    const stored = purpose === 'current' && !fresh ? lookupSearchEvidence(taskKey, url) : undefined
+    const cached = stored?.contentKind === 'article' ? stored : undefined
     const providedContent = cached
       ? {
           content: cached.content,
@@ -340,7 +364,7 @@ export class UrlReaderToolHandler implements IToolHandler {
       if (result.error) {
         const cancelled =
           result.errorCode === 'CANCELLED' || Boolean(context.requestSignal?.aborted)
-        const failureKind = cancelled ? 'cancelled' : readFailureKind(result.errorCode)
+        const failureKind = cancelled ? 'cancelled' : mapReadFailureKind(result.errorCode)
         const status: UrlReadStatus = cancelled
           ? 'cancelled'
           : failureKind === 'timeout'
@@ -350,6 +374,7 @@ export class UrlReaderToolHandler implements IToolHandler {
           url,
           engine: result.engine,
           status,
+          body: false,
           failureKind,
           errorCode: result.errorCode,
           httpStatus: result.httpStatus,
@@ -423,6 +448,8 @@ export class UrlReaderToolHandler implements IToolHandler {
         url,
         engine: result.engine,
         status: body ? 'success' : 'empty',
+        body,
+        contentKind: result.contentKind,
       })
       const evidenceSummary = buildReadEvidenceSummary({
         url,
@@ -479,7 +506,13 @@ export class UrlReaderToolHandler implements IToolHandler {
           leadImageUrl: result.leadImageUrl,
           images: result.images,
           contentSource: readSource,
-          ...(reused ? { reusedFrom: 'search_content' } : {}),
+          // 复用只声明通用来源类别 provider；真实提供方放在独立字段，不改共享枚举
+          ...(reused
+            ? {
+                reusedFrom: 'search_content',
+                ...(cached?.source ? { contentProvider: cached.source } : {}),
+              }
+            : {}),
           retrievalOutcome: outcome,
           evidenceSummary,
           ...(imageEvidence ? { toolImageEvidenceCount: imageEvidence.images.length } : {}),
@@ -505,6 +538,7 @@ export class UrlReaderToolHandler implements IToolHandler {
       const outcome = buildReadOutcome({
         url,
         status: cancelled ? 'cancelled' : 'failed',
+        body: false,
         failureKind: cancelled ? 'cancelled' : 'upstream_error',
         errorCode: cancelled ? 'CANCELLED' : 'UNKNOWN',
       })

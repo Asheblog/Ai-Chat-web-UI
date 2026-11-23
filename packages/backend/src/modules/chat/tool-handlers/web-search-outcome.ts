@@ -9,7 +9,11 @@
  * - evidenceSummary 只做计数与未核实来源收口，不解析正文。
  */
 
-import type { WebSearchTaskFailureKind, WebSearchTaskResult } from '../../../utils/web-search'
+import {
+  RETRYABLE_WEB_SEARCH_FAILURE_KINDS,
+  type WebSearchTaskFailureKind,
+  type WebSearchTaskResult,
+} from '../../../utils/web-search'
 
 export type RetrievalStatus = 'success' | 'partial' | 'empty' | 'failed' | 'timeout' | 'cancelled'
 
@@ -124,42 +128,56 @@ export type ReadFailureReason =
   | 'cancelled'
   | 'unknown'
 
-/** url-reader 的具体错误码 → 固定枚举；调用方按枚举分组统计未核实来源。 */
-export const mapReadFailureReason = (errorCode?: string | null): ReadFailureReason => {
-  switch ((errorCode || '').toUpperCase()) {
-    case 'TIMEOUT':
-      return 'timeout'
-    case 'CANCELLED':
-      return 'cancelled'
-    case 'HTTP_403':
-    case 'JS_CHALLENGE':
-    case 'ROBOTS_DENIED':
-      return 'blocked'
-    case 'HTTP_401':
-    case 'HTTP_404':
-    case 'HTTP_429':
-    case 'HTTP_4XX':
-      return 'http_4xx'
-    case 'HTTP_5XX':
-    case 'HTTP_ERROR':
-      return 'http_5xx'
-    case 'BODY_TOO_LARGE':
-      return 'too_large'
-    case 'UNSUPPORTED_CONTENT_TYPE':
-    case 'BROWSER_UNAVAILABLE':
-    case 'BROWSER_BUSY':
-    case 'INVALID_URL':
-    case 'DISALLOWED_URL':
-      return 'unsupported'
-    case 'EMPTY_CONTENT':
-    case 'PARSE_EMPTY':
-      return 'empty'
-    case 'FETCH_FAILED':
-      return 'network'
-    default:
-      return 'unknown'
-  }
+export interface ReadFailureProjection {
+  /** 与搜索共用的失败种类：退避与 retryable 用这一层。 */
+  failureKind: WebSearchTaskFailureKind
+  /** 父结果给模型看的固定原因枚举。 */
+  reason: ReadFailureReason
 }
+
+/**
+ * url-reader 错误码 → 两套投影的唯一事实源。
+ * 同一错误码在两层的取值不同（403 是 upstream_error/blocked，EMPTY_CONTENT 是
+ * invalid_response/empty，BODY_TOO_LARGE 是 upstream_error/too_large），表里一次写清。
+ */
+const READ_FAILURE_PROJECTIONS: Record<string, ReadFailureProjection> = {
+  TIMEOUT: { failureKind: 'timeout', reason: 'timeout' },
+  CANCELLED: { failureKind: 'cancelled', reason: 'cancelled' },
+  HTTP_403: { failureKind: 'upstream_error', reason: 'blocked' },
+  JS_CHALLENGE: { failureKind: 'upstream_error', reason: 'blocked' },
+  ROBOTS_DENIED: { failureKind: 'upstream_error', reason: 'blocked' },
+  HTTP_401: { failureKind: 'upstream_error', reason: 'http_4xx' },
+  HTTP_404: { failureKind: 'upstream_error', reason: 'http_4xx' },
+  HTTP_429: { failureKind: 'upstream_error', reason: 'http_4xx' },
+  HTTP_4XX: { failureKind: 'upstream_error', reason: 'http_4xx' },
+  HTTP_5XX: { failureKind: 'upstream_error', reason: 'http_5xx' },
+  HTTP_ERROR: { failureKind: 'upstream_error', reason: 'http_5xx' },
+  BODY_TOO_LARGE: { failureKind: 'upstream_error', reason: 'too_large' },
+  UNSUPPORTED_CONTENT_TYPE: { failureKind: 'unsupported', reason: 'unsupported' },
+  BROWSER_UNAVAILABLE: { failureKind: 'unsupported', reason: 'unsupported' },
+  BROWSER_BUSY: { failureKind: 'unsupported', reason: 'unsupported' },
+  INVALID_URL: { failureKind: 'unsupported', reason: 'unsupported' },
+  DISALLOWED_URL: { failureKind: 'unsupported', reason: 'unsupported' },
+  EMPTY_CONTENT: { failureKind: 'invalid_response', reason: 'empty' },
+  PARSE_EMPTY: { failureKind: 'invalid_response', reason: 'empty' },
+  FETCH_FAILED: { failureKind: 'network', reason: 'network' },
+}
+
+const DEFAULT_READ_FAILURE: ReadFailureProjection = {
+  failureKind: 'upstream_error',
+  reason: 'unknown',
+}
+
+export const mapReadFailureProjection = (errorCode?: string | null): ReadFailureProjection =>
+  READ_FAILURE_PROJECTIONS[(errorCode || '').toUpperCase()] || DEFAULT_READ_FAILURE
+
+/** 父结果的固定原因枚举。 */
+export const mapReadFailureReason = (errorCode?: string | null): ReadFailureReason =>
+  mapReadFailureProjection(errorCode).reason
+
+/** 与搜索共用的失败种类投影。 */
+export const mapReadFailureKind = (errorCode?: string | null): WebSearchTaskFailureKind =>
+  mapReadFailureProjection(errorCode).failureKind
 
 export interface EvidenceSummaryFailure {
   url: string
@@ -184,13 +202,6 @@ export interface EvidenceSummary {
   restrictedTo: string[]
   timeRange: { verified: number; undated: number } | null
 }
-
-const RETRYABLE_KINDS: ReadonlySet<WebSearchTaskFailureKind> = new Set([
-  'upstream_error',
-  'rate_limited',
-  'network',
-  'timeout',
-])
 
 export interface SkippedEngineReport {
   engine: string
@@ -272,7 +283,9 @@ export const buildRetrievalOutcome = (input: BuildRetrievalOutcomeInput): Retrie
     if (Number.isFinite(skipped.retryAfterMs)) retryCandidates.push(skipped.retryAfterMs)
   }
   const retryable =
-    failedResults.some((result) => Boolean(result.failureKind && RETRYABLE_KINDS.has(result.failureKind))) ||
+    failedResults.some((result) =>
+      Boolean(result.failureKind && RETRYABLE_WEB_SEARCH_FAILURE_KINDS.has(result.failureKind)),
+    ) ||
     input.skippedEngines.length > 0
 
   const exhaustion: RetrievalOutcome['search']['exhaustion'] = input.exhaustedOverride ??
@@ -397,7 +410,6 @@ export interface BuildEvidenceSummaryInput {
   source: 'search' | 'origin' | 'provider'
   queries: string[]
   hits: number
-  autoRead: RetrievalAutoReadReport
   evidence: RetrievalEvidenceCounts
   engines: string[]
   failures: EvidenceSummaryFailure[]

@@ -110,21 +110,15 @@ import type { ResolvedConnection } from '../../repositories/model-resolver-repos
  * - 上游未交付（内容过滤 / 拒答 / 已知固定话术）：只带 finalAnswerGenerated=false，不冒充取消或成功
  */
 /**
- * 允许落库 / 进 SSE 的收尾原因：只有共享契约里的这两个。
- * 内部原因（例如来源提前用尽的 tool_chain_exhausted）不外泄，走独立追踪。
+ * 本次运行的收尾结果：随工具日志信封落库（runResult），并驱动 SSE 的终态字段。
+ *
+ * stopReason 只接受对外原因 stop_tools / budget_exhausted（前端按它们出终态文案）。
+ * 内部收尾（例如来源提前用尽）不进这里，只体现在追踪事件 agent:retrieval_chain_ended。
  */
-type PersistedStopReason = Extract<ToolOrchestrationStopReason, 'stop_tools' | 'budget_exhausted'>;
-
 type PersistedRunResult = {
-  stopReason?: PersistedStopReason;
+  stopReason?: ToolOrchestrationStopReason;
   finalAnswerGenerated: boolean;
 };
-
-/** 把编排的内部收尾原因收敛成持久化允许的值 */
-const toPersistedStopReason = (
-  reason: ToolOrchestrationStopReason | null,
-): PersistedStopReason | null =>
-  reason === 'stop_tools' || reason === 'budget_exhausted' ? reason : null;
 
 // Re-export for backwards compatibility
 export {
@@ -1290,14 +1284,13 @@ export const createAgentWebSearchResponse = async (params: AgentResponseParams):
           throw new Error(`工具调用次数已达上限（${iterationLabel}），未生成最终答案`);
         }
 
-        // 只有共享契约里的两个原因能进 runResult / SSE：内部原因（来源提前用尽）不外泄
-        const sharedStopReason = toPersistedStopReason(orchestration.stopReason);
-
         // 停止/预算收尾带 stopReason；上游未交付只带 finalAnswerGenerated=false
         const runResult: PersistedRunResult | null =
-          sharedStopReason != null || orchestration.finalAnswerGenerated === false
+          orchestration.stopReason != null || orchestration.finalAnswerGenerated === false
             ? {
-                ...(sharedStopReason != null ? { stopReason: sharedStopReason } : {}),
+                ...(orchestration.stopReason != null
+                  ? { stopReason: orchestration.stopReason }
+                  : {}),
                 finalAnswerGenerated: orchestration.finalAnswerGenerated,
               }
             : null;

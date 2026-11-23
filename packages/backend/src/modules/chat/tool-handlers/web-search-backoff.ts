@@ -9,7 +9,10 @@
  */
 
 import { createHash } from 'node:crypto'
-import type { WebSearchTaskFailureKind } from '../../../utils/web-search'
+import {
+  RETRYABLE_WEB_SEARCH_FAILURE_KINDS,
+  type WebSearchTaskFailureKind,
+} from '../../../utils/web-search'
 
 export interface BackoffInspection {
   blocked: boolean
@@ -39,18 +42,6 @@ const DEFAULT_OPTIONS: Required<EngineBackoffOptions> = {
   maxEntries: 64,
   minProbeIntervalMs: 2_000,
 }
-
-/**
- * 只有可重试的失败才计入退避。
- * 取消是调用方行为，缺凭据/不支持是配置或能力问题，invalid_response 是契约不匹配：
- * 重试它们不会改变结果，只会延长问题。
- */
-const RETRYABLE_FAILURE_KINDS: ReadonlySet<WebSearchTaskFailureKind> = new Set([
-  'upstream_error',
-  'rate_limited',
-  'network',
-  'timeout',
-])
 
 interface BackoffEntry {
   failures: number
@@ -116,7 +107,13 @@ export class EngineBackoffRegistry {
     kind: WebSearchTaskFailureKind,
     options: { retryAfterMs?: number } = {},
   ): void {
-    if (!RETRYABLE_FAILURE_KINDS.has(kind)) return
+    if (!RETRYABLE_WEB_SEARCH_FAILURE_KINDS.has(kind)) {
+      // 不可重试失败不推进冷却，但必须释放已占用的半开探测锁：
+      // 调用方会同步清空自己持有的探测键，锁留在这里就再也没人释放，引擎会永久锁死。
+      const existing = this.entries.get(key)
+      if (existing) existing.probeInFlight = false
+      return
+    }
     const now = this.options.now()
     const entry = this.entries.get(key) ?? {
       failures: 0,

@@ -13,6 +13,8 @@ import { normalizeSearchUrl } from '../../../utils/web-search'
 
 export interface SearchEvidenceEntry {
   content: string
+  /** 正文种类：结构化正文不能按 article 复用，需要原样保留。 */
+  contentKind: 'article' | 'structured'
   /** 实际提供正文的一方：搜索引擎名或读取引擎名。 */
   source: string
   fetchedAt?: string
@@ -32,6 +34,7 @@ interface StoredEvidence extends SearchEvidenceEntry {
 interface EvidenceWrite {
   url: string
   content: string
+  contentKind: 'article' | 'structured'
   source: string
   title?: string
   fetchedAt?: string
@@ -85,6 +88,7 @@ const writeEntry = (taskKey: string, entry: EvidenceWrite, now: number): void =>
   const bytes = Buffer.byteLength(content, 'utf8')
   entries.set(key, {
     content,
+    contentKind: entry.contentKind,
     source: entry.source,
     ...(entry.fetchedAt ? { fetchedAt: entry.fetchedAt } : {}),
     storedAt: now,
@@ -139,6 +143,7 @@ export const recordSearchEvidence = (taskKey: string | null, hits: WebSearchHit[
       {
         url: hit.url,
         content: hit.content || '',
+        contentKind: 'article',
         source: hit.contentSource || hit.engine || hit.sourceEngines?.[0] || 'search',
         ...(hit.title ? { title: hit.title } : {}),
       },
@@ -176,6 +181,7 @@ export const recordReadEvidence = (
       {
         url: item.url,
         content: item.content,
+        contentKind: item.evidenceKind === 'structured' ? 'structured' : 'article',
         source: item.contentSource || 'read',
         ...(item.title ? { title: item.title } : {}),
         ...(item.fetchedAt ? { fetchedAt: item.fetchedAt } : {}),
@@ -199,6 +205,7 @@ export const lookupSearchEvidence = (
   if (!entry) return undefined
   return {
     content: entry.content,
+    contentKind: entry.contentKind,
     source: entry.source,
     ...(entry.fetchedAt ? { fetchedAt: entry.fetchedAt } : {}),
     storedAt: entry.storedAt,

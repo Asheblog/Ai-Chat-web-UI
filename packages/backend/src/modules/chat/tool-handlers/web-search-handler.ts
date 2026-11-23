@@ -686,7 +686,6 @@ export class WebSearchToolHandler implements IToolHandler {
         source: 'search',
         queries: [],
         hits: 0,
-        autoRead: outcome.autoRead,
         evidence: outcome.evidence,
         engines: [],
         failures: [],
@@ -724,6 +723,47 @@ export class WebSearchToolHandler implements IToolHandler {
     }
 
     const requestPlan = requestParse.plan
+
+    /**
+     * 取消终态只有一条路：构造结论、发布父 result 事件、返回不含 error 的结果。
+     * 任何取消支路都走这里，避免个别分支只返回内容却不发事件。
+     */
+    const publishCancelledResult = (skippedEngines?: SkippedEngineReport[]): ToolHandlerResult => {
+      const outcome = buildTerminalOutcome({
+        status: 'cancelled',
+        reason: 'request_cancelled',
+        restriction: requestPlan.restriction,
+        cancelled: true,
+        ...(skippedEngines ? { skippedEngines } : {}),
+      })
+      const evidenceSummary = buildTerminalEvidence(outcome, requestPlan.restriction)
+      context.sendToolEvent({
+        id: callId,
+        tool: 'web_search',
+        stage: 'result',
+        query,
+        hits: [],
+        summary: '检索已取消',
+        details: { groupId: callId, cancelled: true, retrievalOutcome: outcome, evidenceSummary },
+      })
+      return {
+        toolCallId: callId,
+        toolName: this.toolName,
+        message: {
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          name: 'web_search',
+          content: JSON.stringify({
+            query,
+            hits: [],
+            summary: `本次检索已取消（${query}）。`,
+            retrievalOutcome: outcome,
+            evidenceSummary,
+          }),
+        },
+      }
+    }
+
     if (requestPlan.conflict) {
       // 指定来源全部落在部署白名单之外：不放宽白名单，也不换别家媒体替代
       const outcome = buildTerminalOutcome({
@@ -757,39 +797,8 @@ export class WebSearchToolHandler implements IToolHandler {
         },
       }
     }
-    if (requestAborted()) {
-      // 取消优先于一切：不再探测退避、不再升级、不再读取网页
-      const outcome = buildTerminalOutcome({
-        status: 'cancelled',
-        reason: 'request_cancelled',
-        restriction: requestPlan.restriction,
-        cancelled: true,
-      })
-      context.sendToolEvent({
-        id: callId,
-        tool: 'web_search',
-        stage: 'result',
-        query,
-        summary: '检索已取消',
-        details: { groupId: callId, cancelled: true, retrievalOutcome: outcome },
-      })
-      return {
-        toolCallId: callId,
-        toolName: this.toolName,
-        message: {
-          role: 'tool',
-          tool_call_id: toolCall.id,
-          name: 'web_search',
-          content: JSON.stringify({
-            query,
-            hits: [],
-            summary: `本次检索已取消（${query}）。`,
-            retrievalOutcome: outcome,
-            evidenceSummary: buildTerminalEvidence(outcome, requestPlan.restriction),
-          }),
-        },
-      }
-    }
+    // 取消优先于一切：不再探测退避、不再升级、不再读取网页
+    if (requestAborted()) return publishCancelledResult()
 
     const activeEngines = pickActiveEngines(this.config, effectiveScope)
     const backoff = getEngineBackoff()
@@ -842,31 +851,7 @@ export class WebSearchToolHandler implements IToolHandler {
     // 全部冷却时允许一次探测（单飞）：不整轮硬失败，也不允许并发绕过退避
     let exhaustionState: 'all_cooling_down' | null = null
     if (availableEngines.length === 0 && activeEngines.length > 0) {
-      if (requestAborted()) {
-        const outcome = buildTerminalOutcome({
-          status: 'cancelled',
-          reason: 'request_cancelled',
-          restriction: requestPlan.restriction,
-          cancelled: true,
-          skippedEngines,
-        })
-        return {
-          toolCallId: callId,
-          toolName: this.toolName,
-          message: {
-            role: 'tool',
-            tool_call_id: toolCall.id,
-            name: 'web_search',
-            content: JSON.stringify({
-              query,
-              hits: [],
-              summary: `本次检索已取消（${query}）。`,
-              retrievalOutcome: outcome,
-              evidenceSummary: buildTerminalEvidence(outcome, requestPlan.restriction),
-            }),
-          },
-        }
-      }
+      if (requestAborted()) return publishCancelledResult(skippedEngines)
       const probeCandidate = activeEngines[0]
       const probeKey = backoffKeyOf(probeCandidate)
       if (!backoff.acquireProbe(probeKey, { allowCooling: true })) {
@@ -1455,7 +1440,6 @@ export class WebSearchToolHandler implements IToolHandler {
         source: 'search',
         queries: expandedQueries.map((item) => item.query),
         hits: hits.length,
-        autoRead: autoReadReport,
         evidence: evidenceCounts,
         engines: Array.from(new Set(searchResult.tasks.map((item) => item.task.engine))),
         failures: readFailures,
@@ -1585,33 +1569,26 @@ export class WebSearchToolHandler implements IToolHandler {
       releaseRemainingProbes()
       const message = searchError instanceof Error ? searchError.message : 'Web search failed'
       const errorCode = classifyWebSearchErrorCode(message)
-      const aborted = requestAborted()
-      const outcome = aborted
-        ? buildTerminalOutcome({
-            status: 'cancelled',
-            reason: 'request_cancelled',
-            restriction: requestPlan.restriction,
-            cancelled: true,
-          })
-        : buildTerminalOutcome({
-            status: 'failed',
-            reason: 'all_sources_failed',
-            restriction: requestPlan.restriction,
-            retryable: errorCode !== 'HTTP_403' && errorCode !== 'HTTP_404',
-          })
-      // 取消不包装成工具错误：父结果按「整轮取消」收尾，不写 error 状态
+      // 取消不包装成工具错误：整轮按取消收尾，不写 error 状态
+      if (requestAborted()) return publishCancelledResult()
+      const outcome = buildTerminalOutcome({
+        status: 'failed',
+        reason: 'all_sources_failed',
+        restriction: requestPlan.restriction,
+        retryable: errorCode !== 'HTTP_403' && errorCode !== 'HTTP_404',
+      })
       context.sendToolEvent({
         id: callId,
         tool: 'web_search',
-        stage: aborted ? 'result' : 'error',
+        stage: 'error',
         query,
-        summary: aborted ? '检索已取消' : '搜索失败',
-        ...(aborted ? {} : { error: message }),
+        summary: '搜索失败',
+        error: message,
         details: {
           errorCode,
           fallbackUsed: 'none',
           groupId: callId,
-          cancelled: aborted,
+          cancelled: false,
           retrievalOutcome: outcome,
         },
       })
@@ -1624,7 +1601,8 @@ export class WebSearchToolHandler implements IToolHandler {
           name: 'web_search',
           content: JSON.stringify({
             query,
-            ...(aborted ? {} : { error: message, errorCode }),
+            error: message,
+            errorCode,
             retrievalOutcome: outcome,
             evidenceSummary: buildTerminalEvidence(outcome, requestPlan.restriction),
           }),
