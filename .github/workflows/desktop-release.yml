@@ -1,0 +1,394 @@
+name: Desktop Release
+
+# 正式发布：desktop-vX.Y.Z（与镜像 v* Tag 相互独立），版本必须等于 packages/desktop/package.json。
+# 两个平台分别在 desktop-signing-* Environment 中签名并校验通过后，由 publish 任务一次性创建/更新同一个 GitHub Release。
+on:
+  push:
+    tags:
+      - "desktop-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "已存在的 desktop-v<version> Tag"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  # 同一个 Tag 的手动重跑与 Tag 推送必须串行，避免并发写同一个 Release。
+  group: desktop-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      sha: ${{ steps.meta.outputs.sha }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Validate tag, version and main ancestry
+        id: meta
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          tag="${INPUT_TAG:-}"
+          if [ -z "$tag" ]; then
+            tag="$REF_NAME"
+          fi
+          if [[ ! "$tag" =~ ^desktop-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::release tag must look like desktop-vX.Y.Z, got '$tag'"
+            exit 1
+          fi
+          version="${tag#desktop-v}"
+
+          if [ ! -f packages/desktop/package.json ]; then
+            echo "::error::packages/desktop/package.json is missing"
+            exit 1
+          fi
+          name="$(node -p "require('./packages/desktop/package.json').name")"
+          pkg_version="$(node -p "require('./packages/desktop/package.json').version")"
+          if [ "$name" != "@aichat/desktop" ]; then
+            echo "::error::packages/desktop/package.json name must be @aichat/desktop, got '$name'"
+            exit 1
+          fi
+          if [ "$pkg_version" != "$version" ]; then
+            echo "::error::tag version $version does not match packages/desktop/package.json version $pkg_version"
+            exit 1
+          fi
+
+          tag_commit="$(git rev-parse -q --verify "refs/tags/${tag}^{commit}" || true)"
+          if [ -z "$tag_commit" ]; then
+            echo "::error::tag $tag does not exist in the repository"
+            exit 1
+          fi
+          if [ "$(git rev-parse HEAD)" != "$tag_commit" ]; then
+            echo "::error::checked out commit is not the tag commit of $tag"
+            exit 1
+          fi
+
+          git fetch --no-tags origin main
+          main_sha="$(git rev-parse -q --verify FETCH_HEAD)"
+          if ! git merge-base --is-ancestor "$tag_commit" "$main_sha"; then
+            echo "::error::tag commit $tag_commit is not on origin/main ($main_sha)"
+            exit 1
+          fi
+
+          printf 'tag=%s\nversion=%s\nsha=%s\n' "$tag" "$version" "$tag_commit" >> "$GITHUB_OUTPUT"
+          echo "release $tag (version $version) validated at $tag_commit"
+
+  windows:
+    name: Windows x64 signed installer
+    needs: validate
+    runs-on: windows-2022
+    timeout-minutes: 45
+    environment: desktop-signing-windows
+    steps:
+      - name: Checkout validated commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+
+      - name: Preflight Windows signing secrets
+        shell: pwsh
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_LINK)) {
+            throw "desktop-signing-windows environment secret WIN_CSC_LINK is missing"
+          }
+          if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_KEY_PASSWORD)) {
+            throw "desktop-signing-windows environment secret WIN_CSC_KEY_PASSWORD is missing"
+          }
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Desktop tests
+        run: pnpm --filter @aichat/desktop test
+
+      - name: Build signed installer
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: pnpm --filter @aichat/desktop dist:win
+
+      - name: Verify Authenticode signatures
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Path "packages/desktop/dist" -Filter "*.exe" -File |
+            Select-Object -First 1
+          if (-not $installer) {
+            throw "no *.exe installer found in packages/desktop/dist"
+          }
+          # NSIS 安装包与它实际装载的应用 exe 都必须有有效、带时间戳的签名。
+          $appExe = Get-ChildItem -Path "packages/desktop/dist/win-unpacked" -Filter "*.exe" -File -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if (-not $appExe) {
+            throw "no packaged application exe found under packages/desktop/dist/win-unpacked"
+          }
+          $signatures = @()
+          foreach ($file in @($installer, $appExe)) {
+            $signature = Get-AuthenticodeSignature -FilePath $file.FullName
+            if ($signature.Status -ne 'Valid') {
+              throw "$($file.Name) signature is not valid: $($signature.Status) $($signature.StatusMessage)"
+            }
+            if (-not $signature.SignerCertificate) {
+              throw "$($file.Name) has no signer certificate"
+            }
+            if (-not $signature.TimeStamperCertificate) {
+              throw "$($file.Name) signature is not timestamped"
+            }
+            $signatures += $signature
+            Write-Host "$($file.Name) signed by: $($signature.SignerCertificate.Subject)"
+          }
+          if ($signatures[0].SignerCertificate.Thumbprint -ne $signatures[1].SignerCertificate.Thumbprint) {
+            throw "installer and packaged application exe are signed by different certificates"
+          }
+
+      - name: Verify Windows x64 payload
+        shell: pwsh
+        run: |
+          $app = Get-ChildItem -Path "packages/desktop/dist/win-unpacked" -Filter "*.exe" -File -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if (-not $app) {
+            throw "no packaged *.exe found under packages/desktop/dist/win-unpacked"
+          }
+          $stream = [System.IO.File]::OpenRead($app.FullName)
+          try {
+            $reader = [System.IO.BinaryReader]::new($stream)
+            $stream.Position = 0x3C
+            $peOffset = $reader.ReadInt32()
+            $stream.Position = $peOffset + 4
+            $machine = $reader.ReadUInt16()
+          } finally {
+            $stream.Dispose()
+          }
+          if ($machine -ne 0x8664) {
+            throw ("expected x64 PE machine 0x8664, got 0x{0:X4}" -f $machine)
+          }
+
+      - name: Write SHA-256 checksum
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Path "packages/desktop/dist" -Filter "*.exe" -File |
+            Select-Object -First 1
+          $hash = (Get-FileHash -Algorithm SHA256 -Path $installer.FullName).Hash.ToLower()
+          $line = "$hash  $($installer.Name)"
+          [System.IO.File]::WriteAllText(
+            "$($installer.FullName).sha256",
+            $line + "`n",
+            (New-Object System.Text.UTF8Encoding($false))
+          )
+
+      - name: Upload signed installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: aichat-desktop-windows-x64
+          path: |
+            packages/desktop/dist/*.exe
+            packages/desktop/dist/*.exe.sha256
+          if-no-files-found: error
+
+  macos:
+    name: macOS Apple Silicon signed DMG
+    needs: validate
+    runs-on: macos-15
+    timeout-minutes: 60
+    environment: desktop-signing-macos
+    steps:
+      - name: Checkout validated commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+
+      - name: Preflight macOS signing secrets
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            value="${!name:-}"
+            if [ -z "$value" ]; then
+              echo "::error::desktop-signing-macos environment secret ${name} is missing"
+              exit 1
+            fi
+          done
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Desktop tests
+        run: pnpm --filter @aichat/desktop test
+
+      - name: Build signed and notarized DMG
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        # pnpm 8 不会吞掉 `--`，会原样传给 electron-builder；这里直接追加配置覆盖参数。
+        run: pnpm --filter @aichat/desktop dist:mac -c.mac.notarize=true
+
+      - name: Verify signature and notarization
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_path="$(find packages/desktop/dist -maxdepth 2 -type d -name '*.app' -print | head -n 1)"
+          if [ -z "$app_path" ]; then
+            echo "::error::no .app bundle found in packages/desktop/dist"
+            exit 1
+          fi
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+          sign_info="$(codesign -dv --verbose=4 "$app_path" 2>&1)"
+          printf '%s\n' "$sign_info"
+          printf '%s\n' "$sign_info" | grep -q 'Authority=Developer ID Application'
+          printf '%s\n' "$sign_info" | grep -Eq 'TeamIdentifier=[A-Z0-9]+'
+          xcrun stapler validate "$app_path"
+
+          exec_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app_path/Contents/Info.plist")"
+          archs="$(lipo -archs "$app_path/Contents/MacOS/$exec_name")"
+          case " $archs " in
+            *" arm64 "*) ;;
+            *)
+              echo "::error::expected arm64 application payload, got: $archs"
+              exit 1
+              ;;
+          esac
+
+          dmg="$(find packages/desktop/dist -maxdepth 1 -type f -name '*.dmg' -print | head -n 1)"
+          if [ -z "$dmg" ]; then
+            echo "::error::no *.dmg found in packages/desktop/dist"
+            exit 1
+          fi
+          hdiutil verify "$dmg"
+
+      - name: Write SHA-256 checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          dmg="$(find packages/desktop/dist -maxdepth 1 -type f -name '*.dmg' -print | head -n 1)"
+          base="$(basename "$dmg")"
+          ( cd packages/desktop/dist && shasum -a 256 "$base" > "$base.sha256" )
+
+      - name: Upload signed DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: aichat-desktop-macos-arm64
+          path: |
+            packages/desktop/dist/*.dmg
+            packages/desktop/dist/*.dmg.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: [validate, windows, macos]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout validated commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+
+      - name: Verify release tag still points at the validated commit
+        shell: bash
+        env:
+          TAG: ${{ needs.validate.outputs.tag }}
+          VALIDATED_SHA: ${{ needs.validate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if ! git fetch --no-tags origin "+refs/tags/${TAG}:refs/tags/${TAG}"; then
+            echo "::error::tag $TAG no longer exists in the repository; refusing to publish"
+            exit 1
+          fi
+          tag_commit="$(git rev-parse "refs/tags/${TAG}^{commit}")"
+          if [ "$tag_commit" != "$VALIDATED_SHA" ]; then
+            echo "::error::tag $TAG was moved after validation (now $tag_commit, validated $VALIDATED_SHA); refusing to publish"
+            exit 1
+          fi
+          echo "tag $TAG still points at validated commit $VALIDATED_SHA"
+
+      - name: Download platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify release asset set
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          exes=(release-assets/*.exe)
+          dmgs=(release-assets/*.dmg)
+          checks=(release-assets/*.sha256)
+          if [ "${#exes[@]}" -ne 1 ] || [ "${#dmgs[@]}" -ne 1 ] || [ "${#checks[@]}" -ne 2 ]; then
+            echo "::error::unexpected release asset set (exe=${#exes[@]}, dmg=${#dmgs[@]}, sha256=${#checks[@]})"
+            find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
+            exit 1
+          fi
+
+      - name: Create or update the common GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-assets/*.exe release-assets/*.dmg release-assets/*.sha256 --clobber
+          else
+            gh release create "$TAG" release-assets/*.exe release-assets/*.dmg release-assets/*.sha256 \
+              --verify-tag --generate-notes --title "AIChat Desktop ${VERSION}"
+          fi

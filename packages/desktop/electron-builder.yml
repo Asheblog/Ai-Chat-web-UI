@@ -1,0 +1,26 @@
+appId: org.asheblog.aichat.desktop
+productName: AI Chat Desktop
+artifactName: aichat-desktop-${version}-${os}-${arch}.${ext}
+directories:
+  output: dist
+  buildResources: build
+files:
+  - src/**/*
+  - ui/**/*
+  - build/icon.svg
+  - package.json
+extraResources:
+  - from: build/icon.png
+    to: icon.png
+mac:
+  category: public.app-category.productivity
+  icon: build/icon.icns
+  hardenedRuntime: true
+win:
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico

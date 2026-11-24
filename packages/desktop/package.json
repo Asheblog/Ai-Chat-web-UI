@@ -1,0 +1,22 @@
+{
+  "name": "@aichat/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI Chat desktop client for self-hosted sites",
+  "author": "AI Chat Team",
+  "main": "src/main.mjs",
+  "type": "module",
+  "scripts": {
+    "dev": "electron .",
+    "test": "node --test",
+    "dist:win": "electron-builder --win nsis --x64 --publish never",
+    "dist:mac": "electron-builder --mac dmg --arm64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "45.4.1",
+    "electron-builder": "26.18.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

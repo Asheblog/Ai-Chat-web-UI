@@ -167,6 +167,12 @@ _Avoid_：用最小 Key 行 ID 冒充连接组身份；用 channelName / prefixI
 - **Mobile Release Identity（移动端发布身份）**：由 Android applicationId 与长期 release signing certificate 共同确定的可升级应用身份；同一发布链路必须持续使用相同身份
 - **Mobile Release（移动端正式发布）**：与 `app.json` 版本一致、由 `mobile-v<versionName>` Tag 触发并使用移动端发布身份签名的可分发 APK
 
+## 桌面客户端
+
+- **Desktop Client（桌面客户端）**：Windows 与 macOS 的 Electron 应用；连接已部署的 AI Chat 前端，在窗口内复用站点界面与 Cookie 登录。
+- **Desktop Site Origin（桌面站点地址）**：AI Chat 首页的协议、主机及端口。连接成功后保存，重启时重连；不同站点使用独立的本地会话。
+- **Desktop Release（桌面正式发布）**：与桌面包版本一致、由 `desktop-v<version>` 标识的签名 Windows 安装包与包含已签名、公证应用的 Apple Silicon DMG。
+
 ## Skill
 
 - **System Skill（系统级 Skill）**：对所有拥有权限的用户可见且可用的 Skill
