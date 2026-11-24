@@ -337,7 +337,8 @@ pnpm start:dev                # 同时拉起 backend(8001) + frontend(3000)
 - 只启后端：`pnpm --filter @aichat/backend dev`（`tsx watch`）；只启前端：`pnpm --filter @aichat/frontend dev`。
 - `DATABASE_URL` 相对路径以 `packages/backend/prisma` 为基准：`file:./data/app.db` → `packages/backend/prisma/data/app.db`。
 - 本地执行 Python 沙箱工具仍需本机 Docker；没有 Docker 时相关工具不可用，其余功能正常。
-- Android 客户端与后端部署无关，构建方式见 [packages/mobile/README.md](../packages/mobile/README.md)。
+- Windows 和 macOS 客户端填写前端站点的根地址，推荐使用可信证书的 HTTPS。代理应保留前端的 `/api/health`；已有分流代理如果把它转给后端并返回 404，可用 `/main` 和 `/api/settings/health` 兼容，无需新增 API。见 [桌面客户端指南](../packages/desktop/README.md)。
+- Android 自动发布已暂停，本地构建见 [Android 指南](../packages/mobile/README.md)。
 
 开发环境编排（镜像内热重载，可选）：
 

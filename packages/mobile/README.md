@@ -1,6 +1,6 @@
 # AIChat Mobile
 
-AIChat Mobile 是 AIChat 的 Android 客户端包。当前已完成阶段 8：正式分发准备。
+AIChat Mobile 是 AIChat 的 Android 客户端包。自动构建和发布已暂停，源码和本地构建入口保留。
 
 ## 当前范围
 
@@ -190,34 +190,18 @@ tar -xzf /tmp/temurin17.tar.gz -C /tmp/temurin17 --strip-components=1
 mv /tmp/temurin17 ~/.local/share/jdks/temurin-17
 ```
 
-## GitHub Actions 正式发布
+## 自动发布已暂停
 
-普通 PR 和 push 只触发 `.github/workflows/mobile-ci.yml` 中的测试、类型检查和 Expo 配置检查，不构建正式 APK，也不读取签名密钥。
-
-正式发布由 `.github/workflows/mobile-release.yml` 处理。GitHub `android-release` Environment 必须配置：
-
-- `AICHAT_ANDROID_KEYSTORE_BASE64`
-- `AICHAT_ANDROID_KEYSTORE_PASSWORD`
-- `AICHAT_ANDROID_KEY_ALIAS`
-- `AICHAT_ANDROID_KEY_PASSWORD`
-
-流水线只接受与 `app.json` 的 `expo.version` 一致的 `mobile-v<versionName>` Tag。例如当前版本：
-
-```bash
-git tag mobile-v0.1.0
-git push origin mobile-v0.1.0
-```
-
-流水线会构建并验证正式签名 APK、生成 SHA-256、上传 Actions Artifact、生成构建来源证明，并创建或更新 GitHub Release。手工补发只能选择已经存在且版本匹配的 Tag。
+仓库不再自动测试、构建或发布 Android APK，推送 `mobile-v*` Tag 不会触发 Android 发布。已发布的 APK 仍可在 [历史 Release](https://github.com/Asheblog/Ai-Chat-web-UI/releases/tag/mobile-v0.1.0) 下载；也可以继续用上述命令本地构建和验证。请保管原签名密钥，使用同一签名才能覆盖升级。
 
 版本唯一来源是 `packages/mobile/app.json`：
 
 - `expo.android.package`：Android applicationId，当前为 `com.aichat.mobile`。
 - `expo.version`：`versionName`，当前为 `0.1.0`。
 - `expo.android.versionCode`：当前为 `1`。
-- `expo.extra.androidReleaseCertificateSha256`：长期发布证书的公开 SHA-256 指纹；本地和 GitHub 构建必须精确匹配。
+- `expo.extra.androidReleaseCertificateSha256`：长期发布证书的公开 SHA-256 指纹；本地构建正式 APK 时必须精确匹配。
 
-每次准备新的可安装升级版本都必须递增 `versionCode`；发布语义版本时同时更新 `versionName`，再创建对应 Tag。
+每次准备新的可安装升级版本都必须递增 `versionCode`；发布语义版本时同时更新 `versionName`。
 
 ## 真机安装
 
@@ -359,7 +343,9 @@ pnpm mobile:type-check
 pnpm mobile:type-check
 ```
 
-## 阶段 8 正式分发验收结果
+## 阶段 8 正式分发验收结果（历史）
+
+以下是暂停自动发布前的验收记录。
 
 本次使用设备 `3c730137 device`、隔离数据库、专用账号和本地 OpenAI 兼容流式模型桩，不调用真实模型或共享服务端。
 

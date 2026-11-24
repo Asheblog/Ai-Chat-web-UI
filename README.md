@@ -4,9 +4,9 @@
 
 **把多模型对话、联网研究、文件分析和工具执行，放进一个可自部署的工作台。**
 
-AI Chat 面向个人自用和团队共享：接入自己的模型服务，在对话中搜索资料、阅读网页、分析文件、运行 Python，交付带来源的回答和可下载的成果。Web 端提供完整工作台与管理设置，Android 客户端用于连接自己的服务进行日常聊天。
+AI Chat 面向个人自用和团队共享：接入自己的模型服务，在对话中搜索资料、阅读网页、分析文件、运行 Python，交付带来源的回答和可下载的成果。Web 端提供完整工作台与管理设置，Windows 和 macOS 客户端复用同一套界面，连接你部署的站点。
 
-[在线体验](https://aichat.asheblog.org) · [快速部署](#快速部署) · [首次配置](#首次配置) · [完整部署指南](docs/DEPLOYMENT.md) · [Android 客户端](packages/mobile/README.md)
+[在线体验](https://aichat.asheblog.org) · [快速部署](#快速部署) · [首次配置](#首次配置) · [完整部署指南](docs/DEPLOYMENT.md) · [桌面客户端](#桌面客户端)
 
 ## 能做什么
 
@@ -156,16 +156,21 @@ packages/
   frontend/    Next.js 15 · React 18 · Tailwind CSS · shadcn/ui
   backend/     Hono · Prisma · SQLite · 工具编排与文档 worker
   shared/      Web / 后端 / 移动端共享契约与纯函数
-  mobile/      React Native · Expo Android 客户端
+  desktop/     Electron · Windows / macOS 桌面客户端
+  mobile/      React Native · Expo Android 客户端（暂停自动发布）
 scripts/       本地启动、数据库初始化与检查脚本
 docs/          部署、架构、设计与决策记录
 ```
 
-## Android 客户端
+## 桌面客户端
 
-Android App 连接你部署的 AI Chat 服务，支持登录、会话列表、历史消息、流式回复、停止生成和基础 Markdown 阅读。首次使用填写**手机可访问的服务器根地址**；手机上的 `localhost` 指向手机本身，局域网部署应填写服务器的局域网 IP 或域名。
+打开客户端，输入你部署的 **AI Chat 站点首页地址**（例如 `https://chat.example.com`，不带 `/api`），然后沿用站点账号登录。更换部署时，使用「服务器 → 更换服务器…」。
 
-系统管理和完整的工具配置使用 Web 端。APK 构建、签名、安装与移动开发见 [Android 指南](packages/mobile/README.md)，发布产物见 [GitHub Releases](https://github.com/Asheblog/Ai-Chat-web-UI/releases)。
+Windows x64 安装包为 `.exe`，Apple Silicon Mac 安装包为 `.dmg`。测试包从 [Desktop CI](https://github.com/Asheblog/Ai-Chat-web-UI/actions/workflows/desktop-ci.yml) 的构建产物下载；签名正式版发布到 [GitHub Releases](https://github.com/Asheblog/Ai-Chat-web-UI/releases)。本地构建和发布配置见 [桌面客户端指南](packages/desktop/README.md)。
+
+### Android 自动发布已暂停
+
+现有 APK 和源码仍保留。需要安装历史版本或手工构建时，见 [Android 指南](packages/mobile/README.md)。
 
 ## 运维与进一步阅读
 

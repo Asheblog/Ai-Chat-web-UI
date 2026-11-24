@@ -1,5 +1,7 @@
 # AIChat Android 客户端开发计划
 
+> 历史开发计划。Android 自动构建与发布已暂停；本地构建和历史 APK 见 [Android 指南](../../packages/mobile/README.md#自动发布已暂停)。
+
 本文档是 AIChat Android 客户端的阶段路线图。后续每个新聊天窗口都应先阅读本文，再只处理当前阶段，避免上下文丢失和范围漂移。
 
 ## 目标

@@ -44,8 +44,8 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Install non-desktop dependencies
+        run: pnpm --filter '!@aichat/desktop' install --frozen-lockfile
 
       - name: Architecture guard
         run: pnpm architecture:check
@@ -67,17 +67,11 @@ jobs:
       - name: Frontend tests
         run: pnpm --filter @aichat/frontend exec vitest run --reporter=dot
 
-      - name: Mobile tests
-        run: pnpm --filter @aichat/mobile test
-
       - name: Backend type-check
         run: pnpm --filter @aichat/backend type-check
 
       - name: Frontend type-check
         run: pnpm --filter @aichat/frontend type-check
-
-      - name: Mobile type-check
-        run: pnpm mobile:type-check
 
   backend:
     name: Backend Image
