@@ -117,7 +117,11 @@ export function convertChatCompletionsMessagesToResponsesInput(messages: any[]):
       input.push({
         type: 'message',
         role,
-        content: parts,
+        content: role === 'assistant'
+          ? parts.map((part) => part.type === 'input_text'
+            ? { type: 'output_text', text: part.text, annotations: [] }
+            : part)
+          : parts,
       })
     }
 
