@@ -1,6 +1,45 @@
 import { buildChatProviderRequest } from './chat-provider'
 import { resolveToolProviderAdapter } from '../agent-runtime/provider-adapters'
 
+describe('Responses conversation requests', () => {
+  it.each([
+    { format: 'string', answer: 'Water vapor condenses.' },
+    { format: 'text parts', answer: [{ type: 'text', text: 'Water vapor condenses.' }] },
+  ])('replays a previous answer ($format) when the user follows up', ({ answer }) => {
+    const imageUrl = 'https://example.com/cloud.png'
+    const request = buildChatProviderRequest({
+      provider: 'openai_responses',
+      baseUrl: 'https://provider.example/v1',
+      rawModelId: 'model',
+      stream: true,
+      body: {
+        messages: [
+          { role: 'system', content: 'Keep it brief.' },
+          { role: 'user', content: 'What causes rain?' },
+          { role: 'assistant', content: answer },
+          { role: 'assistant', content: '' },
+          { role: 'user', content: [
+            { type: 'text', text: 'Is this a rain cloud?' },
+            { type: 'image_url', image_url: { url: imageUrl } },
+          ] },
+        ],
+      },
+    })
+
+    expect(request.body.input).toEqual([
+      { type: 'message', role: 'system', content: [{ type: 'input_text', text: 'Keep it brief.' }] },
+      { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'What causes rain?' }] },
+      { type: 'message', role: 'assistant', content: [
+        { type: 'output_text', text: 'Water vapor condenses.', annotations: [] },
+      ] },
+      { type: 'message', role: 'user', content: [
+        { type: 'input_text', text: 'Is this a rain cloud?' },
+        { type: 'input_image', detail: 'auto', image_url: imageUrl },
+      ] },
+    ])
+  })
+})
+
 describe('retired provider rejection', () => {
   it.each(['azure_openai', 'ollama', 'unknown'])('rejects %s before constructing a request', (provider) => {
     expect(() => buildChatProviderRequest({
