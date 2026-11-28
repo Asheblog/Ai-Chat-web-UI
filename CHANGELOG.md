@@ -2,6 +2,8 @@
 
 ## 未发布
 
+- BREAKING: 桌面正式发布改为不签名——`desktop-release.yml` 删除两端 secret 预检、Windows `Verify Authenticode signatures` 与 macOS 签名/公证校验，构建改用 `CSC_IDENTITY_AUTO_DISCOVERY=false`、macOS 去掉 `-c.mac.notarize=true`，两个 job 名标注 (unsigned)；`desktop-signing-windows` / `desktop-signing-macos` 两个 Environment 与 7 个 Secret 名称保留（凭据留空），`desktop-v*` Tag 门禁继续生效。行为变化：Release 产物未签名，Windows 需过 SmartScreen、macOS 需在「系统设置 → 隐私与安全性」放行，且不再有可验证的发布者身份。无数据迁移。见 ADR-0050
+
 - fix: 修复 OpenAI Responses 会话追问返回 400——历史助手消息中的纯文本块改用 `output_text`；用户消息继续使用 `input_text`，图片和工具结果格式不变。无数据迁移。
 
 - UI: 根治「中文加载完还会换字体」——移除自托管 Noto Sans SC（Google 侧 404 条 `unicode-range` 切片，只有 4 条 latin 片被 preload，中文切片只能在首帧后按需发现，冷缓存下必然回落到系统字体、回访才变 Noto），中文改用系统 UI 字体链（苹方 / 微软雅黑 UI / HarmonyOS Sans / Noto Sans CJK / 思源黑体），拉丁保留 Source Sans 3（SIL OFL 1.1，latin 单文件 preload）。同时把字体栈收敛为单一事实源——`globals.css` 的 `--font-ui` / `--font-mono`，Tailwind `fontFamily` 只引用变量（原两处各写一份会漂移）、删除 `text-rendering: optimizeLegibility`、`font-weight: 650` 收敛为 600（Noto 无 650，中文原本落到 700）、代码块字体改用系统等宽栈并停止承诺 JetBrains Mono。收益：全局 CSS 少约 126KB（gzip）、构建期少 404 次 fonts.googleapis.com 下载、首屏 0 个 CJK 字体请求、同一页面不再换字体。行为变化：Windows 中文由 Noto Sans SC 变为微软雅黑 UI，中文只有 400/700 两档字重。无后端协议变更、无迁移。见 ADR-0041

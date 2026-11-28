@@ -166,7 +166,7 @@ docs/          部署、架构、设计与决策记录
 
 打开客户端，输入你部署的 **AI Chat 站点首页地址**（例如 `https://chat.example.com`，不带 `/api`），然后沿用站点账号登录。更换部署时，使用「服务器 → 更换服务器…」。
 
-Windows x64 安装包为 `.exe`，Apple Silicon Mac 安装包为 `.dmg`。测试包从 [Desktop CI](https://github.com/Asheblog/Ai-Chat-web-UI/actions/workflows/desktop-ci.yml) 的构建产物下载；签名正式版发布到 [GitHub Releases](https://github.com/Asheblog/Ai-Chat-web-UI/releases)。本地构建和发布配置见 [桌面客户端指南](packages/desktop/README.md)。
+Windows x64 安装包为 `.exe`，Apple Silicon Mac 安装包为 `.dmg`。测试包从 [Desktop CI](https://github.com/Asheblog/Ai-Chat-web-UI/actions/workflows/desktop-ci.yml) 的构建产物下载，正式版发布到 [GitHub Releases](https://github.com/Asheblog/Ai-Chat-web-UI/releases)；两者当前都不做代码签名，安装时按系统提示放行即可（见 [ADR 0050](docs/adr/0050-desktop-release-ships-unsigned-artifacts.md)）。本地构建和发布配置见 [桌面客户端指南](packages/desktop/README.md)。
 
 ### Android 自动发布已暂停
 
