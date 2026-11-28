@@ -344,7 +344,7 @@ jobs:
             checksum="${name}.sha256"
 
             if has_asset "$name" && has_asset "$checksum"; then
-              echo "$TAG 已存在 $name 与 $checksum，保留历史文件不覆盖"
+              echo "${TAG} 已存在 ${name} 与 ${checksum}，保留历史文件不覆盖"
               return 0
             fi
 
@@ -357,7 +357,7 @@ jobs:
             dir="$(mktemp -d)"
             if has_asset "$name"; then
               # 只有产物：按已发布的原始字节重新生成校验，绝不把新产物绑到旧校验上。
-              echo "::warning::$TAG 已有 $name 但缺少 $checksum，按已发布文件重新生成校验"
+              echo "::warning::${TAG} 已有 ${name} 但缺少 ${checksum}，按已发布文件重新生成校验"
               gh release download "$TAG" --pattern "$name" --dir "$dir"
               ( cd "$dir" && write_sha256 "$name" "$checksum" )
               gh release upload "$TAG" "$dir/$checksum"
@@ -367,7 +367,7 @@ jobs:
               gh release download "$TAG" --pattern "$checksum" --dir "$dir"
               cp "$artifact" "$dir/$name"
               if ! ( cd "$dir" && check_sha256 "$checksum" ); then
-                echo "::error::$TAG 的 $checksum 与本次构建的 $name 不匹配，拒绝上传（避免发布无法校验的产物）"
+                echo "::error::${TAG} 的 ${checksum} 与本次构建的 ${name} 不匹配，拒绝上传（避免发布无法校验的产物）"
                 rm -rf "$dir"
                 exit 1
               fi
