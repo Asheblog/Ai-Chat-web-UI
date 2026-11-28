@@ -25,7 +25,7 @@ pnpm --filter @aichat/desktop dist:mac  # 在 macOS 构建 Apple Silicon DMG
 
 [Desktop Release](../../.github/workflows/desktop-release.yml) 只接受指向 main 已合入提交、且与 [桌面包版本](package.json) 相同的 `desktop-vX.Y.Z` Tag。两个平台在 `desktop-signing-*` Environment（只允许 `desktop-v*` Tag 部署）中构建；校验安装包存在、Windows payload 为 x64、macOS payload 为 arm64 且 DMG 完整后，由 publish 任务一次性创建或更新同一个 Release。
 
-当前不签名也不公证，因此不做代码签名与公证校验（见 [ADR 0050](../adr/0050-desktop-release-ships-unsigned-artifacts.md)）。两个 Environment 与下表 7 个 Secret 名称已保留在仓库设置里、凭据留空；拿到证书后配好这些值，并还原工作流里的签名与校验步骤，即可回到签名发布。
+当前不签名也不公证，因此不做代码签名与公证校验（见 [ADR 0050](../../docs/adr/0050-desktop-release-ships-unsigned-artifacts.md)）。两个 Environment 与下表 7 个 Secret 名称已保留在仓库设置里、凭据留空；拿到证书后配好这些值，并还原工作流里的签名与校验步骤，即可回到签名发布。
 
 | Environment | 恢复签名时配置的 Secrets |
 | --- | --- |
