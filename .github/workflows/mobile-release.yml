@@ -313,7 +313,24 @@ jobs:
           # 同一平台的产物与其 .sha256 是一个整体：禁止出现“新产物 + 旧校验”或“旧产物 + 新校验”。
           existing_assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
           has_asset() {
-            printf '%s\n' "$existing_assets" | grep -qxF "$1"
+            case $'\n'"${existing_assets}"$'\n' in
+              *$'\n'"$1"$'\n'*) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+          write_sha256() {
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum "$1" > "$2"
+            else
+              shasum -a 256 "$1" > "$2"
+            fi
+          }
+          check_sha256() {
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum -c "$1"
+            else
+              shasum -a 256 -c "$1"
+            fi
           }
 
           sync_platform() {
@@ -338,14 +355,14 @@ jobs:
               # 只有产物：按已发布的原始字节重新生成校验，绝不把新产物绑到旧校验上。
               echo "::warning::$TAG 已有 $name 但缺少 $checksum，按已发布文件重新生成校验"
               gh release download "$TAG" --pattern "$name" --dir "$dir"
-              ( cd "$dir" && sha256sum "$name" > "$checksum" )
+              ( cd "$dir" && write_sha256 "$name" "$checksum" )
               gh release upload "$TAG" "$dir/$checksum"
               echo "uploaded $checksum generated from published $name"
             else
               # 只有校验：待上传产物必须与历史 checksum 一致，否则 fail closed。
               gh release download "$TAG" --pattern "$checksum" --dir "$dir"
               cp "$artifact" "$dir/$name"
-              if ! ( cd "$dir" && sha256sum -c "$checksum" ); then
+              if ! ( cd "$dir" && check_sha256 "$checksum" ); then
                 echo "::error::$TAG 的 $checksum 与本次构建的 $name 不匹配，拒绝上传（避免发布无法校验的产物）"
                 rm -rf "$dir"
                 exit 1
