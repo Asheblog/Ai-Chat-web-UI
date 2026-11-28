@@ -178,13 +178,24 @@ jobs:
   ios:
     name: iOS Unsigned IPA Release
     needs: validate
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 60
     steps:
       - name: Checkout validated commit
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.validate.outputs.sha }}
+
+      - name: Select Xcode 26 toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          XCODE_26="$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' | sort -V | tail -n 1 || true)"
+          if [ -n "$XCODE_26" ]; then
+            sudo xcode-select -s "$XCODE_26"
+          fi
+          xcodebuild -version
+          swift --version
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
