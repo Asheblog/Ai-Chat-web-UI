@@ -416,8 +416,15 @@ describe("双端构建与发布配置", () => {
         },
       });
       const log = fs.readFileSync(ghLog, "utf8");
-      return { status: result.status, stdout: String(result.stdout ?? ""), log };
+      return {
+        status: result.status,
+        stdout: String(result.stdout ?? ""),
+        stderr: String(result.stderr ?? ""),
+        log,
+      };
     };
+    const formatRun = (run: ReturnType<typeof runPublish>) =>
+      `stderr:\n${run.stderr}\nstdout:\n${run.stdout}\nlog:\n${run.log}`;
     const uploads = (log: string) =>
       log.split(/\r?\n/).filter((line) => line.startsWith("uploaded "));
 
@@ -426,7 +433,7 @@ describe("双端构建与发布配置", () => {
     writeLocal(ipa, "new-ipa");
 
     const fresh = runPublish(false);
-    expect(fresh.status).toBe(0);
+    expect(fresh.status, formatRun(fresh)).toBe(0);
     expect(fresh.log).toContain("release create");
     expect(fresh.log).toContain(apk + ".sha256");
     expect(fresh.log).toContain(ipa + ".sha256");
@@ -438,14 +445,14 @@ describe("双端构建与发布配置", () => {
       fs.appendFileSync(assetsList, name + "\n" + name + ".sha256\n");
     }
     const untouched = runPublish(true);
-    expect(untouched.status).toBe(0);
+    expect(untouched.status, formatRun(untouched)).toBe(0);
     expect(uploads(untouched.log)).toEqual([]);
 
     // 只有已发布产物：按已发布字节补校验，绝不把新产物绑到旧校验上。
     resetRemote();
     publishFile(apk, "published-apk-bytes");
     const artifactOnly = runPublish(true);
-    expect(artifactOnly.status).toBe(0);
+    expect(artifactOnly.status, formatRun(artifactOnly)).toBe(0);
     expect(artifactOnly.log).toContain("gh release download");
     expect(fs.readFileSync(path.join(store, apk), "utf8")).toBe("published-apk-bytes");
     expect(fs.readFileSync(path.join(store, apk + ".sha256"), "utf8").split(" ")[0]).toBe(
@@ -464,7 +471,7 @@ describe("双端构建与发布配置", () => {
     publishChecksum(ipa, "published-ipa-bytes");
     writeLocal(ipa, "published-ipa-bytes");
     const shaOnlyMatch = runPublish(true);
-    expect(shaOnlyMatch.status).toBe(0);
+    expect(shaOnlyMatch.status, formatRun(shaOnlyMatch)).toBe(0);
     expect(uploads(shaOnlyMatch.log)).toEqual(["uploaded " + ipa]);
     expect(fs.readFileSync(path.join(store, ipa + ".sha256"), "utf8").split(" ")[0]).toBe(
       digestOf("published-ipa-bytes"),
