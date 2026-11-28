@@ -105,18 +105,24 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Install Android SDK components
         shell: bash
         run: |
           set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null || true
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -maxdepth 3 -type f -name sdkmanager | sort -V | tail -n 1)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error::sdkmanager not found under $SDK_ROOT/cmdline-tools"
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null || true
           # RN 0.85.3 / expo-modules-core 要求 compileSdk 36、buildTools 36.0.0，
           # 且 expo-modules-core 通过 CMake 编译 C++，需要 NDK 27.1.12297006 与 CMake 3.22.1。
-          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" \
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" \
+            "platform-tools" "platforms;android-36" "build-tools;36.0.0" \
             "ndk;27.1.12297006" "cmake;3.22.1"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

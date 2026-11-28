@@ -33,15 +33,16 @@ if [ -z "${SCHEME}" ]; then
 fi
 
 echo "=== 3. Xcode Release Build (Unsigned iphoneos arm64) ==="
-BUILD_DIR="${IOS_DIR}/build"
-rm -rf "${BUILD_DIR}"
+# 保留 pod install 在 ios/build/generated/ios 下生成的 ReactCodegen 代码，DerivedData 使用独立目录。
+DERIVED_DATA_DIR="${IOS_DIR}/.derived-data"
+rm -rf "${DERIVED_DATA_DIR}"
 xcodebuild \
   -workspace "${WORKSPACE}" \
   -scheme "${SCHEME}" \
   -configuration Release \
   -sdk iphoneos \
   -arch arm64 \
-  -derivedDataPath "${BUILD_DIR}" \
+  -derivedDataPath "${DERIVED_DATA_DIR}" \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY="" \
@@ -50,7 +51,7 @@ xcodebuild \
   ONLY_ACTIVE_ARCH=NO \
   build
 
-APP_PATH="$(find "${BUILD_DIR}/Build/Products/Release-iphoneos" -maxdepth 1 -name '*.app' -print | head -n 1)"
+APP_PATH="$(find "${DERIVED_DATA_DIR}/Build/Products/Release-iphoneos" -maxdepth 1 -name '*.app' -print | head -n 1)"
 if [ -z "${APP_PATH}" ]; then
   echo "::error::未生成 Release-iphoneos .app 产物"
   exit 1
