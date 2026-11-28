@@ -1,7 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useMemo, useRef, useState } from "react";
+import { useState } from "react";
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,18 +11,20 @@ import {
   View,
 } from "react-native";
 
-import type { AuthSession, RegisterResult } from "../auth-types";
+import type { AuthSession } from "../auth-types";
+import { Button, SegmentedControl, SurfaceCard } from "../components/ui/UiPrimitives";
 import type { MobileApiClient } from "../mobile-api-client";
-import type { AppTheme } from "../theme";
-import { spacing } from "../theme";
+import { lightTap, successTap } from "../native/haptics";
+import type { AppTheme } from "../theme/tokens";
+import { radii, spacing } from "../theme/tokens";
 
 type AuthMode = "login" | "register";
-type SubmitState = "idle" | "submitting";
 
 type AuthScreenProps = {
   apiClient: MobileApiClient;
   endpoint: string;
-  onAuthenticated: (session: AuthSession) => Promise<void>;
+  serverName?: string;
+  onAuthenticated: (session: AuthSession) => Promise<void> | void;
   onEditEndpoint: () => void;
   theme: AppTheme;
 };
@@ -31,503 +32,270 @@ type AuthScreenProps = {
 export function AuthScreen({
   apiClient,
   endpoint,
+  serverName,
   onAuthenticated,
   onEditEndpoint,
   theme,
 }: AuthScreenProps) {
-  const passwordInputRef = useRef<TextInput>(null);
   const [mode, setMode] = useState<AuthMode>("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [submitState, setSubmitState] = useState<SubmitState>("idle");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
-  const isRegister = mode === "register";
-  const canSubmit = submitState !== "submitting" && username.trim().length > 0 && password.length > 0;
-  const title = isRegister ? "注册 AIChat 账号" : "登录 AIChat";
-  const subtitle = isRegister
-    ? "创建账号后，如果服务端开启审批，需等待管理员通过。"
-    : "使用已保存的服务端地址登录，令牌会安全保存在本机。";
-
-  const passwordHelper = useMemo(() => {
-    if (!isRegister) {
-      return "请输入你的 AIChat 密码。";
+  const handleSubmit = async () => {
+    const trimmedUser = username.trim();
+    if (!trimmedUser || !password) {
+      setErrorMessage("请输入用户名和密码。");
+      return;
     }
-    return "密码至少 8 位，注册后将使用服务端现有审批规则。";
-  }, [isRegister]);
 
-  async function handleSubmit() {
     setErrorMessage(null);
-    setSuccessMessage(null);
+    setInfoMessage(null);
+    setIsSubmitting(true);
 
-    const normalizedUsername = username.trim();
-    if (normalizedUsername.length < 3) {
-      setErrorMessage("用户名至少需要 3 个字符。");
-      return;
-    }
-
-    if (isRegister && password.length < 8) {
-      setErrorMessage("注册密码至少需要 8 位。");
-      return;
-    }
-
-    if (isRegister && password !== confirmPassword) {
-      setErrorMessage("两次输入的密码不一致。");
-      return;
-    }
-
-    setSubmitState("submitting");
     try {
-      if (isRegister) {
-        const result: RegisterResult = await apiClient.register(normalizedUsername, password);
-        if (result.kind === "pending") {
+      if (mode === "login") {
+        const session = await apiClient.login(trimmedUser, password);
+        await successTap();
+        await onAuthenticated(session);
+      } else {
+        const result = await apiClient.register(trimmedUser, password);
+        if (result.kind === "signed-in") {
+          await successTap();
+          await onAuthenticated(result.session);
+        } else {
+          await lightTap();
+          setInfoMessage(result.message ?? "注册已提交，请等待管理员审核后登录。");
           setMode("login");
-          setPassword("");
-          setConfirmPassword("");
-          setSuccessMessage(result.message ?? "注册已提交，请审批后登录。");
-          return;
         }
-
-        await onAuthenticated(result.session);
-        return;
       }
-
-      const session = await apiClient.login(normalizedUsername, password);
-      await onAuthenticated(session);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "认证请求失败，请重试。");
+      setErrorMessage(error instanceof Error ? error.message : "认证失败，请重试。");
     } finally {
-      setSubmitState("idle");
+      setIsSubmitting(false);
     }
-  }
-
-  function handleSwitchMode(nextMode: AuthMode) {
-    setMode(nextMode);
-    setErrorMessage(null);
-    setSuccessMessage(null);
-    setConfirmPassword("");
-  }
+  };
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={styles.keyboardAvoidingView}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={[styles.flex, { backgroundColor: theme.background }]}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        <View style={styles.header}>
-          <View
-            accessible
-            accessibilityLabel="AIChat Mobile 认证"
-            style={[
-              styles.brandMark,
-              {
-                backgroundColor: theme.primarySurface,
-                borderColor: theme.border,
-              },
-            ]}
-          >
-            <MaterialCommunityIcons name="shield-account-outline" size={30} color={theme.primary} />
-          </View>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Pressable
+          onPress={onEditEndpoint}
+          style={[
+            styles.serverChip,
+            { backgroundColor: theme.surface, borderColor: theme.border },
+          ]}
+        >
+          <View style={[styles.dot, { backgroundColor: theme.success }]} />
+          <Text numberOfLines={1} style={[styles.serverText, { color: theme.mutedForeground }]}>
+            {serverName ? `${serverName} · ` : ""}
+            {endpoint}
+          </Text>
+          <Text style={[styles.switchText, { color: theme.signalText }]}>更换</Text>
+        </Pressable>
 
-          <View style={styles.copy}>
-            <Text style={[styles.eyebrow, { color: theme.primary }]}>AIChat Mobile</Text>
-            <Text style={[styles.title, { color: theme.foreground }]}>{title}</Text>
-            <Text style={[styles.description, { color: theme.mutedForeground }]}>{subtitle}</Text>
-          </View>
-        </View>
+        <Text style={[styles.title, { color: theme.foreground }]}>
+          {mode === "login" ? "登录到工作区" : "创建新账号"}
+        </Text>
 
-        <View style={[styles.panel, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <View style={[styles.endpointBox, { backgroundColor: theme.inputBackground, borderColor: theme.border }]}>
-            <MaterialCommunityIcons name="server-network" size={22} color={theme.primary} />
-            <View style={styles.endpointCopy}>
-              <Text style={[styles.endpointLabel, { color: theme.mutedForeground }]}>当前服务端</Text>
-              <Text style={[styles.endpointValue, { color: theme.foreground }]}>{endpoint}</Text>
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="修改服务端地址"
-              hitSlop={8}
-              onPress={onEditEndpoint}
-              style={({ pressed }) => [
-                styles.iconButton,
-                { backgroundColor: pressed ? theme.primarySurface : "transparent" },
-              ]}
-            >
-              <MaterialCommunityIcons name="pencil-outline" size={22} color={theme.primary} />
-            </Pressable>
-          </View>
+        <SegmentedControl
+          onChange={(next) => {
+            setMode(next);
+            setErrorMessage(null);
+            setInfoMessage(null);
+          }}
+          options={[
+            { value: "login", label: "登录账号" },
+            { value: "register", label: "注册新用户" },
+          ]}
+          theme={theme}
+          value={mode}
+        />
 
-          <View style={[styles.segmentedControl, { backgroundColor: theme.inputBackground, borderColor: theme.border }]}>
-            <ModeButton active={mode === "login"} label="登录" onPress={() => handleSwitchMode("login")} theme={theme} />
-            <ModeButton
-              active={mode === "register"}
-              label="注册"
-              onPress={() => handleSwitchMode("register")}
-              theme={theme}
-            />
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <Text style={[styles.label, { color: theme.foreground }]}>用户名</Text>
-            <TextInput
-              accessibilityLabel="用户名"
-              autoCapitalize="none"
-              autoCorrect={false}
-              editable={submitState !== "submitting"}
-              enterKeyHint="next"
-              onChangeText={(value) => {
-                setUsername(value);
-                setErrorMessage(null);
-              }}
-              onSubmitEditing={() => {
-                passwordInputRef.current?.focus();
-              }}
-              placeholder="请输入用户名"
-              placeholderTextColor={theme.mutedForeground}
-              returnKeyType="next"
-              testID="auth-username-input"
-              style={[
-                styles.input,
-                {
-                  backgroundColor: theme.inputBackground,
-                  borderColor: errorMessage ? theme.danger : theme.border,
-                  color: theme.foreground,
-                },
-              ]}
-              textContentType="username"
-              value={username}
-            />
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <Text style={[styles.label, { color: theme.foreground }]}>密码</Text>
-            <View
-              style={[
-                styles.passwordInputRow,
-                {
-                  backgroundColor: theme.inputBackground,
-                  borderColor: errorMessage ? theme.danger : theme.border,
-                },
-              ]}
-            >
+        <SurfaceCard theme={theme}>
+          <View style={styles.form}>
+            <View style={styles.field}>
+              <Text style={[styles.label, { color: theme.mutedForeground }]}>用户名</Text>
               <TextInput
-                accessibilityLabel="密码"
                 autoCapitalize="none"
                 autoCorrect={false}
-                editable={submitState !== "submitting"}
-                enterKeyHint="done"
-                ref={passwordInputRef}
-                onChangeText={(value) => {
-                  setPassword(value);
-                  setErrorMessage(null);
-                }}
-                onSubmitEditing={canSubmit ? handleSubmit : undefined}
-                placeholder="请输入密码"
-                placeholderTextColor={theme.mutedForeground}
-                returnKeyType="done"
-                secureTextEntry={!showPassword}
-                style={[styles.passwordInput, { color: theme.foreground }]}
-                testID="auth-password-input"
-                textContentType={isRegister ? "newPassword" : "password"}
-                value={password}
-              />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={showPassword ? "隐藏密码" : "显示密码"}
-                hitSlop={8}
-                onPress={() => setShowPassword((current) => !current)}
-                style={styles.passwordToggle}
-              >
-                <MaterialCommunityIcons
-                  name={showPassword ? "eye-off-outline" : "eye-outline"}
-                  size={22}
-                  color={theme.primary}
-                />
-              </Pressable>
-            </View>
-            <Text style={[styles.helperText, { color: theme.mutedForeground }]}>{passwordHelper}</Text>
-          </View>
-
-          {isRegister ? (
-            <View style={styles.fieldGroup}>
-              <Text style={[styles.label, { color: theme.foreground }]}>确认密码</Text>
-              <TextInput
-                accessibilityLabel="确认密码"
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={submitState !== "submitting"}
-                onChangeText={(value) => {
-                  setConfirmPassword(value);
-                  setErrorMessage(null);
-                }}
-                placeholder="再次输入密码"
-                placeholderTextColor={theme.mutedForeground}
-                secureTextEntry={!showPassword}
+                onChangeText={setUsername}
+                placeholder="输入用户名"
+                placeholderTextColor={theme.tertiaryForeground}
                 style={[
                   styles.input,
                   {
-                    backgroundColor: theme.inputBackground,
-                    borderColor: errorMessage ? theme.danger : theme.border,
+                    backgroundColor: theme.background,
+                    borderColor: theme.borderStrong,
                     color: theme.foreground,
                   },
                 ]}
-                testID="auth-confirm-password-input"
-                textContentType="newPassword"
-                value={confirmPassword}
+                value={username}
               />
             </View>
-          ) : null}
 
-          {errorMessage ? (
-            <View
-              accessibilityRole="alert"
-              style={[styles.feedbackBox, { backgroundColor: theme.dangerSurface, borderColor: theme.danger }]}
-            >
-              <MaterialCommunityIcons name="alert-circle-outline" size={22} color={theme.danger} />
-              <Text style={[styles.feedbackText, { color: theme.danger }]}>{errorMessage}</Text>
+            <View style={styles.field}>
+              <Text style={[styles.label, { color: theme.mutedForeground }]}>密码</Text>
+              <View
+                style={[
+                  styles.passwordWrap,
+                  {
+                    backgroundColor: theme.background,
+                    borderColor: theme.borderStrong,
+                  },
+                ]}
+              >
+                <TextInput
+                  autoCapitalize="none"
+                  onChangeText={setPassword}
+                  placeholder="输入密码"
+                  placeholderTextColor={theme.tertiaryForeground}
+                  secureTextEntry={!showPassword}
+                  style={[styles.passwordInput, { color: theme.foreground }]}
+                  value={password}
+                />
+                <Pressable hitSlop={8} onPress={() => setShowPassword((v) => !v)}>
+                  <MaterialCommunityIcons
+                    color={theme.tertiaryForeground}
+                    name={showPassword ? "eye-off-outline" : "eye-outline"}
+                    size={20}
+                  />
+                </Pressable>
+              </View>
             </View>
-          ) : null}
 
-          {successMessage ? (
-            <View
-              accessibilityRole="summary"
-              style={[styles.feedbackBox, { backgroundColor: theme.successSurface, borderColor: theme.border }]}
-            >
-              <MaterialCommunityIcons name="check-circle-outline" size={22} color={theme.success} />
-              <Text style={[styles.feedbackText, { color: theme.success }]}>{successMessage}</Text>
-            </View>
-          ) : null}
+            {errorMessage ? (
+              <View
+                style={[
+                  styles.banner,
+                  { backgroundColor: theme.dangerSurface, borderColor: theme.danger },
+                ]}
+              >
+                <Text style={[styles.bannerText, { color: theme.danger }]}>
+                  {errorMessage}
+                </Text>
+              </View>
+            ) : null}
 
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={isRegister ? "注册 AIChat 账号" : "登录 AIChat"}
-            accessibilityState={{ disabled: !canSubmit, busy: submitState === "submitting" }}
-            disabled={!canSubmit}
-            onPress={handleSubmit}
-            testID="auth-submit-button"
-            style={({ pressed }) => [
-              styles.button,
-              {
-                backgroundColor: !canSubmit
-                  ? theme.border
-                  : pressed
-                    ? theme.primaryPressed
-                    : theme.primary,
-              },
-            ]}
-          >
-            {submitState === "submitting" ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <MaterialCommunityIcons
-                name={isRegister ? "account-plus-outline" : "login"}
-                size={20}
-                color="#FFFFFF"
-              />
-            )}
-            <Text style={styles.buttonText}>
-              {submitState === "submitting" ? "正在提交" : isRegister ? "注册" : "登录"}
+            {infoMessage ? (
+              <View
+                style={[
+                  styles.banner,
+                  { backgroundColor: theme.primarySurface, borderColor: theme.primary },
+                ]}
+              >
+                <Text style={[styles.bannerText, { color: theme.signalText }]}>
+                  {infoMessage}
+                </Text>
+              </View>
+            ) : null}
+
+            <Button
+              disabled={isSubmitting}
+              icon={mode === "login" ? "login" : "account-plus-outline"}
+              label={mode === "login" ? "安全登录" : "提交注册"}
+              loading={isSubmitting}
+              onPress={handleSubmit}
+              theme={theme}
+            />
+
+            <Text style={[styles.footnote, { color: theme.tertiaryForeground }]}>
+              Token 将按当前服务器隔离，使用 iOS Keychain / Android Keystore 加密保存。
             </Text>
-          </Pressable>
-        </View>
+          </View>
+        </SurfaceCard>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-function ModeButton({
-  active,
-  label,
-  onPress,
-  theme,
-}: {
-  active: boolean;
-  label: string;
-  onPress: () => void;
-  theme: AppTheme;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ selected: active }}
-      onPress={onPress}
-      style={[
-        styles.modeButton,
-        {
-          backgroundColor: active ? theme.primary : "transparent",
-        },
-      ]}
-    >
-      <Text style={[styles.modeButtonText, { color: active ? "#FFFFFF" : theme.foreground }]}>{label}</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
-  keyboardAvoidingView: {
+  flex: {
     flex: 1,
   },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: "center",
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing["2xl"],
-    rowGap: spacing.xl,
-  },
-  header: {
-    rowGap: spacing.xl,
-  },
-  brandMark: {
-    alignItems: "center",
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 64,
-    justifyContent: "center",
-    width: 64,
-  },
-  copy: {
-    rowGap: spacing.sm,
-  },
-  eyebrow: {
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: "800",
-    lineHeight: 38,
-  },
-  description: {
-    fontSize: 16,
-    lineHeight: 24,
-    maxWidth: 480,
-  },
-  panel: {
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+  container: {
     padding: spacing.lg,
     rowGap: spacing.lg,
   },
-  endpointBox: {
+  serverChip: {
     alignItems: "center",
-    borderRadius: 8,
+    borderRadius: radii.pill,
     borderWidth: StyleSheet.hairlineWidth,
-    columnGap: spacing.sm,
+    columnGap: 8,
     flexDirection: "row",
-    minHeight: 56,
-    padding: spacing.md,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
-  endpointCopy: {
+  dot: {
+    borderRadius: 4,
+    height: 8,
+    width: 8,
+  },
+  serverText: {
     flex: 1,
-    rowGap: 2,
+    fontSize: 12,
   },
-  endpointLabel: {
+  switchText: {
     fontSize: 13,
-    fontWeight: "700",
-    lineHeight: 18,
+    fontWeight: "600",
   },
-  endpointValue: {
-    fontSize: 15,
-    lineHeight: 22,
+  title: {
+    fontSize: 25,
+    fontWeight: "800",
   },
-  iconButton: {
-    alignItems: "center",
-    borderRadius: 8,
-    height: 48,
-    justifyContent: "center",
-    width: 48,
+  form: {
+    rowGap: 14,
   },
-  segmentedControl: {
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    columnGap: spacing.sm,
-    flexDirection: "row",
-    padding: 4,
-  },
-  modeButton: {
-    alignItems: "center",
-    borderRadius: 6,
-    flex: 1,
-    justifyContent: "center",
-    minHeight: 44,
-  },
-  modeButtonText: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  fieldGroup: {
-    rowGap: spacing.sm,
+  field: {
+    rowGap: 6,
   },
   label: {
-    fontSize: 16,
-    fontWeight: "700",
-    lineHeight: 22,
+    fontSize: 13,
+    fontWeight: "600",
   },
   input: {
-    borderRadius: 8,
+    borderRadius: radii.md,
     borderWidth: 1,
-    fontSize: 16,
-    lineHeight: 22,
-    minHeight: 52,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    fontSize: 15,
+    minHeight: 48,
+    paddingHorizontal: 14,
   },
-  passwordInputRow: {
+  passwordWrap: {
     alignItems: "center",
-    borderRadius: 8,
+    borderRadius: radii.md,
     borderWidth: 1,
+    columnGap: 8,
     flexDirection: "row",
-    minHeight: 52,
-    paddingLeft: spacing.lg,
-    paddingRight: spacing.sm,
+    minHeight: 48,
+    paddingHorizontal: 14,
   },
   passwordInput: {
     flex: 1,
-    fontSize: 16,
-    lineHeight: 22,
-    minHeight: 48,
-    paddingVertical: spacing.sm,
-  },
-  passwordToggle: {
-    alignItems: "center",
-    height: 44,
-    justifyContent: "center",
-    width: 44,
-  },
-  helperText: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  feedbackBox: {
-    alignItems: "flex-start",
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    columnGap: spacing.sm,
-    flexDirection: "row",
-    padding: spacing.md,
-  },
-  feedbackText: {
-    flex: 1,
     fontSize: 15,
-    fontWeight: "600",
-    lineHeight: 22,
   },
-  button: {
-    alignItems: "center",
-    borderRadius: 8,
-    columnGap: spacing.sm,
-    flexDirection: "row",
-    justifyContent: "center",
-    minHeight: 52,
-    paddingHorizontal: spacing.lg,
+  banner: {
+    borderRadius: radii.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
   },
-  buttonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
+  bannerText: {
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  footnote: {
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: "center",
   },
 });

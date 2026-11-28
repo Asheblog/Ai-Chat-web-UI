@@ -7,6 +7,11 @@ const SIGNING_ENV = [
   "AICHAT_ANDROID_KEY_PASSWORD",
 ];
 
+/**
+ * 配置 Android Release 签名：
+ * - 若外部环境变量完整注入，使用外部 keystore（可用于正式升级签名）。
+ * - 若未配置签名凭据（无付费/免密 CI 构建），自动回退 Gradle debug keystore，保证无需秘密即可直接产出可安装 APK。
+ */
 function applyReleaseSigning(contents) {
   const signingStart = contents.indexOf("    signingConfigs {");
   const buildTypesStart = contents.indexOf("    buildTypes {", signingStart);
@@ -21,19 +26,20 @@ function applyReleaseSigning(contents) {
   }
   const existingReleaseStart = signingBlock.indexOf("        release {");
   const signingPrefix =
-    existingReleaseStart === -1 ? signingBlock.slice(0, signingClose) : signingBlock.slice(0, existingReleaseStart);
+    existingReleaseStart === -1
+      ? signingBlock.slice(0, signingClose)
+      : signingBlock.slice(0, existingReleaseStart);
+
   const releaseSigning = `        release {
             def requiredSigningEnvironment = ${JSON.stringify(SIGNING_ENV)}
             def missingSigningEnvironment = requiredSigningEnvironment.findAll { !System.getenv(it) }
-            def releaseSigningRequested = gradle.startParameter.taskNames.any { it.toLowerCase().contains("release") }
-            if (releaseSigningRequested && !missingSigningEnvironment.isEmpty()) {
-                throw new GradleException("正式 APK 缺少签名环境变量: " + missingSigningEnvironment.join(", "))
-            }
             if (missingSigningEnvironment.isEmpty()) {
                 storeFile file(System.getenv("AICHAT_ANDROID_KEYSTORE_PATH"))
                 storePassword System.getenv("AICHAT_ANDROID_KEYSTORE_PASSWORD")
                 keyAlias System.getenv("AICHAT_ANDROID_KEY_ALIAS")
                 keyPassword System.getenv("AICHAT_ANDROID_KEY_PASSWORD")
+            } else {
+                initWith debug
             }
         }
 `;

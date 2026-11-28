@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ChatMessage } from "./chat-types";
 import {
+  appendAssistantGeneratedImages,
   appendAssistantReasoning,
   appendAssistantToolCall,
   normalizeMessage,
@@ -93,5 +94,15 @@ describe("chat-message-utils", () => {
     });
 
     expect(normalized.toolEvents?.map((event) => event.id)).toEqual(["call-a", "call-b"]);
+  });
+
+  it("appends AI generated images onto assistant message", () => {
+    const updated = appendAssistantGeneratedImages([baseMessage], "assistant-1", [
+      { url: "/api/artifacts/1.png", revisedPrompt: "Ink & Mist mountain" },
+    ]);
+
+    expect(updated[0].generatedImages).toEqual([
+      { url: "/api/artifacts/1.png", revisedPrompt: "Ink & Mist mountain" },
+    ]);
   });
 });

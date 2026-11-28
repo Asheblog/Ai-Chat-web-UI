@@ -1,0 +1,278 @@
+name: Mobile Release
+
+# 正式发布：推送 mobile-vX.Y.Z Tag（或手动 workflow_dispatch 指定已有 Tag），
+# 自动构建可直接安装的 Android APK（免付费自签名或可选 Secrets 签名）与 iOS 未签名 .ipa（供巨魔/AltStore/SideStore 侧载）。
+on:
+  push:
+    tags:
+      - "mobile-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "已存在的 mobile-v<version> Tag（例如 mobile-v1.0.0）"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate mobile release tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      sha: ${{ steps.meta.outputs.sha }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Validate tag, version, and main ancestry
+        id: meta
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          tag="${INPUT_TAG:-}"
+          if [ -z "$tag" ]; then
+            tag="$REF_NAME"
+          fi
+
+          meta_json="$(node packages/mobile/scripts/validate-mobile-release-tag.js "refs/tags/${tag}")"
+          version="$(node -e "const d = JSON.parse(process.argv[1]); console.log(d.versionName)" "$meta_json")"
+
+          tag_commit="$(git rev-parse -q --verify "refs/tags/${tag}^{commit}" || true)"
+          if [ -z "$tag_commit" ]; then
+            echo "::error::tag $tag does not exist in the repository"
+            exit 1
+          fi
+          if [ "$(git rev-parse HEAD)" != "$tag_commit" ]; then
+            echo "::error::checked out commit is not the tag commit of $tag"
+            exit 1
+          fi
+
+          git fetch --no-tags origin main
+          main_sha="$(git rev-parse -q --verify FETCH_HEAD)"
+          if ! git merge-base --is-ancestor "$tag_commit" "$main_sha"; then
+            echo "::error::tag commit $tag_commit is not on origin/main ($main_sha)"
+            exit 1
+          fi
+
+          printf 'tag=%s\nversion=%s\nsha=%s\n' "$tag" "$version" "$tag_commit" >> "$GITHUB_OUTPUT"
+          echo "validated mobile release $tag ($version) at $tag_commit"
+
+  android:
+    name: Android APK Release
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout validated commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package & run tests
+        run: |
+          pnpm --filter @aichat/shared build
+          pnpm --filter @aichat/mobile type-check
+          pnpm --filter @aichat/mobile test
+
+      - name: Build installable Android APK
+        shell: bash
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+          KEYSTORE_B64: ${{ secrets.AICHAT_ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.AICHAT_ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.AICHAT_ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.AICHAT_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASS" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASS" ]; then
+            echo "Using configured external Android keystore"
+            printf '%s' "$KEYSTORE_B64" | base64 --decode > "${RUNNER_TEMP}/release.keystore"
+            export AICHAT_ANDROID_KEYSTORE_PATH="${RUNNER_TEMP}/release.keystore"
+            export AICHAT_ANDROID_KEYSTORE_PASSWORD="$KEYSTORE_PASS"
+            export AICHAT_ANDROID_KEY_ALIAS="$KEY_ALIAS"
+            export AICHAT_ANDROID_KEY_PASSWORD="$KEY_PASS"
+          else
+            echo "No external Android keystore configured; generating free self-signed release APK"
+          fi
+
+          pnpm --filter @aichat/mobile android:build-apk
+
+          mkdir -p packages/mobile/dist
+          out="packages/mobile/dist/aichat-mobile-${VERSION}-android.apk"
+          cp packages/mobile/android/app/build/outputs/apk/release/app-release.apk "$out"
+          ( cd packages/mobile/dist && sha256sum "$(basename "$out")" > "$(basename "$out").sha256" )
+
+      - name: Upload Android release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aichat-mobile-android-release
+          path: |
+            packages/mobile/dist/*-android.apk
+            packages/mobile/dist/*-android.apk.sha256
+          if-no-files-found: error
+
+  ios:
+    name: iOS Unsigned IPA Release
+    needs: validate
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Checkout validated commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package & run tests
+        run: |
+          pnpm --filter @aichat/shared build
+          pnpm --filter @aichat/mobile type-check
+          pnpm --filter @aichat/mobile test
+
+      - name: Build unsigned iOS IPA
+        run: bash packages/mobile/scripts/build-ios-unsigned-ipa.sh
+
+      - name: Upload iOS unsigned IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aichat-mobile-ios-release
+          path: |
+            packages/mobile/dist/*-ios-unsigned.ipa
+            packages/mobile/dist/*-ios-unsigned.ipa.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Publish Mobile GitHub Release
+    needs: [validate, android, ios]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout validated commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+
+      - name: Verify release tag still points at the validated commit
+        shell: bash
+        env:
+          TAG: ${{ needs.validate.outputs.tag }}
+          VALIDATED_SHA: ${{ needs.validate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if ! git fetch --no-tags origin "+refs/tags/${TAG}:refs/tags/${TAG}"; then
+            echo "::error::tag $TAG no longer exists; refusing to publish"
+            exit 1
+          fi
+          tag_commit="$(git rev-parse "refs/tags/${TAG}^{commit}")"
+          if [ "$tag_commit" != "$VALIDATED_SHA" ]; then
+            echo "::error::tag $TAG moved after validation ($tag_commit != $VALIDATED_SHA)"
+            exit 1
+          fi
+
+      - name: Download platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify release asset set
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          apks=(release-assets/*.apk)
+          ipas=(release-assets/*.ipa)
+          checks=(release-assets/*.sha256)
+          if [ "${#apks[@]}" -ne 1 ] || [ "${#ipas[@]}" -ne 1 ] || [ "${#checks[@]}" -ne 2 ]; then
+            echo "::error::unexpected asset set (apk=${#apks[@]}, ipa=${#ipas[@]}, sha256=${#checks[@]})"
+            ls -la release-assets
+            exit 1
+          fi
+
+      - name: Create or update GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          ## AIChat Mobile 安装说明（免付费证书 / 无签名构建）
+
+          - **Android (`*-android.apk`)**：下载后直接在手机端安装（支持免付费自签名构建，若系统提示“未知来源”请允许安装）。
+          - **iOS (`*-ios-unsigned.ipa`)**：为未购买 Apple Developer 商业证书的纯无签名 `.ipa`，请通过 **TrollStore（巨魔）**、**AltStore**、**SideStore**、**Sideloadly** 或 **爱思助手** 等工具自签/侧载安装。
+          - **校验文件 (`*.sha256`)**：可用于核对下载文件完整性。
+          NOTES
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-assets/*.apk release-assets/*.ipa release-assets/*.sha256 --clobber
+          else
+            gh release create "$TAG" release-assets/*.apk release-assets/*.ipa release-assets/*.sha256 \
+              --verify-tag --notes-file release-notes.md --title "AIChat Mobile ${VERSION}"
+          fi

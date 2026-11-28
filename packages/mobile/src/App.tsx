@@ -1,165 +1,208 @@
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, useColorScheme, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
-import { clearAuthToken, loadAuthToken, saveAuthToken } from "./auth-token-storage";
 import type { AuthSession, MobileUser } from "./auth-types";
+import { ServerManagerSheet } from "./components/sheets/ServerManagerSheet";
 import { MobileApiClient } from "./mobile-api-client";
+import { setHapticsEnabled } from "./native/haptics";
 import { AuthScreen } from "./screens/AuthScreen";
 import { EndpointScreen } from "./screens/EndpointScreen";
-import { SignedInScreen } from "./screens/SignedInScreen";
+import { WorkspaceScreen } from "./screens/WorkspaceScreen";
 import { checkServerHealth, normalizeServerEndpoint } from "./server-endpoint";
-import { loadServerEndpoint, saveServerEndpoint } from "./server-endpoint-storage";
-import { createTheme, spacing } from "./theme";
+import { clearAuthToken, loadAuthToken, saveAuthToken } from "./storage/auth-token-storage";
+import {
+  DEFAULT_MOBILE_PREFERENCES,
+  loadMobilePreferences,
+  saveMobilePreferences,
+} from "./storage/preferences-storage";
+import {
+  loadServerProfilesState,
+  removeServerProfile,
+  saveServerProfilesState,
+  upsertServerProfile,
+} from "./storage/server-profiles";
+import { ThemeProvider, useAppTheme } from "./theme/ThemeProvider";
+import { spacing } from "./theme/tokens";
+import type { MobilePreferences, ServerProfile } from "./types/mobile";
 
 type SaveState = "idle" | "checking" | "saved";
 type AuthRestoreState = "idle" | "restoring";
 
 export default function App() {
-  const colorScheme = useColorScheme();
-  const theme = useMemo(() => createTheme(colorScheme), [colorScheme]);
-  const [endpointInput, setEndpointInput] = useState("");
-  const [savedEndpoint, setSavedEndpoint] = useState<string | null>(null);
+  return (
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <MobileRoot />
+      </ThemeProvider>
+    </SafeAreaProvider>
+  );
+}
+
+function MobileRoot() {
+  const { theme, setThemeMode, setSyncServerBrand, applyBranding } = useAppTheme();
+
+  const [preferences, setPreferences] = useState<MobilePreferences>(DEFAULT_MOBILE_PREFERENCES);
+  const [profiles, setProfiles] = useState<ServerProfile[]>([]);
+  const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [isEditingEndpoint, setIsEditingEndpoint] = useState(true);
-  const [isLoadingStoredEndpoint, setIsLoadingStoredEndpoint] = useState(true);
+  const [isLoadingStored, setIsLoadingStored] = useState(true);
+
+  const [endpointInput, setEndpointInput] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
   const [authRestoreState, setAuthRestoreState] = useState<AuthRestoreState>("idle");
   const [authToken, setAuthToken] = useState<string | null>(null);
   const authTokenRef = useRef<string | null>(null);
   const [currentUser, setCurrentUser] = useState<MobileUser | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [serverManagerOpen, setServerManagerOpen] = useState(false);
 
-  const clearAuthState = useCallback(async () => {
-    authTokenRef.current = null;
-    setAuthToken(null);
-    setCurrentUser(null);
-    await clearAuthToken();
-  }, []);
+  const activeProfile = useMemo(
+    () => profiles.find((p) => p.id === activeProfileId) ?? null,
+    [activeProfileId, profiles],
+  );
+
+  const clearAuthState = useCallback(
+    async (profileIdOverride?: string | null) => {
+      const targetId = profileIdOverride !== undefined ? profileIdOverride : activeProfileId;
+      authTokenRef.current = null;
+      setAuthToken(null);
+      setCurrentUser(null);
+      await clearAuthToken(targetId);
+    },
+    [activeProfileId],
+  );
 
   useEffect(() => {
-    let isMounted = true;
-
-    async function restoreEndpoint() {
+    let mounted = true;
+    async function bootstrap() {
       try {
-        const storedEndpoint = await loadServerEndpoint();
+        const [prefs, profileState] = await Promise.all([
+          loadMobilePreferences(),
+          loadServerProfilesState(),
+        ]);
+        if (!mounted) return;
 
-        if (!isMounted) {
-          return;
-        }
+        setPreferences(prefs);
+        setThemeMode(prefs.themeMode);
+        setSyncServerBrand(prefs.syncServerBrand);
+        setHapticsEnabled(prefs.hapticsEnabled);
 
-        if (storedEndpoint) {
-          setEndpointInput(storedEndpoint);
-          setSavedEndpoint(storedEndpoint);
+        setProfiles(profileState.profiles);
+        setActiveProfileId(profileState.activeProfileId);
+
+        const active = profileState.profiles.find(
+          (p) => p.id === profileState.activeProfileId,
+        );
+        if (active) {
+          setEndpointInput(active.endpoint);
           setIsEditingEndpoint(false);
-          setSuccessMessage("已恢复上次保存的服务端地址。");
+          if (active.brandTheme) {
+            applyBranding(active.brandTheme);
+          }
         }
       } catch {
-        if (isMounted) {
-          setErrorMessage("读取本地服务端地址失败，请重新保存。");
+        if (mounted) {
+          setErrorMessage("读取本地配置失败，请重新输入服务端地址。");
         }
       } finally {
-        if (isMounted) {
-          setIsLoadingStoredEndpoint(false);
+        if (mounted) {
+          setIsLoadingStored(false);
         }
       }
     }
-
-    restoreEndpoint();
-
+    void bootstrap();
     return () => {
-      isMounted = false;
+      mounted = false;
     };
-  }, []);
+  }, [applyBranding, setSyncServerBrand, setThemeMode]);
 
   const apiClient = useMemo(() => {
-    if (!savedEndpoint) {
-      return null;
-    }
-
+    if (!activeProfile) return null;
     return new MobileApiClient({
-      endpoint: savedEndpoint,
+      endpoint: activeProfile.endpoint,
       getToken: () => authTokenRef.current,
-      onUnauthorized: clearAuthState,
+      onUnauthorized: () => clearAuthState(activeProfile.id),
     });
-  }, [clearAuthState, savedEndpoint]);
+  }, [activeProfile, clearAuthState]);
 
   useEffect(() => {
-    let isMounted = true;
-
-    async function restoreAuth() {
-      if (!apiClient || isEditingEndpoint) {
+    let mounted = true;
+    async function restoreAuthAndBranding() {
+      if (!apiClient || !activeProfile || isEditingEndpoint) {
         return;
       }
 
       setAuthRestoreState("restoring");
+      authTokenRef.current = null;
+      setAuthToken(null);
+      setCurrentUser(null);
+
       try {
-        const storedToken = await loadAuthToken();
-        if (!storedToken) {
-          return;
+        const [storedToken, brandingRes] = await Promise.allSettled([
+          loadAuthToken(activeProfile.id),
+          apiClient.getBranding(),
+        ]);
+
+        if (!mounted) return;
+
+        if (brandingRes.status === "fulfilled") {
+          applyBranding(brandingRes.value);
+          setProfiles((prev) => {
+            const { profiles: next } = upsertServerProfile(prev, {
+              endpoint: activeProfile.endpoint,
+              name: activeProfile.name,
+              branding: brandingRes.value,
+            });
+            void saveServerProfilesState(next, activeProfile.id);
+            return next;
+          });
         }
 
-        authTokenRef.current = storedToken;
-        if (isMounted) {
-          setAuthToken(storedToken);
-        }
+        const token = storedToken.status === "fulfilled" ? storedToken.value : null;
+        if (!token) return;
 
+        authTokenRef.current = token;
+        setAuthToken(token);
         const user = await apiClient.getCurrentUser();
-        if (isMounted) {
+        if (mounted) {
           setCurrentUser(user);
-          setSuccessMessage("已恢复登录状态。");
         }
       } catch {
-        await clearAuthState();
-        if (isMounted) {
-          setErrorMessage("登录状态已失效，请重新登录。");
-        }
+        await clearAuthState(activeProfile.id);
       } finally {
-        if (isMounted) {
+        if (mounted) {
           setAuthRestoreState("idle");
         }
       }
     }
 
-    restoreAuth();
-
+    void restoreAuthAndBranding();
     return () => {
-      isMounted = false;
+      mounted = false;
     };
-  }, [apiClient, clearAuthState, isEditingEndpoint]);
+  }, [activeProfile?.id, apiClient, applyBranding, clearAuthState, isEditingEndpoint]);
 
-  const normalizedPreview = useMemo(() => normalizeServerEndpoint(endpointInput), [endpointInput]);
+  const handleUpdatePreferences = useCallback((patch: Partial<MobilePreferences>) => {
+    setPreferences((prev) => {
+      const next = { ...prev, ...patch };
+      if (patch.hapticsEnabled !== undefined) {
+        setHapticsEnabled(patch.hapticsEnabled);
+      }
+      void saveMobilePreferences(next);
+      return next;
+    });
+  }, []);
+
+  const normalizedPreview = useMemo(
+    () => normalizeServerEndpoint(endpointInput),
+    [endpointInput],
+  );
   const canSubmit = saveState !== "checking" && endpointInput.trim().length > 0;
-  const hasSavedEndpoint = savedEndpoint !== null && !isEditingEndpoint;
-
-  const handleEndpointChange = useCallback((value: string) => {
-    setEndpointInput(value);
-    setErrorMessage(null);
-    setSuccessMessage(null);
-    setSaveState("idle");
-  }, []);
-
-  const handleUseSavedEndpoint = useCallback(() => {
-    if (!savedEndpoint) {
-      return;
-    }
-
-    setEndpointInput(savedEndpoint);
-    setIsEditingEndpoint(false);
-    setErrorMessage(null);
-    setSuccessMessage("继续使用已保存的服务端地址。");
-    setSaveState("saved");
-  }, [savedEndpoint]);
-
-  const handleEditEndpoint = useCallback(() => {
-    setIsEditingEndpoint(true);
-    setCurrentUser(null);
-    setErrorMessage(null);
-    setSuccessMessage(null);
-    setSaveState("idle");
-  }, []);
 
   const handleSaveEndpoint = useCallback(async () => {
     setErrorMessage(null);
@@ -172,7 +215,6 @@ export default function App() {
     }
 
     setSaveState("checking");
-
     const health = await checkServerHealth(validation.endpoint);
     if (!health.ok) {
       setSaveState("idle");
@@ -181,79 +223,122 @@ export default function App() {
     }
 
     try {
-      const endpointChanged = savedEndpoint !== null && savedEndpoint !== health.endpoint;
-      await saveServerEndpoint(health.endpoint);
-      if (endpointChanged) {
-        await clearAuthState();
+      const tempClient = new MobileApiClient({ endpoint: health.endpoint });
+      const branding = await tempClient.getBranding().catch(() => null);
+      if (branding) {
+        applyBranding(branding);
       }
-      setEndpointInput(health.endpoint);
-      setSavedEndpoint(health.endpoint);
+
+      const { profiles: nextProfiles, profile } = upsertServerProfile(profiles, {
+        endpoint: health.endpoint,
+        branding,
+      });
+      await saveServerProfilesState(nextProfiles, profile.id);
+      setProfiles(nextProfiles);
+      setActiveProfileId(profile.id);
+      setEndpointInput(profile.endpoint);
       setIsEditingEndpoint(false);
       setSaveState("saved");
-      setSuccessMessage(
-        endpointChanged
-          ? "服务端地址已更新，请重新登录。"
-          : "连接检测通过，服务端地址已保存。",
-      );
+      setSuccessMessage("连接检测通过，服务端配置已保存。");
     } catch {
       setSaveState("idle");
       setErrorMessage("服务端可达，但保存到本地失败，请重试。");
     }
-  }, [clearAuthState, endpointInput, savedEndpoint]);
+  }, [applyBranding, endpointInput, profiles]);
 
-  const handleAuthenticated = useCallback(async (session: AuthSession) => {
-    await saveAuthToken(session.token);
-    authTokenRef.current = session.token;
-    setAuthToken(session.token);
-    setCurrentUser(session.user);
-    setErrorMessage(null);
-    setSuccessMessage("登录成功。");
-  }, []);
+  const handleSelectProfile = useCallback(
+    async (profile: ServerProfile) => {
+      await saveServerProfilesState(profiles, profile.id);
+      setActiveProfileId(profile.id);
+      setEndpointInput(profile.endpoint);
+      setIsEditingEndpoint(false);
+      setErrorMessage(null);
+      setSuccessMessage(null);
+      applyBranding(profile.brandTheme ?? null);
+    },
+    [applyBranding, profiles],
+  );
+
+  const handleRemoveProfile = useCallback(
+    async (profileId: string) => {
+      await clearAuthToken(profileId);
+      const next = removeServerProfile(profiles, profileId, activeProfileId);
+      await saveServerProfilesState(next.profiles, next.activeProfileId);
+      setProfiles(next.profiles);
+      setActiveProfileId(next.activeProfileId);
+      if (!next.activeProfileId) {
+        setIsEditingEndpoint(true);
+        setEndpointInput("");
+      }
+    },
+    [activeProfileId, profiles],
+  );
+
+  const handleAuthenticated = useCallback(
+    async (session: AuthSession) => {
+      if (!activeProfile) return;
+      await saveAuthToken(session.token, activeProfile.id);
+      authTokenRef.current = session.token;
+      setAuthToken(session.token);
+      setCurrentUser(session.user);
+      setErrorMessage(null);
+      setSuccessMessage(null);
+    },
+    [activeProfile],
+  );
 
   const handleLogout = useCallback(async () => {
     if (!apiClient) {
       await clearAuthState();
       return;
     }
-
     setIsLoggingOut(true);
     try {
       await apiClient.logout();
     } catch {
-      // 本地清理优先，服务端登出失败不阻塞用户退出。
     } finally {
       await clearAuthState();
       setIsLoggingOut(false);
-      setSuccessMessage("已退出登录。");
     }
   }, [apiClient, clearAuthState]);
 
   const content = (() => {
-    if (hasSavedEndpoint && apiClient && authRestoreState === "restoring") {
-      return <LoadingScreen message="正在恢复登录状态" theme={theme} />;
+    if (isLoadingStored) {
+      return <LoadingView message="正在初始化 AIChat Mobile…" />;
     }
 
-    if (hasSavedEndpoint && apiClient && currentUser && authToken) {
+    if (!isEditingEndpoint && activeProfile && apiClient && authRestoreState === "restoring") {
+      return <LoadingView message="正在验证服务端与登录状态…" />;
+    }
+
+    if (!isEditingEndpoint && activeProfile && apiClient && currentUser && authToken) {
       return (
-        <SignedInScreen
+        <WorkspaceScreen
+          activeServer={activeProfile}
           apiClient={apiClient}
-          endpoint={savedEndpoint}
           isLoggingOut={isLoggingOut}
-          onEditEndpoint={handleEditEndpoint}
-          onLogout={handleLogout}
-          theme={theme}
+          onLogout={() => void handleLogout()}
+          onOpenServers={() => setServerManagerOpen(true)}
+          onUpdatePreferences={handleUpdatePreferences}
+          preferences={preferences}
           user={currentUser}
         />
       );
     }
 
-    if (hasSavedEndpoint && apiClient) {
+    if (!isEditingEndpoint && activeProfile && apiClient) {
       return (
         <AuthScreen
           apiClient={apiClient}
-          endpoint={savedEndpoint}
+          endpoint={activeProfile.endpoint}
           onAuthenticated={handleAuthenticated}
-          onEditEndpoint={handleEditEndpoint}
+          onEditEndpoint={() => {
+            setEndpointInput(activeProfile.endpoint);
+            setIsEditingEndpoint(true);
+            setErrorMessage(null);
+            setSuccessMessage(null);
+          }}
+          serverName={activeProfile.name}
           theme={theme}
         />
       );
@@ -261,18 +346,26 @@ export default function App() {
 
     return (
       <EndpointScreen
+        activeProfileId={activeProfileId}
         canSubmit={canSubmit}
         endpointInput={endpointInput}
         errorMessage={errorMessage}
-        hasSavedEndpoint={hasSavedEndpoint}
-        isLoadingStoredEndpoint={isLoadingStoredEndpoint}
+        isLoadingStored={isLoadingStored}
         normalizedPreview={normalizedPreview}
-        onEndpointChange={handleEndpointChange}
-        onEditEndpoint={handleEditEndpoint}
-        onSaveEndpoint={handleSaveEndpoint}
-        onUseSavedEndpoint={handleUseSavedEndpoint}
+        onCancelEdit={
+          activeProfile ? () => setIsEditingEndpoint(false) : undefined
+        }
+        onEndpointChange={(val) => {
+          setEndpointInput(val);
+          setErrorMessage(null);
+          setSuccessMessage(null);
+          setSaveState("idle");
+        }}
+        onRemoveProfile={(id) => void handleRemoveProfile(id)}
+        onSaveEndpoint={() => void handleSaveEndpoint()}
+        onSelectProfile={(p) => void handleSelectProfile(p)}
         saveState={saveState}
-        savedEndpoint={savedEndpoint}
+        savedProfiles={profiles}
         successMessage={successMessage}
         theme={theme}
       />
@@ -280,20 +373,35 @@ export default function App() {
   })();
 
   return (
-    <SafeAreaProvider>
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
-        <StatusBar style={theme.statusBarStyle} />
-        {content}
-      </SafeAreaView>
-    </SafeAreaProvider>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+      <StatusBar style={theme.statusBarStyle} />
+      {content}
+      <ServerManagerSheet
+        activeProfileId={activeProfileId}
+        onAddNewServer={() => {
+          setEndpointInput("");
+          setSaveState("idle");
+          setErrorMessage(null);
+          setSuccessMessage(null);
+          setIsEditingEndpoint(true);
+        }}
+        onClose={() => setServerManagerOpen(false)}
+        onRemoveProfile={(id) => void handleRemoveProfile(id)}
+        onSelectProfile={(p) => void handleSelectProfile(p)}
+        profiles={profiles}
+        theme={theme}
+        visible={serverManagerOpen}
+      />
+    </SafeAreaView>
   );
 }
 
-function LoadingScreen({ message, theme }: { message: string; theme: ReturnType<typeof createTheme> }) {
+function LoadingView({ message }: { message: string }) {
+  const { theme } = useAppTheme();
   return (
-    <View style={styles.loadingScreen} accessibilityRole="progressbar">
-      <ActivityIndicator color={theme.primary} />
-      <Text style={[styles.panelBody, { color: theme.mutedForeground }]}>{message}</Text>
+    <View style={styles.loadingScreen}>
+      <ActivityIndicator color={theme.primary} size="large" />
+      <Text style={[styles.loadingText, { color: theme.mutedForeground }]}>{message}</Text>
     </View>
   );
 }
@@ -309,8 +417,7 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     rowGap: spacing.md,
   },
-  panelBody: {
-    fontSize: 16,
-    lineHeight: 24,
+  loadingText: {
+    fontSize: 14,
   },
 });

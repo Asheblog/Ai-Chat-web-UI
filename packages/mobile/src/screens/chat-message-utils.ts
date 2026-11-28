@@ -5,6 +5,7 @@ import {
   shouldAppendReasoningDelta,
   upsertToolEventFromChunk,
 } from "@aichat/shared/stream-message-reducer";
+import type { GeneratedImage } from "@aichat/shared/chat-stream-contract";
 import { mergeAndSortToolEvents } from "@aichat/shared/tool-events";
 
 import type { ChatMessage, ChatStreamChunk } from "../chat-types";
@@ -78,6 +79,28 @@ export function appendAssistantToolCall(
     return {
       ...message,
       toolEvents: mergeAndSortToolEvents(toolEvents),
+      streamStatus: "streaming",
+    };
+  });
+}
+
+export function appendAssistantGeneratedImages(
+  messages: ChatMessage[],
+  targetId: number | string,
+  images: GeneratedImage[],
+) {
+  if (!Array.isArray(images) || images.length === 0) {
+    return messages;
+  }
+
+  return messages.map((message) => {
+    if (message.id !== targetId) {
+      return message;
+    }
+    const existing = message.generatedImages ?? [];
+    return {
+      ...message,
+      generatedImages: [...existing, ...images],
       streamStatus: "streaming",
     };
   });

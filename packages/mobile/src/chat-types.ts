@@ -1,5 +1,7 @@
+import type { GeneratedImage, ChatStreamChunk } from "@aichat/shared/chat-stream-contract";
 import type { ToolEvent } from "@aichat/shared/tool-events";
 import type { Pagination } from "@aichat/shared/api-contract";
+import type { ReasoningEffort } from "./types/mobile";
 
 export type ChatMessageRole = "user" | "assistant" | "system" | "compressedGroup";
 
@@ -11,6 +13,9 @@ export type ChatMessage = {
   clientMessageId: string | null;
   reasoning?: string | null;
   toolEvents?: ToolEvent[];
+  images?: string[];
+  generatedImages?: GeneratedImage[];
+  replyToMessageId?: number | null;
   streamStatus?: string | null;
   streamError?: string | null;
   createdAt: string;
@@ -23,14 +28,24 @@ export type MessageListPayload = {
   pagination: MessagePagination;
 };
 
-// 流式 chunk 类型已收敛至 @aichat/shared/chat-stream-contract（web / mobile 共用）。
-// 相比旧本地 union 子集，现支持 tool_call / image / artifact / usage / quota 等全量事件。
-export type { ChatStreamChunk } from "@aichat/shared/chat-stream-contract";
+export type { ChatStreamChunk };
 
 export type StreamMessagePayload = {
   sessionId: number;
-  content: string;
+  content?: string;
   clientMessageId: string;
+  replyToMessageId?: number;
+  images?: Array<{ data: string; mime: string }>;
   reasoningEnabled?: boolean;
+  reasoningEffort?: ReasoningEffort;
   contextEnabled?: boolean;
+  skills?: {
+    builtin?: string[];
+    enabled?: Array<{
+      skillId: number;
+      versionId: number;
+      overrides?: Record<string, unknown>;
+    }>;
+  };
+  knowledgeBaseIds?: number[];
 };

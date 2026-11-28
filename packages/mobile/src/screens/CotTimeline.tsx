@@ -18,8 +18,8 @@ import {
 } from "@aichat/shared/cot-timeline";
 import { resolveEventStatus, type ToolEvent } from "@aichat/shared/tool-events";
 
-import type { AppTheme } from "../theme";
-import { spacing } from "../theme";
+import type { AppTheme } from "../theme/tokens";
+import { radii, spacing } from "../theme/tokens";
 
 type CotTimelineProps = {
   reasoningRaw: string;
@@ -59,10 +59,6 @@ function useLocalExpand(
   return { expanded, setExpanded, toggle };
 }
 
-/**
- * 统一 CoT 时间轴：每个 reasoning / tool / toolGroup 节点都是平铺兄弟卡片，
- * 左侧有时间轴轨道，顶部有统一展开/折叠开关；与 Web `CotTimeline` 使用同一 shared 节点构建器。
- */
 export function CotTimeline({
   reasoningRaw,
   toolEvents,
@@ -90,38 +86,41 @@ export function CotTimeline({
   const clearMasterOverride = () => setMasterExpanded(null);
 
   return (
-    <View style={styles.section}>
+    <View style={[styles.section, { backgroundColor: theme.surfaceSubtle, borderColor: theme.border }]}>
       <View style={styles.masterHeader}>
-        <Text style={[styles.masterTitle, { color: theme.mutedForeground }]}>
-          过程时间轴 · {nodes.length} 步
-        </Text>
+        <View style={styles.masterTitleWrap}>
+          <MaterialCommunityIcons color={theme.signalText} name="star-four-points" size={14} />
+          <Text style={[styles.masterTitle, { color: theme.signalText }]}>
+            过程时间轴 · {nodes.length} 步
+          </Text>
+        </View>
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ selected: masterExpanded === true }}
           onPress={() => setMasterExpanded((current) => current !== true)}
-          style={[styles.masterButton, { borderColor: theme.border }]}
+          style={[styles.masterButton, { borderColor: theme.border, backgroundColor: theme.surface }]}
         >
           <MaterialCommunityIcons
             color={theme.mutedForeground}
-            name="unfold-more-horizontal"
-            size={16}
+            name={masterExpanded === true ? "chevron-up" : "chevron-down"}
+            size={15}
           />
           <Text style={[styles.masterButtonText, { color: theme.mutedForeground }]}>
-            {masterExpanded === true ? "全部折叠" : "全部展开"}
+            {masterExpanded === true ? "全部收起" : "全部展开"}
           </Text>
         </Pressable>
       </View>
 
       <View style={styles.timelineBody}>
-        <View pointerEvents="none" style={[styles.railLine, { backgroundColor: theme.border }]} />
+        <View pointerEvents="none" style={[styles.railLine, { backgroundColor: theme.borderStrong }]} />
         {nodes.map((node, index) => {
           const key = cotTimelineNodeKey(node, index);
-          const dotColor = resolveDotColor(node);
+          const dotColor = resolveDotColor(node, theme);
           if (node.type === "reasoning") {
             return (
               <View key={key} style={styles.nodeRow}>
                 <View style={styles.railColumn}>
-                  <View style={[styles.nodeDot, { backgroundColor: dotColor, borderColor: theme.border }]} />
+                  <View style={[styles.nodeDot, { backgroundColor: dotColor, borderColor: theme.surfaceSubtle }]} />
                 </View>
                 <View style={styles.nodeCard}>
                   <CotReasoningCard
@@ -140,7 +139,7 @@ export function CotTimeline({
             return (
               <View key={key} style={styles.nodeRow}>
                 <View style={styles.railColumn}>
-                  <View style={[styles.nodeDot, { backgroundColor: dotColor, borderColor: theme.border }]} />
+                  <View style={[styles.nodeDot, { backgroundColor: dotColor, borderColor: theme.surfaceSubtle }]} />
                 </View>
                 <View style={styles.nodeCard}>
                   <CotToolGroupCard
@@ -156,7 +155,7 @@ export function CotTimeline({
           return (
             <View key={key} style={styles.nodeRow}>
               <View style={styles.railColumn}>
-                <View style={[styles.nodeDot, { backgroundColor: dotColor, borderColor: theme.border }]} />
+                <View style={[styles.nodeDot, { backgroundColor: dotColor, borderColor: theme.surfaceSubtle }]} />
               </View>
               <View style={styles.nodeCard}>
                 <CotToolCard
@@ -174,12 +173,12 @@ export function CotTimeline({
   );
 }
 
-function resolveDotColor(node: CotTimelineNode) {
-  if (node.type === "reasoning") return "#F59E0B";
+function resolveDotColor(node: CotTimelineNode, theme: AppTheme) {
+  if (node.type === "reasoning") return theme.warning;
   const status = node.type === "toolGroup" ? node.status : resolveEventStatus(node.event);
-  if (status === "running" || status === "pending") return "#3B82F6";
-  if (status === "error" || status === "rejected" || status === "aborted") return "#FB7185";
-  return "#34D399";
+  if (status === "running" || status === "pending") return theme.primary;
+  if (status === "error" || status === "rejected" || status === "aborted") return theme.danger;
+  return theme.success;
 }
 
 function CotReasoningCard({
@@ -202,7 +201,7 @@ function CotReasoningCard({
   if (!text) return null;
 
   return (
-    <View style={[styles.card, { backgroundColor: theme.inputBackground, borderColor: theme.border }]}>
+    <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded }}
@@ -213,12 +212,12 @@ function CotReasoningCard({
         style={styles.cardHeaderPress}
       >
         <View style={styles.cardHeader}>
-          <MaterialCommunityIcons color="#F59E0B" name="lightbulb-on-outline" size={18} />
+          <MaterialCommunityIcons color={theme.warning} name="lightbulb-on-outline" size={16} />
           <Text style={[styles.cardTitle, { color: theme.foreground }]}>深度思考</Text>
           {isStreamingTail ? <ActivityIndicator color={theme.primary} size="small" /> : null}
         </View>
         <MaterialCommunityIcons
-          color={theme.mutedForeground}
+          color={theme.tertiaryForeground}
           name={expanded ? "chevron-up" : "chevron-down"}
           size={18}
         />
@@ -272,7 +271,7 @@ function CotToolCard({
           <MaterialCommunityIcons
             color={theme.primary}
             name={resolveIconName(display.iconKey)}
-            size={18}
+            size={16}
           />
           <Text numberOfLines={2} style={[styles.cardTitle, { color: theme.foreground }]}>
             {title}
@@ -284,12 +283,12 @@ function CotToolCard({
           </View>
         </View>
         {event.summary && !expanded ? (
-          <Text numberOfLines={1} style={[styles.summaryText, { color: theme.mutedForeground }]}>
+          <Text numberOfLines={1} style={[styles.summaryText, { color: theme.tertiaryForeground }]}>
             {event.summary}
           </Text>
         ) : null}
         <MaterialCommunityIcons
-          color={theme.mutedForeground}
+          color={theme.tertiaryForeground}
           name={expanded ? "chevron-up" : "chevron-down"}
           size={18}
         />
@@ -332,16 +331,18 @@ function CotToolGroupCard({
           <MaterialCommunityIcons
             color={theme.primary}
             name={resolveIconName(display.iconKey)}
-            size={18}
+            size={16}
           />
           <Text style={[styles.cardTitle, { color: theme.foreground }]}>{display.label}</Text>
-          <Text style={[styles.groupCount, { color: theme.mutedForeground }]}>
-            {node.events.length} 个调用
+          <Text style={[styles.groupCount, { color: theme.tertiaryForeground }]}>
+            {node.events.length} 次调用
           </Text>
         </View>
-        <Text style={[styles.summaryText, { color: theme.mutedForeground }]}>{node.summaryText}</Text>
+        <Text numberOfLines={1} style={[styles.summaryText, { color: theme.tertiaryForeground }]}>
+          {node.summaryText}
+        </Text>
         <MaterialCommunityIcons
-          color={theme.mutedForeground}
+          color={theme.tertiaryForeground}
           name={expanded ? "chevron-up" : "chevron-down"}
           size={18}
         />
@@ -372,7 +373,7 @@ function ToolResultBody({ event, theme }: { event: ToolEvent; theme: AppTheme })
     stringifyPayload(event.summary);
 
   if (!payload) {
-    return <Text style={[styles.emptyResult, { color: theme.mutedForeground }]}>暂无结果详情</Text>;
+    return <Text style={[styles.emptyResult, { color: theme.tertiaryForeground }]}>暂无结果详情</Text>;
   }
 
   return (
@@ -385,9 +386,7 @@ function ToolResultBody({ event, theme }: { event: ToolEvent; theme: AppTheme })
 }
 
 function stringifyPayload(value: unknown): string | null {
-  if (value == null) {
-    return null;
-  }
+  if (value == null) return null;
   if (typeof value === "string") {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : null;
@@ -430,36 +429,24 @@ function resolveIconName(iconKey: ReturnType<typeof resolveToolDisplay>["iconKey
 }
 
 function resolveStatusStyle(status: ToolEvent["status"], theme: AppTheme) {
-  if (status === "success") {
-    return { backgroundColor: theme.successSurface };
-  }
-  if (status === "running") {
-    return { backgroundColor: theme.primarySurface };
-  }
-  if (status === "error") {
-    return { backgroundColor: theme.dangerSurface };
-  }
-  if (status === "pending") {
-    return { backgroundColor: theme.primarySurface };
-  }
-  return { backgroundColor: theme.inputBackground };
+  if (status === "success") return { backgroundColor: theme.successSurface };
+  if (status === "running" || status === "pending") return { backgroundColor: theme.primarySurface };
+  if (status === "error") return { backgroundColor: theme.dangerSurface };
+  return { backgroundColor: theme.surfaceSubtle };
 }
 
 function resolveStatusTextStyle(status: ToolEvent["status"], theme: AppTheme) {
-  if (status === "success") {
-    return { color: theme.success };
-  }
-  if (status === "error") {
-    return { color: theme.danger };
-  }
-  if (status === "running" || status === "pending") {
-    return { color: theme.primary };
-  }
+  if (status === "success") return { color: theme.success };
+  if (status === "error") return { color: theme.danger };
+  if (status === "running" || status === "pending") return { color: theme.signalText };
   return { color: theme.mutedForeground };
 }
 
 const styles = StyleSheet.create({
   section: {
+    borderRadius: radii.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: spacing.md,
     rowGap: spacing.sm,
   },
   masterHeader: {
@@ -467,23 +454,26 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
+  masterTitleWrap: {
+    alignItems: "center",
+    columnGap: 6,
+    flexDirection: "row",
+  },
   masterTitle: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
   },
   masterButton: {
     alignItems: "center",
-    borderRadius: 6,
+    borderRadius: radii.pill,
     borderWidth: StyleSheet.hairlineWidth,
-    columnGap: 4,
+    columnGap: 3,
     flexDirection: "row",
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 4,
   },
   masterButtonText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "600",
   },
   timelineBody: {
@@ -508,8 +498,8 @@ const styles = StyleSheet.create({
     width: 16,
   },
   nodeDot: {
-    borderWidth: 2,
     borderRadius: 4,
+    borderWidth: 2,
     height: 8,
     width: 8,
   },
@@ -517,7 +507,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   card: {
-    borderRadius: 8,
+    borderRadius: radii.sm,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",
   },
@@ -526,8 +516,9 @@ const styles = StyleSheet.create({
     columnGap: spacing.sm,
     flexDirection: "row",
     justifyContent: "space-between",
-    minHeight: 44,
-    padding: spacing.md,
+    minHeight: 42,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
   },
   cardHeader: {
     alignItems: "center",
@@ -538,18 +529,18 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     flexShrink: 1,
-    fontSize: 14,
-    fontWeight: "800",
-    lineHeight: 20,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 19,
   },
   reasoningText: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: 13,
+    lineHeight: 20,
     padding: spacing.md,
   },
   statusBadge: {
-    borderRadius: 999,
+    borderRadius: radii.pill,
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
@@ -560,11 +551,11 @@ const styles = StyleSheet.create({
   summaryText: {
     flexShrink: 1,
     fontSize: 12,
-    lineHeight: 18,
+    lineHeight: 17,
   },
   groupCount: {
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 11,
+    lineHeight: 17,
   },
   cardBody: {
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -572,7 +563,7 @@ const styles = StyleSheet.create({
     rowGap: spacing.sm,
   },
   resultScroll: {
-    maxHeight: 220,
+    maxHeight: 200,
   },
   resultText: {
     fontFamily: "monospace",
