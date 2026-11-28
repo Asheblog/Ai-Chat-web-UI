@@ -1,7 +1,8 @@
 name: Desktop Release
 
 # 正式发布：desktop-vX.Y.Z（与镜像 v* Tag 相互独立），版本必须等于 packages/desktop/package.json。
-# 两个平台分别在 desktop-signing-* Environment 中签名并校验通过后，由 publish 任务一次性创建/更新同一个 GitHub Release。
+# 两个平台在 desktop-signing-* Environment（只允许 desktop-v* Tag 部署）中构建，由 publish 任务一次性创建/更新同一个 GitHub Release。
+# 当前产物不做代码签名与公证：Windows 会触发 SmartScreen，macOS 需在「系统设置 → 隐私与安全性」放行；恢复签名见 ADR 0050。
 on:
   push:
     tags:
@@ -96,29 +97,17 @@ jobs:
           echo "release $tag (version $version) validated at $tag_commit"
 
   windows:
-    name: Windows x64 signed installer
+    name: Windows x64 installer (unsigned)
     needs: validate
     runs-on: windows-2022
     timeout-minutes: 45
+    # 环境保留「只有 desktop-v* Tag 能部署」的门禁；签名凭据暂不配置，恢复签名见 ADR 0050。
     environment: desktop-signing-windows
     steps:
       - name: Checkout validated commit
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.validate.outputs.sha }}
-
-      - name: Preflight Windows signing secrets
-        shell: pwsh
-        env:
-          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_LINK)) {
-            throw "desktop-signing-windows environment secret WIN_CSC_LINK is missing"
-          }
-          if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_KEY_PASSWORD)) {
-            throw "desktop-signing-windows environment secret WIN_CSC_KEY_PASSWORD is missing"
-          }
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -137,44 +126,11 @@ jobs:
       - name: Desktop tests
         run: pnpm --filter @aichat/desktop test
 
-      - name: Build signed installer
+      - name: Build installer
         env:
-          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          # 不签名：显式关闭证书自动发现，避免 runner 上残留证书干扰。
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: pnpm --filter @aichat/desktop dist:win
-
-      - name: Verify Authenticode signatures
-        shell: pwsh
-        run: |
-          $installer = Get-ChildItem -Path "packages/desktop/dist" -Filter "*.exe" -File |
-            Select-Object -First 1
-          if (-not $installer) {
-            throw "no *.exe installer found in packages/desktop/dist"
-          }
-          # NSIS 安装包与它实际装载的应用 exe 都必须有有效、带时间戳的签名。
-          $appExe = Get-ChildItem -Path "packages/desktop/dist/win-unpacked" -Filter "*.exe" -File -ErrorAction SilentlyContinue |
-            Select-Object -First 1
-          if (-not $appExe) {
-            throw "no packaged application exe found under packages/desktop/dist/win-unpacked"
-          }
-          $signatures = @()
-          foreach ($file in @($installer, $appExe)) {
-            $signature = Get-AuthenticodeSignature -FilePath $file.FullName
-            if ($signature.Status -ne 'Valid') {
-              throw "$($file.Name) signature is not valid: $($signature.Status) $($signature.StatusMessage)"
-            }
-            if (-not $signature.SignerCertificate) {
-              throw "$($file.Name) has no signer certificate"
-            }
-            if (-not $signature.TimeStamperCertificate) {
-              throw "$($file.Name) signature is not timestamped"
-            }
-            $signatures += $signature
-            Write-Host "$($file.Name) signed by: $($signature.SignerCertificate.Subject)"
-          }
-          if ($signatures[0].SignerCertificate.Thumbprint -ne $signatures[1].SignerCertificate.Thumbprint) {
-            throw "installer and packaged application exe are signed by different certificates"
-          }
 
       - name: Verify Windows x64 payload
         shell: pwsh
@@ -211,7 +167,7 @@ jobs:
             (New-Object System.Text.UTF8Encoding($false))
           )
 
-      - name: Upload signed installer
+      - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
           name: aichat-desktop-windows-x64
@@ -221,34 +177,17 @@ jobs:
           if-no-files-found: error
 
   macos:
-    name: macOS Apple Silicon signed DMG
+    name: macOS Apple Silicon DMG (unsigned)
     needs: validate
     runs-on: macos-15
     timeout-minutes: 60
+    # 同上：环境只作为 Tag 门禁，签名与公证凭据暂不配置。
     environment: desktop-signing-macos
     steps:
       - name: Checkout validated commit
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.validate.outputs.sha }}
-
-      - name: Preflight macOS signing secrets
-        shell: bash
-        env:
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          set -euo pipefail
-          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
-            value="${!name:-}"
-            if [ -z "$value" ]; then
-              echo "::error::desktop-signing-macos environment secret ${name} is missing"
-              exit 1
-            fi
-          done
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -267,17 +206,13 @@ jobs:
       - name: Desktop tests
         run: pnpm --filter @aichat/desktop test
 
-      - name: Build signed and notarized DMG
+      - name: Build DMG
         env:
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        # pnpm 8 不会吞掉 `--`，会原样传给 electron-builder；这里直接追加配置覆盖参数。
-        run: pnpm --filter @aichat/desktop dist:mac -c.mac.notarize=true
+          # 不签名、不公证：显式关闭证书自动发现，避免 runner 上残留证书干扰。
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: pnpm --filter @aichat/desktop dist:mac
 
-      - name: Verify signature and notarization
+      - name: Verify DMG and payload architecture
         shell: bash
         run: |
           set -euo pipefail
@@ -286,12 +221,6 @@ jobs:
             echo "::error::no .app bundle found in packages/desktop/dist"
             exit 1
           fi
-          codesign --verify --deep --strict --verbose=2 "$app_path"
-          sign_info="$(codesign -dv --verbose=4 "$app_path" 2>&1)"
-          printf '%s\n' "$sign_info"
-          printf '%s\n' "$sign_info" | grep -q 'Authority=Developer ID Application'
-          printf '%s\n' "$sign_info" | grep -Eq 'TeamIdentifier=[A-Z0-9]+'
-          xcrun stapler validate "$app_path"
 
           exec_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app_path/Contents/Info.plist")"
           archs="$(lipo -archs "$app_path/Contents/MacOS/$exec_name")"
@@ -318,7 +247,7 @@ jobs:
           base="$(basename "$dmg")"
           ( cd packages/desktop/dist && shasum -a 256 "$base" > "$base.sha256" )
 
-      - name: Upload signed DMG
+      - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
           name: aichat-desktop-macos-arm64

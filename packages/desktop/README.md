@@ -7,7 +7,7 @@
 
 ## 下载与本地构建
 
-从 [Desktop CI](https://github.com/Asheblog/Ai-Chat-web-UI/actions/workflows/desktop-ci.yml) 的运行详情下载对应平台的 Artifact，解压后打开安装包。测试包没有正式签名，仅用于验证。Windows 双击 `.exe` 并选择目录；macOS 打开 `.dmg` 后将应用拖到「应用程序」。Windows SmartScreen 或 macOS Gatekeeper 拦截时，优先使用 [GitHub Releases](https://github.com/Asheblog/Ai-Chat-web-UI/releases) 的签名版。
+从 [Desktop CI](https://github.com/Asheblog/Ai-Chat-web-UI/actions/workflows/desktop-ci.yml) 的运行详情或 [GitHub Releases](https://github.com/Asheblog/Ai-Chat-web-UI/releases) 下载对应平台的安装包，解压后打开。当前产物未做代码签名：Windows 双击 `.exe` 并选择目录，SmartScreen 提示时点「更多信息 → 仍要运行」；macOS 打开 `.dmg` 后将应用拖到「应用程序」，首次启动若被拦下，去「系统设置 → 隐私与安全性」点「仍要打开」。
 
 在仓库根目录使用 Node.js 22 LTS（≥22.12）与 pnpm 8.15.0：
 
@@ -23,9 +23,11 @@ pnpm --filter @aichat/desktop dist:mac  # 在 macOS 构建 Apple Silicon DMG
 
 ## 正式发布
 
-[Desktop Release](../../.github/workflows/desktop-release.yml) 只接受指向 main 已合入提交、且与 [桌面包版本](package.json) 相同的 `desktop-vX.Y.Z` Tag。发布前由维护者配置下列 GitHub Environments；Windows 安装器及其中的应用须通过签名与时间戳校验；macOS 须通过 DMG 完整性、盘内应用签名和公证凭证校验。两端都通过才发布。
+[Desktop Release](../../.github/workflows/desktop-release.yml) 只接受指向 main 已合入提交、且与 [桌面包版本](package.json) 相同的 `desktop-vX.Y.Z` Tag。两个平台在 `desktop-signing-*` Environment（只允许 `desktop-v*` Tag 部署）中构建；校验安装包存在、Windows payload 为 x64、macOS payload 为 arm64 且 DMG 完整后，由 publish 任务一次性创建或更新同一个 Release。
 
-| Environment | Secrets |
+当前不签名也不公证，因此不做代码签名与公证校验（见 [ADR 0050](../../docs/adr/0050-desktop-release-ships-unsigned-artifacts.md)）。两个 Environment 与下表 7 个 Secret 名称已保留在仓库设置里、凭据留空；拿到证书后配好这些值，并还原工作流里的签名与校验步骤，即可回到签名发布。
+
+| Environment | 恢复签名时配置的 Secrets |
 | --- | --- |
 | `desktop-signing-windows` | `WIN_CSC_LINK`（base64 PFX）、`WIN_CSC_KEY_PASSWORD` |
 | `desktop-signing-macos` | `CSC_LINK`（base64 Developer ID Application .p12）、`CSC_KEY_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID` |
