@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -23,6 +23,93 @@ import { useAppTheme } from "../theme/ThemeProvider";
 import { radii, spacing } from "../theme/tokens";
 import type { AppInfo, MobilePreferences, ServerProfile } from "../types/mobile";
 
+export type PersonalSettingsStatus = "loading" | "ready" | "error";
+
+export type PersonalSettingsState = {
+  /** 每次读取尝试递增的作用域；切换服务器或重试后，旧请求的结果会被丢弃。 */
+  scope: number;
+  status: PersonalSettingsStatus;
+  prompt: string;
+  contextEnabled: boolean;
+  error: string | null;
+  feedback: string | null;
+  saving: boolean;
+};
+
+export type PersonalSettingsAction =
+  | { type: "reload"; scope: number }
+  | { type: "loaded"; scope: number; prompt: string; contextEnabled: boolean }
+  | { type: "failed"; scope: number; message: string }
+  | { type: "editPrompt"; value: string }
+  | { type: "setContextEnabled"; value: boolean }
+  | { type: "saveStarted"; scope: number }
+  | { type: "saveSucceeded"; scope: number; message: string }
+  | { type: "saveFailed"; scope: number; message: string };
+
+export const initialPersonalSettingsState: PersonalSettingsState = {
+  scope: 0,
+  status: "loading",
+  prompt: "",
+  contextEnabled: true,
+  error: null,
+  feedback: null,
+  saving: false,
+};
+
+/** 只有远程个人设置读取成功且当前没有保存请求时，才允许提交，避免用默认值覆盖服务端。 */
+export function canSubmitPersonalSettings(state: PersonalSettingsState): boolean {
+  return state.status === "ready" && !state.saving;
+}
+
+export function personalSettingsReducer(
+  state: PersonalSettingsState,
+  action: PersonalSettingsAction,
+): PersonalSettingsState {
+  switch (action.type) {
+    case "reload":
+      return {
+        ...state,
+        scope: action.scope,
+        status: "loading",
+        error: null,
+        feedback: null,
+        saving: false,
+      };
+    case "loaded":
+      if (action.scope !== state.scope) return state;
+      return {
+        ...state,
+        status: "ready",
+        prompt: action.prompt,
+        contextEnabled: action.contextEnabled,
+        error: null,
+        feedback: null,
+      };
+    case "failed":
+      if (action.scope !== state.scope) return state;
+      return { ...state, status: "error", error: action.message, saving: false };
+    case "editPrompt":
+      if (state.status !== "ready" || state.saving) return state;
+      return { ...state, prompt: action.value, feedback: null };
+    case "setContextEnabled":
+      if (state.status !== "ready" || state.saving) return state;
+      return { ...state, contextEnabled: action.value, feedback: null };
+    case "saveStarted":
+      if (action.scope !== state.scope || state.status !== "ready" || state.saving) {
+        return state;
+      }
+      return { ...state, saving: true, error: null, feedback: null };
+    case "saveSucceeded":
+      if (action.scope !== state.scope) return state;
+      return { ...state, saving: false, error: null, feedback: action.message };
+    case "saveFailed":
+      if (action.scope !== state.scope) return state;
+      return { ...state, saving: false, error: action.message };
+    default:
+      return state;
+  }
+}
+
 export function SettingsScreen({
   apiClient,
   user,
@@ -46,49 +133,78 @@ export function SettingsScreen({
 }) {
   const { theme, themeMode, setThemeMode, syncServerBrand, setSyncServerBrand } = useAppTheme();
 
-  const [personalPrompt, setPersonalPrompt] = useState("");
-  const [contextEnabled, setContextEnabled] = useState(true);
-  const [loadingPersonal, setLoadingPersonal] = useState(true);
-  const [savingPersonal, setSavingPersonal] = useState(false);
+  const [personal, dispatchPersonal] = useReducer(
+    personalSettingsReducer,
+    initialPersonalSettingsState,
+  );
+  const personalScopeRef = useRef(0);
+  const saveInFlightRef = useRef(false);
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  const loadPersonalSettings = useCallback(async () => {
+    const scope = personalScopeRef.current + 1;
+    personalScopeRef.current = scope;
+    dispatchPersonal({ type: "reload", scope });
+    try {
+      const value = await apiClient.getPersonalSettings();
+      dispatchPersonal({
+        type: "loaded",
+        scope,
+        prompt: value.personal_prompt ?? "",
+        contextEnabled: value.context_enabled ?? true,
+      });
+    } catch (error) {
+      dispatchPersonal({
+        type: "failed",
+        scope,
+        message: error instanceof Error ? error.message : "读取服务端个人设置失败。",
+      });
+    }
+  }, [apiClient]);
+
+  useEffect(() => {
+    void loadPersonalSettings();
+    return () => {
+      // 切换服务器或卸载时作废仍在进行中的读取，避免旧响应落到新服务器。
+      personalScopeRef.current += 1;
+    };
+  }, [loadPersonalSettings]);
 
   useEffect(() => {
     let active = true;
-    Promise.allSettled([apiClient.getPersonalSettings(), apiClient.getAppInfo()]).then(
-      ([personalRes, appInfoRes]) => {
-        if (!active) return;
-        if (personalRes.status === "fulfilled") {
-          setPersonalPrompt(personalRes.value.personal_prompt ?? "");
-          setContextEnabled(personalRes.value.context_enabled ?? true);
-        }
-        if (appInfoRes.status === "fulfilled") {
-          setAppInfo(appInfoRes.value);
-        }
-        setLoadingPersonal(false);
-      },
-    );
+    apiClient
+      .getAppInfo()
+      .then((info) => {
+        if (active) setAppInfo(info);
+      })
+      .catch(() => {});
     return () => {
       active = false;
     };
   }, [apiClient]);
 
-  const handleSavePersonal = async () => {
-    setSavingPersonal(true);
-    setStatusMessage(null);
+  const handleSavePersonal = useCallback(async () => {
+    if (!canSubmitPersonalSettings(personal) || saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
+    const scope = personal.scope;
+    dispatchPersonal({ type: "saveStarted", scope });
     try {
       await apiClient.updatePersonalSettings({
-        personal_prompt: personalPrompt.trim() || null,
-        context_enabled: contextEnabled,
+        personal_prompt: personal.prompt.trim() || null,
+        context_enabled: personal.contextEnabled,
       });
       await successTap();
-      setStatusMessage("个人设置已同步到服务端。");
+      dispatchPersonal({ type: "saveSucceeded", scope, message: "个人设置已同步到服务端。" });
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "同步个人设置失败。");
+      dispatchPersonal({
+        type: "saveFailed",
+        scope,
+        message: error instanceof Error ? error.message : "同步个人设置失败。",
+      });
     } finally {
-      setSavingPersonal(false);
+      saveInFlightRef.current = false;
     }
-  };
+  }, [apiClient, personal]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -142,18 +258,50 @@ export function SettingsScreen({
           <Text style={[styles.sectionTitle, { color: theme.mutedForeground }]}>
             服务端个人设置同步
           </Text>
-          {loadingPersonal ? (
+          {personal.status === "loading" ? (
             <SurfaceCard theme={theme}>
-              <ActivityIndicator color={theme.primary} />
+              <View style={styles.promptWrap}>
+                <ActivityIndicator color={theme.primary} />
+                <Text style={[styles.statusText, { color: theme.tertiaryForeground }]}>
+                  正在读取服务端个人设置…
+                </Text>
+              </View>
+            </SurfaceCard>
+          ) : personal.status === "error" ? (
+            <SurfaceCard theme={theme}>
+              <View style={styles.promptWrap}>
+                <Text
+                  accessibilityRole="alert"
+                  style={[styles.promptLabel, { color: theme.danger }]}
+                >
+                  读取服务端个人设置失败
+                </Text>
+                <Text style={[styles.statusText, { color: theme.tertiaryForeground }]}>
+                  {personal.error ?? "请检查网络与登录状态。"}
+                </Text>
+                <Text style={[styles.statusText, { color: theme.tertiaryForeground }]}>
+                  为避免用默认值覆盖服务端设置，保存已禁用；重试成功后才可提交。
+                </Text>
+                <Button
+                  icon="refresh"
+                  label="重新读取"
+                  onPress={() => void loadPersonalSettings()}
+                  theme={theme}
+                  variant="secondary"
+                />
+              </View>
             </SurfaceCard>
           ) : (
             <View style={styles.section}>
               <SwitchRow
-                onValueChange={setContextEnabled}
+                disabled={personal.saving}
+                onValueChange={(next) =>
+                  dispatchPersonal({ type: "setContextEnabled", value: next })
+                }
                 subtitle="允许对话携带个人上下文记忆"
                 theme={theme}
                 title="上下文记忆 (Context Enabled)"
-                value={contextEnabled}
+                value={personal.contextEnabled}
               />
               <SurfaceCard theme={theme}>
                 <View style={styles.promptWrap}>
@@ -161,8 +309,9 @@ export function SettingsScreen({
                     个人默认提示词 (Personal Prompt)
                   </Text>
                   <TextInput
+                    editable={!personal.saving}
                     multiline
-                    onChangeText={setPersonalPrompt}
+                    onChangeText={(value) => dispatchPersonal({ type: "editPrompt", value })}
                     placeholder="输入你希望全局生效的个人偏好提示词…"
                     placeholderTextColor={theme.tertiaryForeground}
                     style={[
@@ -173,20 +322,28 @@ export function SettingsScreen({
                         color: theme.foreground,
                       },
                     ]}
-                    value={personalPrompt}
+                    value={personal.prompt}
                   />
                   <Button
-                    disabled={savingPersonal}
+                    disabled={!canSubmitPersonalSettings(personal)}
                     icon="cloud-upload-outline"
                     label="保存并同步到服务端"
-                    loading={savingPersonal}
-                    onPress={handleSavePersonal}
+                    loading={personal.saving}
+                    onPress={() => void handleSavePersonal()}
                     theme={theme}
                     variant="soft"
                   />
-                  {statusMessage ? (
+                  {personal.feedback ? (
                     <Text style={[styles.statusText, { color: theme.signalText }]}>
-                      {statusMessage}
+                      {personal.feedback}
+                    </Text>
+                  ) : null}
+                  {personal.error ? (
+                    <Text
+                      accessibilityRole="alert"
+                      style={[styles.statusText, { color: theme.danger }]}
+                    >
+                      {personal.error}
                     </Text>
                   ) : null}
                 </View>

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "./chat-types";
 import {
   appendAssistantGeneratedImages,
+  findReplyTargetUserId,
   appendAssistantReasoning,
   appendAssistantToolCall,
   normalizeMessage,
@@ -104,5 +105,37 @@ describe("chat-message-utils", () => {
     expect(updated[0].generatedImages).toEqual([
       { url: "/api/artifacts/1.png", revisedPrompt: "Ink & Mist mountain" },
     ]);
+  });
+
+  it("重新生成时定位最近一条已保存的用户消息", () => {
+    const messages: ChatMessage[] = [
+      { ...baseMessage, id: 11, role: "user", content: "第一问" },
+      { ...baseMessage, id: 12, role: "assistant", content: "第一答" },
+      { ...baseMessage, id: "group:1", role: "compressedGroup", content: "压缩历史" },
+      { ...baseMessage, id: 13, role: "user", content: "第二问" },
+      { ...baseMessage, id: 14, role: "assistant", content: "第二答" },
+    ];
+
+    expect(findReplyTargetUserId(messages, 14)).toBe(13);
+    expect(findReplyTargetUserId(messages, 12)).toBe(11);
+    expect(findReplyTargetUserId(messages, "local-assistant-1")).toBeNull();
+    expect(findReplyTargetUserId([{ ...baseMessage, id: 21, role: "assistant", content: "孤立回复" }], 21)).toBeNull();
+  });
+
+  it("优先使用服务端 parentMessageId，避免压缩历史后定位错提问", () => {
+    const messages: ChatMessage[] = [
+      { ...baseMessage, id: 11, role: "user", content: "更早的提问" },
+      { ...baseMessage, id: 12, role: "assistant", content: "更早的回答" },
+      { ...baseMessage, id: "group:1", role: "compressedGroup", content: "压缩历史" },
+      { ...baseMessage, id: 14, role: "assistant", content: "压缩后的回答" },
+    ];
+
+    // 可见列表里没有父提问（在压缩组内）时，不能拿更早的 11 当作提问。
+    expect(findReplyTargetUserId(messages, 14)).toBeNull();
+    // 服务端字段可以直接定位。
+    expect(findReplyTargetUserId(messages, 14, 13)).toBe(13);
+    // 无效服务端字段回退到可见时间线。
+    expect(findReplyTargetUserId(messages, 12, 0)).toBe(11);
+    expect(findReplyTargetUserId(messages, 12, Number.NaN)).toBe(11);
   });
 });

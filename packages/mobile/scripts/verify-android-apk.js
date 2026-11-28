@@ -29,18 +29,22 @@ const certificateSha256 = new crypto.X509Certificate(certificatePem).fingerprint
   .replace(/:/g, "")
   .toLowerCase();
 
+const pinnedCertificate = String(appConfig.expo.extra?.androidReleaseCertificateSha256 ?? "")
+  .replace(/:/g, "")
+  .toLowerCase();
+console.log(
+  process.env.AICHAT_REQUIRE_PINNED_CERT === "1"
+    ? `Pinned certificate check: enforced (expected ${pinnedCertificate})`
+    : "Pinned certificate check: skipped (AICHAT_REQUIRE_PINNED_CERT != 1)",
+);
+
 if (process.env.AICHAT_REQUIRE_PINNED_CERT === "1") {
   if (/Android Debug/i.test(signature)) {
     throw new Error("release APK 仍使用 Android debug 证书签名");
   }
-  const expectedCertificateSha256 = String(
-    appConfig.expo.extra?.androidReleaseCertificateSha256 ?? "",
-  )
-    .replace(/:/g, "")
-    .toLowerCase();
-  if (!expectedCertificateSha256 || certificateSha256 !== expectedCertificateSha256) {
+  if (!pinnedCertificate || certificateSha256 !== pinnedCertificate) {
     throw new Error(
-      `APK 签名证书不匹配：得到 ${certificateSha256 || "未知"}，预期 ${expectedCertificateSha256 || "未配置"}`,
+      `APK 签名证书不匹配：得到 ${certificateSha256 || "未知"}，预期 ${pinnedCertificate || "未配置"}`,
     );
   }
 }

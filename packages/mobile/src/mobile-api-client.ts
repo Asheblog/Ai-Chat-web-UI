@@ -30,7 +30,7 @@ type AuthPayload = {
 type ApiClientOptions = {
   endpoint: string;
   getToken?: () => string | null;
-  onUnauthorized?: () => void | Promise<void>;
+  onUnauthorized?: (failedToken: string) => void | Promise<void>;
 };
 
 type RequestOptions = {
@@ -75,7 +75,7 @@ export class UnauthorizedApiError extends MobileApiError {
 export class MobileApiClient {
   private readonly endpoint: string;
   private readonly getToken?: () => string | null;
-  private readonly onUnauthorized?: () => void | Promise<void>;
+  private readonly onUnauthorized?: (failedToken: string) => void | Promise<void>;
 
   constructor(options: ApiClientOptions) {
     this.endpoint = options.endpoint.replace(/\/+$/, "");
@@ -234,7 +234,7 @@ export class MobileApiClient {
     }
 
     if (response.status === 401) {
-      await this.onUnauthorized?.();
+      await this.onUnauthorized?.(token);
       throw new UnauthorizedApiError();
     }
 
@@ -342,7 +342,7 @@ export class MobileApiClient {
     }
 
     if (response.status === 401) {
-      await this.onUnauthorized?.();
+      await this.onUnauthorized?.(token);
       throw new UnauthorizedApiError(body?.error);
     }
 
@@ -380,6 +380,17 @@ export class MobileApiClient {
     return Array.isArray(data?.items) ? data.items : [];
   }
 
+  async updateSessionSkillBinding(
+    sessionId: number,
+    body: { skillId: number; versionId: number; enabled: boolean },
+  ): Promise<void> {
+    await this.request<unknown>(`/api/skills/sessions/${sessionId}`, {
+      method: "PUT",
+      body,
+      authenticated: true,
+    });
+  }
+
   async getSessionMcpTools(sessionId: number): Promise<McpSessionTool[]> {
     const data = await this.request<McpSessionTool[]>(`/api/mcp/sessions/${sessionId}/tools`, {
       authenticated: true,
@@ -410,8 +421,8 @@ export class MobileApiClient {
       headers["Content-Type"] = "application/json";
     }
 
+    const token = options.authenticated ? this.getToken?.() ?? null : null;
     if (options.authenticated) {
-      const token = this.getToken?.() ?? null;
       if (!token) {
         throw new UnauthorizedApiError();
       }
@@ -437,7 +448,7 @@ export class MobileApiClient {
     }
 
     if (response.status === 401) {
-      await this.onUnauthorized?.();
+      if (token) await this.onUnauthorized?.(token);
       throw new UnauthorizedApiError(body?.error);
     }
 

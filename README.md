@@ -170,7 +170,7 @@ Windows x64 安装包为 `.exe`，Apple Silicon Mac 安装包为 `.dmg`。测试
 
 ### 移动端客户端（Android + iOS）
 
-基于 Expo + React Native 重构的双端客户端，支持多服务器配置、思维链 CoT、多模态发图/文档上传、知识库/MCP/Skill 与 Ink & Mist 浅/深色主题同步。CI 在 GitHub Actions 自动构建免付费自签名 Android `.apk` 与未签名 iOS `.ipa`（供 TrollStore / AltStore / SideStore / Sideloadly 侧载），详见 [移动端指南](packages/mobile/README.md)。
+基于 Expo + React Native 重构的双端客户端，支持多服务器配置、思维链 CoT、多模态发图/文档上传、知识库/MCP/Skill 与 Ink & Mist 浅/深色主题同步。[Mobile CI](https://github.com/Asheblog/Ai-Chat-web-UI/actions/workflows/mobile-ci.yml) 提供可全新安装的 Android 试装 APK，以及需侧载的未签名 iOS IPA。Android 覆盖升级须沿用原证书；安装、升级与发布步骤见 [移动端指南](packages/mobile/README.md)。
 
 ## 运维与进一步阅读
 

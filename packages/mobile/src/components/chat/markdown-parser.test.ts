@@ -44,6 +44,25 @@ describe("移动端 Rich Markdown 解析器", () => {
     });
   });
 
+  it("保留可复制代码里的 LaTeX 分隔符，只在正文中识别公式", () => {
+    const inline = String.raw`\(a + b\)`;
+    const display = String.raw`\[c = d\]`;
+    const code = [inline, display].join("\n");
+    const prose = "代码：`" + inline + "`；公式：" + inline;
+    const blocks = parseMarkdownBlocks(["```sh", code, "```", prose, display].join("\n"));
+
+    expect(blocks).toEqual([
+      { type: "code", language: "sh", code },
+      { type: "paragraph", spans: [
+        { type: "text", text: "代码：" },
+        { type: "code", text: inline },
+        { type: "text", text: "；公式：" },
+        { type: "math", text: "a + b" },
+      ] },
+      { type: "math", latex: "c = d" },
+    ]);
+  });
+
   it("解析行内及块级 LaTeX 公式和外链", () => {
     const blocks = parseMarkdownBlocks("$$\nE = mc^2\n$$");
     expect(blocks).toEqual([{ type: "math", latex: "E = mc^2" }]);

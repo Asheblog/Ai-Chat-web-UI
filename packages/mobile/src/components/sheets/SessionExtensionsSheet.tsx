@@ -93,19 +93,17 @@ export function SessionExtensionsSheet({
           <Text style={[styles.sectionTitle, { color: theme.mutedForeground }]}>
             推理深度
           </Text>
-          <SegmentedControl
+          <SegmentedControl<ReasoningEffort>
             onChange={onChangeReasoningEffort}
             options={[
               { value: "low", label: "低" },
               { value: "medium", label: "标准" },
               { value: "high", label: "深度" },
+              { value: "xhigh", label: "极深" },
+              { value: "max", label: "最高" },
             ]}
             theme={theme}
-            value={
-              reasoningEffort === "low" || reasoningEffort === "high"
-                ? reasoningEffort
-                : "medium"
-            }
+            value={reasoningEffort}
           />
         </View>
       ) : null}

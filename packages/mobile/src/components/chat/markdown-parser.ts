@@ -1,9 +1,3 @@
-function normalizeLatexDelimiters(input: string): string {
-  return input
-    .replace(/\\\[([\s\S]*?)\\\]/g, (_, body) => `$$\n${String(body).trim()}\n$$`)
-    .replace(/\\\((.+?)\\\)/g, (_, body) => `$${String(body).trim()}$`);
-}
-
 export type InlineSpan =
   | { type: "text"; text: string }
   | { type: "bold"; text: string }
@@ -23,7 +17,7 @@ export type MarkdownBlock =
   | { type: "divider" };
 
 const TOKEN_PATTERN =
-  /(`[^`\n]+`|\$\$?[^$\n]+\$?\$|\[[^\]\n]+\]\(https?:\/\/[^\s)]+\)|\*\*[^*\n]+\*\*|\*[^*\n]+\*)/g;
+  /(`[^`\n]+`|\\\([^\n]+?\\\)|\$\$?[^$\n]+\$?\$|\[[^\]\n]+\]\(https?:\/\/[^\s)]+\)|\*\*[^*\n]+\*\*|\*[^*\n]+\*)/g;
 
 export function parseInlineSpans(line: string): InlineSpan[] {
   const spans: InlineSpan[] = [];
@@ -39,6 +33,8 @@ export function parseInlineSpans(line: string): InlineSpan[] {
 
     if (token.startsWith("`") && token.endsWith("`")) {
       spans.push({ type: "code", text: token.slice(1, -1) });
+    } else if (token.startsWith("\\(")) {
+      spans.push({ type: "math", text: token.slice(2, -2).trim() });
     } else if (token.startsWith("$$") && token.endsWith("$$") && token.length > 4) {
       spans.push({ type: "math", text: token.slice(2, -2).trim() });
     } else if (token.startsWith("$") && token.endsWith("$") && token.length > 2) {
@@ -81,7 +77,7 @@ function isTableSeparator(line: string): boolean {
 }
 
 export function parseMarkdownBlocks(rawText: string): MarkdownBlock[] {
-  const normalized = normalizeLatexDelimiters(rawText).replace(/\r\n/g, "\n");
+  const normalized = rawText.replace(/\r\n/g, "\n");
   const lines = normalized.split("\n");
   const blocks: MarkdownBlock[] = [];
   let index = 0;
@@ -109,16 +105,17 @@ export function parseMarkdownBlocks(rawText: string): MarkdownBlock[] {
       continue;
     }
 
-    // Display LaTeX math block $$...$$
-    if (trimmed.startsWith("$$")) {
-      if (trimmed.length > 4 && trimmed.endsWith("$$")) {
-        blocks.push({ type: "math", latex: trimmed.slice(2, -2).trim() });
+    const mathEnd = trimmed.startsWith("$$") ? "$$" : trimmed.startsWith("\\[") ? "\\]" : null;
+    if (mathEnd) {
+      const openingLine = trimmed.slice(2);
+      if (openingLine.endsWith(mathEnd)) {
+        blocks.push({ type: "math", latex: openingLine.slice(0, -2).trim() });
         index += 1;
         continue;
       }
-      const mathLines: string[] = [trimmed.slice(2)];
+      const mathLines = [openingLine];
       index += 1;
-      while (index < lines.length && !lines[index].trim().endsWith("$$")) {
+      while (index < lines.length && !lines[index].trim().endsWith(mathEnd)) {
         mathLines.push(lines[index]);
         index += 1;
       }
@@ -202,6 +199,7 @@ export function parseMarkdownBlocks(rawText: string): MarkdownBlock[] {
         !nextTrim ||
         nextTrim.startsWith("```") ||
         nextTrim.startsWith("$$") ||
+        nextTrim.startsWith("\\[") ||
         nextTrim.startsWith(">") ||
         /^(#{1,4})\s+/.test(nextTrim) ||
         /^[-*•]\s+/.test(nextTrim) ||

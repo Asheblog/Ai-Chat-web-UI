@@ -105,7 +105,10 @@ jobs:
         run: |
           set -euo pipefail
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          # RN 0.85.3 / expo-modules-core 要求 compileSdk 36、buildTools 36.0.0，
+          # 且 expo-modules-core 通过 CMake 编译 C++，需要 NDK 27.1.12297006 与 CMake 3.22.1。
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" \
+            "ndk;27.1.12297006" "cmake;3.22.1"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

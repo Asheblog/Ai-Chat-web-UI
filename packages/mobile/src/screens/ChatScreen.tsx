@@ -34,13 +34,17 @@ import type {
   SessionDocumentItem,
   SkillOptionItem,
 } from "../types/mobile";
+import { mergePendingImages } from "./chat-attachment-utils";
+import { resolveSkillBindingVersion } from "./chat-skill-utils";
 import {
   appendAssistantContent,
   appendAssistantGeneratedImages,
   appendAssistantReasoning,
   appendAssistantToolCall,
+  findReplyTargetUserId,
   normalizeMessage,
 } from "./chat-message-utils";
+import { ChatStreamCoordinator } from "./chat-stream-coordinator";
 import { MessageBubble } from "./MessageBubble";
 
 type ChatScreenProps = {
@@ -60,7 +64,31 @@ type StreamState = {
   assistantId: number | string;
   clientMessageId: string;
   messageId: number | null;
+  generation: number;
+  sessionId: number;
 };
+
+type ErrorKind = "load" | "action";
+
+type StreamOutcome = "completed" | "failed" | "cancelled" | "busy";
+
+type ExecuteStreamOptions = {
+  content: string;
+  images: PendingImageAttachment[];
+  replyToId?: number;
+  restoreDraftOnError: boolean;
+  /** 请求失败时恢复的文字草稿，默认使用 content（图片-only 时为空串，而非占位指令）。 */
+  restoreInput?: string;
+  /** 请求失败时恢复的引用目标。 */
+  restoreReplyTo?: ChatMessage | null;
+  /** 重新生成时服务端复用已有提问，不再追加本地用户气泡。 */
+  appendUserMessage?: boolean;
+  /** 流成功、最终刷新前执行（例如清理被替换的旧回复）。 */
+  onStreamCompleted?: () => Promise<void>;
+};
+
+/** 图片-only 消息的回退指令，与 Web 端 buildAttachmentFallbackPrompt 保持一致。 */
+const IMAGE_ONLY_FALLBACK_PROMPT = "请查看这些图片";
 
 export function ChatScreen({
   apiClient,
@@ -76,10 +104,12 @@ export function ChatScreen({
 }: ChatScreenProps) {
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList<ChatMessage>>(null);
+  const coordinatorRef = useRef(new ChatStreamCoordinator());
   const abortRef = useRef<AbortController | null>(null);
   const streamRef = useRef<StreamState | null>(null);
-  const stopRequestedRef = useRef(false);
-  const streamStartedRef = useRef(false);
+  const messageRequestRef = useRef(0);
+  const extensionsRequestRef = useRef(0);
+  const updatingSkillIdsRef = useRef(new Set<number>());
   const shouldFollowStreamRef = useRef(true);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -89,6 +119,7 @@ export function ChatScreen({
   const [isStreaming, setIsStreaming] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorKind, setErrorKind] = useState<ErrorKind | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
 
   const [reasoningEnabled, setReasoningEnabled] = useState(
@@ -116,52 +147,92 @@ export function ChatScreen({
   const [enabledSkillIds, setEnabledSkillIds] = useState<number[]>([]);
   const [mcpTools, setMcpTools] = useState<McpSessionTool[]>([]);
 
+  const knowledgeBaseKey = Array.isArray(session.knowledgeBaseIds)
+    ? session.knowledgeBaseIds.join(",")
+    : "";
+
+  // 只同步服务端已保存的会话开关；不再因为会话对象刷新而清空草稿、附件或引用。
+  // 会话切换由 WorkspaceScreen 的 key 触发组件重挂载，附件天然按会话隔离。
   useEffect(() => {
     setReasoningEnabled(session.reasoningEnabled ?? preferences.defaultReasoningEnabled);
     setReasoningEffort(session.reasoningEffort ?? preferences.defaultReasoningEffort);
-    setSelectedKbIds(Array.isArray(session.knowledgeBaseIds) ? session.knowledgeBaseIds : []);
-    setPendingImages([]);
-    setReplyToMessage(null);
-    setErrorMessage(null);
-    setNoticeMessage(null);
   }, [
     preferences.defaultReasoningEffort,
     preferences.defaultReasoningEnabled,
     session.id,
-    session.knowledgeBaseIds,
     session.reasoningEffort,
     session.reasoningEnabled,
   ]);
 
+  useEffect(() => {
+    setSelectedKbIds(Array.isArray(session.knowledgeBaseIds) ? session.knowledgeBaseIds : []);
+  }, [knowledgeBaseKey, session.id]);
+
+  // 卸载（含切换会话导致的 key 重挂载、退出登录、切换服务端）时中止本地流，
+  // 并尽力通知服务端取消，避免遗留仍在生成的后台任务。
+  useEffect(() => {
+    return () => {
+      const active = coordinatorRef.current.cancelActive();
+      const stream = streamRef.current;
+      abortRef.current?.abort();
+      if (active && stream) {
+        void apiClient
+          .cancelStream(active.sessionId, stream.clientMessageId, stream.messageId)
+          .catch(() => {});
+      }
+      abortRef.current = null;
+      streamRef.current = null;
+    };
+  }, [apiClient]);
+
+  const showError = useCallback((message: string, kind: ErrorKind = "action") => {
+    setErrorMessage(message);
+    setErrorKind(kind);
+  }, []);
+
+  const dismissError = useCallback(() => {
+    setErrorMessage(null);
+    setErrorKind(null);
+  }, []);
+
   const loadMessages = useCallback(
     async (mode: "initial" | "refresh" = "refresh") => {
+      const requestId = ++messageRequestRef.current;
       if (mode === "initial") {
         setIsLoading(true);
       } else {
         setIsRefreshing(true);
       }
       setErrorMessage(null);
+      setErrorKind(null);
 
       try {
         const payload = await apiClient.getMessages(session.id, 100);
+        // 后发的刷新请求优先：丢弃旧请求的迟到响应，避免历史消息倒序覆盖。
+        if (messageRequestRef.current !== requestId) return;
         setMessages((payload.messages ?? []).map(normalizeMessage).filter(Boolean));
       } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : "加载消息失败，请重试。");
+        if (messageRequestRef.current !== requestId) return;
+        showError(error instanceof Error ? error.message : "加载消息失败，请重试。", "load");
       } finally {
-        setIsLoading(false);
-        setIsRefreshing(false);
+        if (messageRequestRef.current === requestId) {
+          setIsLoading(false);
+          setIsRefreshing(false);
+        }
       }
     },
-    [apiClient, session.id],
+    [apiClient, session.id, showError],
   );
 
   const loadExtensions = useCallback(async () => {
+    const requestId = ++extensionsRequestRef.current;
     const [docsRes, kbRes, skillRes, mcpRes] = await Promise.allSettled([
       apiClient.getSessionDocuments(session.id),
       apiClient.getKnowledgeBases(),
       apiClient.getSessionSkillOptions(session.id),
       apiClient.getSessionMcpTools(session.id),
     ]);
+    if (extensionsRequestRef.current !== requestId) return;
     if (docsRes.status === "fulfilled") {
       setSessionDocuments(docsRes.value);
     }
@@ -184,10 +255,6 @@ export function ChatScreen({
   useEffect(() => {
     void loadMessages("initial");
     void loadExtensions();
-
-    return () => {
-      abortRef.current?.abort();
-    };
   }, [loadExtensions, loadMessages]);
 
   useIncomingSharedText(
@@ -203,7 +270,7 @@ export function ChatScreen({
       setInput((prev) => (prev.trim() ? `${prev} ${text}` : text));
     },
     onUnavailable: (hint) => setNoticeMessage(hint),
-    onError: (msg) => setErrorMessage(msg),
+    onError: showError,
   });
 
   const scrollToBottom = useCallback((animated = true) => {
@@ -212,42 +279,55 @@ export function ChatScreen({
     listRef.current?.scrollToEnd({ animated });
   }, []);
 
-  const markActiveAssistant = useCallback((status: string, streamError?: string) => {
-    const targetId = streamRef.current?.assistantId;
-    if (targetId == null) return;
-    setMessages((current) =>
-      current.map((message) =>
-        message.id === targetId
-          ? { ...message, streamStatus: status, streamError }
-          : message,
-      ),
-    );
-  }, []);
+  const markAssistantById = useCallback(
+    (targetId: number | string, status: string, streamError?: string) => {
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === targetId && message.streamStatus === "streaming"
+            ? { ...message, streamStatus: status, streamError }
+            : message,
+        ),
+      );
+    },
+    [],
+  );
+
+  const markActiveAssistant = useCallback(
+    (generation: number, status: string, streamError?: string) => {
+      if (!coordinatorRef.current.isCurrent(generation)) return;
+      const targetId = streamRef.current?.assistantId;
+      if (targetId == null) return;
+      markAssistantById(targetId, status, streamError);
+    },
+    [markAssistantById],
+  );
 
   const executeStream = useCallback(
-    async ({
-      content,
-      images,
-      replyToId,
-      restoreDraftOnError,
-    }: {
-      content: string;
-      images: PendingImageAttachment[];
-      replyToId?: number;
-      restoreDraftOnError: boolean;
-    }) => {
+    async (options: ExecuteStreamOptions): Promise<StreamOutcome> => {
+      const {
+        content,
+        images,
+        replyToId,
+        restoreDraftOnError,
+        appendUserMessage = true,
+      } = options;
+      const generation = coordinatorRef.current.begin(session.id);
+      if (generation == null) return "busy";
+
       const clientMessageId = createClientMessageId();
       const now = new Date().toISOString();
-      const userMessage: ChatMessage = {
-        id: `local-user-${clientMessageId}`,
-        sessionId: session.id,
-        role: "user",
-        content,
-        clientMessageId,
-        images: images.map((img) => `data:${img.mime};base64,${img.data}`),
-        replyToMessageId: replyToId ?? null,
-        createdAt: now,
-      };
+      const userMessage: ChatMessage | null = appendUserMessage
+        ? {
+            id: `local-user-${clientMessageId}`,
+            sessionId: session.id,
+            role: "user",
+            content,
+            clientMessageId,
+            images: images.map((img) => `data:${img.mime};base64,${img.data}`),
+            replyToMessageId: replyToId ?? null,
+            createdAt: now,
+          }
+        : null;
       const assistantId = `local-assistant-${clientMessageId}`;
       const assistantMessage: ChatMessage = {
         id: assistantId,
@@ -261,9 +341,14 @@ export function ChatScreen({
 
       const controller = new AbortController();
       abortRef.current = controller;
-      streamRef.current = { assistantId, clientMessageId, messageId: null };
-      stopRequestedRef.current = false;
-      streamStartedRef.current = false;
+      streamRef.current = {
+        assistantId,
+        clientMessageId,
+        messageId: null,
+        generation,
+        sessionId: session.id,
+      };
+      let streamStarted = false;
       shouldFollowStreamRef.current = true;
 
       if (restoreDraftOnError) {
@@ -271,10 +356,14 @@ export function ChatScreen({
         setPendingImages([]);
         setReplyToMessage(null);
       }
-      setErrorMessage(null);
+      dismissError();
       setNoticeMessage(null);
       setIsStreaming(true);
-      setMessages((current) => [...current, userMessage, assistantMessage]);
+      setMessages((current) => [
+        ...current,
+        ...(userMessage ? [userMessage] : []),
+        assistantMessage,
+      ]);
 
       const enabledSkillItems = skills
         .filter((s) => enabledSkillIds.includes(s.id) && s.defaultVersion?.id)
@@ -307,14 +396,21 @@ export function ChatScreen({
           },
           signal: controller.signal,
         })) {
+          // 停止 / 切换会话 / 卸载后，旧流的迟到分片不得再写入任何界面状态。
+          if (!coordinatorRef.current.isCurrent(generation)) {
+            return "cancelled";
+          }
+
           if (chunk.type === "start") {
-            streamStartedRef.current = true;
+            streamStarted = true;
             const prevId: number | string = streamRef.current?.assistantId ?? assistantId;
             const nextId: number | string = chunk.assistantMessageId ?? prevId;
             streamRef.current = {
               assistantId: nextId,
               clientMessageId,
               messageId: chunk.assistantMessageId ?? null,
+              generation,
+              sessionId: session.id,
             };
             setMessages((current) =>
               current.map((message) => {
@@ -326,7 +422,11 @@ export function ChatScreen({
                     streamStatus: "streaming",
                   };
                 }
-                if (message.id === userMessage.id && typeof chunk.messageId === "number") {
+                if (
+                  userMessage &&
+                  message.id === userMessage.id &&
+                  typeof chunk.messageId === "number"
+                ) {
                   return { ...message, id: chunk.messageId };
                 }
                 return message;
@@ -384,6 +484,10 @@ export function ChatScreen({
           }
         }
 
+        if (!coordinatorRef.current.isCurrent(generation)) {
+          return "cancelled";
+        }
+
         const targetId = streamRef.current?.assistantId ?? assistantId;
         setMessages((current) =>
           current.map((message) =>
@@ -393,41 +497,71 @@ export function ChatScreen({
           ),
         );
         await successTap();
-        try {
+
+        if (options.onStreamCompleted && coordinatorRef.current.isCurrent(generation)) {
+          try {
+            await options.onStreamCompleted();
+          } catch {
+            // 清理失败由调用方给出可恢复提示，不阻断最终消息同步。
+          }
+        }
+
+        if (coordinatorRef.current.isCurrent(generation)) {
           await loadMessages("refresh");
-        } catch {}
+        }
+        return "completed";
       } catch (error) {
-        if (stopRequestedRef.current || isAbortError(error)) {
-          markActiveAssistant("cancelled", "已停止生成。");
-          return;
+        if (!coordinatorRef.current.isCurrent(generation)) {
+          return "cancelled";
+        }
+
+        if (isAbortError(error)) {
+          markActiveAssistant(generation, "cancelled", "已停止生成。");
+          return "cancelled";
         }
 
         await warningTap();
         const message = error instanceof Error ? error.message : "发送失败，请重试。";
-        setErrorMessage(message);
+        showError(message);
 
-        if (!streamStartedRef.current) {
+        if (!streamStarted) {
           setMessages((current) =>
-            current.filter((item) => item.id !== userMessage.id && item.id !== assistantId),
+            current.filter(
+              (item) => item.id !== assistantId && item.id !== userMessage?.id,
+            ),
           );
           if (restoreDraftOnError) {
-            setInput((current) => (current.trim().length === 0 ? content : current));
+            // 用用户原始草稿恢复（图片-only 时为空串），并把失败时新增的图片按 id 合并回去。
+            setInput((current) =>
+              current.trim().length === 0 ? options.restoreInput ?? content : current,
+            );
             if (images.length > 0) {
-              setPendingImages(images);
+              setPendingImages((current) => mergePendingImages(current, images));
             }
+            setReplyToMessage((current) => current ?? options.restoreReplyTo ?? null);
           }
-          return;
+          return "failed";
         }
 
-        markActiveAssistant("error", `${message} 下拉刷新可同步服务端已保存内容。`);
+        markActiveAssistant(
+          generation,
+          "error",
+          `${message} 下拉刷新可同步服务端已保存内容。`,
+        );
+        return "failed";
       } finally {
-        abortRef.current = null;
-        streamRef.current = null;
-        setIsStreaming(false);
+        if (coordinatorRef.current.release(generation)) {
+          if (streamRef.current?.generation === generation) {
+            streamRef.current = null;
+          }
+          abortRef.current = null;
+          setIsStreaming(false);
+        }
       }
     },
     [
       apiClient,
+      dismissError,
       enabledSkillIds,
       loadMessages,
       markActiveAssistant,
@@ -435,6 +569,7 @@ export function ChatScreen({
       reasoningEnabled,
       selectedKbIds,
       session.id,
+      showError,
       skills,
       webSearchEnabled,
     ],
@@ -442,96 +577,138 @@ export function ChatScreen({
 
   const handleSend = useCallback(async () => {
     const content = input.trim();
-    if ((!content && pendingImages.length === 0) || isStreaming) {
+    if ((!content && pendingImages.length === 0) || isStreaming || streamRef.current) {
       return;
     }
-    await lightTap();
+
+    const replyTarget = replyToMessage;
+    // 不在启动流之前 await 触感：await 期间若用户切换会话，组件已卸载，
+    // executeStream 会在卸载后才开始且再也不会被 cleanup 取消。
+    void lightTap();
     await executeStream({
-      content: content || "请分析图片内容",
+      content: content || IMAGE_ONLY_FALLBACK_PROMPT,
       images: pendingImages,
       replyToId:
-        replyToMessage && typeof replyToMessage.id === "number"
-          ? replyToMessage.id
-          : undefined,
+        replyTarget && typeof replyTarget.id === "number" ? replyTarget.id : undefined,
       restoreDraftOnError: true,
+      restoreInput: content,
+      restoreReplyTo: replyTarget,
+      appendUserMessage: true,
     });
   }, [executeStream, input, isStreaming, pendingImages, replyToMessage]);
 
   const handleStop = useCallback(async () => {
-    if (!isStreaming) return;
-    await lightTap();
-    stopRequestedRef.current = true;
-    const activeStream = streamRef.current;
-    abortRef.current?.abort();
-
-    if (activeStream) {
-      void apiClient
-        .cancelStream(session.id, activeStream.clientMessageId, activeStream.messageId)
-        .catch(() => {});
+    const stream = streamRef.current;
+    const controller = abortRef.current;
+    const active = coordinatorRef.current.cancelActive();
+    if (!active || !stream) {
+      setIsStreaming(false);
+      return;
     }
-  }, [apiClient, isStreaming, session.id]);
+
+    // 关键顺序：所有同步状态变更必须在第一个 await 之前完成，否则用户在停止的下一帧
+    // 立即发送时，这里会清掉新流的 abortRef / streamRef。
+    abortRef.current = null;
+    streamRef.current = null;
+    setIsStreaming(false);
+    controller?.abort();
+    markAssistantById(stream.assistantId, "cancelled", "已停止生成。");
+    void lightTap();
+
+    try {
+      await apiClient.cancelStream(active.sessionId, stream.clientMessageId, stream.messageId);
+    } catch {
+      setNoticeMessage("已停止本地接收，但服务端取消未确认，请下拉刷新查看最终状态。");
+    }
+  }, [apiClient, markAssistantById]);
 
   const handleRetryAssistantMessage = useCallback(
     async (assistantMsg: ChatMessage) => {
-      if (isStreaming || typeof assistantMsg.id !== "number") return;
-      try {
-        const res = await apiClient.regenerateMessage(session.id, assistantMsg.id);
-        await loadMessages("refresh");
-        await executeStream({
-          content: "",
-          images: [],
-          replyToId: res.userMessageId,
-          restoreDraftOnError: false,
-        });
-      } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : "重新生成失败。");
+      const assistantId = assistantMsg.id;
+      if (
+        isStreaming ||
+        streamRef.current ||
+        typeof assistantId !== "number"
+      ) {
+        return;
       }
+
+      // 不调用会先删除旧回复的 /api/chat/regenerate：先复用已有用户提问生成新回复，
+      // 成功后再删除被替换的旧回复。这样即使请求失败，历史中的旧答案仍然保留。
+      const declaredParentMessageId = (
+        assistantMsg as ChatMessage & { parentMessageId?: unknown }
+      ).parentMessageId;
+      const parentUserId = findReplyTargetUserId(
+        messages,
+        assistantId,
+        typeof declaredParentMessageId === "number" ? declaredParentMessageId : null,
+      );
+      if (parentUserId == null) {
+        showError("未找到这条回复对应的提问（可能已被上下文压缩），请刷新后重试。");
+        return;
+      }
+
+      void lightTap();
+      await executeStream({
+        content: "",
+        images: [],
+        replyToId: parentUserId,
+        restoreDraftOnError: false,
+        appendUserMessage: false,
+        onStreamCompleted: async () => {
+          try {
+            await apiClient.regenerateMessage(session.id, assistantId);
+          } catch {
+            setNoticeMessage("新回复已生成，但旧回复未能清理；下拉刷新后可能看到两条回复。");
+          }
+        },
+      });
     },
-    [apiClient, executeStream, isStreaming, loadMessages, session.id],
+    [apiClient, executeStream, isStreaming, messages, session.id, showError],
   );
 
   const handlePickCamera = useCallback(async () => {
-    const result = await takePhotoWithCamera(pendingImages.length);
+    const result = await takePhotoWithCamera(pendingImages);
     if (!result.ok) {
-      setErrorMessage(result.message);
+      showError(result.message);
       return;
     }
     if (result.images.length > 0) {
-      setPendingImages((prev) => [...prev, ...result.images]);
+      setPendingImages((prev) => mergePendingImages(prev, result.images));
     }
-  }, [pendingImages.length]);
+  }, [pendingImages, showError]);
 
   const handlePickGallery = useCallback(async () => {
-    const result = await pickImagesFromLibrary(pendingImages.length);
+    const result = await pickImagesFromLibrary(pendingImages);
     if (!result.ok) {
-      setErrorMessage(result.message);
+      showError(result.message);
       return;
     }
     if (result.images.length > 0) {
-      setPendingImages((prev) => [...prev, ...result.images]);
+      setPendingImages((prev) => mergePendingImages(prev, result.images));
     }
-  }, [pendingImages.length]);
+  }, [pendingImages, showError]);
 
   const handlePickDocument = useCallback(async () => {
     const picked = await pickDocumentFile();
     if (!picked.ok) {
-      setErrorMessage(picked.message);
+      showError(picked.message);
       return;
     }
     if (!picked.file) return;
     setIsUploadingDoc(true);
-    setErrorMessage(null);
+    dismissError();
     try {
       await apiClient.uploadDocument(picked.file, session.id);
       const docs = await apiClient.getSessionDocuments(session.id);
       setSessionDocuments(docs);
       setNoticeMessage(`已将「${picked.file.name}」附加到当前对话。`);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "上传文档失败。");
+      showError(error instanceof Error ? error.message : "上传文档失败。");
     } finally {
       setIsUploadingDoc(false);
     }
-  }, [apiClient, session.id]);
+  }, [apiClient, dismissError, session.id, showError]);
 
   const handleDetachDocument = useCallback(
     async (docId: number) => {
@@ -539,10 +716,10 @@ export function ChatScreen({
         await apiClient.detachDocument(docId, session.id);
         setSessionDocuments((prev) => prev.filter((d) => d.id !== docId));
       } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : "移除文档失败。");
+        showError(error instanceof Error ? error.message : "移除文档失败。");
       }
     },
-    [apiClient, session.id],
+    [apiClient, session.id, showError],
   );
 
   const activeModelLabel = useMemo(() => {
@@ -555,6 +732,132 @@ export function ChatScreen({
 
   const canSend =
     (input.trim().length > 0 || pendingImages.length > 0) && !isStreaming;
+
+  const handlePersistReasoningEnabled = useCallback(
+    (enabled: boolean) => {
+      const previous = reasoningEnabled;
+      setReasoningEnabled(enabled);
+      void apiClient
+        .updateSession(session.id, { reasoningEnabled: enabled })
+        .then(onSessionUpdated)
+        .catch((error) => {
+          setReasoningEnabled(previous);
+          showError(
+            error instanceof Error ? error.message : "保存深度思考设置失败，请重试。",
+          );
+        });
+    },
+    [apiClient, onSessionUpdated, reasoningEnabled, session.id, showError],
+  );
+
+  const handlePersistReasoningEffort = useCallback(
+    (effort: ReasoningEffort) => {
+      const previous = reasoningEffort;
+      setReasoningEffort(effort);
+      void apiClient
+        .updateSession(session.id, { reasoningEffort: effort })
+        .then(onSessionUpdated)
+        .catch((error) => {
+          setReasoningEffort(previous);
+          showError(
+            error instanceof Error ? error.message : "保存推理深度失败，请重试。",
+          );
+        });
+    },
+    [apiClient, onSessionUpdated, reasoningEffort, session.id, showError],
+  );
+
+  const handleToggleKnowledgeBase = useCallback(
+    (id: number) => {
+      const previous = selectedKbIds;
+      const wasSelected = previous.includes(id);
+      const next = wasSelected
+        ? previous.filter((item) => item !== id)
+        : [...previous, id];
+      setSelectedKbIds(next);
+      void apiClient
+        .updateSession(session.id, { knowledgeBaseIds: next })
+        .then(onSessionUpdated)
+        .catch((error) => {
+          // 只回滚这一个知识库，避免失败请求把用户刚选中的其他知识库一起抹掉。
+          setSelectedKbIds((current) =>
+            wasSelected
+              ? current.includes(id)
+                ? current
+                : [...current, id]
+              : current.filter((item) => item !== id),
+          );
+          showError(
+            error instanceof Error ? error.message : "保存知识库选择失败，请重试。",
+          );
+        });
+    },
+    [apiClient, onSessionUpdated, selectedKbIds, session.id, showError],
+  );
+
+  const handleToggleSkill = useCallback(
+    (skill: SkillOptionItem) => {
+      // 已绑定的会话版本优先，否则回退到该 Skill 的默认版本；后端只接受正整数 versionId。
+      // 两处都没有版本时不提交（Web 端同样直接返回），避免把开关表现成已保存。
+      const versionId = resolveSkillBindingVersion(skill);
+      if (versionId == null) {
+        setNoticeMessage("该 Skill 尚未有可用版本，暂时无法启用。");
+        return;
+      }
+      if (updatingSkillIdsRef.current.has(skill.id)) return;
+
+      const previous = enabledSkillIds;
+      const wasEnabled = previous.includes(skill.id);
+      const enabled = !wasEnabled;
+      const next = enabled
+        ? [...previous, skill.id]
+        : previous.filter((id) => id !== skill.id);
+      setEnabledSkillIds(next);
+      updatingSkillIdsRef.current.add(skill.id);
+
+      void apiClient
+        .updateSessionSkillBinding(session.id, {
+          skillId: skill.id,
+          versionId,
+          enabled,
+        })
+        .catch((error) => {
+          // 只回滚这一个 Skill，其他并发开关的结果不受影响。
+          setEnabledSkillIds((current) =>
+            wasEnabled
+              ? current.includes(skill.id)
+                ? current
+                : [...current, skill.id]
+              : current.filter((id) => id !== skill.id),
+          );
+          showError(
+            error instanceof Error ? error.message : "保存 Skill 开关失败，请重试。",
+          );
+        })
+        .finally(() => {
+          updatingSkillIdsRef.current.delete(skill.id);
+        });
+    },
+    [apiClient, enabledSkillIds, session.id, showError],
+  );
+
+  const handleSaveSystemPrompt = useCallback(
+    async (nextPrompt: string) => {
+      try {
+        const updated = await apiClient.updateSession(session.id, {
+          systemPrompt: nextPrompt || null,
+        });
+        onSessionUpdated(updated);
+      } catch (error) {
+        // 扩展面板的保存按钮没有错误分支，这里吞掉异常并用会话横幅告知，
+        // 避免变成未处理的 Promise rejection。
+        showError(
+          error instanceof Error ? error.message : "保存会话提示词失败，请重试。",
+        );
+      }
+    },
+    [apiClient, onSessionUpdated, session.id, showError],
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -605,13 +908,30 @@ export function ChatScreen({
 
       {errorMessage ? (
         <View
+          accessibilityLiveRegion="polite"
+          accessibilityRole="alert"
           style={[
             styles.banner,
             { backgroundColor: theme.dangerSurface, borderBottomColor: theme.danger },
           ]}
         >
           <Text style={[styles.bannerText, { color: theme.danger }]}>{errorMessage}</Text>
-          <Pressable hitSlop={6} onPress={() => setErrorMessage(null)}>
+          {errorKind === "load" ? (
+            <Pressable
+              accessibilityLabel="重新加载消息"
+              accessibilityRole="button"
+              onPress={() => void loadMessages("refresh")}
+              style={styles.bannerAction}
+            >
+              <MaterialCommunityIcons color={theme.danger} name="reload" size={16} />
+            </Pressable>
+          ) : null}
+          <Pressable
+            accessibilityLabel="关闭错误提示"
+            accessibilityRole="button"
+            onPress={dismissError}
+            style={styles.bannerAction}
+          >
             <MaterialCommunityIcons color={theme.danger} name="close" size={16} />
           </Pressable>
         </View>
@@ -619,13 +939,19 @@ export function ChatScreen({
 
       {noticeMessage ? (
         <View
+          accessibilityLiveRegion="polite"
           style={[
             styles.banner,
             { backgroundColor: theme.primarySurface, borderBottomColor: theme.primary },
           ]}
         >
           <Text style={[styles.bannerText, { color: theme.signalText }]}>{noticeMessage}</Text>
-          <Pressable hitSlop={6} onPress={() => setNoticeMessage(null)}>
+          <Pressable
+            accessibilityLabel="关闭提示"
+            accessibilityRole="button"
+            onPress={() => setNoticeMessage(null)}
+            style={styles.bannerAction}
+          >
             <MaterialCommunityIcons color={theme.signalText} name="close" size={16} />
           </Pressable>
         </View>
@@ -655,17 +981,50 @@ export function ChatScreen({
               keyboardShouldPersistTaps="handled"
               keyExtractor={(item, index) => `${item.id}-${index}`}
               ListEmptyComponent={
-                <View style={styles.emptyWrap}>
-                  <View style={[styles.emptyIcon, { backgroundColor: theme.primarySurface }]}>
-                    <MaterialCommunityIcons color={theme.signalText} name="star-four-points" size={24} />
+                errorMessage && errorKind === "load" ? (
+                  <View style={styles.emptyWrap}>
+                    <View style={[styles.emptyIcon, { backgroundColor: theme.dangerSurface }]}>
+                      <MaterialCommunityIcons
+                        color={theme.danger}
+                        name="cloud-off-outline"
+                        size={24}
+                      />
+                    </View>
+                    <Text style={[styles.emptyTitle, { color: theme.foreground }]}>
+                      消息加载失败
+                    </Text>
+                    <Text style={[styles.emptySub, { color: theme.mutedForeground }]}>
+                      {errorMessage}
+                    </Text>
+                    <Pressable
+                      accessibilityLabel="重新加载消息"
+                      accessibilityRole="button"
+                      onPress={() => void loadMessages("refresh")}
+                      style={[styles.retryButton, { backgroundColor: theme.primary }]}
+                    >
+                      <MaterialCommunityIcons
+                        color={theme.primaryForeground}
+                        name="reload"
+                        size={16}
+                      />
+                      <Text style={[styles.retryButtonText, { color: theme.primaryForeground }]}>
+                        重试
+                      </Text>
+                    </Pressable>
                   </View>
-                  <Text style={[styles.emptyTitle, { color: theme.foreground }]}>
-                    开始新对话
-                  </Text>
-                  <Text style={[styles.emptySub, { color: theme.mutedForeground }]}>
-                    支持多模态发图、文档上传、深度思考时间轴与实时联网检索。
-                  </Text>
-                </View>
+                ) : (
+                  <View style={styles.emptyWrap}>
+                    <View style={[styles.emptyIcon, { backgroundColor: theme.primarySurface }]}>
+                      <MaterialCommunityIcons color={theme.signalText} name="star-four-points" size={24} />
+                    </View>
+                    <Text style={[styles.emptyTitle, { color: theme.foreground }]}>
+                      开始新对话
+                    </Text>
+                    <Text style={[styles.emptySub, { color: theme.mutedForeground }]}>
+                      支持多模态发图、文档上传、深度思考时间轴与实时联网检索。
+                    </Text>
+                  </View>
+                )
               }
               onContentSizeChange={() => {
                 if (shouldFollowStreamRef.current && messages.length > 0) {
@@ -682,7 +1041,7 @@ export function ChatScreen({
               }}
               refreshControl={
                 <RefreshControl
-                  onRefresh={() => loadMessages("refresh")}
+                  onRefresh={() => void loadMessages("refresh")}
                   refreshing={isRefreshing}
                   tintColor={theme.primary}
                 />
@@ -692,7 +1051,13 @@ export function ChatScreen({
                   endpoint={apiClient.getEndpoint()}
                   message={item}
                   onPreviewImage={setPreviewImageUri}
-                  onReply={(msg) => setReplyToMessage(msg)}
+                  onReply={(msg) => {
+                    if (typeof msg.id !== "number") {
+                      setNoticeMessage("这条消息仍在发送中，保存完成后才能引用。");
+                      return;
+                    }
+                    setReplyToMessage(msg);
+                  }}
                   onRetry={handleRetryAssistantMessage}
                   theme={theme}
                 />
@@ -755,45 +1120,13 @@ export function ChatScreen({
         enabledSkillIds={enabledSkillIds}
         knowledgeBases={knowledgeBases}
         mcpTools={mcpTools}
-        onChangeReasoningEffort={(effort) => {
-          setReasoningEffort(effort);
-          void apiClient
-            .updateSession(session.id, { reasoningEffort: effort })
-            .then(onSessionUpdated)
-            .catch(() => {});
-        }}
-        onChangeReasoningEnabled={(enabled) => {
-          setReasoningEnabled(enabled);
-          void apiClient
-            .updateSession(session.id, { reasoningEnabled: enabled })
-            .then(onSessionUpdated)
-            .catch(() => {});
-        }}
+        onChangeReasoningEffort={handlePersistReasoningEffort}
+        onChangeReasoningEnabled={handlePersistReasoningEnabled}
         onChangeWebSearchEnabled={setWebSearchEnabled}
         onClose={() => setExtensionsOpen(false)}
-        onSaveSystemPrompt={async (nextPrompt) => {
-          const updated = await apiClient.updateSession(session.id, {
-            systemPrompt: nextPrompt || null,
-          });
-          onSessionUpdated(updated);
-        }}
-        onToggleKb={(id) => {
-          const next = selectedKbIds.includes(id)
-            ? selectedKbIds.filter((item) => item !== id)
-            : [...selectedKbIds, id];
-          setSelectedKbIds(next);
-          void apiClient
-            .updateSession(session.id, { knowledgeBaseIds: next })
-            .then(onSessionUpdated)
-            .catch(() => {});
-        }}
-        onToggleSkill={(skill) => {
-          setEnabledSkillIds((prev) =>
-            prev.includes(skill.id)
-              ? prev.filter((item) => item !== skill.id)
-              : [...prev, skill.id],
-          );
-        }}
+        onSaveSystemPrompt={handleSaveSystemPrompt}
+        onToggleKb={handleToggleKnowledgeBase}
+        onToggleSkill={handleToggleSkill}
         reasoningEffort={reasoningEffort}
         reasoningEnabled={reasoningEnabled}
         selectedKbIds={selectedKbIds}
@@ -879,12 +1212,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     paddingHorizontal: spacing.md,
-    paddingVertical: 8,
+    paddingVertical: 2,
   },
   bannerText: {
     flex: 1,
     fontSize: 12,
     lineHeight: 18,
+    paddingVertical: 4,
+  },
+  bannerAction: {
+    alignItems: "center",
+    height: 44,
+    justifyContent: "center",
+    width: 44,
   },
   centered: {
     alignItems: "center",
@@ -924,6 +1264,19 @@ const styles = StyleSheet.create({
   messageList: {
     padding: spacing.lg,
     rowGap: spacing.lg,
+  },
+  retryButton: {
+    alignItems: "center",
+    borderRadius: radii.pill,
+    columnGap: 6,
+    flexDirection: "row",
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 18,
+  },
+  retryButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
   },
   scrollBottomBtn: {
     alignItems: "center",

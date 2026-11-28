@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import {
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -24,6 +25,14 @@ type SessionDrawerContentProps = {
   activeSessionId: number | null;
   activeServer: ServerProfile | null;
   user: MobileUser;
+  /** 会话操作（置顶 / 删除 / 清空）失败等工作区级错误；抽屉覆盖主区域时仍要可见。 */
+  errorMessage?: string | null;
+  onDismissError?: () => void;
+  /** 加载类错误的重试入口；有活动对话时不传，避免重载工作区把聊天流卸载。 */
+  onRetryError?: () => void;
+  /** 会话列表下拉刷新；只刷新列表，不应卸载进行中的聊天。 */
+  isRefreshingSessions?: boolean;
+  onRefreshSessions?: () => void;
   onSelectSession: (session: ChatSession) => void;
   onNewChat: () => void;
   onTogglePin: (session: ChatSession) => void;
@@ -41,6 +50,11 @@ export function SessionDrawerContent({
   activeSessionId,
   activeServer,
   user,
+  errorMessage = null,
+  onDismissError,
+  onRetryError,
+  isRefreshingSessions = false,
+  onRefreshSessions,
   onSelectSession,
   onNewChat,
   onTogglePin,
@@ -55,6 +69,7 @@ export function SessionDrawerContent({
   const [actionTarget, setActionTarget] = useState<ChatSession | null>(null);
   const [renameTarget, setRenameTarget] = useState<ChatSession | null>(null);
   const [renameText, setRenameText] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
   const [isRenaming, setIsRenaming] = useState(false);
 
   const { pinned, recent } = useMemo(() => {
@@ -86,6 +101,7 @@ export function SessionDrawerContent({
           label: "重命名会话",
           icon: "pencil-outline",
           onPress: () => {
+            setRenameError(null);
             setRenameTarget(actionTarget);
             setRenameText(actionTarget.title || "");
           },
@@ -106,14 +122,25 @@ export function SessionDrawerContent({
       ]
     : [];
 
+  const closeRename = () => {
+    setRenameTarget(null);
+    setRenameError(null);
+  };
+
   const handleConfirmRename = async () => {
     if (!renameTarget) return;
     const trimmed = renameText.trim();
     if (!trimmed) return;
+    setRenameError(null);
     setIsRenaming(true);
     try {
       await onRenameSession(renameTarget, trimmed);
       setRenameTarget(null);
+    } catch (error) {
+      // 保存失败时保留弹窗并就地展示错误，不能让失败看起来像成功。
+      setRenameError(
+        error instanceof Error && error.message ? error.message : "重命名失败，请重试。",
+      );
     } finally {
       setIsRenaming(false);
     }
@@ -130,7 +157,12 @@ export function SessionDrawerContent({
             </Text>
           </View>
           {onClose ? (
-            <Pressable hitSlop={8} onPress={onClose}>
+            <Pressable
+              accessibilityLabel="关闭会话列表"
+              accessibilityRole="button"
+              hitSlop={8}
+              onPress={onClose}
+            >
               <MaterialCommunityIcons color={theme.tertiaryForeground} name="close" size={20} />
             </Pressable>
           ) : null}
@@ -168,9 +200,64 @@ export function SessionDrawerContent({
         />
       </View>
 
+      {errorMessage ? (
+        <View
+          accessibilityLiveRegion="polite"
+          accessibilityRole="alert"
+          style={[
+            styles.errorBanner,
+            {
+              backgroundColor: theme.dangerSurface,
+              borderTopColor: theme.danger,
+              borderBottomColor: theme.danger,
+            },
+          ]}
+        >
+          <MaterialCommunityIcons
+            color={theme.danger}
+            name="alert-circle-outline"
+            size={16}
+          />
+          <Text numberOfLines={3} style={[styles.errorBannerText, { color: theme.danger }]}>
+            {errorMessage}
+          </Text>
+          {onRetryError ? (
+            <Pressable
+              accessibilityLabel="重新加载工作区"
+              accessibilityRole="button"
+              onPress={onRetryError}
+              style={styles.bannerAction}
+            >
+              <MaterialCommunityIcons color={theme.danger} name="reload" size={16} />
+            </Pressable>
+          ) : null}
+          {onDismissError ? (
+            <Pressable
+              accessibilityLabel="关闭错误提示"
+              accessibilityRole="button"
+              onPress={onDismissError}
+              style={styles.bannerAction}
+            >
+              <MaterialCommunityIcons color={theme.danger} name="close" size={16} />
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+
       <ScrollView
-        contentContainerStyle={styles.listContent}
+        alwaysBounceVertical
+        contentContainerStyle={[styles.listContent, styles.listContentGrow]}
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          onRefreshSessions ? (
+            <RefreshControl
+              colors={[theme.primary]}
+              onRefresh={onRefreshSessions}
+              refreshing={isRefreshingSessions}
+              tintColor={theme.primary}
+            />
+          ) : undefined
+        }
         showsVerticalScrollIndicator={false}
       >
         {pinned.length > 0 ? (
@@ -265,7 +352,7 @@ export function SessionDrawerContent({
 
       <Modal
         animationType="fade"
-        onRequestClose={() => setRenameTarget(null)}
+        onRequestClose={closeRename}
         transparent
         visible={Boolean(renameTarget)}
       >
@@ -283,10 +370,19 @@ export function SessionDrawerContent({
               ]}
               value={renameText}
             />
+            {renameError ? (
+              <Text
+                accessibilityLiveRegion="polite"
+                accessibilityRole="alert"
+                style={[styles.renameError, { color: theme.danger }]}
+              >
+                {renameError}
+              </Text>
+            ) : null}
             <View style={styles.renameActions}>
               <Button
                 label="取消"
-                onPress={() => setRenameTarget(null)}
+                onPress={closeRename}
                 style={styles.renameBtn}
                 theme={theme}
                 variant="secondary"
@@ -361,7 +457,13 @@ function DrawerRow({
           {session._count?.messages ? ` · ${session._count.messages} 条` : ""}
         </Text>
       </View>
-      <Pressable hitSlop={8} onPress={onMore} style={styles.moreBtn}>
+      <Pressable
+        accessibilityLabel={`${session.title?.trim() || "未命名对话"} 的会话操作`}
+        accessibilityRole="button"
+        hitSlop={8}
+        onPress={onMore}
+        style={styles.moreBtn}
+      >
         <MaterialCommunityIcons color={theme.tertiaryForeground} name="dots-horizontal" size={18} />
       </Pressable>
     </Pressable>
@@ -412,10 +514,35 @@ const styles = StyleSheet.create({
     fontSize: 13,
     paddingVertical: 6,
   },
+  errorBanner: {
+    alignItems: "center",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    columnGap: 8,
+    flexDirection: "row",
+    paddingHorizontal: spacing.md,
+    paddingVertical: 2,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    paddingVertical: 4,
+  },
+  bannerAction: {
+    alignItems: "center",
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
   listContent: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     rowGap: spacing.lg,
+  },
+  /** 列表不足一屏时也能触发下拉刷新（空列表 / 少量会话）。 */
+  listContentGrow: {
+    flexGrow: 1,
   },
   group: {
     rowGap: 4,
@@ -546,6 +673,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     minHeight: 44,
     paddingHorizontal: 12,
+  },
+  renameError: {
+    fontSize: 12,
+    lineHeight: 18,
   },
   renameActions: {
     columnGap: 10,

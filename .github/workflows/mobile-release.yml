@@ -113,7 +113,10 @@ jobs:
         run: |
           set -euo pipefail
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          # RN 0.85.3 / expo-modules-core 要求 compileSdk 36、buildTools 36.0.0，
+          # 且 expo-modules-core 通过 CMake 编译 C++，需要 NDK 27.1.12297006 与 CMake 3.22.1。
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" \
+            "ndk;27.1.12297006" "cmake;3.22.1"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -123,27 +126,32 @@ jobs:
           pnpm --filter @aichat/shared build
           pnpm --filter @aichat/mobile type-check
           pnpm --filter @aichat/mobile test
+          # 与 Mobile CI 的 quality job 保持一致：提前校验 Expo 配置与插件。
+          pnpm --filter @aichat/mobile exec expo config --type public >/dev/null
 
       - name: Build installable Android APK
         shell: bash
         env:
           VERSION: ${{ needs.validate.outputs.version }}
-          KEYSTORE_B64: ${{ secrets.AICHAT_ANDROID_KEYSTORE_BASE64 }}
-          KEYSTORE_PASS: ${{ secrets.AICHAT_ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.AICHAT_ANDROID_KEY_ALIAS }}
-          KEY_PASS: ${{ secrets.AICHAT_ANDROID_KEY_PASSWORD }}
+          AICHAT_ANDROID_KEYSTORE_BASE64: ${{ secrets.AICHAT_ANDROID_KEYSTORE_BASE64 }}
+          AICHAT_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.AICHAT_ANDROID_KEYSTORE_PASSWORD }}
+          AICHAT_ANDROID_KEY_ALIAS: ${{ secrets.AICHAT_ANDROID_KEY_ALIAS }}
+          AICHAT_ANDROID_KEY_PASSWORD: ${{ secrets.AICHAT_ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASS" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASS" ]; then
-            echo "Using configured external Android keystore"
-            printf '%s' "$KEYSTORE_B64" | base64 --decode > "${RUNNER_TEMP}/release.keystore"
+          # 签名来源三态判定统一由 packages/mobile/scripts/android-signing.js 负责：
+          # 四项全空 → 免密自签名；四项齐全 → 正式 keystore；任何部分配置 → 构建脚本直接失败。
+          # shell 只负责把 base64 Secret 落盘为 keystore 文件，避免在这里再写一份判定逻辑。
+          if [ -n "${AICHAT_ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "Decoding configured Android keystore secret"
+            printf '%s' "$AICHAT_ANDROID_KEYSTORE_BASE64" | base64 --decode > "${RUNNER_TEMP}/release.keystore"
             export AICHAT_ANDROID_KEYSTORE_PATH="${RUNNER_TEMP}/release.keystore"
-            export AICHAT_ANDROID_KEYSTORE_PASSWORD="$KEYSTORE_PASS"
-            export AICHAT_ANDROID_KEY_ALIAS="$KEY_ALIAS"
-            export AICHAT_ANDROID_KEY_PASSWORD="$KEY_PASS"
+            # 使用正式签名身份时必须校验 app.json 中的原证书指纹，保持 fail-closed。
+            export AICHAT_REQUIRE_PINNED_CERT=1
           else
-            echo "No external Android keystore configured; generating free self-signed release APK"
+            echo "No Android keystore secret; signing source is decided by the build script"
           fi
+          unset AICHAT_ANDROID_KEYSTORE_BASE64
 
           pnpm --filter @aichat/mobile android:build-apk
 
@@ -191,6 +199,8 @@ jobs:
           pnpm --filter @aichat/shared build
           pnpm --filter @aichat/mobile type-check
           pnpm --filter @aichat/mobile test
+          # 与 Mobile CI 的 quality job 保持一致：提前校验 Expo 配置与插件。
+          pnpm --filter @aichat/mobile exec expo config --type public >/dev/null
 
       - name: Build unsigned iOS IPA
         run: bash packages/mobile/scripts/build-ios-unsigned-ipa.sh
@@ -208,7 +218,8 @@ jobs:
     name: Publish Mobile GitHub Release
     needs: [validate, android, ios]
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    # 补校验路径需要下载已发布产物，预留更充裕的时间。
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
@@ -265,14 +276,69 @@ jobs:
           cat > release-notes.md <<'NOTES'
           ## AIChat Mobile 安装说明（免付费证书 / 无签名构建）
 
-          - **Android (`*-android.apk`)**：下载后直接在手机端安装（支持免付费自签名构建，若系统提示“未知来源”请允许安装）。
-          - **iOS (`*-ios-unsigned.ipa`)**：为未购买 Apple Developer 商业证书的纯无签名 `.ipa`，请通过 **TrollStore（巨魔）**、**AltStore**、**SideStore**、**Sideloadly** 或 **爱思助手** 等工具自签/侧载安装。
-          - **校验文件 (`*.sha256`)**：可用于核对下载文件完整性。
+          - **Android (`*-android.apk`)**：免付费自签名构建，可直接安装；系统提示“未知来源”时允许即可。
+            - 每次免密构建生成的试装证书彼此不同，**不同证书版本之间无法覆盖安装**；跨版本升级请先卸载旧版本（会清除应用内本地数据）。
+            - 需要长期可覆盖升级的签名，请改用仓库已配置的原 Android 证书（`AICHAT_ANDROID_KEYSTORE_*` Secrets）构建；该通道会强制校验 `app.json` 中的原证书指纹。
+          - **iOS (`*-ios-unsigned.ipa`)**：未签名的纯 `.ipa`，请通过 **TrollStore（巨魔）**、**AltStore**、**SideStore**、**Sideloadly** 或 **爱思助手** 侧载安装。
+          - **校验文件 (`*.sha256`)**：与同版本产物成对发布，用于核对下载文件完整性。
           NOTES
 
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" release-assets/*.apk release-assets/*.ipa release-assets/*.sha256 --clobber
-          else
-            gh release create "$TAG" release-assets/*.apk release-assets/*.ipa release-assets/*.sha256 \
+          apk_file="$(ls release-assets/*.apk)"
+          ipa_file="$(ls release-assets/*.ipa)"
+
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" "$apk_file" "$apk_file.sha256" "$ipa_file" "$ipa_file.sha256" \
               --verify-tag --notes-file release-notes.md --title "AIChat Mobile ${VERSION}"
+            echo "created mobile release $TAG"
+            exit 0
           fi
+
+          # 同一平台的产物与其 .sha256 是一个整体：禁止出现“新产物 + 旧校验”或“旧产物 + 新校验”。
+          existing_assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
+          has_asset() {
+            printf '%s\n' "$existing_assets" | grep -qxF "$1"
+          }
+
+          sync_platform() {
+            local artifact="$1"
+            local name checksum dir
+            name="$(basename "$artifact")"
+            checksum="${name}.sha256"
+
+            if has_asset "$name" && has_asset "$checksum"; then
+              echo "$TAG 已存在 $name 与 $checksum，保留历史文件不覆盖"
+              return 0
+            fi
+
+            if ! has_asset "$name" && ! has_asset "$checksum"; then
+              gh release upload "$TAG" "$artifact" "$artifact.sha256"
+              echo "uploaded $name and $checksum"
+              return 0
+            fi
+
+            dir="$(mktemp -d)"
+            if has_asset "$name"; then
+              # 只有产物：按已发布的原始字节重新生成校验，绝不把新产物绑到旧校验上。
+              echo "::warning::$TAG 已有 $name 但缺少 $checksum，按已发布文件重新生成校验"
+              gh release download "$TAG" --pattern "$name" --dir "$dir"
+              ( cd "$dir" && sha256sum "$name" > "$checksum" )
+              gh release upload "$TAG" "$dir/$checksum"
+              echo "uploaded $checksum generated from published $name"
+            else
+              # 只有校验：待上传产物必须与历史 checksum 一致，否则 fail closed。
+              gh release download "$TAG" --pattern "$checksum" --dir "$dir"
+              cp "$artifact" "$dir/$name"
+              if ! ( cd "$dir" && sha256sum -c "$checksum" ); then
+                echo "::error::$TAG 的 $checksum 与本次构建的 $name 不匹配，拒绝上传（避免发布无法校验的产物）"
+                rm -rf "$dir"
+                exit 1
+              fi
+              gh release upload "$TAG" "$artifact"
+              echo "uploaded $name (checksum matched published $checksum)"
+            fi
+            rm -rf "$dir"
+          }
+
+          sync_platform "$apk_file"
+          sync_platform "$ipa_file"
+          echo "mobile release $TAG is complete"

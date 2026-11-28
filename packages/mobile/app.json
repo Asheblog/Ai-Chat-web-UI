@@ -30,6 +30,7 @@
         "NSCameraUsageDescription": "用于拍摄照片并发送给 AI 对话模型进行视觉分析。",
         "NSPhotoLibraryUsageDescription": "用于从相册选择图片发送给 AI 对话模型。",
         "NSPhotoLibraryAddUsageDescription": "用于将 AI 生成的图片保存到系统相册。",
+        "NSLocalNetworkUsageDescription": "用于连接局域网内的 AIChat 服务端，完成登录、同步会话与发送消息。",
         "NSMicrophoneUsageDescription": "用于语音输入聊天消息。",
         "NSSpeechRecognitionUsageDescription": "用于将你的语音实时转写为聊天文本。",
         "ITSAppUsesNonExemptEncryption": false

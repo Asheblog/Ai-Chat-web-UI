@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -117,6 +117,9 @@ export function ChatComposer({
             <View key={img.id} style={styles.thumbWrap}>
               <Image source={{ uri: img.uri }} style={styles.thumbImg} />
               <Pressable
+                accessibilityLabel="移除图片附件"
+                accessibilityRole="button"
+                hitSlop={13}
                 onPress={() => onRemoveImage(img.id)}
                 style={[styles.thumbRemove, { backgroundColor: theme.foreground }]}
               >
@@ -136,7 +139,12 @@ export function ChatComposer({
               <Text numberOfLines={1} style={[styles.docChipText, { color: theme.foreground }]}>
                 {doc.originalName || doc.filename}
               </Text>
-              <Pressable hitSlop={6} onPress={() => onDetachDocument(doc.id)}>
+              <Pressable
+                accessibilityLabel={`移除文档附件 ${doc.originalName || doc.filename}`}
+                accessibilityRole="button"
+                hitSlop={15}
+                onPress={() => onDetachDocument(doc.id)}
+              >
                 <MaterialCommunityIcons color={theme.tertiaryForeground} name="close" size={14} />
               </Pressable>
             </View>
@@ -208,20 +216,22 @@ export function ChatComposer({
           { backgroundColor: theme.background, borderColor: theme.borderStrong },
         ]}
       >
-        <Pressable
-          accessibilityLabel="添加图片或文档"
-          accessibilityRole="button"
+        <ComposerAction
+          label="添加图片或文档"
           onPress={() => {
             void lightTap();
             setAttachMenuOpen(true);
           }}
-          style={[
-            styles.roundIconBtn,
-            { backgroundColor: theme.surface, borderColor: theme.border },
-          ]}
         >
-          <MaterialCommunityIcons color={theme.mutedForeground} name="plus" size={20} />
-        </Pressable>
+          <View
+            style={[
+              styles.roundIconBtn,
+              { backgroundColor: theme.surface, borderColor: theme.border },
+            ]}
+          >
+            <MaterialCommunityIcons color={theme.mutedForeground} name="plus" size={20} />
+          </View>
+        </ComposerAction>
 
         <TextInput
           multiline
@@ -233,50 +243,51 @@ export function ChatComposer({
           value={value}
         />
 
-        <Pressable
-          accessibilityLabel="语音输入"
-          accessibilityRole="button"
+        <ComposerAction
+          label="语音输入"
           onPress={() => {
             void lightTap();
             onPressVoice();
           }}
-          style={styles.voiceBtn}
+          selected={isListeningVoice}
         >
-          <MaterialCommunityIcons
-            color={isListeningVoice ? theme.danger : theme.mutedForeground}
-            name={isListeningVoice ? "microphone" : "microphone-outline"}
-            size={20}
-          />
-        </Pressable>
+          <View style={styles.voiceBtn}>
+            <MaterialCommunityIcons
+              color={isListeningVoice ? theme.danger : theme.mutedForeground}
+              name={isListeningVoice ? "microphone" : "microphone-outline"}
+              size={20}
+            />
+          </View>
+        </ComposerAction>
 
         {isStreaming ? (
-          <Pressable
-            accessibilityLabel="停止生成"
-            accessibilityRole="button"
-            onPress={onStop}
-            style={[styles.sendBtn, { backgroundColor: theme.danger }]}
-          >
-            <MaterialCommunityIcons color="#FFFFFF" name="stop" size={18} />
-          </Pressable>
+          <ComposerAction label="停止生成" onPress={onStop}>
+            <View style={[styles.sendBtn, { backgroundColor: theme.danger }]}>
+              <MaterialCommunityIcons color="#FFFFFF" name="stop" size={18} />
+            </View>
+          </ComposerAction>
         ) : (
-          <Pressable
-            accessibilityLabel="发送消息"
-            accessibilityRole="button"
+          <ComposerAction
             disabled={!canSend}
+            label="发送消息"
             onPress={onSend}
-            style={[
-              styles.sendBtn,
-              {
-                backgroundColor: canSend ? theme.primary : theme.borderStrong,
-              },
-            ]}
           >
-            <MaterialCommunityIcons
-              color={canSend ? theme.primaryForeground : theme.surface}
-              name="arrow-up"
-              size={18}
-            />
-          </Pressable>
+            <View
+              style={[
+                styles.sendBtn,
+                {
+                  backgroundColor: canSend ? theme.primary : theme.borderStrong,
+                  opacity: canSend ? 1 : 0.65,
+                },
+              ]}
+            >
+              <MaterialCommunityIcons
+                color={canSend ? theme.primaryForeground : theme.surface}
+                name="arrow-up"
+                size={18}
+              />
+            </View>
+          </ComposerAction>
         )}
       </View>
 
@@ -310,6 +321,46 @@ export function ChatComposer({
   );
 }
 
+type ComposerActionProps = {
+  label: string;
+  onPress: () => void;
+  children: ReactNode;
+  disabled?: boolean;
+  selected?: boolean;
+};
+
+/**
+ * Composer 主操作的统一触控盒：视觉尺寸仍由 children 决定（34px 圆形 / 20px 图标），
+ * 但布局盒固定 44×44，且与相邻操作保持 8px token 间隔，不使用相互重叠的 hitSlop。
+ */
+export function ComposerAction({
+  label,
+  onPress,
+  children,
+  disabled,
+  selected,
+}: ComposerActionProps) {
+  const accessibilityState: { disabled?: boolean; selected?: boolean } = {};
+  if (typeof disabled === "boolean") accessibilityState.disabled = disabled;
+  if (typeof selected === "boolean") accessibilityState.selected = selected;
+
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      {...(Object.keys(accessibilityState).length > 0 ? { accessibilityState } : {})}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.touchTarget,
+        pressed && !disabled ? styles.pressed : null,
+      ]}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
 function ComposerChip({
   label,
   icon,
@@ -325,6 +376,8 @@ function ComposerChip({
 }) {
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
       onPress={onPress}
       style={[
         styles.chip,
@@ -435,7 +488,17 @@ const styles = StyleSheet.create({
     columnGap: 8,
     flexDirection: "row",
     paddingHorizontal: 8,
-    paddingVertical: 7,
+    paddingVertical: 4,
+  },
+  /** 视觉保持 34px 圆形，但每个主操作获得 44×44 的实际布局盒（不重叠，间隔沿用 8px token）。 */
+  touchTarget: {
+    alignItems: "center",
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  pressed: {
+    opacity: 0.72,
   },
   roundIconBtn: {
     alignItems: "center",

@@ -23,6 +23,12 @@ if [ -z "${APP_DIR}" ]; then
   exit 1
 fi
 
+# 未签名发布合约：.app 主 bundle 不应包含 _CodeSignature/CodeResources（存在即说明被签名）。
+if [ -e "${APP_DIR}/_CodeSignature/CodeResources" ]; then
+  echo "::error::IPA 内 .app 带有代码签名（_CodeSignature/CodeResources 存在），与未签名发布合约不符"
+  exit 1
+fi
+
 INFO_PLIST="${APP_DIR}/Info.plist"
 BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${INFO_PLIST}")"
 SHORT_VER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${INFO_PLIST}")"
@@ -54,4 +60,4 @@ esac
   cat "${BASE}.sha256"
 )
 
-echo "Verified iOS unsigned IPA: ${BUNDLE_ID} v${SHORT_VER} (${ARCHS})"
+echo "Verified unsigned iOS IPA: ${BUNDLE_ID} v${SHORT_VER} (${ARCHS})"

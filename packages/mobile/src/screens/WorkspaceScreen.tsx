@@ -1,9 +1,11 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Animated,
-  Dimensions,
+  BackHandler,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -23,6 +25,7 @@ import { spacing } from "../theme/tokens";
 import type { MobilePreferences, ServerProfile } from "../types/mobile";
 import { ChatScreen } from "./ChatScreen";
 import { SettingsScreen } from "./SettingsScreen";
+import { loadAllSessions } from "./workspace-session-loader";
 
 type WorkspaceScreenProps = {
   apiClient: MobileApiClient;
@@ -53,14 +56,44 @@ export function WorkspaceScreen({
   const [models, setModels] = useState<ModelItem[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshingSessions, setIsRefreshingSessions] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorKind, setErrorKind] = useState<"load" | "action">("action");
   const [view, setView] = useState<"chat" | "settings">("chat");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
 
-  const drawerWidth = Math.min(312, Math.max(272, Dimensions.get("window").width * 0.8));
+  const creatingRef = useRef(false);
+  const sessionsRequestRef = useRef(0);
+  const refreshSessionsInFlightRef = useRef(false);
+  const drawerWidth = Math.min(312, Math.max(272, width * 0.8));
   const slideAnim = useRef(new Animated.Value(-drawerWidth)).current;
+
+  const showError = useCallback((message: string, kind: "load" | "action" = "action") => {
+    setErrorMessage(message);
+    setErrorKind(kind);
+  }, []);
+
+  // Android 返回键优先关闭应用内自定义层（抽屉 / 设置页），而不是直接退出应用。
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    if (!drawerOpen && view === "chat") return;
+
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (drawerOpen) {
+        setDrawerOpen(false);
+        return true;
+      }
+      if (view === "settings") {
+        setView("chat");
+        return true;
+      }
+      return false;
+    });
+
+    return () => subscription.remove();
+  }, [drawerOpen, view]);
 
   useEffect(() => {
     Animated.timing(slideAnim, {
@@ -71,26 +104,94 @@ export function WorkspaceScreen({
   }, [drawerOpen, drawerWidth, slideAnim]);
 
   const loadWorkspace = useCallback(async () => {
+    const sessionsRequestId = ++sessionsRequestRef.current;
     setIsLoading(true);
     setErrorMessage(null);
+    setErrorKind("load");
+
+    const [sessionRes, modelRes] = await Promise.allSettled([
+      loadAllSessions(apiClient),
+      apiClient.getModels(),
+    ]);
+
+    const problems: string[] = [];
+
+    // 刷新期间可能已经发起更新的会话请求；旧结果不得覆盖新列表。
+    const isLatestSessionsRequest = sessionsRequestId === sessionsRequestRef.current;
+
+    if (sessionRes.status === "fulfilled") {
+      if (isLatestSessionsRequest) {
+        const list = sessionRes.value.sessions;
+        setSessions(list);
+        setActiveSessionId((prev) => {
+          if (prev && list.some((s) => s.id === prev)) return prev;
+          return list[0]?.id ?? null;
+        });
+        if (sessionRes.value.incomplete) {
+          problems.push("会话列表仅加载了部分内容，可下拉刷新重试。");
+        }
+      }
+    } else if (isLatestSessionsRequest) {
+      problems.push(
+        sessionRes.reason instanceof Error
+          ? `会话列表加载失败：${sessionRes.reason.message}`
+          : "会话列表加载失败，请重试。",
+      );
+    }
+
+    if (modelRes.status === "fulfilled") {
+      setModels(modelRes.value ?? []);
+    } else {
+      problems.push(
+        modelRes.reason instanceof Error
+          ? `模型列表加载失败：${modelRes.reason.message}`
+          : "模型列表加载失败。",
+      );
+    }
+
+    if (problems.length > 0) {
+      showError(problems.join(" "), "load");
+    }
+    setIsLoading(false);
+  }, [apiClient, showError]);
+
+  /**
+   * 抽屉下拉刷新：只刷新会话列表，不设置 isLoading，因此不会卸载当前 ChatScreen，
+   * 进行中的流式回复和输入草稿保持不变。后续分页失败时保留现有列表并提示，可再次下拉重试。
+   */
+  const refreshSessions = useCallback(async () => {
+    if (isLoading || refreshSessionsInFlightRef.current) return;
+
+    refreshSessionsInFlightRef.current = true;
+    setIsRefreshingSessions(true);
+    setErrorMessage(null);
+    const requestId = ++sessionsRequestRef.current;
+
     try {
-      const [sessionRes, modelList] = await Promise.all([
-        apiClient.getSessions(1, 100),
-        apiClient.getModels(),
-      ]);
-      const list = sessionRes.sessions ?? [];
-      setSessions(list);
-      setModels(modelList ?? []);
+      const result = await loadAllSessions(apiClient);
+      if (requestId !== sessionsRequestRef.current) return;
+
+      if (result.incomplete) {
+        showError("会话列表仅加载了部分内容，已保留当前列表，可再次下拉重试。", "load");
+        return;
+      }
+
+      setSessions(result.sessions);
       setActiveSessionId((prev) => {
-        if (prev && list.some((s) => s.id === prev)) return prev;
-        return list[0]?.id ?? null;
+        if (prev && result.sessions.some((s) => s.id === prev)) return prev;
+        return result.sessions[0]?.id ?? null;
       });
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "加载工作区失败，请重试。");
+      if (requestId !== sessionsRequestRef.current) return;
+      showError(
+        error instanceof Error ? error.message : "刷新会话列表失败，请重试。",
+        "load",
+      );
     } finally {
-      setIsLoading(false);
+      refreshSessionsInFlightRef.current = false;
+      setIsRefreshingSessions(false);
     }
-  }, [apiClient]);
+  }, [apiClient, isLoading, showError]);
 
   useEffect(() => {
     void loadWorkspace();
@@ -100,18 +201,33 @@ export function WorkspaceScreen({
 
   const handleCreateSession = useCallback(
     async (preferredModel?: ModelItem) => {
-      const usableModels = models.filter(
-        (m) => m.modelType !== "embedding" && m.accessDecision !== "deny",
-      );
-      const targetModel = preferredModel ?? usableModels[0];
-      if (!targetModel) {
-        setErrorMessage("当前账号没有可用对话模型，请联系管理员配置。");
-        return;
-      }
+      if (creatingRef.current) return;
 
+      creatingRef.current = true;
       setIsCreating(true);
       setErrorMessage(null);
+
       try {
+        let availableModels = models;
+        if (!preferredModel && availableModels.length === 0) {
+          // 首屏模型接口失败后仍允许用户直接新建：重试一次模型列表，而不是直接判定“没有模型”。
+          try {
+            availableModels = await apiClient.getModels();
+            setModels(availableModels);
+          } catch {
+            availableModels = [];
+          }
+        }
+
+        const usableModels = availableModels.filter(
+          (m) => m.modelType !== "embedding" && m.accessDecision !== "deny",
+        );
+        const targetModel = preferredModel ?? usableModels[0];
+        if (!targetModel) {
+          showError("暂时无法读取可用对话模型，请稍后重试或检查服务端模型配置。");
+          return;
+        }
+
         const created = await apiClient.createSession({
           modelId: targetModel.id,
           rawId: targetModel.rawId,
@@ -120,13 +236,14 @@ export function WorkspaceScreen({
           reasoningEffort: preferences.defaultReasoningEffort,
         });
         await successTap();
-        setSessions((prev) => [created, ...prev]);
+        setSessions((prev) => [created, ...prev.filter((item) => item.id !== created.id)]);
         setActiveSessionId(created.id);
         setView("chat");
         setDrawerOpen(false);
       } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : "创建会话失败。");
+        showError(error instanceof Error ? error.message : "创建会话失败。");
       } finally {
+        creatingRef.current = false;
         setIsCreating(false);
       }
     },
@@ -135,6 +252,7 @@ export function WorkspaceScreen({
       models,
       preferences.defaultReasoningEffort,
       preferences.defaultReasoningEnabled,
+      showError,
     ],
   );
 
@@ -154,10 +272,10 @@ export function WorkspaceScreen({
           prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)),
         );
       } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : "切换模型失败。");
+        showError(error instanceof Error ? error.message : "切换模型失败。");
       }
     },
-    [activeSession, apiClient, handleCreateSession],
+    [activeSession, apiClient, handleCreateSession, showError],
   );
 
   const handleTogglePin = useCallback(
@@ -170,20 +288,27 @@ export function WorkspaceScreen({
           prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)),
         );
       } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : "更新置顶状态失败。");
+        showError(error instanceof Error ? error.message : "更新置顶状态失败。");
       }
     },
-    [apiClient],
+    [apiClient, showError],
   );
 
   const handleRenameSession = useCallback(
     async (session: ChatSession, newTitle: string) => {
-      const updated = await apiClient.updateSession(session.id, { title: newTitle });
-      setSessions((prev) =>
-        prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)),
-      );
+      try {
+        const updated = await apiClient.updateSession(session.id, { title: newTitle });
+        setSessions((prev) =>
+          prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)),
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "重命名会话失败。";
+        showError(message);
+        // 抽屉里的重命名弹窗需要感知失败并保持打开，再显示同一错误。
+        throw error instanceof Error ? error : new Error(message);
+      }
     },
-    [apiClient],
+    [apiClient, showError],
   );
 
   const handleClearMessages = useCallback(
@@ -198,13 +323,13 @@ export function WorkspaceScreen({
               .clearSessionMessages(session.id)
               .then(() => loadWorkspace())
               .catch((err) =>
-                setErrorMessage(err instanceof Error ? err.message : "清空消息失败。"),
+                showError(err instanceof Error ? err.message : "清空消息失败。"),
               );
           },
         },
       ]);
     },
-    [apiClient, loadWorkspace],
+    [apiClient, loadWorkspace, showError],
   );
 
   const handleDeleteSession = useCallback(
@@ -218,22 +343,20 @@ export function WorkspaceScreen({
             void apiClient
               .deleteSession(session.id)
               .then(() => {
-                setSessions((prev) => {
-                  const next = prev.filter((item) => item.id !== session.id);
-                  if (activeSessionId === session.id) {
-                    setActiveSessionId(next[0]?.id ?? null);
-                  }
-                  return next;
-                });
+                const next = sessions.filter((item) => item.id !== session.id);
+                setSessions(next);
+                if (activeSessionId === session.id) {
+                  setActiveSessionId(next[0]?.id ?? null);
+                }
               })
               .catch((err) =>
-                setErrorMessage(err instanceof Error ? err.message : "删除会话失败。"),
+                showError(err instanceof Error ? err.message : "删除会话失败。"),
               );
           },
         },
       ]);
     },
-    [activeSessionId, apiClient],
+    [activeSessionId, apiClient, sessions, showError],
   );
 
   if (view === "settings") {
@@ -256,7 +379,14 @@ export function WorkspaceScreen({
     <SessionDrawerContent
       activeServer={activeServer}
       activeSessionId={activeSessionId}
+      errorMessage={errorMessage}
+      isRefreshingSessions={isRefreshingSessions}
       onClearMessages={handleClearMessages}
+      onDismissError={() => setErrorMessage(null)}
+      onRefreshSessions={() => void refreshSessions()}
+      onRetryError={
+        errorKind === "load" && !activeSession ? () => void loadWorkspace() : undefined
+      }
       onClose={isTabletSplit ? undefined : () => setDrawerOpen(false)}
       onDeleteSession={handleDeleteSession}
       onNewChat={() => void handleCreateSession()}
@@ -290,6 +420,47 @@ export function WorkspaceScreen({
       ) : null}
 
       <View style={styles.mainStage}>
+        {errorMessage && !isTabletSplit && !drawerOpen ? (
+          <View
+            accessibilityLiveRegion="polite"
+            accessibilityRole="alert"
+            style={[
+              styles.errorBanner,
+              {
+                backgroundColor: theme.dangerSurface,
+                borderBottomColor: theme.danger,
+              },
+            ]}
+          >
+            <MaterialCommunityIcons
+              color={theme.danger}
+              name="alert-circle-outline"
+              size={16}
+            />
+            <Text style={[styles.errorBannerText, { color: theme.danger }]}>
+              {errorMessage}
+            </Text>
+            {errorKind === "load" && !activeSession ? (
+              <Pressable
+                accessibilityLabel="重新加载工作区"
+                accessibilityRole="button"
+                onPress={() => void loadWorkspace()}
+                style={styles.bannerAction}
+              >
+                <MaterialCommunityIcons color={theme.danger} name="reload" size={16} />
+              </Pressable>
+            ) : null}
+            <Pressable
+              accessibilityLabel="关闭错误提示"
+              accessibilityRole="button"
+              onPress={() => setErrorMessage(null)}
+              style={styles.bannerAction}
+            >
+              <MaterialCommunityIcons color={theme.danger} name="close" size={16} />
+            </Pressable>
+          </View>
+        ) : null}
+
         {isLoading ? (
           <View style={styles.centered}>
             <ActivityIndicator color={theme.primary} />
@@ -299,6 +470,7 @@ export function WorkspaceScreen({
           </View>
         ) : activeSession ? (
           <ChatScreen
+            key={activeSession.id}
             apiClient={apiClient}
             models={models}
             onNewChat={() => void handleCreateSession()}
@@ -322,7 +494,7 @@ export function WorkspaceScreen({
                   欢迎使用 AIChat Mobile
                 </Text>
                 <Text style={[styles.emptySub, { color: theme.mutedForeground }]}>
-                  {errorMessage || "当前还没有历史会话，点击下方按钮立即开启第一轮对话。"}
+                  当前还没有历史会话，点击下方按钮立即开启第一轮对话。
                 </Text>
                 <View style={styles.emptyActions}>
                   <Button
@@ -395,6 +567,26 @@ const styles = StyleSheet.create({
   },
   mainStage: {
     flex: 1,
+  },
+  errorBanner: {
+    alignItems: "center",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    columnGap: spacing.sm,
+    flexDirection: "row",
+    paddingHorizontal: spacing.md,
+    paddingVertical: 2,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    paddingVertical: 4,
+  },
+  bannerAction: {
+    alignItems: "center",
+    height: 44,
+    justifyContent: "center",
+    width: 44,
   },
   centered: {
     alignItems: "center",

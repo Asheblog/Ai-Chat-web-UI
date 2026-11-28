@@ -3,6 +3,7 @@
  */
 
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { actorMiddleware, adminOnlyMiddleware } from '../middleware/auth'
@@ -10,6 +11,7 @@ import type { Actor, ApiResponse } from '../types'
 import { getSupportedMimeTypes } from '../modules/document/loaders'
 import type { DocumentService } from '../services/document/document-service'
 import type { RAGService } from '../services/document/rag-service'
+import { ChatServiceError, type ChatService } from '../services/chat'
 import {
   documentWorkspaceBridgeService as defaultDocumentWorkspaceBridgeService,
   type DocumentWorkspaceBridgeService,
@@ -42,6 +44,11 @@ export interface DocumentsApiServices {
 export interface DocumentsApiDeps {
   resolveServices: () => DocumentsApiServices | null
   bridgeService?: DocumentWorkspaceBridgeService
+  /**
+   * 聊天会话所有权校验。复用 ChatService.ensureSessionAccess，
+   * 使会话文档的可见性边界与聊天会话合约保持一致。
+   */
+  chatService: Pick<ChatService, 'ensureSessionAccess'>
 }
 
 /**
@@ -63,6 +70,56 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
   const router = new Hono()
   const requireRAGEnabled = createRequireRAGEnabled(deps)
   const bridgeService = deps.bridgeService ?? defaultDocumentWorkspaceBridgeService
+  const chatService = deps.chatService
+
+  /**
+   * 文档归属判定：与文档详情/删除路由现有的权限语义保持一致。
+   */
+  const actorOwnsDocument = (
+    actor: Actor,
+    document: { userId: number | null; anonymousKey: string | null }
+  ): boolean =>
+    actor.type === 'user' ? document.userId === actor.id : document.anonymousKey === actor.key
+
+  /**
+   * 会话所有权校验：通过返回 null；拒绝时直接生成响应，
+   * 服务层抛出的 ChatServiceError（如会话不存在 404）按原状态码透传给调用方。
+   */
+  const ensureSessionAccess = async (
+    c: Context,
+    actor: Actor,
+    sessionId: number
+  ): Promise<Response | null> => {
+    try {
+      await chatService.ensureSessionAccess(actor, sessionId)
+      return null
+    } catch (error) {
+      if (error instanceof ChatServiceError) {
+        return c.json<ApiResponse>(
+          { success: false, error: error.message },
+          error.statusCode as any
+        )
+      }
+      throw error
+    }
+  }
+
+  /**
+   * 文档所有权校验：不存在=404、非本人=403，与 GET/DELETE /:id 一致。
+   */
+  const requireOwnedDocument = async (c: Context, actor: Actor, documentId: number) => {
+    const { documentService } = c.get('docServices') as NonNullable<
+      ReturnType<DocumentsApiDeps['resolveServices']>
+    >
+    const document = await documentService.getDocument(documentId)
+    if (!document) {
+      return { denied: c.json<ApiResponse>({ success: false, error: 'Document not found' }, 404) }
+    }
+    if (!actorOwnsDocument(actor, document)) {
+      return { denied: c.json<ApiResponse>({ success: false, error: 'Access denied' }, 403) }
+    }
+    return { document }
+  }
 
   /**
    * 获取支持的文件类型
@@ -84,10 +141,24 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
 
       const formData = await c.req.formData()
       const file = formData.get('file') as File | null
-      const sessionIdStr = formData.get('sessionId') as string | null
+      // 只接受文本部件；若伪造为文件部件，按未指定会话处理
+      const rawSessionId = formData.get('sessionId')
+      const sessionIdStr = typeof rawSessionId === 'string' ? rawSessionId : null
 
       if (!file) {
         return c.json<ApiResponse>({ success: false, error: 'No file provided' }, 400)
+      }
+
+      // 会话归属必须在落盘前确认，否则会把文档注入他人的会话上下文
+      let sessionId: number | null = null
+      if (sessionIdStr !== null && sessionIdStr.trim() !== '') {
+        const parsedSessionId = Number.parseInt(sessionIdStr, 10)
+        if (!Number.isFinite(parsedSessionId) || parsedSessionId <= 0) {
+          return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
+        }
+        sessionId = parsedSessionId
+        const denied = await ensureSessionAccess(c, actor, sessionId)
+        if (denied) return denied
       }
 
       const buffer = Buffer.from(await file.arrayBuffer())
@@ -103,22 +174,19 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
       )
 
       // 如果指定了 sessionId，自动附加到会话
-      if (sessionIdStr) {
-        const sessionId = parseInt(sessionIdStr, 10)
-        if (!isNaN(sessionId)) {
-          await documentService!.attachToSession(result.documentId, sessionId)
-          try {
-            await bridgeService.syncDocumentToWorkspace({
-              sessionId,
-              documentId: result.documentId,
-            })
-          } catch (bridgeError) {
-            console.warn('[Documents] Upload bridge sync warning:', {
-              sessionId,
-              documentId: result.documentId,
-              error: bridgeError instanceof Error ? bridgeError.message : String(bridgeError),
-            })
-          }
+      if (sessionId !== null) {
+        await documentService!.attachToSession(result.documentId, sessionId)
+        try {
+          await bridgeService.syncDocumentToWorkspace({
+            sessionId,
+            documentId: result.documentId,
+          })
+        } catch (bridgeError) {
+          console.warn('[Documents] Upload bridge sync warning:', {
+            sessionId,
+            documentId: result.documentId,
+            error: bridgeError instanceof Error ? bridgeError.message : String(bridgeError),
+          })
         }
       }
 
@@ -370,7 +438,14 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
       }
 
       const { sessionId } = c.req.valid('json')
+      const actor = c.get('actor') as Actor
       const { documentService } = c.get('docServices') as NonNullable<ReturnType<DocumentsApiDeps['resolveServices']>>
+
+      const denied = await ensureSessionAccess(c, actor, sessionId)
+      if (denied) return denied
+
+      const ownership = await requireOwnedDocument(c, actor, documentId)
+      if ('denied' in ownership) return ownership.denied
 
       await documentService!.attachToSession(documentId, sessionId)
       let bridgeSynced = true
@@ -407,7 +482,13 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
         return c.json<ApiResponse>({ success: false, error: 'Invalid IDs' }, 400)
       }
 
+      const actor = c.get('actor') as Actor
       const { documentService } = c.get('docServices') as NonNullable<ReturnType<DocumentsApiDeps['resolveServices']>>
+
+      // 会话所有者可移除任何挂在自己会话上的文档（含历史误挂），无需文档归属
+      const denied = await ensureSessionAccess(c, actor, sessionId)
+      if (denied) return denied
+
       await documentService!.detachFromSession(documentId, sessionId)
       try {
         await bridgeService.removeDocumentBridge({ sessionId, documentId })
@@ -437,7 +518,16 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
       }
 
       const { sessionId, force } = c.req.valid('json')
+      const actor = c.get('actor') as Actor
       const { documentService } = c.get('docServices') as NonNullable<ReturnType<DocumentsApiDeps['resolveServices']>>
+
+      const denied = await ensureSessionAccess(c, actor, sessionId)
+      if (denied) return denied
+
+      // 桥接会把文档内容写入会话 workspace，必须同时确认文档归属
+      const ownership = await requireOwnedDocument(c, actor, documentId)
+      if ('denied' in ownership) return ownership.denied
+
       const sessionDocIds = await documentService.getSessionDocumentIds(sessionId)
       if (!sessionDocIds.includes(documentId)) {
         return c.json<ApiResponse>(
@@ -472,6 +562,10 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
         return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
       }
 
+      const actor = c.get('actor') as Actor
+      const denied = await ensureSessionAccess(c, actor, sessionId)
+      if (denied) return denied
+
       const bridges = await bridgeService.listSessionBridges(sessionId)
       return c.json<ApiResponse>({
         success: true,
@@ -494,6 +588,10 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
         return c.json<ApiResponse>({ success: false, error: 'Invalid IDs' }, 400)
       }
 
+      const actor = c.get('actor') as Actor
+      const denied = await ensureSessionAccess(c, actor, sessionId)
+      if (denied) return denied
+
       await bridgeService.removeDocumentBridge({ sessionId, documentId })
       return c.json<ApiResponse>({ success: true, data: { removed: true } })
     } catch (error) {
@@ -512,7 +610,12 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
         return c.json<ApiResponse>({ success: false, error: 'Invalid session ID' }, 400)
       }
 
+      const actor = c.get('actor') as Actor
       const { documentService } = c.get('docServices') as NonNullable<ReturnType<DocumentsApiDeps['resolveServices']>>
+
+      const denied = await ensureSessionAccess(c, actor, sessionId)
+      if (denied) return denied
+
       const documents = await documentService!.getSessionDocuments(sessionId)
 
       return c.json<ApiResponse>({
@@ -539,12 +642,35 @@ export const createDocumentsApi = (deps: DocumentsApiDeps) => {
   router.post('/search', actorMiddleware, requireRAGEnabled, zValidator('json', searchSchema), async (c) => {
     try {
       const { query, sessionId, documentIds } = c.req.valid('json')
-      const { ragService } = c.get('docServices') as NonNullable<ReturnType<DocumentsApiDeps['resolveServices']>>
+      const actor = c.get('actor') as Actor
+      const { documentService, ragService } = c.get('docServices') as NonNullable<
+        ReturnType<DocumentsApiDeps['resolveServices']>
+      >
 
       let result
       if (sessionId) {
+        const denied = await ensureSessionAccess(c, actor, sessionId)
+        if (denied) return denied
+
         result = await ragService!.searchInSession(sessionId, query)
       } else if (documentIds && documentIds.length > 0) {
+        // 检索结果会返回文档正文片段，必须逐篇确认归属
+        const documents = await Promise.all(
+          documentIds.map((id) => documentService!.getDocument(id))
+        )
+        for (let i = 0; i < documents.length; i++) {
+          const document = documents[i]
+          if (!document) {
+            return c.json<ApiResponse>(
+              { success: false, error: `Document ${documentIds[i]} not found` },
+              404
+            )
+          }
+          if (!actorOwnsDocument(actor, document)) {
+            return c.json<ApiResponse>({ success: false, error: 'Access denied' }, 403)
+          }
+        }
+
         result = await ragService!.searchInDocuments(documentIds, query)
       } else {
         return c.json<ApiResponse>(

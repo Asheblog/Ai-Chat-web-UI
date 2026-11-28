@@ -2,6 +2,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import type { BrandingInfo, ServerProfile } from "../types/mobile";
 import { loadServerEndpoint } from "../server-endpoint-storage";
+import { buildServerProfileId, normalizeServerEndpointKey } from "./server-identity";
+
+export { buildServerProfileId };
 
 const PROFILES_KEY = "aichat.serverProfiles.v1";
 const ACTIVE_PROFILE_ID_KEY = "aichat.activeServerProfileId.v1";
@@ -13,12 +16,6 @@ export type KeyValueStorage = {
 };
 
 const defaultStorage: KeyValueStorage = AsyncStorage;
-
-export function buildServerProfileId(endpoint: string): string {
-  const normalized = endpoint.trim().replace(/\/+$/, "").toLowerCase();
-  const safe = normalized.replace(/[^a-z0-9._-]+/g, "_").replace(/^_+|_+$/g, "");
-  return safe.slice(0, 80) || "default_server";
-}
 
 export function deriveServerName(endpoint: string, brandText?: string | null): string {
   const trimmedBrand = typeof brandText === "string" ? brandText.trim() : "";
@@ -57,10 +54,11 @@ export async function loadServerProfilesState(
     }
   }
 
-  // 从旧单地址存储平滑迁移
-  if (profiles.length === 0) {
+  // 旧单地址存储只在“从未写入过多服务器配置”时迁移一次。
+  // 不能用 profiles.length === 0 判定：用户主动删光服务器后，重启会把旧地址重新迁回来。
+  if (!rawProfiles) {
     try {
-      const legacyEndpoint = await legacyLoader();
+      const legacyEndpoint = (await legacyLoader())?.trim();
       if (legacyEndpoint) {
         const migrated: ServerProfile = {
           id: buildServerProfileId(legacyEndpoint),
@@ -98,6 +96,22 @@ export async function saveServerProfilesState(
   }
 }
 
+/**
+ * 派生 id 撞到已有条目时绝不覆盖：那可能是另一台服务器（旧格式 id 残留）。
+ * 追加序号保持唯一，宁可多一个 profile，也不让两台服务器共用凭证槽位。
+ */
+function pickProfileId(profiles: ServerProfile[], endpoint: string): string {
+  const baseId = buildServerProfileId(endpoint);
+  if (!profiles.some((p) => p.id === baseId)) {
+    return baseId;
+  }
+  let suffix = 2;
+  while (profiles.some((p) => p.id === `${baseId}_${suffix}`)) {
+    suffix += 1;
+  }
+  return `${baseId}_${suffix}`;
+}
+
 export function upsertServerProfile(
   profiles: ServerProfile[],
   input: {
@@ -107,11 +121,16 @@ export function upsertServerProfile(
   },
 ): { profiles: ServerProfile[]; profile: ServerProfile } {
   const endpoint = input.endpoint.trim().replace(/\/+$/, "");
-  const id = buildServerProfileId(endpoint);
-  const existing = profiles.find((p) => p.id === id || p.endpoint === endpoint);
+  const endpointKey = normalizeServerEndpointKey(endpoint);
+  // 只按“同一台服务器”合并：地址归一化后相同才算同一台。
+  // 若按派生 id 合并，长地址被截断或字符被折叠后会把两台服务器并成一条，
+  // 并让第二台服务器复用第一台的凭证槽位。
+  const existing = profiles.find(
+    (p) => normalizeServerEndpointKey(p.endpoint) === endpointKey,
+  );
 
   const profile: ServerProfile = {
-    id: existing?.id ?? id,
+    id: existing?.id ?? pickProfileId(profiles, endpoint),
     name:
       (typeof input.name === "string" && input.name.trim()) ||
       deriveServerName(endpoint, input.branding?.brand_text ?? existing?.brandText),

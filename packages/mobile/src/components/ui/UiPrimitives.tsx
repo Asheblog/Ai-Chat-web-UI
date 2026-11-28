@@ -259,6 +259,29 @@ export function SegmentedControl<T extends string>({
   );
 }
 
+/**
+ * 开关行的可访问契约：整行作为一个 switch 暴露，标题是可读名称、说明是提示，
+ * 状态同时给出 checked 与 disabled，读屏用户不必再靠视觉判断开关是否开启。
+ */
+export function buildSwitchRowAccessibility({
+  title,
+  subtitle,
+  value,
+  disabled = false,
+}: {
+  title: string;
+  subtitle?: string;
+  value: boolean;
+  disabled?: boolean;
+}) {
+  return {
+    accessibilityRole: "switch" as const,
+    accessibilityLabel: title,
+    accessibilityHint: subtitle,
+    accessibilityState: { checked: value, disabled },
+  };
+}
+
 export function SwitchRow({
   title,
   subtitle,
@@ -276,6 +299,7 @@ export function SwitchRow({
 }) {
   return (
     <Pressable
+      {...buildSwitchRowAccessibility({ title, subtitle, value, disabled })}
       disabled={disabled}
       onPress={() => onValueChange(!value)}
       style={[
@@ -296,8 +320,12 @@ export function SwitchRow({
         ) : null}
       </View>
       <Switch
+        accessibilityElementsHidden
+        accessible={false}
         disabled={disabled}
+        importantForAccessibility="no-hide-descendants"
         onValueChange={onValueChange}
+        pointerEvents="none"
         thumbColor={theme.surface}
         trackColor={{ false: theme.borderStrong, true: theme.primary }}
         value={value}

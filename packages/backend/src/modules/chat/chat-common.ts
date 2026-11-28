@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DEFAULT_CHAT_IMAGE_LIMITS } from '@aichat/shared/image-limits';
 import { prisma } from '../../db';
 import { ensureAnonymousSession } from '../../utils/actor';
 import type { Actor, UsageQuotaSnapshot } from '../../types';
@@ -18,7 +19,7 @@ export const sendMessageSchema = z.object({
   content: z.string().max(10000).optional(),
   replyToMessageId: z.number().int().positive().optional(),
   replyToClientMessageId: z.string().min(1).max(128).optional(),
-  images: z.array(z.object({ data: z.string().min(1), mime: z.string().min(1) })).max(4).optional(),
+  images: z.array(z.object({ data: z.string().min(1), mime: z.string().min(1) })).max(DEFAULT_CHAT_IMAGE_LIMITS.maxCount).optional(),
   reasoningEnabled: z.boolean().optional(),
   reasoningEffort: z.enum(['low', 'medium', 'high', 'max', 'xhigh']).optional(),
   saveReasoning: z.boolean().optional(),

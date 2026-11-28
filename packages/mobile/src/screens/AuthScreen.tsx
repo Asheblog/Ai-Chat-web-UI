@@ -20,6 +20,50 @@ import { radii, spacing } from "../theme/tokens";
 
 type AuthMode = "login" | "register";
 
+type AuthInputSemantics = {
+  username: {
+    accessibilityLabel: string;
+    autoCapitalize: "none";
+    autoCorrect: boolean;
+    autoComplete: "username";
+    textContentType: "username";
+  };
+  password: {
+    accessibilityLabel: string;
+    autoCapitalize: "none";
+    autoComplete: "current-password" | "new-password";
+    textContentType: "password" | "newPassword";
+  };
+};
+
+/** 登录复用系统已保存的账号密码，注册只应提示用户新建密码。 */
+export function authInputSemantics(mode: AuthMode): AuthInputSemantics {
+  return {
+    username: {
+      accessibilityLabel: "用户名",
+      autoCapitalize: "none",
+      autoCorrect: false,
+      autoComplete: "username",
+      textContentType: "username",
+    },
+    password: {
+      accessibilityLabel: "密码",
+      autoCapitalize: "none",
+      autoComplete: mode === "login" ? "current-password" : "new-password",
+      textContentType: mode === "login" ? "password" : "newPassword",
+    },
+  };
+}
+
+/** 图标按钮没有可见文字，读屏时需要随状态翻转的动作名。 */
+export function passwordToggleAccessibility(visible: boolean) {
+  return {
+    accessibilityRole: "button" as const,
+    accessibilityLabel: visible ? "隐藏密码" : "显示密码",
+    accessibilityState: { selected: visible },
+  };
+}
+
 type AuthScreenProps = {
   apiClient: MobileApiClient;
   endpoint: string;
@@ -127,8 +171,7 @@ export function AuthScreen({
             <View style={styles.field}>
               <Text style={[styles.label, { color: theme.mutedForeground }]}>用户名</Text>
               <TextInput
-                autoCapitalize="none"
-                autoCorrect={false}
+                {...authInputSemantics(mode).username}
                 onChangeText={setUsername}
                 placeholder="输入用户名"
                 placeholderTextColor={theme.tertiaryForeground}
@@ -156,7 +199,7 @@ export function AuthScreen({
                 ]}
               >
                 <TextInput
-                  autoCapitalize="none"
+                  {...authInputSemantics(mode).password}
                   onChangeText={setPassword}
                   placeholder="输入密码"
                   placeholderTextColor={theme.tertiaryForeground}
@@ -164,7 +207,11 @@ export function AuthScreen({
                   style={[styles.passwordInput, { color: theme.foreground }]}
                   value={password}
                 />
-                <Pressable hitSlop={8} onPress={() => setShowPassword((v) => !v)}>
+                <Pressable
+                  {...passwordToggleAccessibility(showPassword)}
+                  hitSlop={8}
+                  onPress={() => setShowPassword((v) => !v)}
+                >
                   <MaterialCommunityIcons
                     color={theme.tertiaryForeground}
                     name={showPassword ? "eye-off-outline" : "eye-outline"}

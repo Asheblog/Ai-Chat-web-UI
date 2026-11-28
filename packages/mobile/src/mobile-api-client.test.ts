@@ -39,6 +39,22 @@ describe("MobileApiClient", () => {
     );
   });
 
+  it("保存会话 Skill 的具体版本和开关状态", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ success: true, data: {} })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new MobileApiClient({ endpoint: "https://chat.example.com", getToken: () => "token" });
+    const payload = { skillId: 4, versionId: 7, enabled: false };
+
+    await client.updateSessionSkillBinding(12, payload);
+
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+      "https://chat.example.com/api/skills/sessions/12",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify(payload) }),
+    );
+  });
+
   it("返回 401 时触发 onUnauthorized 回调并抛出 UnauthorizedApiError", async () => {
     const onUnauthorized = vi.fn();
     vi.stubGlobal(
@@ -58,6 +74,17 @@ describe("MobileApiClient", () => {
     });
 
     await expect(client.getKnowledgeBases()).rejects.toBeInstanceOf(UnauthorizedApiError);
-    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    expect(onUnauthorized).toHaveBeenCalledExactlyOnceWith("bad-token");
+  });
+
+  it("不因未附带凭据的登录请求返回 401 而清除已保存的登录", async () => {
+    const onUnauthorized = vi.fn();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ success: false, error: "Invalid credentials" }), { status: 401 }),
+    ));
+    const client = new MobileApiClient({ endpoint: "https://chat.example.com", onUnauthorized });
+
+    await expect(client.login("user", "wrong-password")).rejects.toThrow("Invalid credentials");
+    expect(onUnauthorized).not.toHaveBeenCalled();
   });
 });

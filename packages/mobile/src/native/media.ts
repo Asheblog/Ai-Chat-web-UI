@@ -3,13 +3,19 @@ import { File, Paths } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import * as MediaLibrary from "expo-media-library";
 import * as Sharing from "expo-sharing";
-import { DEFAULT_CHAT_IMAGE_LIMITS } from "@aichat/shared/image-limits";
 
-import type { PendingImageAttachment } from "../types/mobile";
-
-type ImagePickResult =
-  | { ok: true; images: PendingImageAttachment[] }
-  | { ok: false; message: string };
+import {
+  imageLimitMessage,
+  remainingImageSlots,
+  toPendingImageAttachments,
+  type ExistingImageState,
+  type ImagePickResult,
+} from "./image-attachment";
+import {
+  imageExtensionForMime,
+  parseImageDataUri,
+  resolveImageMimeFromUri,
+} from "./image-format";
 
 type DocPickResult =
   | { ok: true; file: { uri: string; name: string; mimeType?: string } | null }
@@ -17,40 +23,15 @@ type DocPickResult =
 
 type ActionResult = { ok: true } | { ok: false; message: string };
 
-function mapAssetsToPending(
-  assets: ImagePicker.ImagePickerAsset[],
-  existingCount: number,
-): ImagePickResult {
-  const maxAllowed = Math.min(4, DEFAULT_CHAT_IMAGE_LIMITS.maxCount);
-  const remainingSlots = maxAllowed - existingCount;
-  if (remainingSlots <= 0) {
-    return { ok: false, message: `单条消息最多发送 ${maxAllowed} 张图片。` };
+type MaterializedImage = { file: File; mimeType: string };
+
+export async function takePhotoWithCamera(
+  existing: ExistingImageState = [],
+): Promise<ImagePickResult> {
+  if (remainingImageSlots(existing) <= 0) {
+    return { ok: false, message: imageLimitMessage() };
   }
 
-  const picked: PendingImageAttachment[] = [];
-  for (const asset of assets.slice(0, remainingSlots)) {
-    if (!asset.base64) continue;
-    const estimatedBytes = Math.round((asset.base64.length * 3) / 4);
-    if (estimatedBytes > DEFAULT_CHAT_IMAGE_LIMITS.maxMb * 1024 * 1024) {
-      return {
-        ok: false,
-        message: `图片体积超过 ${DEFAULT_CHAT_IMAGE_LIMITS.maxMb}MB 上限，请重新选择或压缩后发送。`,
-      };
-    }
-    picked.push({
-      id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      uri: asset.uri,
-      mime: asset.mimeType || "image/jpeg",
-      data: asset.base64,
-      fileName: asset.fileName ?? undefined,
-      sizeBytes: asset.fileSize ?? estimatedBytes,
-    });
-  }
-
-  return { ok: true, images: picked };
-}
-
-export async function takePhotoWithCamera(existingCount: number): Promise<ImagePickResult> {
   try {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
@@ -64,7 +45,7 @@ export async function takePhotoWithCamera(existingCount: number): Promise<ImageP
     if (result.canceled || !result.assets?.length) {
       return { ok: true, images: [] };
     }
-    return mapAssetsToPending(result.assets, existingCount);
+    return toPendingImageAttachments(result.assets, existing);
   } catch (error) {
     return {
       ok: false,
@@ -73,14 +54,20 @@ export async function takePhotoWithCamera(existingCount: number): Promise<ImageP
   }
 }
 
-export async function pickImagesFromLibrary(existingCount: number): Promise<ImagePickResult> {
+export async function pickImagesFromLibrary(
+  existing: ExistingImageState = [],
+): Promise<ImagePickResult> {
+  const remaining = remainingImageSlots(existing);
+  if (remaining <= 0) {
+    return { ok: false, message: imageLimitMessage() };
+  }
+
   try {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       return { ok: false, message: "需要授予相册访问权限才能选择图片。" };
     }
-    const maxAllowed = Math.min(4, DEFAULT_CHAT_IMAGE_LIMITS.maxCount);
-    const remaining = Math.max(1, maxAllowed - existingCount);
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       allowsMultipleSelection: true,
@@ -91,7 +78,7 @@ export async function pickImagesFromLibrary(existingCount: number): Promise<Imag
     if (result.canceled || !result.assets?.length) {
       return { ok: true, images: [] };
     }
-    return mapAssetsToPending(result.assets, existingCount);
+    return toPendingImageAttachments(result.assets, existing);
   } catch (error) {
     return {
       ok: false,
@@ -126,23 +113,50 @@ export async function pickDocumentFile(): Promise<DocPickResult> {
   }
 }
 
-async function materializeImageToCache(imageUri: string): Promise<File> {
-  const filename = `aichat-img-${Date.now()}.png`;
-  const target = new File(Paths.cache, filename);
+function createCacheImageFile(extension: string): File {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  return new File(Paths.cache, `aichat-img-${Date.now()}-${suffix}${extension}`);
+}
 
-  if (imageUri.startsWith("data:")) {
-    const commaIdx = imageUri.indexOf(",");
-    const base64Data = commaIdx >= 0 ? imageUri.slice(commaIdx + 1) : imageUri;
+/**
+ * 把 data URI / file URI / http(s) URL 落成带正确后缀的本地文件，供保存相册与系统分享使用。
+ * 旧实现固定写 .png，而生成图片或 AI 图片经常是 JPEG/WebP，后缀与 MIME 会不一致。
+ */
+async function materializeImageToCache(imageUri: string): Promise<MaterializedImage> {
+  const parsed = parseImageDataUri(imageUri);
+  if (parsed) {
+    const mimeType = resolveImageMimeFromUri(imageUri);
+    const target = createCacheImageFile(imageExtensionForMime(mimeType));
     target.create({ overwrite: true, intermediates: true });
-    target.write(base64Data, { encoding: "base64" });
-    return target;
+
+    if (parsed.isBase64) {
+      const data = parsed.data.replace(/\s+/g, "");
+      if (!data) {
+        throw new Error("图片数据为空。");
+      }
+      target.write(data, { encoding: "base64" });
+    } else {
+      try {
+        target.write(decodeURIComponent(parsed.data), { encoding: "utf8" });
+      } catch {
+        throw new Error("图片数据格式不受支持。");
+      }
+    }
+
+    return { file: target, mimeType };
   }
 
   if (imageUri.startsWith("file://")) {
-    return new File(imageUri);
+    return {
+      file: new File(imageUri),
+      mimeType: resolveImageMimeFromUri(imageUri),
+    };
   }
 
-  return File.downloadFileAsync(imageUri, target, { idempotent: true });
+  const mimeType = resolveImageMimeFromUri(imageUri);
+  const target = createCacheImageFile(imageExtensionForMime(mimeType));
+  const file = await File.downloadFileAsync(imageUri, target, { idempotent: true });
+  return { file, mimeType };
 }
 
 export async function saveImageToLibrary(imageUri: string): Promise<ActionResult> {
@@ -151,8 +165,8 @@ export async function saveImageToLibrary(imageUri: string): Promise<ActionResult
     if (!perm.granted) {
       return { ok: false, message: "未获得保存图片到相册的权限。" };
     }
-    const localFile = await materializeImageToCache(imageUri);
-    await MediaLibrary.Asset.create(localFile.uri);
+    const { file } = await materializeImageToCache(imageUri);
+    await MediaLibrary.Asset.create(file.uri);
     return { ok: true };
   } catch (error) {
     return {
@@ -168,8 +182,8 @@ export async function shareImageFile(imageUri: string): Promise<ActionResult> {
     if (!available) {
       return { ok: false, message: "当前设备不支持系统文件分享。" };
     }
-    const localFile = await materializeImageToCache(imageUri);
-    await Sharing.shareAsync(localFile.uri);
+    const { file, mimeType } = await materializeImageToCache(imageUri);
+    await Sharing.shareAsync(file.uri, { mimeType });
     return { ok: true };
   } catch (error) {
     return {
