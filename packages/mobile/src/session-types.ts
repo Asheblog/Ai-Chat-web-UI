@@ -1,4 +1,5 @@
 import type { Pagination } from "@aichat/shared/api-contract";
+import type { ReasoningEffort } from "./types/mobile";
 
 export type ChatSession = {
   id: number;
@@ -9,6 +10,10 @@ export type ChatSession = {
   title: string;
   createdAt: string;
   pinnedAt?: string | null;
+  reasoningEnabled?: boolean | null;
+  reasoningEffort?: ReasoningEffort | null;
+  systemPrompt?: string | null;
+  knowledgeBaseIds?: number[] | null;
   lastMessagePreview?: string | null;
   lastMessageAt?: string | null;
   _count?: {
@@ -32,11 +37,37 @@ export type ModelItem = {
   connectionId?: number | null;
   modelType?: "chat" | "embedding" | "both";
   accessDecision?: "allow" | "deny";
+  capabilities?: {
+    vision?: boolean;
+    reasoning?: boolean;
+    toolCall?: boolean;
+    imageGeneration?: boolean;
+  };
+  contextWindow?: number | null;
 };
 
 export type CreateSessionPayload = {
   modelId: string;
   title?: string;
+  connectionId?: number;
+  rawId?: string;
+  reasoningEnabled?: boolean;
+  reasoningEffort?: ReasoningEffort;
+  systemPrompt?: string;
+  knowledgeBaseIds?: number[];
+};
+
+export type UpdateSessionPayload = {
+  title?: string;
+  pinned?: boolean;
+  reasoningEnabled?: boolean;
+  reasoningEffort?: ReasoningEffort | null;
+  systemPrompt?: string | null;
+  knowledgeBaseIds?: number[];
+};
+
+export type SwitchSessionModelPayload = {
+  modelId: string;
   connectionId?: number;
   rawId?: string;
 };

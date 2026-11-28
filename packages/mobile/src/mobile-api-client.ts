@@ -1,9 +1,26 @@
-import type { AuthSession, MobileUser, RegisterResult } from "./auth-types";
-import { parseStreamLines } from "./chat-stream-parser";
 import { readSseStream } from "@aichat/shared/sse-reader";
 import type { ApiResponse } from "@aichat/shared/api-contract";
+
+import type { AuthSession, MobileUser, RegisterResult } from "./auth-types";
+import { parseStreamLines } from "./chat-stream-parser";
 import type { ChatStreamChunk, MessageListPayload, StreamMessagePayload } from "./chat-types";
-import type { ChatSession, CreateSessionPayload, ModelItem, SessionListPayload } from "./session-types";
+import type {
+  ChatSession,
+  CreateSessionPayload,
+  ModelItem,
+  SessionListPayload,
+  SwitchSessionModelPayload,
+  UpdateSessionPayload,
+} from "./session-types";
+import type {
+  AppInfo,
+  BrandingInfo,
+  KnowledgeBaseItem,
+  McpSessionTool,
+  PersonalSettings,
+  SessionDocumentItem,
+  SkillOptionItem,
+} from "./types/mobile";
 
 type AuthPayload = {
   user?: MobileUser;
@@ -13,7 +30,7 @@ type AuthPayload = {
 type ApiClientOptions = {
   endpoint: string;
   getToken?: () => string | null;
-  onUnauthorized?: () => void | Promise<void>;
+  onUnauthorized?: (failedToken: string) => void | Promise<void>;
 };
 
 type RequestOptions = {
@@ -25,6 +42,17 @@ type RequestOptions = {
 type StreamRequestOptions = {
   body: StreamMessagePayload;
   signal?: AbortSignal;
+};
+
+export type PersonalSettingsUpdatePayload = {
+  preferred_model?: {
+    modelId: string;
+    connectionId: number | null;
+    rawId: string;
+  } | null;
+  personal_prompt?: string | null;
+  context_enabled?: boolean;
+  username?: string;
 };
 
 export class MobileApiError extends Error {
@@ -47,12 +75,24 @@ export class UnauthorizedApiError extends MobileApiError {
 export class MobileApiClient {
   private readonly endpoint: string;
   private readonly getToken?: () => string | null;
-  private readonly onUnauthorized?: () => void | Promise<void>;
+  private readonly onUnauthorized?: (failedToken: string) => void | Promise<void>;
 
   constructor(options: ApiClientOptions) {
     this.endpoint = options.endpoint.replace(/\/+$/, "");
     this.getToken = options.getToken;
     this.onUnauthorized = options.onUnauthorized;
+  }
+
+  getEndpoint() {
+    return this.endpoint;
+  }
+
+  async getBranding(): Promise<BrandingInfo> {
+    return this.request<BrandingInfo>("/api/settings/branding");
+  }
+
+  async getAppInfo(): Promise<AppInfo> {
+    return this.request<AppInfo>("/api/settings/app-info");
   }
 
   async login(username: string, password: string): Promise<AuthSession> {
@@ -131,6 +171,36 @@ export class MobileApiClient {
     });
   }
 
+  async updateSession(sessionId: number, updates: UpdateSessionPayload): Promise<ChatSession> {
+    return this.request<ChatSession>(`/api/sessions/${sessionId}`, {
+      method: "PUT",
+      authenticated: true,
+      body: updates,
+    });
+  }
+
+  async switchSessionModel(sessionId: number, payload: SwitchSessionModelPayload): Promise<ChatSession> {
+    return this.request<ChatSession>(`/api/sessions/${sessionId}/model`, {
+      method: "PUT",
+      authenticated: true,
+      body: payload,
+    });
+  }
+
+  async deleteSession(sessionId: number): Promise<void> {
+    await this.request<void>(`/api/sessions/${sessionId}`, {
+      method: "DELETE",
+      authenticated: true,
+    });
+  }
+
+  async clearSessionMessages(sessionId: number): Promise<void> {
+    await this.request<void>(`/api/sessions/${sessionId}/messages`, {
+      method: "DELETE",
+      authenticated: true,
+    });
+  }
+
   async getMessages(sessionId: number, limit = 100): Promise<MessageListPayload> {
     return this.request<MessageListPayload>(
       `/api/chat/sessions/${sessionId}/messages?page=latest&limit=${limit}`,
@@ -164,7 +234,7 @@ export class MobileApiClient {
     }
 
     if (response.status === 401) {
-      await this.onUnauthorized?.();
+      await this.onUnauthorized?.(token);
       throw new UnauthorizedApiError();
     }
 
@@ -174,7 +244,7 @@ export class MobileApiClient {
     }
 
     if (!response.body || typeof response.body.getReader !== "function") {
-      throw new MobileApiError("当前 Expo Go 运行环境不支持流式读取，请升级 Expo Go 或使用兼容的开发构建。");
+      throw new MobileApiError("当前运行环境不支持流式读取，请使用独立安装构建。");
     }
 
     let completed = false;
@@ -208,6 +278,140 @@ export class MobileApiClient {
     });
   }
 
+  async stopTools(sessionId: number, clientMessageId?: string, messageId?: number | null): Promise<void> {
+    const body: Record<string, unknown> = { sessionId };
+    if (clientMessageId) body.clientMessageId = clientMessageId;
+    if (typeof messageId === "number" && Number.isFinite(messageId)) {
+      body.messageId = messageId;
+    }
+
+    await this.request<void>("/api/chat/stream/stop-tools", {
+      method: "POST",
+      authenticated: true,
+      body,
+    });
+  }
+
+  async regenerateMessage(sessionId: number, messageId: number): Promise<{ userMessageId: number }> {
+    return this.request<{ userMessageId: number }>("/api/chat/regenerate", {
+      method: "POST",
+      authenticated: true,
+      body: { sessionId, messageId },
+    });
+  }
+
+  async uploadDocument(
+    file: { uri: string; name: string; mimeType?: string },
+    sessionId?: number,
+  ): Promise<{ documentId: number; filename?: string; originalName?: string }> {
+    const token = this.getToken?.() ?? null;
+    if (!token) {
+      throw new UnauthorizedApiError();
+    }
+
+    const formData = new FormData();
+    formData.append("file", {
+      uri: file.uri,
+      name: file.name,
+      type: file.mimeType || "application/octet-stream",
+    } as unknown as Blob);
+
+    if (typeof sessionId === "number" && Number.isFinite(sessionId)) {
+      formData.append("sessionId", String(sessionId));
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.endpoint}/api/documents/upload`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+    } catch {
+      throw new MobileApiError("上传文档失败，请检查网络和服务端地址。");
+    }
+
+    let body: ApiResponse<{ documentId: number; filename?: string; originalName?: string }> | null = null;
+    try {
+      body = (await response.json()) as ApiResponse<{ documentId: number; filename?: string; originalName?: string }>;
+    } catch {
+      body = null;
+    }
+
+    if (response.status === 401) {
+      await this.onUnauthorized?.(token);
+      throw new UnauthorizedApiError(body?.error);
+    }
+
+    if (!response.ok || body?.success === false || !body?.data) {
+      throw new MobileApiError(body?.error ?? `文档上传失败（${response.status}）。`, response.status);
+    }
+
+    return body.data;
+  }
+
+  async getSessionDocuments(sessionId: number): Promise<SessionDocumentItem[]> {
+    return this.request<SessionDocumentItem[]>(`/api/documents/session/${sessionId}`, {
+      authenticated: true,
+    });
+  }
+
+  async detachDocument(documentId: number, sessionId: number): Promise<void> {
+    await this.request<void>(`/api/documents/${documentId}/detach/${sessionId}`, {
+      method: "DELETE",
+      authenticated: true,
+    });
+  }
+
+  async getKnowledgeBases(): Promise<KnowledgeBaseItem[]> {
+    return this.request<KnowledgeBaseItem[]>("/api/knowledge-bases", {
+      authenticated: true,
+    });
+  }
+
+  async getSessionSkillOptions(sessionId: number): Promise<SkillOptionItem[]> {
+    const data = await this.request<{ items?: SkillOptionItem[] }>(
+      `/api/skills/session-options?sessionId=${sessionId}`,
+      { authenticated: true },
+    );
+    return Array.isArray(data?.items) ? data.items : [];
+  }
+
+  async updateSessionSkillBinding(
+    sessionId: number,
+    body: { skillId: number; versionId: number; enabled: boolean },
+  ): Promise<void> {
+    await this.request<unknown>(`/api/skills/sessions/${sessionId}`, {
+      method: "PUT",
+      body,
+      authenticated: true,
+    });
+  }
+
+  async getSessionMcpTools(sessionId: number): Promise<McpSessionTool[]> {
+    const data = await this.request<McpSessionTool[]>(`/api/mcp/sessions/${sessionId}/tools`, {
+      authenticated: true,
+    });
+    return Array.isArray(data) ? data : [];
+  }
+
+  async getPersonalSettings(): Promise<PersonalSettings> {
+    return this.request<PersonalSettings>("/api/settings/personal", {
+      authenticated: true,
+    });
+  }
+
+  async updatePersonalSettings(payload: PersonalSettingsUpdatePayload): Promise<PersonalSettings> {
+    return this.request<PersonalSettings>("/api/settings/personal", {
+      method: "PUT",
+      authenticated: true,
+      body: payload,
+    });
+  }
+
   private async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
     const headers: Record<string, string> = {
       Accept: "application/json",
@@ -217,8 +421,8 @@ export class MobileApiClient {
       headers["Content-Type"] = "application/json";
     }
 
+    const token = options.authenticated ? this.getToken?.() ?? null : null;
     if (options.authenticated) {
-      const token = this.getToken?.() ?? null;
       if (!token) {
         throw new UnauthorizedApiError();
       }
@@ -244,7 +448,7 @@ export class MobileApiClient {
     }
 
     if (response.status === 401) {
-      await this.onUnauthorized?.();
+      if (token) await this.onUnauthorized?.(token);
       throw new UnauthorizedApiError(body?.error);
     }
 

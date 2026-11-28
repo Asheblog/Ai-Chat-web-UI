@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useState } from "react";
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -11,386 +11,374 @@ import {
   View,
 } from "react-native";
 
+import { Badge, Button, SurfaceCard } from "../components/ui/UiPrimitives";
+import { lightTap } from "../native/haptics";
 import type { EndpointValidationResult } from "../server-endpoint";
-import type { AppTheme } from "../theme";
-import { spacing } from "../theme";
+import type { AppTheme } from "../theme/tokens";
+import { radii, spacing } from "../theme/tokens";
+import type { ServerProfile } from "../types/mobile";
 
 type SaveState = "idle" | "checking" | "saved";
 
 type EndpointScreenProps = {
-  canSubmit: boolean;
-  endpointInput: string;
-  errorMessage: string | null;
-  hasSavedEndpoint: boolean;
-  isLoadingStoredEndpoint: boolean;
-  normalizedPreview: EndpointValidationResult;
-  onEndpointChange: (value: string) => void;
-  onEditEndpoint: () => void;
-  onSaveEndpoint: () => void;
-  onUseSavedEndpoint: () => void;
-  saveState: SaveState;
-  savedEndpoint: string | null;
-  successMessage: string | null;
   theme: AppTheme;
+  endpointInput: string;
+  normalizedPreview: EndpointValidationResult;
+  canSubmit: boolean;
+  saveState: SaveState;
+  savedProfiles: ServerProfile[];
+  activeProfileId: string | null;
+  isLoadingStored: boolean;
+  errorMessage: string | null;
+  successMessage: string | null;
+  onEndpointChange: (value: string) => void;
+  onSaveEndpoint: () => void;
+  onSelectProfile: (profile: ServerProfile) => void;
+  onRemoveProfile: (profileId: string) => void;
+  onCancelEdit?: () => void;
 };
 
 export function EndpointScreen({
-  canSubmit,
-  endpointInput,
-  errorMessage,
-  hasSavedEndpoint,
-  isLoadingStoredEndpoint,
-  normalizedPreview,
-  onEndpointChange,
-  onEditEndpoint,
-  onSaveEndpoint,
-  onUseSavedEndpoint,
-  saveState,
-  savedEndpoint,
-  successMessage,
   theme,
+  endpointInput,
+  normalizedPreview,
+  canSubmit,
+  saveState,
+  savedProfiles,
+  activeProfileId,
+  isLoadingStored,
+  errorMessage,
+  successMessage,
+  onEndpointChange,
+  onSaveEndpoint,
+  onSelectProfile,
+  onRemoveProfile,
+  onCancelEdit,
 }: EndpointScreenProps) {
+  const [showTips, setShowTips] = useState(false);
+
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={styles.keyboardAvoidingView}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={[styles.flex, { backgroundColor: theme.background }]}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        <View style={styles.header}>
-          <View
-            accessible
-            accessibilityLabel="AIChat Mobile"
-            style={[
-              styles.brandMark,
-              {
-                backgroundColor: theme.primarySurface,
-                borderColor: theme.border,
-              },
-            ]}
-          >
-            <MaterialCommunityIcons name="server-network" size={30} color={theme.primary} />
-          </View>
-
-          <View style={styles.copy}>
-            <Text style={[styles.eyebrow, { color: theme.primary }]}>AIChat Mobile</Text>
-            <Text style={[styles.title, { color: theme.foreground }]}>配置服务端地址</Text>
-            <Text style={[styles.description, { color: theme.mutedForeground }]}>
-              输入 AIChat 后端根地址，连接检测通过后会保存在本机，后续启动自动恢复。
-            </Text>
-          </View>
-        </View>
-
-        <View style={[styles.panel, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          {isLoadingStoredEndpoint ? (
-            <View style={styles.loadingRow} accessibilityRole="progressbar">
-              <ActivityIndicator color={theme.primary} />
-              <Text style={[styles.panelBody, { color: theme.mutedForeground }]}>正在读取已保存地址</Text>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.hero}>
+          <View style={styles.brandRow}>
+            <View style={[styles.brandPill, { backgroundColor: theme.primarySurface }]}>
+              <MaterialCommunityIcons color={theme.signalText} name="star-four-points" size={16} />
+              <Text style={[styles.brandPillText, { color: theme.signalText }]}>
+                AIChat Mobile
+              </Text>
             </View>
-          ) : (
-            <>
-              <View style={styles.panelHeader}>
-                <View style={styles.panelTitleGroup}>
-                  <Text style={[styles.panelTitle, { color: theme.foreground }]}>服务器地址</Text>
-                  <Text style={[styles.panelBody, { color: theme.mutedForeground }]}>
-                    例如 http://192.168.1.20:3000
-                  </Text>
-                </View>
+            {onCancelEdit ? (
+              <Pressable hitSlop={8} onPress={onCancelEdit}>
+                <Text style={[styles.cancelText, { color: theme.signalText }]}>返回</Text>
+              </Pressable>
+            ) : null}
+          </View>
 
-                {hasSavedEndpoint ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="修改服务端地址"
-                    hitSlop={8}
-                    onPress={onEditEndpoint}
-                    style={({ pressed }) => [
-                      styles.iconButton,
-                      {
-                        backgroundColor: pressed ? theme.primarySurface : theme.inputBackground,
-                        borderColor: theme.border,
-                      },
-                    ]}
-                  >
-                    <MaterialCommunityIcons name="pencil-outline" size={22} color={theme.primary} />
-                  </Pressable>
-                ) : null}
-              </View>
-
-              {hasSavedEndpoint ? (
-                <View
-                  accessibilityLabel={`已保存的服务端地址：${savedEndpoint}`}
-                  style={[styles.savedEndpointBox, { backgroundColor: theme.successSurface, borderColor: theme.border }]}
-                >
-                  <MaterialCommunityIcons name="check-circle-outline" size={22} color={theme.success} />
-                  <View style={styles.savedEndpointCopy}>
-                    <Text style={[styles.savedEndpointLabel, { color: theme.success }]}>已保存</Text>
-                    <Text style={[styles.savedEndpointValue, { color: theme.foreground }]}>{savedEndpoint}</Text>
-                  </View>
-                </View>
-              ) : (
-                <>
-                  <View style={styles.fieldGroup}>
-                    <Text style={[styles.label, { color: theme.foreground }]}>AIChat 服务端根地址</Text>
-                    <TextInput
-                      accessibilityLabel="AIChat 服务端根地址"
-                      accessibilityHint="输入完整的 http 或 https 服务端地址"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      editable={saveState !== "checking"}
-                      inputMode="url"
-                      onChangeText={onEndpointChange}
-                      placeholder="http://192.168.1.20:3000"
-                      placeholderTextColor={theme.mutedForeground}
-                      testID="server-endpoint-input"
-                      style={[
-                        styles.input,
-                        {
-                          backgroundColor: theme.inputBackground,
-                          borderColor: errorMessage ? theme.danger : theme.border,
-                          color: theme.foreground,
-                        },
-                      ]}
-                      value={endpointInput}
-                    />
-                    <Text style={[styles.helperText, { color: theme.mutedForeground }]}>
-                      请填写后端根地址，不需要手动追加 /api/settings/health。
-                    </Text>
-                    {normalizedPreview.ok ? (
-                      <Text style={[styles.helperText, { color: theme.mutedForeground }]}>
-                        将检测：{normalizedPreview.endpoint}/api/settings/health
-                      </Text>
-                    ) : null}
-                  </View>
-
-                  {errorMessage ? (
-                    <View
-                      accessibilityRole="alert"
-                      style={[styles.feedbackBox, { backgroundColor: theme.dangerSurface, borderColor: theme.danger }]}
-                    >
-                      <MaterialCommunityIcons name="alert-circle-outline" size={22} color={theme.danger} />
-                      <Text style={[styles.feedbackText, { color: theme.danger }]}>{errorMessage}</Text>
-                    </View>
-                  ) : null}
-
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="检测并保存服务端地址"
-                    accessibilityState={{ disabled: !canSubmit, busy: saveState === "checking" }}
-                    disabled={!canSubmit}
-                    onPress={onSaveEndpoint}
-                    testID="server-endpoint-save-button"
-                    style={({ pressed }) => [
-                      styles.button,
-                      {
-                        backgroundColor: !canSubmit
-                          ? theme.border
-                          : pressed
-                            ? theme.primaryPressed
-                            : theme.primary,
-                      },
-                    ]}
-                  >
-                    {saveState === "checking" ? (
-                      <ActivityIndicator color="#FFFFFF" />
-                    ) : (
-                      <MaterialCommunityIcons name="connection" size={20} color="#FFFFFF" />
-                    )}
-                    <Text style={styles.buttonText}>{saveState === "checking" ? "正在检测" : "检测并保存"}</Text>
-                  </Pressable>
-
-                  {savedEndpoint ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="取消修改服务端地址"
-                      onPress={onUseSavedEndpoint}
-                      style={({ pressed }) => [
-                        styles.secondaryButton,
-                        {
-                          backgroundColor: pressed ? theme.primarySurface : "transparent",
-                          borderColor: theme.border,
-                        },
-                      ]}
-                    >
-                      <Text style={[styles.secondaryButtonText, { color: theme.primary }]}>取消修改</Text>
-                    </Pressable>
-                  ) : null}
-                </>
-              )}
-
-              {successMessage ? (
-                <View
-                  accessibilityRole="summary"
-                  style={[styles.feedbackBox, { backgroundColor: theme.successSurface, borderColor: theme.border }]}
-                >
-                  <MaterialCommunityIcons name="check-circle-outline" size={22} color={theme.success} />
-                  <Text style={[styles.feedbackText, { color: theme.success }]}>{successMessage}</Text>
-                </View>
-              ) : null}
-            </>
-          )}
+          <Text style={[styles.title, { color: theme.foreground }]}>
+            连接你的 AIChat 服务端
+          </Text>
+          <Text style={[styles.subtitle, { color: theme.mutedForeground }]}>
+            支持局域网自托管 HTTP、公网 HTTPS 以及多服务器快速切换，跨端数据与 Web 端实时同步。
+          </Text>
         </View>
+
+        <SurfaceCard theme={theme}>
+          <View style={styles.form}>
+            <Text style={[styles.label, { color: theme.mutedForeground }]}>
+              服务端根地址
+            </Text>
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              onChangeText={onEndpointChange}
+              placeholder="例如 http://192.168.1.20:3001 或 https://chat.example.com"
+              placeholderTextColor={theme.tertiaryForeground}
+              returnKeyType="done"
+              style={[
+                styles.input,
+                {
+                  backgroundColor: theme.background,
+                  borderColor: errorMessage ? theme.danger : theme.borderStrong,
+                  color: theme.foreground,
+                },
+              ]}
+              value={endpointInput}
+            />
+
+            {endpointInput.trim().length > 0 ? (
+              <Text
+                style={[
+                  styles.previewText,
+                  {
+                    color: normalizedPreview.ok
+                      ? theme.tertiaryForeground
+                      : theme.warning,
+                  },
+                ]}
+              >
+                {normalizedPreview.ok
+                  ? `将连接：${normalizedPreview.endpoint}`
+                  : normalizedPreview.message}
+              </Text>
+            ) : null}
+
+            {errorMessage ? (
+              <View
+                style={[
+                  styles.notice,
+                  { backgroundColor: theme.dangerSurface, borderColor: theme.danger },
+                ]}
+              >
+                <Text style={[styles.noticeText, { color: theme.danger }]}>
+                  {errorMessage}
+                </Text>
+              </View>
+            ) : null}
+
+            {successMessage ? (
+              <View
+                style={[
+                  styles.notice,
+                  { backgroundColor: theme.successSurface, borderColor: theme.success },
+                ]}
+              >
+                <Text style={[styles.noticeText, { color: theme.success }]}>
+                  {successMessage}
+                </Text>
+              </View>
+            ) : null}
+
+            <Button
+              disabled={!canSubmit || isLoadingStored}
+              icon="lan-connect"
+              label={saveState === "checking" ? "正在检测服务端健康…" : "检测并连接服务端"}
+              loading={saveState === "checking"}
+              onPress={() => {
+                void lightTap();
+                onSaveEndpoint();
+              }}
+              theme={theme}
+            />
+          </View>
+        </SurfaceCard>
+
+        {savedProfiles.length > 0 ? (
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: theme.mutedForeground }]}>
+              已保存的服务器 ({savedProfiles.length})
+            </Text>
+            {savedProfiles.map((profile) => {
+              const active = profile.id === activeProfileId;
+              return (
+                <Pressable
+                  key={profile.id}
+                  onPress={() => {
+                    void lightTap();
+                    onSelectProfile(profile);
+                  }}
+                  style={[
+                    styles.profileCard,
+                    {
+                      backgroundColor: active ? theme.primarySurface : theme.surface,
+                      borderColor: active ? theme.primary : theme.border,
+                    },
+                  ]}
+                >
+                  <View style={styles.profileMain}>
+                    <View style={styles.profileTitleRow}>
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          styles.profileName,
+                          { color: active ? theme.signalText : theme.foreground },
+                        ]}
+                      >
+                        {profile.name}
+                      </Text>
+                      {active ? <Badge label="当前" theme={theme} tone="signal" /> : null}
+                    </View>
+                    <Text
+                      numberOfLines={1}
+                      style={[styles.profileUrl, { color: theme.tertiaryForeground }]}
+                    >
+                      {profile.endpoint}
+                    </Text>
+                  </View>
+                  <Pressable
+                    accessibilityLabel={`移除服务器 ${profile.name}`}
+                    hitSlop={8}
+                    onPress={() => onRemoveProfile(profile.id)}
+                  >
+                    <MaterialCommunityIcons
+                      color={theme.tertiaryForeground}
+                      name="trash-can-outline"
+                      size={18}
+                    />
+                  </Pressable>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+
+        <Pressable
+          onPress={() => setShowTips((v) => !v)}
+          style={[styles.tipsToggle, { borderColor: theme.border, backgroundColor: theme.surface }]}
+        >
+          <View style={styles.tipsHeader}>
+            <MaterialCommunityIcons color={theme.signalText} name="help-circle-outline" size={18} />
+            <Text style={[styles.tipsTitle, { color: theme.foreground }]}>
+              局域网连接与排查提示
+            </Text>
+            <MaterialCommunityIcons
+              color={theme.tertiaryForeground}
+              name={showTips ? "chevron-up" : "chevron-down"}
+              size={18}
+            />
+          </View>
+          {showTips ? (
+            <Text style={[styles.tipsBody, { color: theme.mutedForeground }]}>
+              1. 请填写后端 API 所在地址与端口（默认如 `:3001`），不要把真机里的 localhost 当作电脑地址。{"\n"}
+              2. Android / iOS 均已放开局域网明文 HTTP 限制，同一 Wi-Fi 下可直接填电脑局域网 IP。{"\n"}
+              3. 若使用 USB 调试 Android，可执行 `adb reverse tcp:3001 tcp:3001` 后填写 `http://127.0.0.1:3001`。
+            </Text>
+          ) : null}
+        </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  keyboardAvoidingView: {
+  flex: {
     flex: 1,
   },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: "center",
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing["2xl"],
-    rowGap: spacing.xl,
-  },
-  header: {
-    rowGap: spacing.xl,
-  },
-  brandMark: {
-    alignItems: "center",
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 64,
-    justifyContent: "center",
-    width: 64,
-  },
-  copy: {
-    rowGap: spacing.sm,
-  },
-  eyebrow: {
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: "800",
-    lineHeight: 38,
-  },
-  description: {
-    fontSize: 16,
-    lineHeight: 24,
-    maxWidth: 480,
-  },
-  panel: {
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+  container: {
     padding: spacing.lg,
     rowGap: spacing.lg,
   },
-  panelHeader: {
-    alignItems: "flex-start",
-    columnGap: spacing.md,
+  hero: {
+    paddingTop: spacing.sm,
+    rowGap: 10,
+  },
+  brandRow: {
+    alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  panelTitleGroup: {
-    flex: 1,
-    rowGap: spacing.sm,
-  },
-  panelTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    lineHeight: 24,
-  },
-  panelBody: {
-    fontSize: 16,
-    lineHeight: 24,
-  },
-  iconButton: {
+  brandPill: {
     alignItems: "center",
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 48,
-    justifyContent: "center",
-    width: 48,
-  },
-  fieldGroup: {
-    rowGap: spacing.sm,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: "700",
-    lineHeight: 22,
-  },
-  input: {
-    borderRadius: 8,
-    borderWidth: 1,
-    fontSize: 16,
-    lineHeight: 22,
-    minHeight: 52,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  helperText: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  button: {
-    alignItems: "center",
-    borderRadius: 8,
-    columnGap: spacing.sm,
+    borderRadius: radii.pill,
+    columnGap: 6,
     flexDirection: "row",
-    justifyContent: "center",
-    minHeight: 52,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
-  buttonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
+  brandPillText: {
+    fontSize: 13,
     fontWeight: "700",
   },
-  secondaryButton: {
-    alignItems: "center",
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    justifyContent: "center",
-    minHeight: 48,
-    paddingHorizontal: spacing.lg,
-  },
-  secondaryButtonText: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  feedbackBox: {
-    alignItems: "flex-start",
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    columnGap: spacing.sm,
-    flexDirection: "row",
-    padding: spacing.md,
-  },
-  feedbackText: {
-    flex: 1,
+  cancelText: {
     fontSize: 15,
     fontWeight: "600",
-    lineHeight: 22,
   },
-  loadingRow: {
-    alignItems: "center",
-    columnGap: spacing.md,
-    flexDirection: "row",
-    minHeight: 72,
+  title: {
+    fontSize: 25,
+    fontWeight: "800",
+    lineHeight: 33,
   },
-  savedEndpointBox: {
-    alignItems: "flex-start",
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    columnGap: spacing.sm,
-    flexDirection: "row",
-    padding: spacing.md,
-  },
-  savedEndpointCopy: {
-    flex: 1,
-    rowGap: 4,
-  },
-  savedEndpointLabel: {
+  subtitle: {
     fontSize: 14,
-    fontWeight: "700",
-    lineHeight: 20,
+    lineHeight: 21,
   },
-  savedEndpointValue: {
-    fontSize: 16,
-    lineHeight: 24,
+  form: {
+    rowGap: 12,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  input: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    fontFamily: "monospace",
+    fontSize: 14,
+    minHeight: 48,
+    paddingHorizontal: 14,
+  },
+  previewText: {
+    fontSize: 12,
+  },
+  notice: {
+    borderRadius: radii.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  noticeText: {
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  section: {
+    rowGap: 8,
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  profileCard: {
+    alignItems: "center",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    columnGap: 12,
+    flexDirection: "row",
+    padding: 14,
+  },
+  profileMain: {
+    flex: 1,
+    rowGap: 3,
+  },
+  profileTitleRow: {
+    alignItems: "center",
+    columnGap: 8,
+    flexDirection: "row",
+  },
+  profileName: {
+    flexShrink: 1,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  profileUrl: {
+    fontFamily: "monospace",
+    fontSize: 12,
+  },
+  tipsToggle: {
+    borderRadius: radii.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 14,
+    rowGap: 10,
+  },
+  tipsHeader: {
+    alignItems: "center",
+    columnGap: 8,
+    flexDirection: "row",
+  },
+  tipsTitle: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  tipsBody: {
+    fontSize: 12,
+    lineHeight: 19,
   },
 });

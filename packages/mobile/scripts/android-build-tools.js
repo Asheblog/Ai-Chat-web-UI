@@ -6,14 +6,34 @@ const { spawnSync } = require("node:child_process");
 const mobileDir = path.resolve(__dirname, "..");
 const androidDir = path.join(mobileDir, "android");
 
+const SHELL_UNSAFE = /[\s"&|<>^()]/;
+
+/**
+ * Windows 下 run() 通过 shell 执行命令（.bat/.cmd 必须如此），
+ * 含空格的路径或参数必须显式加引号，否则会被 cmd.exe 从空格处截断
+ * （例如 JAVA_HOME 为 "E:\Program Files\Java\..." 时的 keytool.exe）。
+ */
+function quoteShellArgument(value) {
+  const text = String(value);
+  if (text !== "" && !SHELL_UNSAFE.test(text)) {
+    return text;
+  }
+  return `"${text.replace(/"/g, '\\"')}"`;
+}
+
 function run(command, args, options = {}) {
-  const result = spawnSync(command, args, {
-    cwd: options.cwd ?? mobileDir,
-    env: options.env ?? process.env,
-    encoding: "utf8",
-    stdio: options.capture ? "pipe" : "inherit",
-    shell: process.platform === "win32",
-  });
+  const useShell = process.platform === "win32";
+  const result = spawnSync(
+    useShell ? quoteShellArgument(command) : command,
+    useShell ? args.map(quoteShellArgument) : args,
+    {
+      cwd: options.cwd ?? mobileDir,
+      env: options.env ?? process.env,
+      encoding: "utf8",
+      stdio: options.capture ? "pipe" : "inherit",
+      shell: useShell,
+    },
+  );
   if (result.error) throw result.error;
   if (result.status !== 0) {
     const detail = options.capture ? `\n${result.stdout ?? ""}${result.stderr ?? ""}` : "";
@@ -82,6 +102,7 @@ module.exports = {
   findBuildTool,
   findJavaHome,
   mobileDir,
+  quoteShellArgument,
   run,
   writeLocalProperties,
 };

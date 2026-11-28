@@ -179,6 +179,7 @@ app.route('/api/battle', createBattleApi({
 
 // 文档路由（RAG 服务状态在请求时动态检查）
 app.route('/api/documents', createDocumentsApi({
+  chatService: container.chatService,
   resolveServices: () => {
     const services = getDocumentServices();
     if (!services) return null;

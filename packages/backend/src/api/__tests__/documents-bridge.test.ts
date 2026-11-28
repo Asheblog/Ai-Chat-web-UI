@@ -23,9 +23,18 @@ describe('documents api bridge routes', () => {
     const documentService = {
       attachToSession: jest.fn().mockResolvedValue(undefined),
       detachFromSession: jest.fn().mockResolvedValue(undefined),
+      getDocument: jest.fn().mockResolvedValue({
+        id: 10,
+        userId: 1,
+        anonymousKey: null,
+      }),
       getSessionDocumentIds: jest
         .fn()
         .mockResolvedValue(options?.sessionDocIds ?? [10]),
+    }
+
+    const chatService = {
+      ensureSessionAccess: jest.fn().mockResolvedValue({ id: 7 }),
     }
 
     const bridgeService = {
@@ -67,6 +76,7 @@ describe('documents api bridge routes', () => {
     }
 
     const app = createDocumentsApi({
+      chatService: chatService as any,
       resolveServices: () =>
         ({
           documentService,
@@ -75,7 +85,7 @@ describe('documents api bridge routes', () => {
       bridgeService: bridgeService as any,
     })
 
-    return { app, documentService, bridgeService }
+    return { app, documentService, bridgeService, chatService }
   }
 
   beforeEach(() => {

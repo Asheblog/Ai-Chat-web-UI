@@ -160,12 +160,11 @@ _Avoid_：用最小 Key 行 ID 冒充连接组身份；用 channelName / prefixI
 
 ## 移动客户端
 
-- **Android Client（Android 客户端）**：AIChat 的可安装 Android 应用，以移动端原生交互访问既有 AIChat 服务端；它不是 Web 客户端的简单网页壳
-- **Server Endpoint（服务端地址）**：用户在 Android 客户端内配置的 AIChat 服务端根地址，客户端所有 API 请求都以它为基址
-- **Mobile Chat MVP（移动端聊天 MVP）**：Android 客户端首版范围，仅覆盖服务器配置、认证、会话列表和聊天主流程；不包含系统设置、MCP、Skill、知识库管理、Battle、任务追踪或管理员后台
-- **Mobile Auth Token（移动端认证令牌）**：Android 客户端保存并用于 API 请求的 Bearer token；不同于 Web 客户端依赖的浏览器 cookie
-- **Mobile Release Identity（移动端发布身份）**：由 Android applicationId 与长期 release signing certificate 共同确定的可升级应用身份；同一发布链路必须持续使用相同身份
-- **Mobile Release（移动端正式发布）**：与 `app.json` 版本一致、由 `mobile-v<versionName>` Tag 触发并使用移动端发布身份签名的可分发 APK
+- **Mobile Client（移动客户端）**：以 Android、iOS / iPadOS 原生交互连接既有 AIChat 服务端，访问聊天、附件、会话扩展与个人设置。
+- **Server Endpoint（服务端地址）**：移动客户端配置的 AIChat 服务端根地址。切换地址同时切换当前账号和会话；登录凭据按服务端分别保存。
+- **Mobile Auth Token（移动端认证令牌）**：移动客户端访问特定服务端 API 的 Bearer token；不同于 Web 客户端依赖的浏览器 cookie。
+- **Mobile Release Identity（移动端发布身份）**：Android `applicationId` 和长期发布证书共同确定的应用身份；覆盖升级必须维持该身份，并递增 `versionCode`。
+- **Mobile Release（移动端发布）**：与应用版本一致、由 `mobile-v<versionName>` Tag 触发的 GitHub Release，包含 Android APK 与需侧载的未签名 iOS IPA。Android 临时证书版本供试装，不能覆盖安装不同证书签名的版本。
 
 ## 桌面客户端
 

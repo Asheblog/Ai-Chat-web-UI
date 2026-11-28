@@ -1,379 +1,59 @@
-# AIChat Mobile
+# AIChat Mobile (Android + iOS)
 
-AIChat Mobile 是 AIChat 的 Android 客户端包。自动构建和发布已暂停，源码和本地构建入口保留。
+AIChat Mobile 是基于 **Expo SDK 56 + React Native 0.85 + TypeScript** 重构的跨平台原生客户端（支持 Android 与 iOS / iPadOS），视觉设计遵循项目 **Ink & Mist** 浅色雾纸与深色墨绿美学。
 
-## 当前范围
+- Figma 设计稿：[AIChat Mobile — Ink & Mist UI](https://www.figma.com/design/rwYFsmLNiRYjKWSqnFrQY4)（文档索引见 [mobile-ui-design.md](../../.figma/mobile-ui-design.md)）
+- 架构决策：[ADR 0051](../../docs/adr/0051-mobile-cross-platform-ink-mist-and-unsigned-ci.md)
 
-- `packages/mobile` 是 Expo + React Native TypeScript App。
-- App 首次启动时由用户配置 AIChat 服务端根地址。
-- 通过 `GET /api/settings/health` 检测服务端可达。
-- 使用服务端返回的 Bearer token 调用认证接口。
-- 使用 `expo-secure-store` 保存认证 token，并在 App 重启后恢复登录状态。
-- token 失效或服务端返回 401 时清理本地 token 并回到登录页。
-- 支持会话列表、新建会话、进入聊天页、加载历史消息。
-- 支持发送文本消息到 `POST /api/chat/stream`。
-- 支持 SSE 流式助手回复、停止生成和基础 Markdown 可读渲染。
-- 支持生成可安装 Android APK，并记录安装、服务端配置和真机验收流程。
-- Android 键盘弹出时聊天输入区保持可见。
-- 流式回复只在用户接近底部时自动跟随；用户上滑阅读时不抢滚动，并提供“最新消息”按钮。
-- 发送前网络失败会恢复输入草稿，不保留未被服务端确认的乐观消息。
-- 流中断会保留已收到内容并提示下拉刷新同步服务端状态。
-- SSE 在最后一行没有换行时仍能正确识别完成事件，减少误报流中断。
+## 核心功能
 
-当前范围不做图片上传、文件上传、MCP、Skill、知识库、模型选择、会话删除/重命名、复杂 Markdown、管理后台或应用商店上架。
+- **多服务器连接与安全持久化**：支持局域网 HTTP 与公网 HTTPS、`/api/settings/health` 连通性检查、多服务器配置保存与切换，按服务器隔离存储 Bearer Token（`expo-secure-store`）。
+- **完整流式对话体验**：模型分组切换（含推理/视觉标签）、可折叠 CoT 思维链与工具时间轴、Rich Markdown（代码块一键复制、LaTeX 公式卡片、横向滚动表格）、长按操作菜单（复制 / 引用回复 / 重新生成 / 系统分享）。
+- **多模态与文档上传**：相机拍照与相册多选发图（每条最多 8 张；单张最多 15 MB、单边最多 8192 px，合计最多 60 MB）、文档上传（`/api/documents/upload`）及会话文档管理、AI 生成图片全屏预览/保存相册/系统分享。
+- **能力扩展与主题同步**：支持深度思考力度、联网搜索（`web-search`）、知识库绑定、保存会话 Skill 开关与查看 MCP 工具；支持外观切换（跟随系统/浅色/深色）与服务端品牌色同步（`/api/settings/branding`），以及个人设置同步（`/api/settings/personal`）。
+- **原生增强**：触觉反馈（`expo-haptics`）、在 Android 的系统分享菜单中接收纯文本；双端也可通过 `aichat://share?text=...` 导入文本。语音输入使用系统键盘听写。
 
-## 环境要求
-
-- Node.js 18 或更高版本。
-- pnpm 8 或更高版本。
-- Java 17 或更高版本，推荐 JDK 17。
-- Linux/WSL 本地构建需要 Linux 版 Android SDK，推荐路径为 `~/.local/share/android-sdk`。
-- Android SDK Platform Tools，用于 `adb install` 和真机日志。WSL 中如果只安装了 Windows 版 SDK，可用 `adb.exe` 安装 APK，但不推荐用 Windows SDK 给 Linux Gradle 构建。
-- Android 真机开启开发者选项和 USB 调试。
-
-## 安装依赖
+## 本地开发与校验
 
 在仓库根目录执行：
 
 ```bash
 pnpm install
-```
-
-## 开发启动
-
-在仓库根目录执行：
-
-```bash
+pnpm --filter @aichat/shared build
+pnpm mobile:type-check
+pnpm mobile:test
 pnpm mobile:start
 ```
 
-然后用 Android 设备上的 Expo Go 扫描终端二维码。
+## 无付费证书构建
 
-也可以直接尝试打开 Android 设备或模拟器：
+### Android APK（免付费自签名）
 
-```bash
-pnpm mobile:android
-```
-
-## 正式签名准备
-
-release APK 必须使用长期保存的独立 keystore。仓库禁止提交 `*.keystore`、`*.jks`、密码、token 或签名环境文件。
-
-首次准备密钥时执行：
-
-```bash
-pnpm --filter @aichat/mobile android:generate-keystore
-```
-
-默认生成到仓库外的 `~/.config/aichat-mobile/signing/`：
-
-- `release.keystore`：长期发布密钥。
-- `signing.env`：Linux/WSL 环境变量。
-- `signing.cmd`：Windows cmd 环境变量。
-
-生成脚本拒绝覆盖已有密钥。请立即对整个目录做加密离线备份；密钥丢失后无法继续覆盖升级已经分发的 App。
-
-Linux/WSL 构建前加载：
-
-```bash
-set -a
-source ~/.config/aichat-mobile/signing/signing.env
-set +a
-```
-
-Windows cmd 构建前加载仓库外的配置：
-
-```cmd
-call %USERPROFILE%\.config\aichat-mobile\signing\signing.cmd
-```
-
-构建统一读取以下变量，缺少任何一项都会失败，绝不回退 debug keystore：
-
-- `AICHAT_ANDROID_KEYSTORE_PATH`
-- `AICHAT_ANDROID_KEYSTORE_PASSWORD`
-- `AICHAT_ANDROID_KEY_ALIAS`
-- `AICHAT_ANDROID_KEY_PASSWORD`
-
-## 构建 APK
-
-在仓库根目录执行：
+要在没有旧版的设备上试装，不必配置 GitHub Secrets 或商业证书。请先准备 JDK 17、Android SDK 36（Build Tools 36.0.0）、NDK 27.1.12297006 和 CMake 3.22.1，再运行：
 
 ```bash
 pnpm --filter @aichat/mobile android:build-apk
 ```
 
-该命令会执行：
+产物路径：`packages/mobile/android/app/build/outputs/apk/release/app-release.apk`。四项签名变量全部留空时，CI 每次生成临时证书；不同运行的试装 APK 不能互相覆盖，也不能覆盖[历史 APK](https://github.com/Asheblog/Ai-Chat-web-UI/releases/tag/mobile-v0.1.0)。卸载旧包会清除本机保存的服务端配置和登录状态。
 
-1. `expo prebuild --platform android`
-2. 将 Gradle wrapper 锁到 `8.14.3`
-3. 自动发现 `ANDROID_HOME`/`ANDROID_SDK_ROOT` 或常见 Android SDK 路径
-4. 自动发现 `JAVA_HOME` 或常见 JDK 17 路径
-5. 使用外部 release keystore 执行 `:app:assembleRelease`
-6. 自动验证签名、包名、版本和 SHA-256
+要覆盖升级历史正式版，请保留原发布 keystore 并递增 `packages/mobile/app.json` 中的 `expo.android.versionCode`。本地构建配置 `AICHAT_ANDROID_KEYSTORE_PATH`、`AICHAT_ANDROID_KEYSTORE_PASSWORD`、`AICHAT_ANDROID_KEY_ALIAS` 和 `AICHAT_ANDROID_KEY_PASSWORD`；本地设置 `AICHAT_REQUIRE_PINNED_CERT=1` 可强制验证原证书。CI 在 `android-release` 环境用 `AICHAT_ANDROID_KEYSTORE_BASE64` 替代本地的路径变量，另外三项名称相同。只配置部分变量会失败；使用外部密钥的 Release 必须通过原证书指纹校验。
 
-APK 产物路径：
+### iOS 未签名 `.ipa`（供侧载安装）
 
-```text
-packages/mobile/android/app/build/outputs/apk/release/app-release.apk
-```
-
-Windows 原生终端也可以在 `packages/mobile` 下执行：
-
-```cmd
-scripts\build-android-apk.cmd
-```
-
-`packages/mobile/android/` 是 Expo prebuild 生成的本地构建产物，已被仓库 `.gitignore` 忽略。
-
-当前本地生成的 APK 信息：
-
-```text
-路径：packages/mobile/android/app/build/outputs/apk/release/app-release.apk
-大小：70,832,503 bytes
-SHA-256：a4084c6aae23505f0950f87090bb16f59b130dfd81236c3cd71cbf89562a5efb
-包名：com.aichat.mobile
-版本：0.1.0 (versionCode 1)
-签名证书 SHA-256：2de04200f1e2cbc8263f33ecdd0a55cf78a0545d8e129a40edac076eb5c0ac10
-```
-
-开发调试 APK 使用显式命令，不会被当作正式产物：
+在 macOS（含 Xcode 与 CocoaPods）环境执行：
 
 ```bash
-pnpm --filter @aichat/mobile android:build-debug-apk
+pnpm --filter @aichat/mobile ios:build-unsigned-ipa
 ```
 
-### 手工验证正式 APK
+该脚本会通过 `CODE_SIGNING_ALLOWED=NO` 编译 `iphoneos` (`arm64`) Release `.app` 并打包为 `packages/mobile/dist/aichat-mobile-<version>-ios-unsigned.ipa`。
 
-```bash
-pnpm --filter @aichat/mobile android:verify-apk
-```
+安装方式（无需 \$99 Apple Developer 账号）：
+- **TrollStore（巨魔）**：在受支持的设备和 iOS 版本上导入 `.ipa`。
+- **AltStore / SideStore / Sideloadly / 爱思助手**：使用个人免费 Apple ID 本地签名并侧载到 iPhone / iPad。
 
-底层等价验证命令：
+## GitHub Actions CI & Release
 
-```bash
-"$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs packages/mobile/android/app/build/outputs/apk/release/app-release.apk
-"$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging packages/mobile/android/app/build/outputs/apk/release/app-release.apk
-sha256sum packages/mobile/android/app/build/outputs/apk/release/app-release.apk
-```
-
-Windows SHA-256 命令：
-
-```cmd
-certutil -hashfile packages\mobile\android\app\build\outputs\apk\release\app-release.apk SHA256
-```
-
-### WSL 本地 SDK 准备
-
-如果 WSL 里没有 Linux 版 Android SDK，可安装到用户目录：
-
-```bash
-mkdir -p ~/.local/share/android-sdk/cmdline-tools
-curl -L -o /tmp/commandlinetools-linux.zip \
-  https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip
-unzip -q /tmp/commandlinetools-linux.zip -d /tmp/android-cmdline-tools
-rm -rf ~/.local/share/android-sdk/cmdline-tools/latest
-mv /tmp/android-cmdline-tools/cmdline-tools ~/.local/share/android-sdk/cmdline-tools/latest
-yes | ~/.local/share/android-sdk/cmdline-tools/latest/bin/sdkmanager \
-  --sdk_root="$HOME/.local/share/android-sdk" \
-  "platform-tools" "platforms;android-36" "build-tools;36.0.0"
-```
-
-如果系统没有 JDK 17，可安装到用户目录：
-
-```bash
-mkdir -p ~/.local/share/jdks
-curl -L -o /tmp/temurin17.tar.gz \
-  https://api.adoptium.net/v3/binary/latest/17/ga/linux/x64/jdk/hotspot/normal/eclipse
-rm -rf ~/.local/share/jdks/temurin-17 /tmp/temurin17
-mkdir -p /tmp/temurin17
-tar -xzf /tmp/temurin17.tar.gz -C /tmp/temurin17 --strip-components=1
-mv /tmp/temurin17 ~/.local/share/jdks/temurin-17
-```
-
-## 自动发布已暂停
-
-仓库不再自动测试、构建或发布 Android APK，推送 `mobile-v*` Tag 不会触发 Android 发布。已发布的 APK 仍可在 [历史 Release](https://github.com/Asheblog/Ai-Chat-web-UI/releases/tag/mobile-v0.1.0) 下载；也可以继续用上述命令本地构建和验证。请保管原签名密钥，使用同一签名才能覆盖升级。
-
-版本唯一来源是 `packages/mobile/app.json`：
-
-- `expo.android.package`：Android applicationId，当前为 `com.aichat.mobile`。
-- `expo.version`：`versionName`，当前为 `0.1.0`。
-- `expo.android.versionCode`：当前为 `1`。
-- `expo.extra.androidReleaseCertificateSha256`：长期发布证书的公开 SHA-256 指纹；本地构建正式 APK 时必须精确匹配。
-
-每次准备新的可安装升级版本都必须递增 `versionCode`；发布语义版本时同时更新 `versionName`。
-
-## 真机安装
-
-确认电脑能看到真机：
-
-```bash
-adb devices
-```
-
-安装 APK：
-
-```bash
-adb install -r packages/mobile/android/app/build/outputs/apk/release/app-release.apk
-```
-
-如果在 WSL 中使用 Windows 版 Android SDK，可直接调用 `adb.exe`：
-
-```bash
-'/mnt/e/Program Files/Android/Sdk/platform-tools/adb.exe' install -r packages/mobile/android/app/build/outputs/apk/release/app-release.apk
-```
-
-部分设备的 streamed install 可能卡住，可改用 push 后由设备本地安装：
-
-```bash
-'/mnt/e/Program Files/Android/Sdk/platform-tools/adb.exe' push packages/mobile/android/app/build/outputs/apk/release/app-release.apk /data/local/tmp/aichat-app-release.apk
-'/mnt/e/Program Files/Android/Sdk/platform-tools/adb.exe' shell pm install -r /data/local/tmp/aichat-app-release.apk
-```
-
-阶段 6/7 的 APK 使用 debug 签名，与阶段 8 正式签名不兼容。首次迁移必须卸载旧 App 后安装，会清除本地服务端地址和登录 token，但不会删除服务端会话；此后沿用同一 release keystore，即可使用 `adb install -r` 覆盖升级。
-
-## 配置服务端地址
-
-App 内填写 AIChat 后端根地址，例如：
-
-```text
-http://192.168.1.20:3001
-```
-
-注意事项：
-
-- 不要填写 Web 前端地址，必须填写后端 API 所在地址。
-- 真机不能用 `localhost` 访问电脑上的后端；应使用电脑在同一局域网中的 IP。
-- 手机和后端机器需要在同一网络内，或后端地址必须能被手机直接访问。
-- 当前 APK 已通过 Android manifest 允许访问明文 HTTP，便于局域网调试。
-- 使用 USB 连接本机 WSL 后端时，可执行 `adb reverse tcp:8001 tcp:8001`，然后在 App 中填写 `http://127.0.0.1:8001`。
-
-## 无法连接服务端排查
-
-1. 在电脑上确认后端运行并可访问：
-
-```bash
-curl http://127.0.0.1:3001/api/settings/health
-```
-
-2. 查看电脑局域网 IP：
-
-```bash
-hostname -I
-```
-
-3. 在手机浏览器访问健康检查地址：
-
-```text
-http://<电脑局域网 IP>:3001/api/settings/health
-```
-
-4. 如果手机浏览器也打不开，优先检查：
-
-- 后端是否监听在 `0.0.0.0`，而不是只监听 `127.0.0.1`。
-- Windows 防火墙或安全软件是否拦截入站端口。
-- 手机和电脑是否在同一个局域网或同一个 VPN 路由内。
-- 服务端地址是否包含正确协议、IP 和端口。
-- 如果使用 USB 反向代理，确认 `adb reverse --list` 中存在目标端口映射。
-
-5. 如果浏览器能打开但 App 报错，使用：
-
-```bash
-adb logcat
-```
-
-查看 Android 运行日志。
-
-## 阶段 6 真机验收结果
-
-本次验收设备通过 `adb devices` 识别为 `3c730137 device`。测试后端地址为 `http://127.0.0.1:8001`，通过 `adb reverse tcp:8001 tcp:8001` 映射到 WSL 中运行的后端。
-
-1. 通过：APK 可安装并打开。
-2. 通过：可配置服务端地址 `http://127.0.0.1:8001`。
-3. 通过：测试用户 `apktest` 可登录。
-4. 通过：登录后进入会话列表。
-5. 通过：可进入已有会话 `APK 真机验收`。
-6. 通过：可看到历史消息。
-7. 通过：可发送文本消息。
-8. 通过：助手回复通过 SSE 持续更新，真机中能看到生成中内容逐步出现。
-9. 通过：生成中可点击停止按钮，页面显示 `已停止生成。` 并恢复输入。
-10. 通过：标题、列表、加粗和行内代码等基础 Markdown 可读。
-11. 通过：更换后端 `JWT_SECRET` 后，已保存 token 失效，下一次认证请求清理本地 token 并回到登录页。
-12. 通过：移除 `adb reverse` 模拟网络不可达后，聊天页显示 `无法连接服务端，请确认网络和服务端地址。`，输入区恢复可用，并提供刷新入口。
-
-## 阶段 7 使用与验证
-
-自动检查：
-
-```bash
-pnpm --filter @aichat/mobile test
-pnpm mobile:type-check
-```
-
-阶段 7 新增的流解析测试覆盖：
-
-- 完成事件位于流末尾且没有换行。
-- 不完整事件跨字节块保留缓冲。
-- 只有部分内容、没有完成事件时仍判定为流中断。
-
-### 阶段 7 真机验收结果
-
-验收设备仍为 `3c730137 device`。新版 release APK 通过 `adb install -r` 覆盖安装；测试使用隔离数据库、专用账号和本地 OpenAI 兼容流式模型桩，不调用真实模型或共享服务端。
-
-1. 通过：新版 APK 可覆盖安装并冷启动，启动日志无 AIChat 崩溃或 React Native 异常。
-2. 通过：登录后进入会话列表，已有会话、消息数量和最近回复可见。
-3. 通过：进入 `APK 真机验收` 会话并加载历史消息。
-4. 通过：发送 `stage7-core-flow` 后，后端收到流式请求，助手内容逐步到达，完成后自动刷新历史。
-5. 通过：流式生成期间停止操作可恢复输入状态，页面不会锁死。
-6. 通过：Android 软键盘弹出后，聊天输入框从屏幕底部上移到键盘上方，仍可见且可输入。
-7. 通过：长历史消息可滚动查看；离开底部时停止强制跟随，并提供 44dp 高的“最新消息”按钮返回底部。
-8. 通过：移除 `adb reverse tcp:8001` 后发送消息，页面显示网络错误和刷新入口，原输入草稿被恢复，发送按钮重新可用；恢复 reverse 后可继续使用。
-9. 通过：后端轮换测试 JWT 后，下次认证请求返回登录页并清理本地登录态，聊天页未卡死。
-10. 通过：release APK 构建、3 项流解析测试、TypeScript 类型检查和 `git diff --check` 均通过。
-
-阶段 7 仍有以下限制：
-
-- “停止生成”的效果取决于服务端和模型供应商对取消请求的响应速度；客户端会立即恢复可操作状态。
-- 当前只渲染基础 Markdown；复杂表格、语法高亮和横向代码块工具栏未纳入本阶段。
-- 该条是阶段 7 的历史限制；阶段 8 已改为独立 release keystore。
-
-## 类型检查
-
-```bash
-pnpm mobile:type-check
-```
-
-## 阶段 8 正式分发验收结果（历史）
-
-以下是暂停自动发布前的验收记录。
-
-本次使用设备 `3c730137 device`、隔离数据库、专用账号和本地 OpenAI 兼容流式模型桩，不调用真实模型或共享服务端。
-
-1. 通过：正式 APK 使用独立 `AIChat Mobile Release` 证书签名，不再使用 Android debug 证书。
-2. 通过：APK 包名为 `com.aichat.mobile`，版本为 `0.1.0 (versionCode 1)`，签名、包名、版本和 SHA-256 自动验证通过。
-3. 通过：历史 debug 签名 APK 直接覆盖时返回 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`，与一次性迁移设计一致。
-4. 通过：卸载旧包后可安装正式签名 APK，冷启动正常。
-5. 通过：可配置服务端、登录、进入会话列表，并加载 `APK 真机验收` 的历史消息。
-6. 通过：发送 `stage8-final-stream` 后，助手内容逐步到达并完整显示，输入区恢复可用。
-7. 通过：流式生成期间点击停止后显示 `已停止生成。`，页面和输入区不锁死。
-8. 通过：移除 `adb reverse tcp:8001` 后显示明确网络错误，原输入草稿恢复，发送按钮重新可用；恢复 reverse 后可继续使用。
-9. 通过：轮换隔离后端 JWT 后，下一次认证请求清理 token 并返回登录页，页面未卡死。
-10. 通过：使用同一正式签名 APK 执行 `pm install -r` 覆盖安装成功，后续升级签名链路成立。
-11. 通过：移动端 5 项测试、TypeScript 类型检查、Expo prebuild 和正式 release 构建通过。
-12. 通过：普通 push 的 Mobile CI 成功，且未触发正式 APK 发布。
-13. 通过：`mobile-v0.1.0` Tag 自动完成正式签名构建、证书指纹校验、Actions Artifact、来源证明和 GitHub Release。
-
-首次 GitHub Release：
-
-```text
-地址：https://github.com/Asheblog/Ai-Chat-web-UI/releases/tag/mobile-v0.1.0
-文件：aichat-mobile-0.1.0.apk
-大小：70,832,071 bytes
-SHA-256：4ef6580abd01a25ed59bcf844464b7067081d43329f09eb1fe95575c1c5e2a8f
-```
-
-当前限制：
-
-- GitHub `android-release` Environment 已保存四项签名 Secrets，但 keystore 仍必须由项目负责人另行做加密离线备份。
-- Windows 原生构建脚本已按同一 Node 入口实现，本阶段环境为 WSL，无法把 Windows 原生执行结果冒充为已验证。
-- 当前仅分发 APK，不包含 Play Console、AAB 或应用商店上架。
+- **`.github/workflows/mobile-ci.yml`**：PR / push `main`（或手动触发）自动运行类型检查、单元测试、Expo 配置校验，并分别在 `ubuntu-24.04` 构建 Android APK、在 `macos-15` 构建 iOS 未签名 `.ipa` 上传为 Artifacts。
+- **`.github/workflows/mobile-release.yml`**：推送 `mobile-v<version>` Tag（例如 `mobile-v1.0.0`，须与 `packages/mobile/app.json` 及 `packages/mobile/package.json` 版本一致且已合入 `main`），自动构建并发布包含 `.apk`、`-ios-unsigned.ipa` 与 `.sha256` 的 GitHub Release。

@@ -1,0 +1,344 @@
+name: Mobile Release
+
+# 正式发布：推送 mobile-vX.Y.Z Tag（或手动 workflow_dispatch 指定已有 Tag），
+# 自动构建可直接安装的 Android APK（免付费自签名或可选 Secrets 签名）与 iOS 未签名 .ipa（供巨魔/AltStore/SideStore 侧载）。
+on:
+  push:
+    tags:
+      - "mobile-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "已存在的 mobile-v<version> Tag（例如 mobile-v1.0.0）"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate mobile release tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      sha: ${{ steps.meta.outputs.sha }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Validate tag, version, and main ancestry
+        id: meta
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          tag="${INPUT_TAG:-}"
+          if [ -z "$tag" ]; then
+            tag="$REF_NAME"
+          fi
+
+          meta_json="$(node packages/mobile/scripts/validate-mobile-release-tag.js "refs/tags/${tag}")"
+          version="$(node -e "const d = JSON.parse(process.argv[1]); console.log(d.versionName)" "$meta_json")"
+
+          tag_commit="$(git rev-parse -q --verify "refs/tags/${tag}^{commit}" || true)"
+          if [ -z "$tag_commit" ]; then
+            echo "::error::tag $tag does not exist in the repository"
+            exit 1
+          fi
+          if [ "$(git rev-parse HEAD)" != "$tag_commit" ]; then
+            echo "::error::checked out commit is not the tag commit of $tag"
+            exit 1
+          fi
+
+          git fetch --no-tags origin main
+          main_sha="$(git rev-parse -q --verify FETCH_HEAD)"
+          if ! git merge-base --is-ancestor "$tag_commit" "$main_sha"; then
+            echo "::error::tag commit $tag_commit is not on origin/main ($main_sha)"
+            exit 1
+          fi
+
+          printf 'tag=%s\nversion=%s\nsha=%s\n' "$tag" "$version" "$tag_commit" >> "$GITHUB_OUTPUT"
+          echo "validated mobile release $tag ($version) at $tag_commit"
+
+  android:
+    name: Android APK Release
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout validated commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          # RN 0.85.3 / expo-modules-core 要求 compileSdk 36、buildTools 36.0.0，
+          # 且 expo-modules-core 通过 CMake 编译 C++，需要 NDK 27.1.12297006 与 CMake 3.22.1。
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" \
+            "ndk;27.1.12297006" "cmake;3.22.1"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package & run tests
+        run: |
+          pnpm --filter @aichat/shared build
+          pnpm --filter @aichat/mobile type-check
+          pnpm --filter @aichat/mobile test
+          # 与 Mobile CI 的 quality job 保持一致：提前校验 Expo 配置与插件。
+          pnpm --filter @aichat/mobile exec expo config --type public >/dev/null
+
+      - name: Build installable Android APK
+        shell: bash
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+          AICHAT_ANDROID_KEYSTORE_BASE64: ${{ secrets.AICHAT_ANDROID_KEYSTORE_BASE64 }}
+          AICHAT_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.AICHAT_ANDROID_KEYSTORE_PASSWORD }}
+          AICHAT_ANDROID_KEY_ALIAS: ${{ secrets.AICHAT_ANDROID_KEY_ALIAS }}
+          AICHAT_ANDROID_KEY_PASSWORD: ${{ secrets.AICHAT_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # 签名来源三态判定统一由 packages/mobile/scripts/android-signing.js 负责：
+          # 四项全空 → 免密自签名；四项齐全 → 正式 keystore；任何部分配置 → 构建脚本直接失败。
+          # shell 只负责把 base64 Secret 落盘为 keystore 文件，避免在这里再写一份判定逻辑。
+          if [ -n "${AICHAT_ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "Decoding configured Android keystore secret"
+            printf '%s' "$AICHAT_ANDROID_KEYSTORE_BASE64" | base64 --decode > "${RUNNER_TEMP}/release.keystore"
+            export AICHAT_ANDROID_KEYSTORE_PATH="${RUNNER_TEMP}/release.keystore"
+            # 使用正式签名身份时必须校验 app.json 中的原证书指纹，保持 fail-closed。
+            export AICHAT_REQUIRE_PINNED_CERT=1
+          else
+            echo "No Android keystore secret; signing source is decided by the build script"
+          fi
+          unset AICHAT_ANDROID_KEYSTORE_BASE64
+
+          pnpm --filter @aichat/mobile android:build-apk
+
+          mkdir -p packages/mobile/dist
+          out="packages/mobile/dist/aichat-mobile-${VERSION}-android.apk"
+          cp packages/mobile/android/app/build/outputs/apk/release/app-release.apk "$out"
+          ( cd packages/mobile/dist && sha256sum "$(basename "$out")" > "$(basename "$out").sha256" )
+
+      - name: Upload Android release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aichat-mobile-android-release
+          path: |
+            packages/mobile/dist/*-android.apk
+            packages/mobile/dist/*-android.apk.sha256
+          if-no-files-found: error
+
+  ios:
+    name: iOS Unsigned IPA Release
+    needs: validate
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Checkout validated commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package & run tests
+        run: |
+          pnpm --filter @aichat/shared build
+          pnpm --filter @aichat/mobile type-check
+          pnpm --filter @aichat/mobile test
+          # 与 Mobile CI 的 quality job 保持一致：提前校验 Expo 配置与插件。
+          pnpm --filter @aichat/mobile exec expo config --type public >/dev/null
+
+      - name: Build unsigned iOS IPA
+        run: bash packages/mobile/scripts/build-ios-unsigned-ipa.sh
+
+      - name: Upload iOS unsigned IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aichat-mobile-ios-release
+          path: |
+            packages/mobile/dist/*-ios-unsigned.ipa
+            packages/mobile/dist/*-ios-unsigned.ipa.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Publish Mobile GitHub Release
+    needs: [validate, android, ios]
+    runs-on: ubuntu-24.04
+    # 补校验路径需要下载已发布产物，预留更充裕的时间。
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout validated commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+
+      - name: Verify release tag still points at the validated commit
+        shell: bash
+        env:
+          TAG: ${{ needs.validate.outputs.tag }}
+          VALIDATED_SHA: ${{ needs.validate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if ! git fetch --no-tags origin "+refs/tags/${TAG}:refs/tags/${TAG}"; then
+            echo "::error::tag $TAG no longer exists; refusing to publish"
+            exit 1
+          fi
+          tag_commit="$(git rev-parse "refs/tags/${TAG}^{commit}")"
+          if [ "$tag_commit" != "$VALIDATED_SHA" ]; then
+            echo "::error::tag $TAG moved after validation ($tag_commit != $VALIDATED_SHA)"
+            exit 1
+          fi
+
+      - name: Download platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify release asset set
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          apks=(release-assets/*.apk)
+          ipas=(release-assets/*.ipa)
+          checks=(release-assets/*.sha256)
+          if [ "${#apks[@]}" -ne 1 ] || [ "${#ipas[@]}" -ne 1 ] || [ "${#checks[@]}" -ne 2 ]; then
+            echo "::error::unexpected asset set (apk=${#apks[@]}, ipa=${#ipas[@]}, sha256=${#checks[@]})"
+            ls -la release-assets
+            exit 1
+          fi
+
+      - name: Create or update GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'NOTES'
+          ## AIChat Mobile 安装说明（免付费证书 / 无签名构建）
+
+          - **Android (`*-android.apk`)**：免付费自签名构建，可直接安装；系统提示“未知来源”时允许即可。
+            - 每次免密构建生成的试装证书彼此不同，**不同证书版本之间无法覆盖安装**；跨版本升级请先卸载旧版本（会清除应用内本地数据）。
+            - 需要长期可覆盖升级的签名，请改用仓库已配置的原 Android 证书（`AICHAT_ANDROID_KEYSTORE_*` Secrets）构建；该通道会强制校验 `app.json` 中的原证书指纹。
+          - **iOS (`*-ios-unsigned.ipa`)**：未签名的纯 `.ipa`，请通过 **TrollStore（巨魔）**、**AltStore**、**SideStore**、**Sideloadly** 或 **爱思助手** 侧载安装。
+          - **校验文件 (`*.sha256`)**：与同版本产物成对发布，用于核对下载文件完整性。
+          NOTES
+
+          apk_file="$(ls release-assets/*.apk)"
+          ipa_file="$(ls release-assets/*.ipa)"
+
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" "$apk_file" "$apk_file.sha256" "$ipa_file" "$ipa_file.sha256" \
+              --verify-tag --notes-file release-notes.md --title "AIChat Mobile ${VERSION}"
+            echo "created mobile release $TAG"
+            exit 0
+          fi
+
+          # 同一平台的产物与其 .sha256 是一个整体：禁止出现“新产物 + 旧校验”或“旧产物 + 新校验”。
+          existing_assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
+          has_asset() {
+            printf '%s\n' "$existing_assets" | grep -qxF "$1"
+          }
+
+          sync_platform() {
+            local artifact="$1"
+            local name checksum dir
+            name="$(basename "$artifact")"
+            checksum="${name}.sha256"
+
+            if has_asset "$name" && has_asset "$checksum"; then
+              echo "$TAG 已存在 $name 与 $checksum，保留历史文件不覆盖"
+              return 0
+            fi
+
+            if ! has_asset "$name" && ! has_asset "$checksum"; then
+              gh release upload "$TAG" "$artifact" "$artifact.sha256"
+              echo "uploaded $name and $checksum"
+              return 0
+            fi
+
+            dir="$(mktemp -d)"
+            if has_asset "$name"; then
+              # 只有产物：按已发布的原始字节重新生成校验，绝不把新产物绑到旧校验上。
+              echo "::warning::$TAG 已有 $name 但缺少 $checksum，按已发布文件重新生成校验"
+              gh release download "$TAG" --pattern "$name" --dir "$dir"
+              ( cd "$dir" && sha256sum "$name" > "$checksum" )
+              gh release upload "$TAG" "$dir/$checksum"
+              echo "uploaded $checksum generated from published $name"
+            else
+              # 只有校验：待上传产物必须与历史 checksum 一致，否则 fail closed。
+              gh release download "$TAG" --pattern "$checksum" --dir "$dir"
+              cp "$artifact" "$dir/$name"
+              if ! ( cd "$dir" && sha256sum -c "$checksum" ); then
+                echo "::error::$TAG 的 $checksum 与本次构建的 $name 不匹配，拒绝上传（避免发布无法校验的产物）"
+                rm -rf "$dir"
+                exit 1
+              fi
+              gh release upload "$TAG" "$artifact"
+              echo "uploaded $name (checksum matched published $checksum)"
+            fi
+            rm -rf "$dir"
+          }
+
+          sync_platform "$apk_file"
+          sync_platform "$ipa_file"
+          echo "mobile release $TAG is complete"

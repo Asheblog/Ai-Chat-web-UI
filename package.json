@@ -25,6 +25,8 @@
     "type-check": "pnpm --filter backend type-check",
     "mobile:start": "pnpm --filter @aichat/mobile start",
     "mobile:android": "pnpm --filter @aichat/mobile android",
+    "mobile:ios": "pnpm --filter @aichat/mobile ios",
+    "mobile:test": "pnpm --filter @aichat/mobile test",
     "mobile:type-check": "pnpm --filter @aichat/mobile type-check",
     "e2e:provider": "node -r tsx/register scripts/e2e-provider.ts",
     "e2e:provider:img": "node -r tsx/register scripts/e2e-provider-image.ts",

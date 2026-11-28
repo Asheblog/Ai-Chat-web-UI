@@ -2,21 +2,48 @@
   "expo": {
     "name": "AIChat Mobile",
     "slug": "aichat-mobile",
-    "version": "0.1.0",
-    "orientation": "portrait",
+    "version": "1.0.0",
+    "orientation": "default",
     "scheme": "aichat",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F6F6F2"
+    },
     "extra": {
       "androidReleaseCertificateSha256": "2de04200f1e2cbc8263f33ecdd0a55cf78a0545d8e129a40edac076eb5c0ac10"
     },
     "plugins": [
       "./plugins/with-android-cleartext-traffic",
-      "./plugins/with-android-release-signing"
+      "./plugins/with-android-release-signing",
+      "./plugins/with-android-share-intent",
+      "./plugins/with-ios-ats-http"
     ],
+    "ios": {
+      "bundleIdentifier": "com.aichat.mobile",
+      "buildNumber": "2",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "用于拍摄照片并发送给 AI 对话模型进行视觉分析。",
+        "NSPhotoLibraryUsageDescription": "用于从相册选择图片发送给 AI 对话模型。",
+        "NSPhotoLibraryAddUsageDescription": "用于将 AI 生成的图片保存到系统相册。",
+        "NSLocalNetworkUsageDescription": "用于连接局域网内的 AIChat 服务端，完成登录、同步会话与发送消息。",
+        "NSMicrophoneUsageDescription": "用于语音输入聊天消息。",
+        "NSSpeechRecognitionUsageDescription": "用于将你的语音实时转写为聊天文本。",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
     "android": {
       "package": "com.aichat.mobile",
-      "versionCode": 1,
-      "usesCleartextTraffic": true
+      "versionCode": 2,
+      "usesCleartextTraffic": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0F766E"
+      }
     }
   }
 }

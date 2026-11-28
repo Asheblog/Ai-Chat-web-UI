@@ -157,7 +157,7 @@ packages/
   backend/     Hono · Prisma · SQLite · 工具编排与文档 worker
   shared/      Web / 后端 / 移动端共享契约与纯函数
   desktop/     Electron · Windows / macOS 桌面客户端
-  mobile/      React Native · Expo Android 客户端（暂停自动发布）
+  mobile/      Expo · React Native Android / iOS 双端客户端
 scripts/       本地启动、数据库初始化与检查脚本
 docs/          部署、架构、设计与决策记录
 ```
@@ -168,9 +168,9 @@ docs/          部署、架构、设计与决策记录
 
 Windows x64 安装包为 `.exe`，Apple Silicon Mac 安装包为 `.dmg`。测试包从 [Desktop CI](https://github.com/Asheblog/Ai-Chat-web-UI/actions/workflows/desktop-ci.yml) 的构建产物下载，正式版发布到 [GitHub Releases](https://github.com/Asheblog/Ai-Chat-web-UI/releases)；两者当前都不做代码签名，安装时按系统提示放行即可（见 [ADR 0050](docs/adr/0050-desktop-release-ships-unsigned-artifacts.md)）。本地构建和发布配置见 [桌面客户端指南](packages/desktop/README.md)。
 
-### Android 自动发布已暂停
+### 移动端客户端（Android + iOS）
 
-现有 APK 和源码仍保留。需要安装历史版本或手工构建时，见 [Android 指南](packages/mobile/README.md)。
+基于 Expo + React Native 重构的双端客户端，支持多服务器配置、思维链 CoT、多模态发图/文档上传、知识库/MCP/Skill 与 Ink & Mist 浅/深色主题同步。[Mobile CI](https://github.com/Asheblog/Ai-Chat-web-UI/actions/workflows/mobile-ci.yml) 提供可全新安装的 Android 试装 APK，以及需侧载的未签名 iOS IPA。Android 覆盖升级须沿用原证书；安装、升级与发布步骤见 [移动端指南](packages/mobile/README.md)。
 
 ## 运维与进一步阅读
 

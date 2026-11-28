@@ -41,6 +41,8 @@ coverage/
 # --- Expo / React Native ---
 .expo/
 packages/mobile/.expo/
+packages/mobile/.build-cache/
+packages/mobile/dist/
 packages/mobile/android/
 packages/mobile/ios/
 packages/mobile/signing/
